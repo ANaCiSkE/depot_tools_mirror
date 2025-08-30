@@ -5,7 +5,7 @@ on:
         - __mirror
   schedule:
     # Run everyday at 3 AM UTC
-    - cron: '0 3 * * *'
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:
@@ -20,5 +20,5 @@ jobs:
         id: mirror
         uses: bridgelightcloud/github-mirror-action@v3
         with:
-          origin: ''
+          origin: 'https://chromium.googlesource.com/chromium/tools/depot_tools'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
