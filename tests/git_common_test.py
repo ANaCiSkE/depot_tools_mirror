@@ -1214,7 +1214,7 @@ class CheckGitVersionTest(GitCommonTestBase):
     def testGitSufficientVersion(self, mockRun, mockWhich, mockCog):
         mockCog.return_value = False
         mockWhich.return_value = '/example/bin/git'
-        mockRun.return_value = 'git version 2.30.1.456'
+        mockRun.return_value = 'git version 2.51.1.851'
 
         self.assertIsNone(self.gc.check_git_version())
 

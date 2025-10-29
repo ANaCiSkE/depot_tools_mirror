@@ -104,7 +104,7 @@ def _extract_git_path_from_git_bat(path: str) -> str:
 GIT_EXE = 'git' if not IS_WIN else win_find_git()
 
 # The recommended minimum version of Git, as (<major>, <minor>, <patch>).
-GIT_MIN_VERSION = (2, 26, 0)
+GIT_MIN_VERSION = (2, 46, 0)
 
 GIT_BLAME_IGNORE_REV_FILE = '.git-blame-ignore-revs'
 
