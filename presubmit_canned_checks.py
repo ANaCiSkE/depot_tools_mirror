@@ -847,12 +847,12 @@ def CheckLicense(input_api,
             bad_files.append(f.LocalPath())
     results = []
 
-    # Don't report errors when on the presubmit --all bot or when testing with
-    # presubmit --files.
-    if input_api.no_diffs:
-        report_type = output_api.PresubmitPromptWarning
-    else:
+    # Fail on CQ when checking diffs.
+    # Warn locally or when checking the whole tree (due to legacy headers).
+    if input_api.is_committing and not input_api.no_diffs:
         report_type = output_api.PresubmitError
+    else:
+        report_type = output_api.PresubmitPromptWarning
 
     if bad_new_files:
         if license_re_param:

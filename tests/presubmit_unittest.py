@@ -2801,7 +2801,7 @@ the current line as well!
             presubmit.OutputApi.PresubmitError,
             description=description)
 
-    def testCheckLicenseFailUpload(self):
+    def testCheckLicenseWarnUpload(self):
         text = ("#!/bin/python\n"
                 "# Copyright (c) 2037 Nobody.\n"
                 "# All Rights Reserved.\n"
@@ -2809,7 +2809,7 @@ the current line as well!
         license_text = (r".*? Copyright \(c\) 0007 Nobody.\n"
                         r".*? All Rights Reserved\.\n")
         self._LicenseCheck(text, license_text, False,
-                           presubmit.OutputApi.PresubmitError)
+                           presubmit.OutputApi.PresubmitPromptWarning)
 
     def testCheckLicenseEmptySuccess(self):
         text = ''
@@ -2826,8 +2826,8 @@ the current line as well!
         license_text = None
         self._LicenseCheck(text, license_text, False, None, new_file=True)
 
-    def testCheckLicenseNewFileFail(self):
-        # Check that we fail on new files with the (c) symbol.
+    def testCheckLicenseNewFileWarnUpload(self):
+        # Check that we warn on uploading new files with the (c) symbol.
         current_year = int(time.strftime('%Y'))
         text = (
             "#!/bin/python\n"
@@ -2840,6 +2840,23 @@ the current line as well!
         self._LicenseCheck(text,
                            license_text,
                            False,
+                           presubmit.OutputApi.PresubmitPromptWarning,
+                           new_file=True)
+
+    def testCheckLicenseNewFileFailCommit(self):
+        # Check that we fail on committing new files with the (c) symbol.
+        current_year = int(time.strftime('%Y'))
+        text = (
+            "#!/bin/python\n"
+            "# Copyright (c) %d The Chromium Authors\n"
+            "# Use of this source code is governed by a BSD-style license that can "
+            "be\n"
+            "# found in the LICENSE file.\n"
+            "print('foo')\n" % current_year)
+        license_text = None
+        self._LicenseCheck(text,
+                           license_text,
+                           True,
                            presubmit.OutputApi.PresubmitError,
                            new_file=True)
 
@@ -2852,14 +2869,25 @@ the current line as well!
             "# found in the LICENSE file.\n"
             "print('foo')\n" % current_year)
 
-    def testCheckLicenseNewFileError(self):
-        # Check that we error on new files with wrong year. Test with first
-        # allowed year.
+    def testCheckLicenseNewFileWarnWrongYear(self):
+        # Check that we warn on uploading new files with wrong year. Test with
+        # first allowed year.
         text = self._GetLicenseText(2006)
         license_text = None
         self._LicenseCheck(text,
                            license_text,
                            False,
+                           presubmit.OutputApi.PresubmitPromptWarning,
+                           new_file=True)
+
+    def testCheckLicenseNewFileErrorCommit(self):
+        # Check that we error on committing new files with wrong year. Test with
+        # first allowed year.
+        text = self._GetLicenseText(2006)
+        license_text = None
+        self._LicenseCheck(text,
+                           license_text,
+                           True,
                            presubmit.OutputApi.PresubmitError,
                            new_file=True)
 
