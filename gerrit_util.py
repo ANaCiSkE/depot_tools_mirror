@@ -33,6 +33,7 @@ from multiprocessing.pool import ThreadPool
 from typing import Any, Container, Dict, Mapping
 from typing import NamedTuple, List, Optional
 from typing import Tuple, TypedDict, cast
+from typing import Generator
 
 import httplib2
 import httplib2.socks
@@ -995,28 +996,34 @@ class ChainedAuthenticator(_Authenticator):
     """
 
     def __init__(self, authenticators: List[_Authenticator]):
-        self.authenticators = list(authenticators)
+        self._authenticators = list(authenticators)
 
     def is_applicable(self, *, gerrit_host: Optional[str] = None) -> bool:
         return bool(
-            any(
-                a.is_applicable(gerrit_host=gerrit_host)
-                for a in self.authenticators))
+            next(self.applicable_authenticators(gerrit_host=gerrit_host), None))
+
+    def applicable_authenticators(
+        self,
+        *,
+        gerrit_host: Optional[str] = None
+    ) -> Generator[_Authenticator, None, None]:
+        """Returns a generator that yields applicable authenticators."""
+        for a in self._authenticators:
+            if a.is_applicable(gerrit_host=gerrit_host):
+                yield a
 
     def authenticate(self, conn: HttpConn):
-        for a in self.authenticators:
-            if a.is_applicable(gerrit_host=conn.host):
-                a.authenticate(conn)
-                break
+        for a in self.applicable_authenticators(gerrit_host=conn.host):
+            a.authenticate(conn)
+            break
         else:
             raise ValueError(
                 f'{self!r} has no applicable authenticator for {conn!r}')
 
     def attempt_authenticate_with_reauth(self, conn: HttpConn,
                                          context: auth.ReAuthContext) -> bool:
-        for a in self.authenticators:
-            if (a.is_applicable(gerrit_host=conn.host)
-                    and a.attempt_authenticate_with_reauth(conn, context)):
+        for a in self.applicable_authenticators(gerrit_host=conn.host):
+            if a.attempt_authenticate_with_reauth(conn, context):
                 return True
         return False
 
@@ -1025,10 +1032,9 @@ class ChainedAuthenticator(_Authenticator):
 
     def ensure_authenticated(self, *, gerrit_host: str,
                              git_host: str) -> Tuple[bool, str]:
-        for a in self.authenticators:
-            if a.is_applicable(gerrit_host=gerrit_host):
-                return a.ensure_authenticated(gerrit_host=gerrit_host,
-                                              git_host=git_host)
+        for a in self.applicable_authenticators(gerrit_host=gerrit_host):
+            return a.ensure_authenticated(gerrit_host=gerrit_host,
+                                          git_host=git_host)
         return (False,
                 f'{self!r} has no applicable authenticator for {gerrit_host}')
 
