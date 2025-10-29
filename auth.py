@@ -105,8 +105,9 @@ class GitReAuthRequiredError(Exception):
     """
 
     def __init__(self):
-        msg = ('You have not done ReAuth. Please run and try again:\n'
-               '  %s' % self.reauth_command)
+        msg = (
+            'You have not done ReAuth. Please complete ReAuth first, then try again:\n'
+            '  %s' % self.reauth_command)
         super(GitReAuthRequiredError, self).__init__(msg)
 
     @property
