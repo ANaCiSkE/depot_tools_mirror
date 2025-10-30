@@ -2557,6 +2557,10 @@ def main(argv=None):
                   '%(filename)s] %(message)s')
     logging.basicConfig(format=log_format, level=log_level)
 
+    # Recognize *.gn files as text files, so they are included in testable
+    # files.
+    mimetypes.add_type('text/ninja', '.gn')
+
     # Print call stacks when _PresubmitResult objects are created with -v -v is
     # specified. This helps track down where presubmit messages are coming from.
     if options.verbose >= 2:
