@@ -154,29 +154,6 @@ def _print_cmd(cmd):
     print(*[shell_quoter(arg) for arg in cmd], file=sys.stderr)
 
 
-def _get_remoteexec_defaults(output_dir):
-    root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
-    if not root_dir:
-        return None
-    default_file = os.path.join(root_dir,
-                                "build/toolchain/remoteexec_defaults.gni")
-    values = {
-        "use_reclient_on_siso": True,
-        "use_reclient_on_ninja": True,
-    }
-    if not os.path.exists(default_file):
-        return values
-    pattern = re.compile(r"(^|\s*)([^=\s]*)\s*=\s*(\S*)\s*$")
-    with open(default_file, encoding="utf-8") as f:
-        for line in f:
-            line = line.split("#")[0]
-            m = pattern.match(line)
-            if not m:
-                continue
-            values[m.group(2)] = m.group(3) == "true"
-    return values
-
-
 # `use_siso` value is used to determine whether siso or ninja is used,
 # and used to determine default value of `use_reclient`, so
 # this logic should match with //build/toolchain/siso.gni
@@ -411,11 +388,10 @@ def _main_inner(input_args, build_id):
                 use_siso = False
 
         if use_reclient is None and use_remoteexec:
-            if values := _get_remoteexec_defaults(output_dir):
-                if use_siso:
-                    use_reclient = values["use_reclient_on_siso"]
-                else:
-                    use_reclient = values["use_reclient_on_ninja"]
+            if use_siso:
+                use_reclient = False
+            else:
+                use_reclient = True
 
     # Use the server for target_os="android" (where it is relevant), unless it
     # is disabled via GN arg.
