@@ -22,10 +22,6 @@ PROPERTIES = {
 }
 
 
-# TODO: crbug.com/339472834 - Once all downstream uses of presentation and
-# json.output have been removed, this test can be updated to not reference them
-# and the decorator can be removed
-@recipe_api.ignore_warnings('^depot_tools/BOT_UPDATE_CUSTOM_RESULT_ATTRIBUTES$')
 def RunSteps(api, expected_checkout_dir, expected_source_root_name,
              expected_patch_root_name):
   api.gclient.set_config('depot_tools')
