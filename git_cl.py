@@ -6839,7 +6839,14 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
         print('google-java-format not found, skipping java formatting.')
         return 0
 
-    base_cmd = [tool, '--aosp']
+    base_cmd = [tool]
+    # The script now adds --aosp, but this shim is needed for the window where
+    # devs are using depot_tools that is newer than their chromium checkout.
+    # This can be remove after Dec 2025.
+    if os.path.exists(
+            os.path.join(os.path.dirname(tool), 'chromium-overrides.jar')):
+        base_cmd += ['--aosp']
+
     if not opts.diff:
         if opts.dry_run:
             base_cmd += ['--dry-run']

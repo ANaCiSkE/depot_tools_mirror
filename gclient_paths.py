@@ -80,7 +80,8 @@ def _GetPrimarySolutionPathInternal(cwd):
         return os.path.join(gclient_root, source_dir_name)
 
     # Some projects might not use .gclient. Try to see whether we're in a git
-    # checkout that contains a 'buildtools' subdir.
+    # checkout that contains a "buildtools" directory or "codereview.settings"
+    # file.
     top_dir = cwd
     try:
         top_dir = subprocess2.check_output(
@@ -90,7 +91,8 @@ def _GetPrimarySolutionPathInternal(cwd):
     except subprocess2.CalledProcessError:
         pass
 
-    if os.path.exists(os.path.join(top_dir, 'buildtools')):
+    if (os.path.exists(os.path.join(top_dir, 'codereview.settings'))
+            or os.path.exists(os.path.join(top_dir, 'buildtools'))):
         return top_dir
     return None
 
