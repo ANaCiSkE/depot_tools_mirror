@@ -29,15 +29,13 @@ def HostArch():
     elif host_arch.startswith('mips'):
         host_arch = 'mips'
     elif host_arch.startswith('ppc') or host_processor == 'powerpc':
-        host_arch = 'ppc'
-    elif host_arch.startswith('s390'):
-        host_arch = 's390'
+        host_arch = 'ppc64'
+    elif host_arch.startswith('s390') or platform.system() == 'OS/390':
+        host_arch = 's390x'
     elif host_arch.startswith('riscv'):
         host_arch = 'riscv64'
     elif host_arch.startswith('loongarch64'):
         host_arch = 'loong64'
-    elif platform.system() == 'OS/390':
-        host_arch = 's390x'
 
     if host_arch == 'arm64':
         host_platform = platform.architecture()

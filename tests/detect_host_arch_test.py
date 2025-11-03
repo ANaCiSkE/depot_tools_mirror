@@ -38,9 +38,9 @@ class DetectHostArchTest(unittest.TestCase):
             ('arm64', 'ARMv8 (64-bit) Family', ['32bit', 'WindowsPE'], 'x64'),
             ('mips64', '', [''], 'mips64'),
             ('mips', '', [''], 'mips'),
-            ('ppc', '', [''], 'ppc'),
-            ('foo', 'powerpc', [''], 'ppc'),
-            ('s390', '', [''], 's390'),
+            ('ppc64', '', [''], 'ppc64'),
+            ('foo', 'powerpc', [''], 'ppc64'),
+            ('s390x', '', [''], 's390x'),
         ]
 
         for machine, processor, arch, expected in test_cases:
