@@ -205,8 +205,9 @@ def CheckShouldUseSSO(host: str, email: str) -> SSOCheckResult:
             True, 'email is empty or missing (and SSO command available)')
     if email.endswith('@google.com'):
         return SSOCheckResult(True, 'email is @google.com')
-    if not email.endswith('@chromium.org'):
-        return SSOCheckResult(False, 'email is not @chromium.org')
+    if not (email.endswith('@chromium.org') or email.endswith('@webrtc.org')):
+        return SSOCheckResult(
+            False, 'email is not @chromium.org or @webrtc.org')
     authenticator = SSOAuthenticator()
     records: list[EmailRecord] = []
     try:
