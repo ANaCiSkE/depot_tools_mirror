@@ -2446,7 +2446,7 @@ class TestGitCl(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _setup_mock_for_cookies_authenticator(self, auth):
+    def _setup_mock_for_cookies_authenticator(self, creds):
         """Sets up mocks for CookiesAuthenticator, and returns a git_cl.Changelist() for testing."""
 
         self._add_patch_with_cleanup(
@@ -2454,7 +2454,7 @@ class TestGitCl(unittest.TestCase):
             lambda prompt: self._mocked_call('ask_for_data', prompt))
 
         cookies_authenticator_factory = CookiesAuthenticatorMockFactory(
-            hosts_with_creds=auth)
+            hosts_with_creds=creds)
 
         self._add_patch_with_cleanup('git_cl.gerrit_util.CookiesAuthenticator',
                                      cookies_authenticator_factory)
@@ -2473,7 +2473,7 @@ class TestGitCl(unittest.TestCase):
                           'https://chromium.googlesource.com/my/repo')
 
         cl = self._setup_mock_for_cookies_authenticator(
-            auth={
+            creds={
                 'chromium.googlesource.com': ('git-same.example.com', 'secret'),
                 'chromium-review.googlesource.com': ('git-same.example.com',
                                                      'secret'),
@@ -2485,13 +2485,13 @@ class TestGitCl(unittest.TestCase):
                           'https://chromium.googlesource.com/my/repo')
         scm.GIT.SetConfig('', 'gerrit.skip-ensure-authenticated', 'true')
 
-        cl = self._setup_mock_for_cookies_authenticator(auth={})
+        cl = self._setup_mock_for_cookies_authenticator(creds={})
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
     def test_gerrit_ensure_authenticated_sso(self):
         scm.GIT.SetConfig('', 'remote.origin.url', 'sso://repo')
 
-        cl = self._setup_mock_for_cookies_authenticator(auth={})
+        cl = self._setup_mock_for_cookies_authenticator(creds={})
         cl.lookedup_issue = True
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
@@ -2500,7 +2500,7 @@ class TestGitCl(unittest.TestCase):
                           'https://chromium.googlesource.com/my/repo')
 
         cl = self._setup_mock_for_cookies_authenticator(
-            auth={
+            creds={
                 'chromium.googlesource.com': ('', 'secret'),
                 'chromium-review.googlesource.com': ('', 'secret'),
             })
@@ -2529,7 +2529,7 @@ class TestGitCl(unittest.TestCase):
         mock.patch('logging.warning',
                    lambda *a: self._mocked_call('logging.warning', *a)).start()
 
-        cl = self._setup_mock_for_cookies_authenticator(auth={})
+        cl = self._setup_mock_for_cookies_authenticator(creds={})
         cl.lookedup_issue = True
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
@@ -2548,7 +2548,7 @@ class TestGitCl(unittest.TestCase):
         mock.patch('logging.error',
                    lambda *a: self._mocked_call('logging.error', *a)).start()
 
-        cl = self._setup_mock_for_cookies_authenticator(auth={})
+        cl = self._setup_mock_for_cookies_authenticator(creds={})
         cl.lookedup_issue = True
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
 
