@@ -29,6 +29,7 @@ import metrics_utils
 # We have to disable monitoring before importing git_cl.
 metrics_utils.COLLECT_METRICS = False
 
+import auth
 import clang_format
 import contextlib
 import gclient_utils
@@ -2551,6 +2552,60 @@ class TestGitCl(unittest.TestCase):
         cl = self._setup_mock_for_cookies_authenticator(creds={})
         cl.lookedup_issue = True
         self.assertIsNone(cl.EnsureAuthenticated(force=False))
+
+    @mock.patch('sys.stderr', io.StringIO())
+    def test_gerrit_ensure_authenticated_with_reauth(self):
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/my/repo')
+
+        self._add_patch_with_cleanup(
+            'gclient_utils.AskForData',
+            lambda prompt: self._mocked_call('ask_for_data', prompt))
+
+        mock_ensure_authenticated = mock.MagicMock(
+            spec=gerrit_util.ensure_authenticated,
+            return_value=(False, "You have not done ReAuth"))
+        self._add_patch_with_cleanup('git_cl.gerrit_util.ensure_authenticated',
+                                     mock_ensure_authenticated)
+
+        cl = git_cl.Changelist()
+        cl.branch = 'main'
+        cl.branchref = 'refs/heads/main'
+
+        with self.assertRaises(SystemExitMock):
+            cl.EnsureAuthenticated(force=False)
+
+        self.assertRegex(sys.stderr.getvalue(), "You have not done ReAuth")
+        mock_ensure_authenticated.assert_called_with(
+            gerrit_host="chromium-review.googlesource.com",
+            git_host="chromium.googlesource.com",
+            reauth_context=auth.ReAuthContext(
+                host='chromium-review.googlesource.com', project='my/repo'))
+
+    def test_gerrit_ensure_authenticated_reauth_not_needed(self):
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/my/repo')
+
+        self._add_patch_with_cleanup(
+            'gclient_utils.AskForData',
+            lambda prompt: self._mocked_call('ask_for_data', prompt))
+
+        mock_ensure_authenticated = mock.MagicMock(
+            spec=gerrit_util.ensure_authenticated, return_value=(True, ''))
+        self._add_patch_with_cleanup('git_cl.gerrit_util.ensure_authenticated',
+                                     mock_ensure_authenticated)
+
+        cl = git_cl.Changelist()
+        cl.branch = 'main'
+        cl.branchref = 'refs/heads/main'
+
+        self.assertIsNone(
+            cl.EnsureAuthenticated(force=False, skip_reauth_check=True))
+        mock_ensure_authenticated.assert_called_with(
+            gerrit_host='chromium-review.googlesource.com',
+            git_host="chromium.googlesource.com",
+            reauth_context=None)
+
 
     def _cmd_set_commit_gerrit_common(self, vote, notify=None):
         scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')

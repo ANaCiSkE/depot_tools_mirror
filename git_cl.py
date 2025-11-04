@@ -2372,7 +2372,10 @@ class Changelist(object):
         # Fall back on still unique, but less efficient change number.
         return str(self.GetIssue())
 
-    def EnsureAuthenticated(self, force: bool) -> None:
+    def EnsureAuthenticated(self,
+                            *,
+                            force: bool,
+                            skip_reauth_check: bool = False) -> None:
         """Best effort check that user is authenticated with Gerrit server."""
         if settings.GetGerritSkipEnsureAuthenticated():
             # For projects with unusual authentication schemes.
@@ -2402,8 +2405,16 @@ class Changelist(object):
         git_host = self._GetGitHost()
         assert self._gerrit_server and self._gerrit_host and git_host
 
+        if skip_reauth_check:
+            reauth_context = None
+        else:
+            reauth_context = auth.ReAuthContext(host=self._gerrit_host,
+                                                project=self.GetGerritProject())
+
         bypassable, msg = gerrit_util.ensure_authenticated(
-            gerrit_host=self._gerrit_host, git_host=git_host)
+            gerrit_host=self._gerrit_host,
+            git_host=git_host,
+            reauth_context=reauth_context)
         if not msg:
             return  # OK
         if bypassable:
@@ -4114,7 +4125,7 @@ def get_cl_statuses(changes: List[Changelist],
     # First, sort out authentication issues.
     logging.debug('ensuring credentials exist')
     for cl in changes:
-        cl.EnsureAuthenticated(force=False)
+        cl.EnsureAuthenticated(force=False, skip_reauth_check=True)
 
     def fetch(cl):
         try:
@@ -5526,14 +5537,20 @@ def CMDupload(parser, args):
 
     cl = Changelist(branchref=options.target_branch)
 
-    # Do a quick RPC to Gerrit to ensure that our authentication is all working
-    # properly. Otherwise `git cl upload` will:
+    # Ensure we're authenticated correctly. Otherwise `git cl upload` will:
     #   * run `git status` (slow for large repos)
     #   * run presubmit tests (likely slow)
     #   * ask the user to edit the CL description (requires thinking)
     #
     # And then attempt to push the change up to Gerrit, which can fail if
     # authentication is not working properly.
+    #
+    # 1. EnsureAuthenticated ensures we have a credential that satisfies ReAuth
+    #    requirement, so our upload is "trusted" for review enforcement.
+    # 2. GetAccountDetails ensures the user's Gerrit account exists. This is
+    #    required on-top of EnsureAuthenticated check, because Gerrit accounts
+    #    exists independently of the OAuth-ed account.
+    cl.EnsureAuthenticated(force=options.force)
     gerrit_util.GetAccountDetails(cl.GetGerritHost())
 
     # Check whether git should be updated.
