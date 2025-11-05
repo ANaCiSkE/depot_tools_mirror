@@ -46,6 +46,7 @@ TEST_CONFIGS = [
     'infradata_master_manager',
     'infradata_cloud_run',
     'infradata_config',
+    'infradata_k8s',
     'infradata_rbe',
     'luci_gae',
     'luci_go',

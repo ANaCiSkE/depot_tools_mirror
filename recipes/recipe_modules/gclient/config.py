@@ -364,6 +364,14 @@ def infradata_cloud_run(c):
 
 
 @config_ctx()
+def infradata_k8s(c):
+  soln = c.solutions.add()
+  soln.name = 'infradata-k8s'
+  soln.url = 'https://chrome-internal.googlesource.com/infradata/k8s.git'
+  c.got_revision_mapping['infradata-k8s'] = 'got_revision'
+
+
+@config_ctx()
 def infradata_config(c):
   soln = c.solutions.add()
   soln.name = 'infra-data-config'
