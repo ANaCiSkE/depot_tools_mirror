@@ -172,6 +172,7 @@ class ConfigWizard(object):
             '(Report any issues to https://issues.chromium.org/issues/new?component=1456702&template=2076315)'
         )
         self._println()
+        self._fix_netrc()
         self._fix_gitcookies()
         self._println()
         self._println('Checking for SSO helper...')
@@ -355,9 +356,24 @@ class ConfigWizard(object):
             self._set_url_rewrite_override(parts, scope=scope)
         self._clear_sso_rewrite(parts, scope=scope)
 
-    # Fixing gitcookies
+    # Fixing competing auth
 
-    def _fix_gitcookies(self):
+    def _fix_netrc(self) -> None:
+        # https://curl.se/libcurl/c/CURLOPT_NETRC_FILE.html
+        netrc_paths = ['~/.netrc']
+        if self._is_windows():
+            netrc_paths.append('~/_netrc')
+
+        for path in netrc_paths:
+            path = os.path.expanduser(path)
+            if os.path.exists(path):
+                self._println(f'You have a netrc file {path!r}')
+                if self._read_yn(
+                        'Shall we move your netrc file (to a backup location)?',
+                        default=True):
+                    self._move_file(path)
+
+    def _fix_gitcookies(self) -> None:
         sit = self._check_gitcookies()
         if not sit.cookiefile:
             self._println(
@@ -467,7 +483,7 @@ class ConfigWizard(object):
         self._println('You will need to add `export SKIP_GCE_AUTH_FOR_GIT=1`')
         self._println('to your .bashrc or similar.')
         fallback_msg = 'Add `export SKIP_GCE_AUTH_FOR_GIT=1` to your .bashrc or similar.'
-        if os.name == 'nt':
+        if self._is_windows():
             # Can't automatically handle Windows yet.
             self._println_action(fallback_msg)
             return
@@ -713,6 +729,9 @@ class ConfigWizard(object):
     def _read_enter(self) -> None:
         self._ui.read_enter()
         self._ui.write('\n')
+
+    def _is_windows(self) -> bool:
+        return os.name == 'nt'
 
     @staticmethod
     def _gitcookies() -> str:
