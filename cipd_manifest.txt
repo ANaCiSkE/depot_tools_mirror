@@ -49,7 +49,7 @@ infra/tools/prpc/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf1
 infra/tools/luci-auth/${platform} git_revision:14c1dfd95e07b23eeaff304bd29a2eb80b06fe0b
 
 # LUCI Git credential helper
-infra/tools/luci/git-credential-luci/${platform} git_revision:b6eeff153b6553bfdd43b7c640e8c99a9f7532df
+infra/tools/luci/git-credential-luci/${platform} git_revision:3fde0dfb3a18fbd049c259e0f10ba57b97ac9b33
 
 # LUCI Git credential helper plugins
 infra/tools/luci/luci-auth-ssh-plugin/${platform} git_revision:c39ff861346b9dcbaef40bf6a3f0a6143ba4433a
