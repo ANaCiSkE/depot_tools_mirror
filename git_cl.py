@@ -4149,7 +4149,8 @@ def get_cl_statuses(changes: List[Changelist],
         while True:
             try:
                 cl, status = it.next(timeout=5)
-            except (multiprocessing.TimeoutError, StopIteration):
+            except (multiprocessing.TimeoutError, StopIteration) as e:
+                logging.debug('aborting get_cl_statuses due to %r', e)
                 break
             fetched_cls.add(cl)
             yield cl, status
