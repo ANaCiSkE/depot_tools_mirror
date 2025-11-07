@@ -34,7 +34,7 @@ $VerifiedPlatform windows-arm64
 infra/tools/luci/vpython3/${platform} git_revision:ad0c4b622c7d4cee870f57eed8170c059ca42ed3
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:a095a06b3c202445e01b75d5690a8587cbc3ab7d
+infra/tools/luci/led/${platform} git_revision:d011b1c404484997f48c987ecc9649c3283d372b
 
 # LUCI config generator
 infra/tools/luci/lucicfg/${platform} git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
@@ -46,7 +46,7 @@ infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:59b5b4b5a506dc23eae31ef
 infra/tools/prpc/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI authentication command line tool
-infra/tools/luci-auth/${platform} git_revision:14c1dfd95e07b23eeaff304bd29a2eb80b06fe0b
+infra/tools/luci-auth/${platform} git_revision:d011b1c404484997f48c987ecc9649c3283d372b
 
 # LUCI Git credential helper
 infra/tools/luci/git-credential-luci/${platform} git_revision:3fde0dfb3a18fbd049c259e0f10ba57b97ac9b33
@@ -58,7 +58,7 @@ infra/tools/luci/luci-auth-ssh-plugin/${platform} git_revision:c39ff861346b9dcba
 infra/tools/luci/luci-auth-ssh-helper/${platform} git_revision:0ff6e38043daec0a3e3bea265820a63eab6bf21d
 
 # LUCI Buildbucket CLI
-infra/tools/bb/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
+infra/tools/bb/${platform} git_revision:d011b1c404484997f48c987ecc9649c3283d372b
 
 # LUCI ResultDB CLI
 infra/tools/rdb/${platform} git_revision:3543fb152a50d3086105df574a32176f67d9a043
