@@ -7534,6 +7534,8 @@ def main(argv):
         DieWithError((
             'App Engine is misbehaving and returned HTTP %d, again. Keep faith '
             'and retry or visit go/isgaeup.\n%s') % (e.code, str(e)))
+    except GitPushError as e:
+        DieWithError(str(e))
     return 0
 
 
