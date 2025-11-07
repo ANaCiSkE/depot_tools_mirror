@@ -25,16 +25,17 @@ def FindGoogleJavaFormat():
             # Make relative to solution root if not an absolute path.
             return os.path.join(primary_solution_path, override)
 
-        bin_dir = os.path.join(primary_solution_path, 'third_party',
-                               'google-java-format')
-        bin_path = os.path.join(bin_dir, 'google-java-format')
+        bin_path = os.path.join(primary_solution_path, 'third_party',
+                                'google-java-format', 'google-java-format')
+        cipd_path = os.path.join(primary_solution_path, 'third_party',
+                                 'google-java-format', 'cipd',
+                                 'google-java-format.jar')
 
         # Check that the .jar exists, since it is conditionally downloaded via
         # DEPS conditions.
-        if os.path.exists(bin_path):
-            if glob.glob(os.path.join(bin_dir, '*.jar')) or glob.glob(
-                    os.path.join(bin_dir, 'cipd', '*.jar')):
-                return bin_path
+        if os.path.exists(bin_path) and (os.path.exists(bin_path + '.jar')
+                                         or os.path.exists(cipd_path)):
+            return bin_path
     return None
 
 
