@@ -47,12 +47,6 @@ def check_outdir(subcmd, out_dir):
 
 
 def apply_metrics_labels(args: list[str]) -> list[str]:
-    if not args:
-        return args
-    # We expect ninja calls, else this algorithm is meaningless.
-    if args[0] != "ninja":
-        return args
-
     system_dict = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
     user_system = system_dict.get(platform.system(), platform.system())
 
@@ -71,9 +65,6 @@ def apply_metrics_labels(args: list[str]) -> list[str]:
 
 
 def apply_telemetry_flags(args: list[str]) -> list[str]:
-    # Don't apply for non ninja runs.
-    if args[0] != "ninja":
-        return args
     telemetry_flags = [
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
@@ -242,9 +233,11 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
                 if args[1:] != new_args:
                     print('depot_tools/siso.py: %s' % shlex.join(new_args),
                           file=sys.stderr)
-                new_args = apply_metrics_labels(new_args)
-                if should_collect_logs:
-                    new_args = apply_telemetry_flags(new_args)
+                # Add ninja specific flags.
+                if args[0] == "ninja":
+                    new_args = apply_metrics_labels(new_args)
+                    if should_collect_logs:
+                        new_args = apply_telemetry_flags(new_args)
                 return caffeinate.run([siso_path] + new_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
