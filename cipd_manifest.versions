@@ -518,68 +518,68 @@ infra/tools/luci/luci-auth-ssh-plugin/windows-arm64
 	HqHn_7ADF4Z8gSD-qRASZ3O5XDcqQ1R3JY9JjLOr3ScC
 
 infra/tools/luci/lucicfg/linux-386
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	L54DXS1lBXJiNoyWXQmXvt2Oz0mPWBKecqy615VYnlAC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	jGD8ESgLeEW2X2lUpxYTR2hTkGdGk2bE04sHBoIHV70C
 
 infra/tools/luci/lucicfg/linux-amd64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	EWUbyK_xED3-nVYQxlmUB89Hmhfeh8_JmBckePM-D4UC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	YpKP_ls2U7KPdGWm-KPHlgJXy9wch9mIfAxNi8cZIL8C
 
 infra/tools/luci/lucicfg/linux-arm64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	AARocrI01jwVU1UPoDgluImmNirQH53IMub0Ch-WF_QC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	V9iJlJyl53rxJgnDKt6YpH3bO8ueMbV2hoiSsvnpKiMC
 
 infra/tools/luci/lucicfg/linux-armv6l
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	bhTtlVbtdq456qD5mo_7igmZIGaRiNcFbvL2sB93AdMC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	_IXdCGaXUVj8CkE_k15eEv1C6ZWsUlHTy5i0vhf6oMcC
 
 infra/tools/luci/lucicfg/linux-loong64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	sxfFEywhIxQnDgZCUYB5IhY7h7pK3TgGW2CpQHJ3f_IC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	r-nuK3HTLn1UBsC4i2DnFR--pW4hyqCK5IFtBslBwokC
 
 infra/tools/luci/lucicfg/linux-mips64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	v7N97AwjAlZuuVfyIR8Hu8axuF1wwlQfIJnLz4Ichg4C
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	-vnL5CKBE787tuzMXOq9Qf-opdGn2dCUWX4NBzZpRikC
 
 infra/tools/luci/lucicfg/linux-mips64le
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	TxHhtfsYVjJhUcuO9UDbNonumAp0rffDbP_6ApZTFuYC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	kgjE283GywixwM_yoFr7KYcPN3NYwtbBO611eCrlJ8EC
 
 infra/tools/luci/lucicfg/linux-mipsle
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	bunKwzqgIihvpsWMNdgIgQi0nOcU5A6V4jJieR37D00C
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	pRlQ9AM7Cd-eJTvhJ3_M0Nw1VmbKFOaUgNAXghPtIV8C
 
 infra/tools/luci/lucicfg/linux-ppc64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	cYNEF_VBZttfecYY_GjjO1SwAHIslKnpqCB-rcMtfHgC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	E1PkxPqja71aE9-G7h9ANQeRoy5v9yQTjYRv3KfUoBUC
 
 infra/tools/luci/lucicfg/linux-ppc64le
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	GlnlvUMOVuU5Wbv0cZxJ3a4hjGbhiedXIXbsAXiGtjEC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	TBx9MPHZwAANOx09BDRfcwkKOCFBXrE7QK4bmkp64dMC
 
 infra/tools/luci/lucicfg/linux-riscv64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	2yzCvDys0k_sW_kUCQ_Et0zklMje4VDVwFu4aayUeUcC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	phlVGQiu4V-ZzgsKk1Z2uBs14rmxhjdCs9l9OeX3-YwC
 
 infra/tools/luci/lucicfg/linux-s390x
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	xYAl1AZD8LOQqVbxQz49J4GovqqN690Nde3pcxQFd1YC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	kPVLluZC_Ae-gbeHX4YWWRZxpf_NiW3E1tUoNpvIIMIC
 
 infra/tools/luci/lucicfg/mac-amd64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	mw1luIyxJog8RDeiKoRvAgqTruMy6pHnvnMBN_xL9P4C
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	zlu7q9xQ5wIcEqkB2x0Im4T_vlise1EuMfGMJLZ4V3kC
 
 infra/tools/luci/lucicfg/mac-arm64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	N78I6ItWJeGQuMLHE9TWFe6iAx1fq6Sj597JJL1_mzwC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	EVbWjViyyrwkMfH-gW57den3iqIcTLEP60Rpqfzyt0UC
 
 infra/tools/luci/lucicfg/windows-amd64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	1nHrpg-dpoii2qAmgzBr781A1d6qH_THxwUtgxfcWlIC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	0auO4FPlsu0MkjJCh-lk2erSp7llYRxztbBiOiNn4DUC
 
 infra/tools/luci/lucicfg/windows-arm64
-	git_revision:2979c169bbbde52f55c855e5bc14e22243363c16
-	TRpEhrasZFu4SULo_LPyw8cOLUcZE51wfHAXjSQaOVIC
+	git_revision:29d61c6eefac51389019cb9e7d4c448933f79111
+	pMb649d8LtsiX4-kefk2VlJwfUfyZzPWnjVeDTo3q9gC
 
 infra/tools/luci/vpython3/linux-386
 	git_revision:ad0c4b622c7d4cee870f57eed8170c059ca42ed3
