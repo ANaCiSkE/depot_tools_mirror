@@ -40,14 +40,16 @@ def FindGclientRoot(from_dir, filename='.gclient'):
     # a sub directory that is controlled by this configuration.
     entries_filename = os.path.join(path, filename + '_entries')
     if not os.path.exists(entries_filename):
-        # If .gclient_entries does not exist, a previous call to gclient sync
-        # might have failed. In that case, we cannot verify that the .gclient
-        # is the one we want to use. In order to not to cause too much trouble,
-        # just issue a warning and return the path anyway.
-        print(
-            "%s missing, %s file in parent directory %s might not be the file "
-            "you want to use." % (entries_filename, filename, path),
-            file=sys.stderr)
+        if not gclient_utils.IsEnvCog():
+            # If .gclient_entries does not exist, a previous call to
+            # gclient sync might have failed. In that case, we cannot verify
+            # that the .gclient is the one we want to use. In order to not
+            # to cause too much trouble, just issue a warning and return
+            # the path anyway.
+            print("%s missing, %s file in parent directory %s might not be "
+                  "the file you want to use." %
+                  (entries_filename, filename, path),
+                  file=sys.stderr)
         return path
 
     entries_content = gclient_utils.FileRead(entries_filename)
