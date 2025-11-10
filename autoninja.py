@@ -26,7 +26,6 @@ import sys
 import time
 import uuid
 import warnings
-from typing import Optional
 
 import android_build_server_helper
 import build_telemetry
@@ -276,10 +275,7 @@ def _check_reclient_cfgs(output_dir):
                 file=sys.stderr,
             )
 
-
-def _main_inner(input_args,
-                build_id,
-                telemetry_cfg: Optional[build_telemetry.Config] = None):
+def _main_inner(input_args, build_id):
     # If running in the Gemini CLI, automatically add --quiet if it's not
     # already present to avoid filling the context window.
     if os.environ.get('GEMINI_CLI') == '1':
@@ -498,7 +494,7 @@ def _main_inner(input_args,
                     # Print the command-line to reassure the user that the right
                     # settings are being used.
                     _print_cmd(args)
-                return siso.main(args, telemetry_cfg)
+                return siso.main(args)
             if use_remoteexec:
                 if use_reclient and not t_specified:
                     # TODO: crbug.com/379584977 - Remove siso/reclient
@@ -687,16 +683,15 @@ def main(args):
     # are not supported by autoninja, but that is not a real limitation.
     input_args = args
     exit_code = 127
-    telemetry_cfg = build_telemetry.load_config()
-    should_collect_logs = telemetry_cfg.enabled()
     if sys.platform.startswith("win") and len(args) == 2:
         input_args = args[:1] + args[1].split()
     try:
-        exit_code = _main_inner(input_args, build_id, telemetry_cfg)
+        exit_code = _main_inner(input_args, build_id)
     except KeyboardInterrupt:
         exit_code = 1
     finally:
         # Check the log collection opt-in/opt-out status, and display notice if necessary.
+        should_collect_logs = build_telemetry.enabled()
         if should_collect_logs:
             warnings.simplefilter("ignore", ResourceWarning)
             elapsed = time.time() - start
