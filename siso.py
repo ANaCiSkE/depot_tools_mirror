@@ -234,7 +234,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
                     print('depot_tools/siso.py: %s' % shlex.join(new_args),
                           file=sys.stderr)
                 # Add ninja specific flags.
-                if args[0] == "ninja":
+                if args[1] == "ninja":
                     new_args = apply_metrics_labels(new_args)
                     if should_collect_logs:
                         new_args = apply_telemetry_flags(new_args)
