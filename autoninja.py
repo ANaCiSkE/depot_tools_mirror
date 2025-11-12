@@ -463,6 +463,36 @@ def _main_inner(input_args,
                 file=sys.stderr,
             )
 
+    # A large build (with or without RBE) tends to hog all system resources.
+    # Depending on the operating system, we might have mechanisms available
+    # to run at a lower priority, which improves this situation.
+    if os.environ.get("NINJA_BUILD_IN_BACKGROUND") == "1":
+        if sys.platform in ["darwin", "linux"]:
+            # nice-level 10 is usually considered a good default for background
+            # tasks. The niceness is inherited by child processes, so we can
+            # just set it here for us and it'll apply to the build tool we
+            # spawn later.
+            os.nice(10)
+
+    # On macOS and most Linux distributions, the default limit of open file
+    # descriptors is too low (256 and 1024, respectively).
+    # This causes a large j value to result in 'Too many open files' errors.
+    # Check whether the limit can be raised to a large enough value. If yes,
+    # use `ulimit -n .... &&` as a prefix to increase the limit when running
+    # ninja.
+    if sys.platform in ["darwin", "linux"]:
+        import resource
+        # Increase the number of allowed open file descriptors to the maximum.
+        fileno_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if fileno_limit < hard_limit:
+            try:
+                resource.setrlimit(resource.RLIMIT_NOFILE,
+                                   (hard_limit, hard_limit))
+            except Exception:
+                pass
+            fileno_limit, hard_limit = resource.getrlimit(
+                resource.RLIMIT_NOFILE)
+
     # use_siso may not be set when running `autoninja -help` without `-C`.
     if use_siso is None:
         use_siso = _get_use_siso_default(output_dir)
@@ -524,36 +554,6 @@ def _main_inner(input_args,
 
     # Strip -o/--offline so ninja doesn't see them.
     input_args = [arg for arg in input_args if arg not in ("-o", "--offline")]
-
-    # A large build (with or without RBE) tends to hog all system resources.
-    # Depending on the operating system, we might have mechanisms available
-    # to run at a lower priority, which improves this situation.
-    if os.environ.get("NINJA_BUILD_IN_BACKGROUND") == "1":
-        if sys.platform in ["darwin", "linux"]:
-            # nice-level 10 is usually considered a good default for background
-            # tasks. The niceness is inherited by child processes, so we can
-            # just set it here for us and it'll apply to the build tool we
-            # spawn later.
-            os.nice(10)
-
-    # On macOS and most Linux distributions, the default limit of open file
-    # descriptors is too low (256 and 1024, respectively).
-    # This causes a large j value to result in 'Too many open files' errors.
-    # Check whether the limit can be raised to a large enough value. If yes,
-    # use `ulimit -n .... &&` as a prefix to increase the limit when running
-    # ninja.
-    if sys.platform in ["darwin", "linux"]:
-        import resource
-        # Increase the number of allowed open file descriptors to the maximum.
-        fileno_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
-        if fileno_limit < hard_limit:
-            try:
-                resource.setrlimit(resource.RLIMIT_NOFILE,
-                                   (hard_limit, hard_limit))
-            except Exception:
-                pass
-            fileno_limit, hard_limit = resource.getrlimit(
-                resource.RLIMIT_NOFILE)
 
     ninja_args = ['ninja']
     num_cores = multiprocessing.cpu_count()
