@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import collections.abc
 import hashlib
 import struct
 import typing
@@ -26,23 +27,49 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
   def commit_positions(val: bool):
     return val
 
-  def output_json(self,
-                  first_sln,
-                  revision_mapping,
-                  *,
-                  patch_root=None,
-                  fixed_revisions=None,
-                  fail_checkout: bool = False,
-                  fail_patch: bool | typing.Literal['download'] = False,
-                  commit_positions: bool = True):
-    """Deterministically synthesize json.output test data for gclient's
-    --output-json option.
+  def output_json(
+      self,
+      first_sln: str,
+      revision_mapping: collections.abc.Mapping[str, str],
+      *,
+      patch_root: str | None = None,
+      fixed_revisions: collections.abc.Mapping[str, str] | None = None,
+      fail_checkout: bool = False,
+      fail_patch: bool | typing.Literal['download'] = False,
+      commit_positions: bool = True,
+  ):
+    """Synthesized json output for bot_update.py.
+
+    Args:
+      first_sln: The name of the first solution in the gclient config.
+      revision_mapping: A mapping from property name to project
+        name/checkout-relative repo path. The resultant json will have
+        the given property set to the revision of that project.
+      patch_root: The relative path within the checkout to where the
+        patch should be applied.
+      fixed_revisions: A mapping from project name/checkout-relative
+        repo path to the revisions to be used for the project. The
+        revisions can be either refs or commit hashes. The manifests in
+        the resultant json will have refs replaced with generated
+        revision values. The provided revisions will be reported as-is
+        in the fixed_revisions of the resultant json.
+      fail_checkout: Whether or not the simulated checkout should fail.
+      fail_patch: Whether or not the checkout should fail to apply the
+        patch. A value of 'download' can be provided to indicate a
+        failure to download the patch.
+      commit_positions: Whether or not to generate commit position
+        properties when generating revision properties. If true, any
+        project that has a revision property generated will have another
+        property generated with the same name with _cp appended with a
+        commit position as the value.
     """
     t = recipe_test_api.StepTestData()
 
-    output = {
+    output: dict[str, typing.Any] = {
         'did_run': True,
     }
+
+    fixed_revisions = fixed_revisions or {}
 
     if fail_checkout:
       t.retcode = 1
