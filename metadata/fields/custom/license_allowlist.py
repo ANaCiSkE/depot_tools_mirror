@@ -48,7 +48,9 @@
 # 5. Note:
 #   * Remove 'LicenseRef-' prefix from license classifier outputs.
 #   * Case does not matter.
-ALLOWED_SPDX_LICENSES = frozenset([
+from typing import List, Tuple
+
+_ALLOWED_SPDX_LICENSES = frozenset([
     # unencumbered.
     # go/keep-sorted start case=no
     "blessing",
@@ -117,7 +119,7 @@ ALLOWED_SPDX_LICENSES = frozenset([
 
 # These are licenses that are not in the SPDX license list, but are identified
 # by the license classifier.
-EXTENDED_LICENSE_CLASSIFIERS = frozenset([
+_EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     # unencumbered.
     # go/keep-sorted start case=no
     "AhemFont",
@@ -181,7 +183,7 @@ EXTENDED_LICENSE_CLASSIFIERS = frozenset([
 
 # These licenses are only allowed in open source projects due to their
 # reciprocal requirements.
-OPEN_SOURCE_SPDX_LICENSES = frozenset([
+_OPEN_SOURCE_SPDX_LICENSES = frozenset([
     # reciprocal.
     # go/keep-sorted start case=no
     "APSL-2.0",
@@ -196,7 +198,7 @@ OPEN_SOURCE_SPDX_LICENSES = frozenset([
 
 # TODO(b/388620886): Implement warning when changing to or from these licenses
 # (but not every time the README.chromium file is modified).
-WITH_PERMISSION_ONLY = frozenset([
+_WITH_PERMISSION_ONLY = frozenset([
     # restricted.
     # go/keep-sorted start case=no
     "CC-BY-SA-3.0",
@@ -222,14 +224,57 @@ WITH_PERMISSION_ONLY = frozenset([
 
 # These are references to files that are not licenses, but are allowed to be
 # included in the LICENSE field.
-ALLOWED_REFERENCES = frozenset([
+_ALLOWED_REFERENCES = frozenset([
     "Refer to additional_readme_paths.json",
 ])
 
-ALLOWED_LICENSES = (
-    ALLOWED_SPDX_LICENSES
-    | EXTENDED_LICENSE_CLASSIFIERS
-    | ALLOWED_REFERENCES
-)
-ALLOWED_OPEN_SOURCE_LICENSES = ALLOWED_LICENSES | OPEN_SOURCE_SPDX_LICENSES
-ALL_LICENSES = ALLOWED_OPEN_SOURCE_LICENSES | WITH_PERMISSION_ONLY
+_ALLOWED_LICENSES = (_ALLOWED_SPDX_LICENSES
+                     | _EXTENDED_LICENSE_CLASSIFIERS
+                     | _ALLOWED_REFERENCES)
+_ALLOWED_OPEN_SOURCE_LICENSES = _ALLOWED_LICENSES | _OPEN_SOURCE_SPDX_LICENSES
+_ALL_LICENSES = _ALLOWED_OPEN_SOURCE_LICENSES | _WITH_PERMISSION_ONLY
+
+
+def normalize_value(value: str) -> bool:
+    """Removes unnecessary prefixes/suffixes.
+    """
+    # Do not convert to lower case here, as we want to preserve the original
+    # casing for warning messages.
+    return value.removeprefix("LicenseRef-").strip()
+
+
+def _license_in_list(value: str, allow_list: frozenset[str]) -> bool:
+    """Normalizes and does a case insensitive check if value is in allow_list.
+    """
+    return normalize_value(value).lower() in map(str.lower, allow_list)
+
+
+def is_a_known_license(value: str) -> bool:
+    return _license_in_list(value, _ALL_LICENSES)
+
+
+def _is_allowed_license(value: str) -> bool:
+    return _license_in_list(value, _ALLOWED_LICENSES)
+
+
+def is_open_source_license(value: str) -> bool:
+    return _license_in_list(value, _OPEN_SOURCE_SPDX_LICENSES)
+
+
+def _allowed_with_permission_only(value: str) -> bool:
+    return _license_in_list(value, _WITH_PERMISSION_ONLY)
+
+
+def is_license_allowed(value: str,
+                       is_open_source_project: bool = False) -> bool:
+    """Returns whether the value is in the allowlist for license
+    types.
+    """
+    # Restricted licenses are not enforced by presubmits, see b/388620886 😢.
+    if _allowed_with_permission_only(value):
+        return True
+    if _is_allowed_license(value):
+        return True
+    if is_open_source_project and is_open_source_license(value):
+        return True
+    return False

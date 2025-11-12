@@ -474,38 +474,44 @@ class DependencyValidationTest(unittest.TestCase):
 
     def test_all_licenses_allowlisted(self):
         """Test that a single allowlisted license returns True."""
-        dependency = dm.DependencyMetadata()
-        self.assertTrue(dependency.all_licenses_allowlisted("MIT", False))
-        self.assertTrue(dependency.all_licenses_allowlisted("MIT, GPL-2.0", False))
-        self.assertTrue(dependency.all_licenses_allowlisted("MIT, Apache-2.0", False))
-        self.assertFalse(dependency.all_licenses_allowlisted("InvalidLicense", False))
-        self.assertFalse(dependency.all_licenses_allowlisted("MIT, InvalidLicense", False))
-        self.assertFalse(dependency.all_licenses_allowlisted("", False))
+        lic = known_fields.LICENSE
+        self.assertTrue(lic.all_licenses_allowed("MIT", False))
+        self.assertTrue(lic.all_licenses_allowed("MIT, GPL-2.0", False))
+        self.assertTrue(lic.all_licenses_allowed("MIT, Apache-2.0", False))
+        self.assertFalse(lic.all_licenses_allowed("InvalidLicense", False))
+        self.assertFalse(lic.all_licenses_allowed("MIT, InvalidLicense", False))
+        self.assertFalse(lic.all_licenses_allowed("", False))
 
         # "MPL-2.0" is a reciprocal license, i.e. only allowed in open source projects.
-        self.assertTrue(dependency.all_licenses_allowlisted("MPL-2.0", True))
-        self.assertFalse(dependency.all_licenses_allowlisted("MPL-2.0", False))
+        self.assertTrue(lic.all_licenses_allowed("MPL-2.0", True))
+        self.assertFalse(lic.all_licenses_allowed("MPL-2.0", False))
 
         # Restricted licenses are treated the same as other license types, until
         # the exception and enforcement is resourced.
-        self.assertTrue(dependency.all_licenses_allowlisted("GPL-2.0", False))
-        self.assertTrue(dependency.all_licenses_allowlisted("GPL-2.0", True))
-        self.assertFalse(dependency.all_licenses_allowlisted("MPL-2.0, GPL-2.0", False))
+        self.assertTrue(lic.all_licenses_allowed("GPL-2.0", False))
+        self.assertTrue(lic.all_licenses_allowed("GPL-2.0", True))
+        self.assertFalse(lic.all_licenses_allowed("MPL-2.0, GPL-2.0", False))
 
 
     def test_only_open_source_licenses(self):
         """Test that only open source licenses are returned."""
-        dependency = dm.DependencyMetadata()
-        self.assertEqual(dependency.only_open_source_licenses(""), [])
-        self.assertEqual(dependency.only_open_source_licenses("MIT"), [])
-        self.assertEqual(dependency.only_open_source_licenses("GPL-2.0"), [])
-        self.assertEqual(dependency.only_open_source_licenses("MPL-2.0"), ["MPL-2.0"])
-        result = dependency.only_open_source_licenses("MIT, MPL-2.0")
+        lic = known_fields.LICENSE
+        self.assertEqual(lic.filter_open_source_project_only_licenses(""), [])
+        self.assertEqual(lic.filter_open_source_project_only_licenses("MIT"),
+                         [])
+        self.assertEqual(
+            lic.filter_open_source_project_only_licenses("GPL-2.0"), [])
+        self.assertEqual(
+            lic.filter_open_source_project_only_licenses("MPL-2.0"),
+            ["MPL-2.0"])
+        result = lic.filter_open_source_project_only_licenses("MIT, MPL-2.0")
         self.assertEqual(result, ["MPL-2.0"])
-        result = dependency.only_open_source_licenses("MPL-2.0, APSL-2.0")
+        result = lic.filter_open_source_project_only_licenses(
+            "MPL-2.0, APSL-2.0")
         self.assertEqual(set(result), {"MPL-2.0", "APSL-2.0"})
         # Test with mix of invalid and valid licenses
-        result = dependency.only_open_source_licenses("InvalidLicense, MPL-2.0")
+        result = lic.filter_open_source_project_only_licenses(
+            "InvalidLicense, MPL-2.0")
         self.assertEqual(result, ["MPL-2.0"])
 
     def test_mitigated_validation(self):

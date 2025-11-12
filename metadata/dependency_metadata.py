@@ -38,7 +38,7 @@ import metadata.fields.custom.mitigated as mitigated_util
 import metadata.fields.known as known_fields
 import metadata.fields.util as util
 import metadata.validation_result as vr
-from metadata.fields.custom.license_allowlist import OPEN_SOURCE_SPDX_LICENSES
+import metadata.fields.custom.license_allowlist as allowlist_util
 
 
 class DependencyMetadata:
@@ -126,30 +126,6 @@ class DependencyMetadata:
                                field: field_types.MetadataField) -> List[int]:
         return sorted(self._metadata_line_numbers[field])
 
-    def all_licenses_allowlisted(self, license_field_value: str, is_open_source_project: bool) -> bool:
-        """Returns whether all licenses in the field are allowlisted.
-        Assumes a non-empty license_field_value"""
-        licenses = license_util.process_license_value(
-            license_field_value,
-            atomic_delimiter=known_fields.LICENSE.VALUE_DELIMITER)
-        for lic, valid in licenses:
-            allowed = license_util.is_license_allowlisted(lic, is_open_source_project=is_open_source_project)
-            if not valid or not allowed:
-                return False
-        return True
-
-
-    def only_open_source_licenses(self, license_field_value: str) ->List[str]:
-        """Returns a list of licenses that are only allowed in open source projects."""
-        licenses = license_util.process_license_value(
-            license_field_value,
-            atomic_delimiter=known_fields.LICENSE.VALUE_DELIMITER)
-        open_source_only = []
-        for lic, valid in licenses:
-            if valid and lic in OPEN_SOURCE_SPDX_LICENSES:
-                open_source_only.append(lic)
-        return open_source_only
-
     def _assess_required_fields(self, is_open_source_project: bool = False) -> Set[field_types.MetadataField]:
         """Returns the set of required fields, based on the current
         metadata.
@@ -169,7 +145,8 @@ class DependencyMetadata:
             # package is shipped and the license is not in the
             # allowlist.
             license_value = self._metadata.get(known_fields.LICENSE)
-            if not license_value or not self.all_licenses_allowlisted(license_value, is_open_source_project):
+            if not license_value or not known_fields.LICENSE.all_licenses_allowed(
+                    license_value, is_open_source_project):
                 required.add(known_fields.LICENSE_ANDROID_COMPATIBLE)
 
         return required
@@ -300,7 +277,8 @@ class DependencyMetadata:
         if not is_open_source_project:
             license_value = self._metadata.get(known_fields.LICENSE)
             if license_value is not None:
-                not_allowed_licenses = self.only_open_source_licenses(license_value)
+                not_allowed_licenses = known_fields.LICENSE.filter_open_source_project_only_licenses(
+                    license_value)
                 if len(not_allowed_licenses) > 0:
                     license_result = vr.ValidationWarning(
                         reason=f"License has a license not in the allowlist."
