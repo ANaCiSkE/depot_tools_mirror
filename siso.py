@@ -109,6 +109,24 @@ def apply_sisorc(global_flags, subcmd_flags, args, subcmd):
     return new_args
 
 
+def _fix_system_limits() -> None:
+    # On macOS and most Linux distributions, the default limit of open file
+    # descriptors is too low (256 and 1024, respectively).
+    # This causes a large j value to result in 'Too many open files' errors.
+    # Check whether the limit can be raised to a large enough value. If yes,
+    # use `resource.setrlimit` to increase the limit when running ninja.
+    if sys.platform in ["darwin", "linux"]:
+        import resource
+        # Increase the number of allowed open file descriptors to the maximum.
+        fileno_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if fileno_limit < hard_limit:
+            try:
+                resource.setrlimit(resource.RLIMIT_NOFILE,
+                                   (hard_limit, hard_limit))
+            except Exception:
+                pass
+
+
 def _is_google_corp_machine():
     """This assumes that corp machine has gcert binary in known location."""
     return shutil.which("gcert") is not None
@@ -122,6 +140,8 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
     if not telemetry_cfg:
         telemetry_cfg = build_telemetry.load_config()
     should_collect_logs = telemetry_cfg.enabled()
+
+    _fix_system_limits()
 
     def _ignore(signum, frame):
         try:
