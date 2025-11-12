@@ -69,6 +69,10 @@ def apply_telemetry_flags(args: list[str]) -> list[str]:
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
     ]
+    # Despite go.dev/issue/68312 being fixed, the issue is still reproducible
+    # for googlers. Due to this, the flag is still applied while the
+    # issue is being investigated.
+    os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
     flag_to_add = []
     for flag in telemetry_flags:
         if f"-{flag}" not in args and f"--{flag}" not in args:
