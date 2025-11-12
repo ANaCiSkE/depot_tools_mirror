@@ -7,6 +7,7 @@ third_party as part of gclient sync. It will automatically find the siso
 binary when run inside a gclient source tree, so users can just type
 "siso" on the command line."""
 
+import argparse
 import itertools
 import os
 import platform
@@ -64,7 +65,7 @@ def apply_metrics_labels(args: list[str]) -> list[str]:
     return args + ["--metrics_labels", ",".join(result)]
 
 
-def apply_telemetry_flags(args: list[str]) -> list[str]:
+def apply_telemetry_flags(args: list[str], env: dict[str, str]) -> list[str]:
     telemetry_flags = [
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
@@ -73,11 +74,41 @@ def apply_telemetry_flags(args: list[str]) -> list[str]:
     # for googlers. Due to this, the flag is still applied while the
     # issue is being investigated.
     os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
-    flag_to_add = []
+    flags_to_add = []
     for flag in telemetry_flags:
-        if f"-{flag}" not in args and f"--{flag}" not in args:
-            flag_to_add.append(f"--{flag}")
-    return args + flag_to_add
+        found = False
+        for arg in args:
+            if (arg == f"-{flag}" or arg == f"--{flag}"
+                    or arg.startswith(f"-{flag}=")
+                    or arg.startswith(f"--{flag}=")):
+                found = True
+                break
+        if not found:
+            flags_to_add.append(f"--{flag}")
+
+    # This is a temporary measure as on new siso versions metrics_project
+    # gets set the same as project by default.
+    # TODO: remove this code after we make sure all clients are using new siso versions.
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-metrics_project", "--metrics_project")
+    parser.add_argument("-project", "--project")
+    metrics_env_var = "RBE_metrics_project"
+    project_env_var = "SISO_PROJECT"
+    # If metrics env variable is set, add flags and return.
+    if metrics_env_var in env:
+        return args + flags_to_add
+    # Check if metrics project is set. If so, then add flags and return.
+    known_args, _ = parser.parse_known_args(args)
+    if known_args.metrics_project:
+        return args + flags_to_add
+    if known_args.project:
+        return args + flags_to_add + [f"--metrics_project={known_args.project}"]
+    if project_env_var in env:
+        return args + flags_to_add + [f"--metrics_project={env[project_env_var]}"]
+    # Default case - no flags are set, so don't add any
+    return args
 
 
 def load_sisorc(rcfile):
@@ -261,7 +292,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
                 if args[1] == "ninja":
                     new_args = apply_metrics_labels(new_args)
                     if should_collect_logs:
-                        new_args = apply_telemetry_flags(new_args)
+                        new_args = apply_telemetry_flags(new_args, env)
                 return caffeinate.run([siso_path] + new_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
