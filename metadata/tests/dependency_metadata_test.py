@@ -622,8 +622,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://git.example.com/repo.git")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.2.3")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:Git URL and Version")
+        self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Package Manager URL and Version.
         dependency = dm.DependencyMetadata()
@@ -740,6 +739,7 @@ class DependencyValidationTest(unittest.TestCase):
             dependency.add_entry(known_fields.URL.get_name(),
                                  "https://github.com/example/repo.git")
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
+            dependency.add_entry(known_fields.REVISION.get_name(), "abcdef1234")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
             dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
                                  "LICENSE")
@@ -800,6 +800,7 @@ class DependencyValidationTest(unittest.TestCase):
             dependency.add_entry(known_fields.URL.get_name(),
                                  "https://www.github.com")
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
+            dependency.add_entry(known_fields.REVISION.get_name(), "abcdef1234")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
             dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
                                  "LICENSE")

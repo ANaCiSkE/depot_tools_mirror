@@ -3,6 +3,7 @@ Short Name: metadata-test-valid
 URL: https://www.github.com/metadata,
      https://www.github.com/parser
 Version: 1.0.12
+Revision: 1234abcdef1234
 Date: 2020-12-03
 License: Apache-2.0, MIT
 License File: LICENSE
@@ -26,6 +27,7 @@ Name: Test-B README for Chromium metadata
 Short Name: metadata-test-valid-again
 URL: https://www.github.com/metadata
 Version: 1.0.12
+Revision: 1234abcdef1234
 Date: 2020-12-03
 License: MIT
 License File: LICENSE
@@ -39,6 +41,7 @@ Name: Test-C README for Chromium metadata
 Short Name: metadata-test-valid-again
 URL: https://www.github.com/metadata
 Version: 1.0.12
+Revision: 1234abcdef1234
 Update Mechanism: Static(https://crbug.com/1234)
 Date: 2020-12-03
 License: Apache-2.0

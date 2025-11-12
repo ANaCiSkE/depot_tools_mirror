@@ -543,7 +543,6 @@ class DependencyMetadata:
             - 'sufficient:CPE' if a CPE prefix is provided and a version is included in the README.
             - 'sufficient:URL and Revision' if URL is a git url and a Revision is provided.
             - 'sufficient:URL and Revision[DEPS]' as above, but 'Revision:DEPS'.
-            - 'sufficient:Git URL and Version' if a git clonable URL and a Version are provided.
             - 'sufficient:Package Manager URL and Version' if a package manager URL and a Version are provided.
             - 'ignore:Canonical' if the dependency is the canonical repository.
             - 'ignore:Internal' if the dependency is internal.
@@ -560,8 +559,6 @@ class DependencyMetadata:
             if self.revision_in_deps:
                 return "sufficient:URL and Revision[DEPS]"
             if self.version:
-                if self.url_is_git_clonable:
-                    return "sufficient:Git URL and Version"
                 if self.url_is_package_manager:
                     return "sufficient:Package Manager URL and Version"
 
