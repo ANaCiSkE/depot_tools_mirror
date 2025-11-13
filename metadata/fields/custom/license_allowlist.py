@@ -61,6 +61,7 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     # permissive.
     # go/keep-sorted start case=no
     "0BSD",
+    "bcrypt-Solar-Designer",
     "FSFUL",
     "GPL-2.0-with-autoconf-exception",
     "GPL-2.0-with-classpath-exception",
@@ -78,8 +79,10 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "BSD-2-Clause-FreeBSD",
     "BSD-3-Clause",
     "BSD-3-Clause-Attribution",
+    "BSD-3-Clause-Open-MPI",
     "BSD-4-Clause",
     "BSD-4-Clause-UC",
+    "BSD-4.3RENO",
     "BSD-4.3TAHOE",
     "BSD-Source-Code",
     "BSL-1.0",
@@ -98,7 +101,9 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "JSON",
     "Libpng",
     "libtiff",
+    "Minpack",
     "MIT",
+    "MIT-Khronos-old",
     "MIT-Modern-Variant",
     "MS-PL",
     "NAIST-2003",
@@ -112,6 +117,7 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "Unicode-3.0",
     "Unicode-DFS-2015",
     "Unicode-DFS-2016",
+    "Unicode-TOU",
     "X11",
     "Zlib",
     # go/keep-sorted end
