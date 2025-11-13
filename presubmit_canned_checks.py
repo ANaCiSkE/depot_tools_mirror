@@ -943,10 +943,20 @@ def CheckChromiumDependencyMetadata(input_api, output_api, file_filter=None):
 _IGNORE_FREEZE_FOOTER = 'Ignore-Freeze'
 
 _FREEZE_TZ = datetime.timezone(-datetime.timedelta(hours=8), 'PST')
-_CHROMIUM_FREEZE_START = datetime.datetime(
-    2024, 12, 20, 17, 1, tzinfo=_FREEZE_TZ)
-_CHROMIUM_FREEZE_END = datetime.datetime(2025, 1, 5, 17, 0, tzinfo=_FREEZE_TZ)
-_CHROMIUM_FREEZE_DETAILS = 'Holiday freeze'
+
+# (freeze start, freeze end, freeze details)
+_CHROMIUM_FREEZES = [
+    (
+        datetime.datetime(2025, 11, 21, 17, 1, tzinfo=_FREEZE_TZ),
+        datetime.datetime(2025, 11, 30, 17, 0, tzinfo=_FREEZE_TZ),
+        'Holiday freeze',
+    ),
+    (
+        datetime.datetime(2025, 12, 19, 17, 1, tzinfo=_FREEZE_TZ),
+        datetime.datetime(2026, 1, 4, 17, 0, tzinfo=_FREEZE_TZ),
+        'Holiday freeze',
+    ),
+]
 
 def CheckInfraFreeze(input_api,
                      output_api,
@@ -980,7 +990,10 @@ def CheckChromiumInfraFreeze(input_api,
     """
     # Not in the freeze time range
     now = datetime.datetime.now(_FREEZE_TZ)
-    if now < _CHROMIUM_FREEZE_START or now >= _CHROMIUM_FREEZE_END:
+    for start, end, details in _CHROMIUM_FREEZES:
+        if start <= now < end:
+            break
+    else:
         input_api.logging.info('No freeze is in effect')
         return []
 
@@ -1002,7 +1015,7 @@ def CheckChromiumInfraFreeze(input_api,
         for af in input_api.AffectedFiles(file_filter=file_filter)
     ]
 
-    # The Cl does not touch ny files covered by the freeze
+    # The Cl does not touch any files covered by the freeze
     if not files:
         input_api.logging.info('No affected files are covered by freeze')
         return []
@@ -1019,8 +1032,7 @@ def CheckChromiumInfraFreeze(input_api,
             '\t{}\n\n'
             'The following files cannot be modified:\n  {}.\n\n'
             'Add "{}: <reason>" to the end of your commit message to override.'.
-            format(_CHROMIUM_FREEZE_START, _CHROMIUM_FREEZE_END,
-                   _CHROMIUM_FREEZE_DETAILS, '\n  '.join(files),
+            format(start, end, details, '\n  '.join(files),
                    _IGNORE_FREEZE_FOOTER))
     ]
 
