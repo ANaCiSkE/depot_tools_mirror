@@ -45,8 +45,7 @@ def RunSteps(api):
       submodule_update_recursive=submodule_update_recursive,
       use_git_cache=api.properties.get('use_git_cache'),
       tags=api.properties.get('tags'),
-      depth=api.properties.get('depth'),
-      no_auto_gc=api.properties.get('no_auto_gc'))
+      depth=api.properties.get('depth'))
 
   assert retVal == "deadbeef", (
     "expected retVal to be %r but was %r" % ("deadbeef", retVal))
@@ -175,6 +174,3 @@ def GenTests(api):
          api.expect_exception('ValueError'))
 
   yield (api.test('git-checkout-with-depth') + api.properties(depth=1))
-
-  yield (api.test('git-fetch-without-auto-gc') +
-         api.properties(no_auto_gc=True))
