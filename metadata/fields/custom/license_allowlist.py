@@ -243,7 +243,7 @@ OPEN_SOURCE_SPDX_LICENSES = _OPEN_SOURCE_SPDX_LICENSES
 WITH_PERMISSION_ONLY = _WITH_PERMISSION_ONLY
 
 
-def normalize_value(value: str) -> bool:
+def normalize_value(value: str) -> str:
     """Removes unnecessary prefixes/suffixes.
     """
     # Do not convert to lower case here, as we want to preserve the original
@@ -261,7 +261,15 @@ def is_a_known_license(value: str) -> bool:
     return _license_in_list(value, _ALL_LICENSES)
 
 
-def _is_allowed_license(value: str) -> bool:
+def is_allowed_spdx_license(value: str) -> bool:
+    return _license_in_list(value, _ALLOWED_SPDX_LICENSES)
+
+
+def is_extended_license_classifier(value: str) -> bool:
+    return _license_in_list(value, _EXTENDED_LICENSE_CLASSIFIERS)
+
+
+def is_allowed_license(value: str) -> bool:
     return _license_in_list(value, _ALLOWED_LICENSES)
 
 
@@ -269,7 +277,7 @@ def is_open_source_license(value: str) -> bool:
     return _license_in_list(value, _OPEN_SOURCE_SPDX_LICENSES)
 
 
-def _allowed_with_permission_only(value: str) -> bool:
+def is_with_permission_only(value: str) -> bool:
     return _license_in_list(value, _WITH_PERMISSION_ONLY)
 
 
@@ -279,9 +287,9 @@ def is_license_allowed(value: str,
     types.
     """
     # Restricted licenses are not enforced by presubmits, see b/388620886 😢.
-    if _allowed_with_permission_only(value):
+    if is_with_permission_only(value):
         return True
-    if _is_allowed_license(value):
+    if is_allowed_license(value):
         return True
     if is_open_source_project and is_open_source_license(value):
         return True
