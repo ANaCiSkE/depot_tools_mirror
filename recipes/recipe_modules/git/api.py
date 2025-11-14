@@ -122,7 +122,8 @@ class GitApi(recipe_api.RecipeApi):
                use_git_cache=False,
                progress=True,
                tags=False,
-               depth=None):
+               depth=None,
+               no_auto_gc=False):
     """Performs a full git checkout and returns sha1 of checked out revision.
 
     Args:
@@ -158,6 +159,7 @@ class GitApi(recipe_api.RecipeApi):
       * tags (bool): Also fetch tags.
       * depth (int): if > 0, limit fetching to the given number of commits from
         the tips of the remote tree.
+      * no_auto_gc: whether to turn off the automatic garbage collection.
 
     Returns: If the checkout was successful, this returns the commit hash of
       the checked-out-repo. Otherwise this returns None.
@@ -262,6 +264,9 @@ class GitApi(recipe_api.RecipeApi):
       if depth:
         assert isinstance(depth, int)
         fetch_args += ['--depth', depth]
+
+      if no_auto_gc:
+        fetch_args.append('--no-auto-gc')
 
       fetch_step_name = 'git fetch%s' % step_suffix
       if display_fetch_size:
