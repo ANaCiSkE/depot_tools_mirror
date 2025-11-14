@@ -335,7 +335,6 @@ class DependencyMetadata:
                         "Please provide one of the following combinations:",
                         "- 'CPEPrefix' with a version.",
                         "- A git clonable 'URL' and a 'Revision'.",
-                        "- A git clonable 'URL' and a 'Version' matching the git tag.",
                         "- A package manager 'URL' and a 'Version'. ",
                     ]))
         return results
