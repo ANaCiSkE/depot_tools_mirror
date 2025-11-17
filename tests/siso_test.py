@@ -6,6 +6,7 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
@@ -62,6 +63,19 @@ ninja --failure_verbose=false -k=0
             '-credential_helper=luci-auth', '-log_dir=/tmp', 'ninja', '-k=0',
             '-C', 'out/Default'
         ])
+
+    @mock.patch('siso.subprocess.call')
+    def test_is_subcommand_present(self, mock_call):
+
+        def side_effect(cmd):
+            if cmd[2] in ['collector', 'ninja']:
+                return 0
+            return 2
+
+        mock_call.side_effect = side_effect
+        self.assertTrue(siso._is_subcommand_present('siso_path', 'collector'))
+        self.assertTrue(siso._is_subcommand_present('siso_path', 'ninja'))
+        self.assertFalse(siso._is_subcommand_present('siso_path', 'unknown'))
 
 
 if __name__ == '__main__':
