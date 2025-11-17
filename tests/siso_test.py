@@ -6,6 +6,7 @@
 import os
 import sys
 import unittest
+import platform
 from unittest import mock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -76,6 +77,140 @@ ninja --failure_verbose=false -k=0
         self.assertTrue(siso._is_subcommand_present('siso_path', 'collector'))
         self.assertTrue(siso._is_subcommand_present('siso_path', 'ninja'))
         self.assertFalse(siso._is_subcommand_present('siso_path', 'unknown'))
+
+    def test_apply_metrics_labels(self):
+        user_system = siso._SYSTEM_DICT.get(platform.system(),
+                                            platform.system())
+        test_cases = {
+            'no_labels': {
+                'args': ['ninja', '-C', 'out/Default'],
+                'want': [
+                    'ninja', '-C', 'out/Default', '--metrics_labels',
+                    f'type=developer,tool=siso,host_os={user_system}'
+                ]
+            },
+            'labels_exist': {
+                'args':
+                ['ninja', '-C', 'out/Default', '--metrics_labels=foo=bar'],
+                'want':
+                ['ninja', '-C', 'out/Default', '--metrics_labels=foo=bar']
+            }
+        }
+        for name, tc in test_cases.items():
+            with self.subTest(name):
+                got = siso.apply_metrics_labels(tc['args'])
+                self.assertEqual(got, tc['want'])
+
+    def test_apply_telemetry_flags(self):
+        test_cases = {
+            'no_env_flags': {
+                'args': ['ninja', '-C', 'out/Default'],
+                'env': {},
+                'want': ['ninja', '-C', 'out/Default'],
+            },
+            'some_already_applied_no_env_flags': {
+                'args': [
+                    'ninja', '-C', 'out/Default', '--enable_cloud_monitoring',
+                    '--enable_cloud_profiler'
+                ],
+                'env': {},
+                'want': [
+                    'ninja', '-C', 'out/Default', '--enable_cloud_monitoring',
+                    '--enable_cloud_profiler'
+                ],
+            },
+            'metrics_project_set': {
+                'args': [
+                    'ninja', '-C', 'out/Default', '--metrics_project',
+                    'some_project'
+                ],
+                'env': {},
+                'want': [
+                    'ninja', '-C', 'out/Default', '--metrics_project',
+                    'some_project', '--enable_cloud_monitoring',
+                    '--enable_cloud_profiler', '--enable_cloud_trace',
+                    '--enable_cloud_logging'
+                ],
+            },
+            'metrics_project_set_thru_env': {
+                'args': ['ninja', '-C', 'out/Default'],
+                'env': {
+                    'RBE_metrics_project': 'some_project'
+                },
+                'want': [
+                    'ninja', '-C', 'out/Default', '--enable_cloud_monitoring',
+                    '--enable_cloud_profiler', '--enable_cloud_trace',
+                    '--enable_cloud_logging'
+                ],
+            },
+            'cloud_project_set': {
+                'args':
+                ['ninja', '-C', 'out/Default', '--project', 'some_project'],
+                'env': {},
+                'want': [
+                    'ninja',
+                    '-C',
+                    'out/Default',
+                    '--project',
+                    'some_project',
+                    '--enable_cloud_monitoring',
+                    '--enable_cloud_profiler',
+                    '--enable_cloud_trace',
+                    '--enable_cloud_logging',
+                    '--metrics_project=some_project',
+                ],
+            },
+            'cloud_project_set_thru_env': {
+                'args': ['ninja', '-C', 'out/Default'],
+                'env': {
+                    'SISO_PROJECT': 'some_project'
+                },
+                'want': [
+                    'ninja',
+                    '-C',
+                    'out/Default',
+                    '--enable_cloud_monitoring',
+                    '--enable_cloud_profiler',
+                    '--enable_cloud_trace',
+                    '--enable_cloud_logging',
+                    '--metrics_project=some_project',
+                ],
+            },
+            'respects_set_flags': {
+                'args':
+                ['ninja', '-C', 'out/Default', '--enable_cloud_profiler=false'],
+                'env': {
+                    'SISO_PROJECT': 'some_project'
+                },
+                'want': [
+                    'ninja',
+                    '-C',
+                    'out/Default',
+                    '--enable_cloud_profiler=false',
+                    '--enable_cloud_monitoring',
+                    '--enable_cloud_trace',
+                    '--enable_cloud_logging',
+                    '--metrics_project=some_project',
+                ],
+            },
+        }
+
+        for name, tc in test_cases.items():
+            with self.subTest(name):
+                got = siso.apply_telemetry_flags(tc['args'], tc['env'])
+                self.assertEqual(got, tc['want'])
+
+    @mock.patch.dict('os.environ', {})
+    def test_apply_telemetry_flags_sets_expected_env_var(self):
+        args = [
+            'ninja',
+            '-C',
+            'out/Default',
+        ]
+        env = {}
+        _ = siso.apply_telemetry_flags(args, env)
+        self.assertEqual(os.environ.get("GOOGLE_API_USE_CLIENT_CERTIFICATE"),
+                         "false")
 
 
 if __name__ == '__main__':

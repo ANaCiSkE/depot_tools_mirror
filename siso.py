@@ -22,6 +22,9 @@ import caffeinate
 import gclient_paths
 
 
+_SYSTEM_DICT = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
+
+
 def parse_args(args):
     subcmd = ''
     out_dir = "."
@@ -55,8 +58,7 @@ def check_outdir(subcmd, out_dir):
 
 
 def apply_metrics_labels(args: list[str]) -> list[str]:
-    system_dict = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
-    user_system = system_dict.get(platform.system(), platform.system())
+    user_system = _SYSTEM_DICT.get(platform.system(), platform.system())
 
     # TODO(ovsienko) - add targets to the processing. For this, the Siso needs to understand lists.
     for arg in args[1:]:
