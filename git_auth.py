@@ -187,21 +187,18 @@ class ConfigWizard(object):
         self._print_actions_for_user()
 
     def _run_gerrit_host_configuration(self, *, force_global: bool) -> None:
+        if force_global:
+            self._println(
+                'Since you passed --global, we will check your global Git configuration.'
+            )
+            self._run_outside_repo()
+            return
         remote_url = self._remote_url_func()
         if _is_gerrit_url(remote_url):
-            if force_global:
-                self._println(
-                    'We will pretend to be running outside of a Gerrit repository'
-                )
-                self._println(
-                    'and check your global Git configuration since you passed --global.'
-                )
-                self._run_outside_repo()
-            else:
-                self._println(
-                    'Looks like we are running inside a Gerrit repository,')
-                self._println('so we will check your Git configuration for it.')
-                self._run_inside_repo()
+            self._println(
+                'Looks like we are running inside a Gerrit repository,')
+            self._println('so we will check your Git configuration for it.')
+            self._run_inside_repo()
         else:
             self._println(
                 'Looks like we are running outside of a Gerrit repository,')
