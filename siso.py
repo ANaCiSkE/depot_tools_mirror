@@ -140,7 +140,8 @@ def load_sisorc(rcfile):
     return global_flags, subcmd_flags
 
 
-def apply_sisorc(global_flags, subcmd_flags, args, subcmd):
+def apply_sisorc(global_flags: list[str], subcmd_flags: dict[str, list[str]],
+                 args: list[str], subcmd: str) -> list[str]:
     new_args = []
     for arg in args:
         if not new_args:
@@ -170,6 +171,21 @@ def _fix_system_limits() -> None:
                                    (hard_limit, hard_limit))
             except Exception:
                 pass
+
+
+# Utility function to produce actual command line flags for Siso.
+def _process_args(global_flags: list[str], subcmd_flags: dict[str, list[str]],
+                  args: list[str], subcmd: str, should_collect_logs: bool,
+                  env: dict[str, str]) -> list[str]:
+    new_args = apply_sisorc(global_flags, subcmd_flags, args, subcmd)
+    if args != new_args:
+        print('depot_tools/siso.py: %s' % shlex.join(new_args), file=sys.stderr)
+    # Add ninja specific flags.
+    if subcmd == "ninja":
+        new_args = apply_metrics_labels(new_args)
+        if should_collect_logs:
+            new_args = apply_telemetry_flags(new_args, env)
+    return new_args
 
 
 def _is_google_corp_machine():
@@ -283,6 +299,8 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
             return 1
         global_flags, subcmd_flags = load_sisorc(
             os.path.join(base_path, 'build', 'config', 'siso', '.sisorc'))
+        processed_args = _process_args(global_flags, subcmd_flags, args[1:],
+                                       subcmd, should_collect_logs, env)
         siso_paths = [
             siso_override_path,
             os.path.join(base_path, 'third_party', 'siso', 'cipd',
@@ -293,17 +311,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
                 check_outdir(subcmd, out_dir)
-                new_args = apply_sisorc(global_flags, subcmd_flags, args[1:],
-                                        subcmd)
-                if args[1:] != new_args:
-                    print('depot_tools/siso.py: %s' % shlex.join(new_args),
-                          file=sys.stderr)
-                # Add ninja specific flags.
-                if subcmd == "ninja":
-                    new_args = apply_metrics_labels(new_args)
-                    if should_collect_logs:
-                        new_args = apply_telemetry_flags(new_args, env)
-                return caffeinate.run([siso_path] + new_args, env=env)
+                return caffeinate.run([siso_path] + processed_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',
