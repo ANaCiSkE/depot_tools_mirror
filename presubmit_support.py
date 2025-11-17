@@ -1248,7 +1248,8 @@ class AffectedFile(object):
         # The keeplinebreaks parameter to splitlines must be True or else the
         # CheckForWindowsLineEndings presubmit will be a NOP.
         for line in self.GenerateScmDiff().splitlines(keeplinebreaks):
-            m = re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line)
+            m = re.match(r'^@@ -[0-9]+(?:,[0-9]+)? \+([0-9]+)(?:,[0-9]+)? @@',
+                         line)
             if m:
                 line_num = int(m.groups(1)[0])
                 continue

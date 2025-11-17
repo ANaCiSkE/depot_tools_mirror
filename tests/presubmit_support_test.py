@@ -99,6 +99,29 @@ class ProvidedDiffChangeTest(fake_repos.FakeReposTestBase):
         self._test('somewhere/else', ['not a top level file!'],
                    ['still not a top level file!'])
 
+    def test_changed_contents_of_modified_file(self):
+        diff = '\n'.join([
+            'diff --git a/foo b/foo',
+            'index d7ba659f..b7957f3 100644',
+            '--- a/foo',
+            '+++ b/foo',
+            '%s',
+            '-  foo1',
+            '+  foo2',
+        ])
+
+        def test(hunk):
+            change = self._create_change(diff % hunk)
+            afs = change.AffectedFiles()
+            self.assertEqual(len(afs), 1)
+            return afs[0].ChangedContents()
+
+        self.assertEqual(test('@@ -1,1 +1,1 @@'), [(1, '  foo2')])
+        self.assertEqual(test('@@ -290,1 +290 @@'), [(290, '  foo2')])
+        self.assertEqual(test('@@ -291 +291 @@'), [(291, '  foo2')])
+        self.assertEqual(test('@@ -292 +292,1 @@'), [(292, '  foo2')])
+        self.assertEqual(test('@@ -293,1 +293,1 @@'), [(293, '  foo2')])
+
     def test_unix_local_paths(self):
         if sys.platform == 'win32':
             self.assertIn(r'somewhere\else', self.change.LocalPaths())
