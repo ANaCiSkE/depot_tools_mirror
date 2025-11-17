@@ -100,6 +100,7 @@ def GenTests(api):
   def ci_build(**kwargs):
     kwargs.setdefault(
         'git_repo', 'https://chromium.googlesource.com/chromium/src')
+    kwargs.setdefault('revision', '2d72510e447ab60a9728aeea2362d8be2cbd7789')
     return (
         api.buildbucket.ci_build('chromium/src', 'ci', 'linux', **kwargs) +
         api.properties(patch=False)
@@ -262,10 +263,11 @@ def GenTests(api):
       # attempts to do comparisons on the revision value
       api.step_data(
           'bot_update (without patch)',
-          api.bot_update.output_json(patch_root='src',
-                                     first_sln='src',
-                                     revision_mapping={'got_revision': 'src'},
-                                     commit_positions=False)))
+          api.bot_update.output_json(
+              patch_root='src',
+              first_sln='src',
+              got_revision_mapping={'got_revision': 'src'},
+              commit_positions=False)))
 
   yield api.test(
       'upload_traces',
@@ -342,3 +344,65 @@ def GenTests(api):
       {'$depot_tools/bot_update': {
           'stale_process_duration_override': 3000,
       }}) + ci_build())
+
+  def check_revisions(check, output_json):
+    preconditions_valid = (
+        check(output_json['fixed_revisions']['infra'] == 'HEAD')
+        and check(output_json['fixed_revisions']['src'] ==
+                  '2d72510e447ab60a9728aeea2362d8be2cbd7789'))
+    if not preconditions_valid:
+      return  # pragma: no cover
+
+    manifest = output_json['manifest']
+    # An empty revision specified for a project where there is a fixed revision
+    # uses the fixed revision
+    check(manifest['src']['revision'] ==
+          '2d72510e447ab60a9728aeea2362d8be2cbd7789')
+    # An empty revision specified for a project where there is not a fixed
+    # revision will generate a revision for 'HEAD'
+    check(manifest['src/foo']['revision'] == api.bot_update.gen_revision(
+        'src/foo'))
+    # A non-empty revision specified for a project where there is not a fixed
+    # revision will use the revision (generating an actual revision for a ref)
+    check(manifest['src/v8']['revision'] == api.bot_update.gen_revision(
+        'src/v8@refs/bar'))
+    # A non-empty revision specified for a project where there is a fixed
+    # revision with the same value will use the revision (generating an actual
+    # revision for a ref)
+    check(manifest['infra']['revision'] == api.bot_update.gen_revision('infra'))
+
+  yield api.test(
+      'revisions',
+      ci_build(),
+      api.bot_update.revisions({
+          'src': '',
+          'src/foo': '',
+          'src/v8': 'refs/bar',
+          'infra': 'HEAD',
+      }),
+      api.bot_update.post_check_output_json('bot_update (without patch)',
+                                            check_revisions),
+      api.post_process(post_process.DropExpectation),
+  )
+
+  def check_revisions_overriding_generation(check, output_json):
+    # Precondition check
+    if not check(output_json['fixed_revisions']['infra'] == 'HEAD'):
+      return  # pragma: no cover
+
+    manifest = output_json['manifest']
+    # A non-empty revision for a project where there is a fixed revision that is
+    # different is okay if the fixed revision would be replaced with a generated
+    # value: the specified revision will be used
+    check(manifest['infra']['revision'] == 'a' * 40)
+
+  yield api.test(
+      'revisions-overriding-revision-generation',
+      ci_build(),
+      api.bot_update.revisions({
+          'infra': 'a' * 40,
+      }),
+      api.bot_update.post_check_output_json(
+          'bot_update (without patch)', check_revisions_overriding_generation),
+      api.post_process(post_process.DropExpectation),
+  )
