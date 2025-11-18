@@ -2136,7 +2136,9 @@ def CheckForCommitObjects(input_api, output_api):
         # this global presubmit check.
         #
         # https://chromium.googlesource.com/angle/angle/+/refs/heads/main/DEPS#412
-        if dep_path == 'third_party/dummy_chromium':
+        # https://dawn.googlesource.com/dawn/+/refs/heads/main/DEPS#606
+        if dep_path in ('third_party/dummy_chromium',
+                        'third_party/placeholder_chromium'):
             continue
 
         if commit_hash in git_submodules:
