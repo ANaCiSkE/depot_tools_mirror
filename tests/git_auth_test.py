@@ -109,6 +109,30 @@ class TestConfigWizard(unittest.TestCase):
         }
         self.assertEqual(self.global_state, want)
 
+    def test_configure_sso_global_oauth_local(self):
+        parts = urllib.parse.urlsplit(
+            'https://chromium.googlesource.com/chromium/tools/depot_tools.git')
+        self.wizard._configure_sso(parts, scope='global')
+        want = {
+            'url.sso://chromium/.insteadof':
+            ['https://chromium.googlesource.com/'],
+        }
+        self.assertEqual(self.global_state, want)
+        self.wizard._configure_oauth(parts, scope='local')
+        self.assertEqual(
+            scm.GIT.GetConfigList(
+                os.getcwd(),
+                'credential.https://chromium.googlesource.com.helper'),
+            ['', 'luci'])
+        # Ensure that we're overriding the global overwrite rule
+        self.assertEqual(
+            scm.GIT.GetConfigList(
+                os.getcwd(),
+                'url.https://chromium.googlesource.com/chromium/tools/depot_tools.git.insteadof'
+            ), [
+                'https://chromium.googlesource.com/chromium/tools/depot_tools.git'
+            ])
+
     def test_check_gitcookies_same(self):
         with tempfile.NamedTemporaryFile() as gitcookies:
             self.wizard._gitcookies = lambda: gitcookies.name
