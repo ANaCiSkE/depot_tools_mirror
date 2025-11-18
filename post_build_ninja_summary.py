@@ -329,6 +329,14 @@ def SummarizeEntries(entries, extra_step_types, elapsed_time_sorting):
 
 
 def main():
+    # Single dashed go style flags get interpreted greedily by Python as short flags
+    # leading to -enable interpreted as -e and nable.
+    # To combat this, change it to double dash.
+    passed_args = sys.argv[1:].copy()
+    for i, arg in enumerate(passed_args):
+        if len(arg) > 2 and arg.startswith("-") and not arg.startswith("--"):
+            passed_args[i] = "-" + arg
+
     log_file = ".ninja_log"
     metrics_file = "siso_metrics.json"
     parser = argparse.ArgumentParser()
@@ -347,7 +355,7 @@ def main():
     )
     parser.add_argument("--log-file",
                         help="specific ninja log file to analyze.")
-    args, _extra_args = parser.parse_known_args()
+    args, _ = parser.parse_known_args(passed_args)
     if args.build_directory:
         log_file = os.path.join(args.build_directory, log_file)
         metrics_file = os.path.join(args.build_directory, metrics_file)
