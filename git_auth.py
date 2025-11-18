@@ -613,6 +613,10 @@ class ConfigWizard(object):
 
     def _set_url_rewrite_override(self, parts: urllib.parse.SplitResult, *,
                                   scope: scm.GitConfigScope) -> None:
+        """Set a URL rewrite config that rewrites a URL to itself.
+
+        This is used to override a global rewrite rule.
+        """
         url_key = _url_rewrite_key(parts)
         self._set_config(url_key, parts.geturl(), modify_all=True, scope=scope)
 
@@ -628,6 +632,7 @@ class ConfigWizard(object):
                     scope: scm.GitConfigScope,
                     modify_all: bool = False,
                     append: bool = False) -> None:
+        """Set a Git config option."""
         scope_msg = f'In your {scope} Git config,'
         if append:
             assert value is not None
