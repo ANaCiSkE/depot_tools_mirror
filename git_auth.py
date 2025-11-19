@@ -11,7 +11,7 @@ import contextlib
 import functools
 import logging
 import os
-from typing import Callable, NamedTuple, TextIO
+from typing import Callable, Iterable, NamedTuple, TextIO
 import urllib.parse
 
 import gerrit_util
@@ -600,16 +600,13 @@ class ConfigWizard(object):
 
     def _set_sso_rewrite(self, parts: urllib.parse.SplitResult, *,
                          scope: scm.GitConfigScope) -> None:
-        sso_key = _sso_rewrite_key(parts)
-        self._set_config(sso_key,
-                         _url_root_url(parts),
-                         modify_all=True,
-                         scope=scope)
+        self._set_url_rewrites(_url_gerrit_sso_url(parts),
+                               [_url_root_url(parts)],
+                               scope=scope)
 
     def _clear_sso_rewrite(self, parts: urllib.parse.SplitResult, *,
                            scope: scm.GitConfigScope) -> None:
-        sso_key = _sso_rewrite_key(parts)
-        self._set_config(sso_key, None, modify_all=True, scope=scope)
+        self._set_url_rewrites(_url_gerrit_sso_url(parts), [], scope=scope)
 
     def _set_url_rewrite_override(self, parts: urllib.parse.SplitResult, *,
                                   scope: scm.GitConfigScope) -> None:
@@ -617,13 +614,31 @@ class ConfigWizard(object):
 
         This is used to override a global rewrite rule.
         """
-        url_key = _url_rewrite_key(parts)
-        self._set_config(url_key, parts.geturl(), modify_all=True, scope=scope)
+        self._set_url_rewrites(parts.geturl(), [parts.geturl()], scope=scope)
 
     def _clear_url_rewrite_override(self, parts: urllib.parse.SplitResult, *,
                                     scope: scm.GitConfigScope) -> None:
-        url_key = _url_rewrite_key(parts)
-        self._set_config(url_key, None, scope=scope, modify_all=True)
+        self._set_url_rewrites(parts.geturl(), [], scope=scope)
+
+    def _set_url_rewrites(self, new: str, old: Iterable[str], *,
+                          scope: scm.GitConfigScope) -> None:
+        """Set URL rewrite config.
+
+        Because Git URL rewrites are set as `new -> multiple old`, we
+        should set all of them together.
+
+        This should be called at most once per wizard invocation per
+        url_key.
+        """
+        self._set_config(f'url.{new}.insteadOf',
+                         None,
+                         scope=scope,
+                         modify_all=True)
+        for url in old:
+            self._set_config(f'url.{new}.insteadOf',
+                             url,
+                             append=True,
+                             scope=scope)
 
     def _set_config(self,
                     key: str,
@@ -793,14 +808,9 @@ def _creds_use_http_path_key(parts: urllib.parse.SplitResult) -> str:
     return f'credential.{_url_host_url(parts)}.useHttpPath'
 
 
-def _sso_rewrite_key(parts: urllib.parse.SplitResult) -> str:
-    """Return Git config key for SSO URL rewrites."""
-    return f'url.sso://{_url_shortname(parts)}/.insteadOf'
-
-
-def _url_rewrite_key(parts: urllib.parse.SplitResult) -> str:
-    """Return Git config key for rewriting the full URL."""
-    return f'url.{parts.geturl()}.insteadOf'
+def _url_gerrit_sso_url(parts: urllib.parse.SplitResult) -> str:
+    """Return the base SSO URL for a Gerrit host URL."""
+    return f'sso://{_url_shortname(parts)}/'
 
 
 def _url_review_host(parts: urllib.parse.SplitResult) -> str:
