@@ -44,12 +44,6 @@ class Result:
     source_root: The root for the repo identified by the first gclient solution.
     patch_root: The root for the repo that was patched, if a patch was applied.
       Otherwise, None.
-    presentation: DEPRECATED. The presentation of the bot_update step. This is
-      used by some code to get the properties. This is provided for backwards
-      compatibility, code should access the properties attribute instead.
-    json: DEPRECATED. The result of json outputs for the bot_update step. This
-      is provided for backwards compatibility, attributes on this object are
-      provided for accessing the contents of json.output.
     properties: The properties set by the bot_update execution.
     manifest: The manifest mapping the checkout_dir-relative path to the
       repository and revision that was checked out.
