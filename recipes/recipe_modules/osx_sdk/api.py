@@ -15,7 +15,7 @@ from recipe_engine import recipe_api
 # implemented with a proto message.
 _PROPERTY_DEFAULTS = {
     'toolchain_pkg': 'infra/tools/mac_toolchain/${platform}',
-    'toolchain_ver': 'git_revision:26bb3effce1bc1896a3776c21b84e76ae82c3917',
+    'toolchain_ver': 'git_revision:4418184743840e63096a58bddda364f4c7555a6f',
 }
 
 # Rationalized from https://en.wikipedia.org/wiki/Xcode.
@@ -24,7 +24,7 @@ _PROPERTY_DEFAULTS = {
 #
 # These correspond to package instance tags for:
 #
-#   https://chrome-infra-packages.appspot.com/p/infra_internal/ios/xcode/xcode_binaries/mac-amd64
+#   https://chrome-infra-packages.appspot.com/p/infra_internal/ios/xcode/
 #
 # Keep this sorted by OS version.
 _DEFAULT_VERSION_MAP = [
@@ -39,6 +39,7 @@ _DEFAULT_VERSION_MAP = [
     ('13.5', '15c500b'),
     ('14.0', '15e204a'),
     ('15.0', '16c5032a'),
+    ('15.6', '17a400'),
 ]
 
 
