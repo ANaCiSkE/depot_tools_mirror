@@ -211,8 +211,7 @@ ninja --failure_verbose=false -k=0
         ]
         env = {}
         _ = siso.apply_telemetry_flags(args, env)
-        self.assertEqual(os.environ.get("GOOGLE_API_USE_CLIENT_CERTIFICATE"),
-                         "false")
+        self.assertEqual(env.get("GOOGLE_API_USE_CLIENT_CERTIFICATE"), "false")
 
     def test_process_args(self):
         user_system = siso._SYSTEM_DICT.get(platform.system(),

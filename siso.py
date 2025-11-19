@@ -82,7 +82,7 @@ def apply_telemetry_flags(args: list[str], env: dict[str, str]) -> list[str]:
     # Despite go.dev/issue/68312 being fixed, the issue is still reproducible
     # for googlers. Due to this, the flag is still applied while the
     # issue is being investigated.
-    os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
+    env.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
     flags_to_add = []
     for flag in telemetry_flags:
         found = False
@@ -318,7 +318,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
             file=sys.stderr)
         return 1
     if siso_override_path:
-        return caffeinate.run([siso_override_path] + args[1:])
+        return caffeinate.run([siso_override_path] + args[1:], env=env)
 
     print(
         'depot_tools/siso.py: Could not find .sisoenv under build/config/siso '
