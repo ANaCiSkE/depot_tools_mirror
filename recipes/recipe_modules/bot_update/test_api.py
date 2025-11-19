@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import collections
 import collections.abc
 import hashlib
 import json
@@ -16,6 +17,11 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
   @recipe_test_api.mod_test_data
   @staticmethod
   def revisions(val: dict[str, str]):
+    return val
+
+  @recipe_test_api.mod_test_data
+  @staticmethod
+  def repo_urls(val: dict[str, str]):
     return val
 
   @recipe_test_api.mod_test_data
@@ -40,6 +46,7 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
       revisions: collections.abc.Mapping[str, str] | None = None,
       fixed_revisions: collections.abc.Mapping[str, str] | None = None,
       got_revision_mapping: collections.abc.Mapping[str, str] | None = None,
+      repo_urls: collections.abc.Mapping[str, str] | None = None,
       patch_root: str | None = None,
       fail_checkout: bool = False,
       fail_patch: bool | typing.Literal['download'] = False,
@@ -86,6 +93,10 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
         not present in revisions. If non-empty and revisions and
         fixed_revisions are both empty or None, the resultant json's
         root value will be the first project.
+      repo_urls: A mapping from project name/checkout-relative repo path
+        to the repo URLs for the project. When constructing the
+        manifests in the result json, the the provided URLs will be used
+        for the repository values for those projects.
       patch_root: The relative path within the checkout to where the
         patch should be applied.
       fail_checkout: Whether or not the simulated checkout should fail.
@@ -191,10 +202,16 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
           'step_text': 'Some step text'
       })
 
+      repo_urls = dict(repo_urls or {})
+
+      def get_repo_url(project_name):
+        return repo_urls.setdefault(project_name,
+                                    f'https://fake.org/{project_name}.git')
+
       output.update({
           'manifest': {
               project_name: {
-                  'repository': 'https://fake.org/%s.git' % project_name,
+                  'repository': get_repo_url(project_name),
                   'revision': revision,
               }
               for project_name, revision in sorted(resolved_revisions.items())
@@ -207,7 +224,7 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
               'directories': {
                   project_name: {
                       'git_checkout': {
-                          'repo_url': 'https://fake.org/%s.git' % project_name,
+                          'repo_url': get_repo_url(project_name),
                           'revision': revision
                       }
                   }
