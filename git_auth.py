@@ -813,6 +813,24 @@ def _url_gerrit_sso_url(parts: urllib.parse.SplitResult) -> str:
     return f'sso://{_url_shortname(parts)}/'
 
 
+def _url_host_url(parts: urllib.parse.SplitResult) -> str:
+    """Format URL with host only (no path).
+
+    Example: https://chromium.googlesource.com
+    Example: https://chromium-review.googlesource.com
+    """
+    return parts._replace(path='', query='', fragment='').geturl()
+
+
+def _url_root_url(parts: urllib.parse.SplitResult) -> str:
+    """Format URL with root path.
+
+    Example: https://chromium.googlesource.com/
+    Example: https://chromium-review.googlesource.com/
+    """
+    return parts._replace(path='/', query='', fragment='').geturl()
+
+
 def _url_review_host(parts: urllib.parse.SplitResult) -> str:
     """Format URL as Gerrit review host.
 
@@ -830,21 +848,3 @@ def _url_shortname(parts: urllib.parse.SplitResult) -> str:
     if name.endswith('-review'):
         name = name[:-len('-review')]
     return name
-
-
-def _url_host_url(parts: urllib.parse.SplitResult) -> str:
-    """Format URL with host only (no path).
-
-    Example: https://chromium.googlesource.com
-    Example: https://chromium-review.googlesource.com
-    """
-    return parts._replace(path='', query='', fragment='').geturl()
-
-
-def _url_root_url(parts: urllib.parse.SplitResult) -> str:
-    """Format URL with root path.
-
-    Example: https://chromium.googlesource.com/
-    Example: https://chromium-review.googlesource.com/
-    """
-    return parts._replace(path='/', query='', fragment='').geturl()
