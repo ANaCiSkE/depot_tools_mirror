@@ -311,14 +311,14 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
                 check_outdir(subcmd, out_dir)
-                return caffeinate.run([siso_path] + processed_args, env=env)
+                return caffeinate.call([siso_path] + processed_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',
             file=sys.stderr)
         return 1
     if siso_override_path:
-        return caffeinate.run([siso_override_path] + args[1:], env=env)
+        return caffeinate.call([siso_override_path] + args[1:], env=env)
 
     print(
         'depot_tools/siso.py: Could not find .sisoenv under build/config/siso '

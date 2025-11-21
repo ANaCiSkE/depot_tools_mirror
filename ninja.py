@@ -77,7 +77,7 @@ def fallback(tool, out_dir, ninja_args):
     ninja_path = find_ninja_in_path()
     if ninja_path:
         check_out_dir(tool, out_dir)
-        return caffeinate.run([ninja_path] + ninja_args)
+        return caffeinate.call([ninja_path] + ninja_args)
 
     print(
         "depot_tools/ninja.py: Could not find Ninja in the third_party of "
@@ -130,7 +130,7 @@ def main(args):
         )
         if os.path.isfile(ninja_path):
             check_out_dir(tool, out_dir)
-            return caffeinate.run([ninja_path] + args[1:])
+            return caffeinate.call([ninja_path] + args[1:])
 
     return fallback(tool, out_dir, args[1:])
 

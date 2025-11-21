@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import os
 import subprocess
 import sys
 
@@ -12,13 +13,16 @@ caffeinate:
   {_NO_CAFFEINATE_FLAG}  do not prepend `caffeinate` to ninja command
 """
 
-def run(cmd, env=None):
-    """Runs a command with `caffeinate` if it's on macOS."""
+
+def call(args, **call_kwargs):
+    """Runs a command (via subprocess.call) with `caffeinate` if it's on macOS."""
     if sys.platform == 'darwin':
-        if '-h' in cmd or '--help' in cmd:
+        if isinstance(args, (str, bytes, os.PathLike)):
+            args = [args]
+        if '-h' in args or '--help' in args:
             print(_HELP_MESSAGE, file=sys.stderr)
-        if _NO_CAFFEINATE_FLAG in cmd:
-            cmd.remove(_NO_CAFFEINATE_FLAG)
+        if _NO_CAFFEINATE_FLAG in args:
+            args.remove(_NO_CAFFEINATE_FLAG)
         else:
-            cmd = ['caffeinate'] + cmd
-    return subprocess.call(cmd, env=env)
+            args = ['caffeinate'] + args
+    return subprocess.call(args, **call_kwargs)
