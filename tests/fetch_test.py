@@ -49,6 +49,7 @@ class TestUtilityFunctions(unittest.TestCase):
                                force=False,
                                config='foo',
                                protocol_override=None,
+                               caffeinate=True,
                                props=[]), response)
 
         response = fetch.handle_args([
@@ -63,11 +64,13 @@ class TestUtilityFunctions(unittest.TestCase):
                                force=True,
                                config='foo',
                                protocol_override='sso',
+                               caffeinate=True,
                                props=['--some-param=1', '--bar=2']), response)
 
         response = fetch.handle_args([
             'filename', '-n', '--dry-run', '--no-hooks', '--nohistory',
-            '--force', '-p', 'sso', 'foo', '--some-param=1', '--bar=2'
+            '--force', '--no-caffeinate', '-p', 'sso', 'foo', '--some-param=1',
+            '--bar=2'
         ])
         self.assertEqual(
             argparse.Namespace(dry_run=True,
@@ -76,6 +79,7 @@ class TestUtilityFunctions(unittest.TestCase):
                                force=True,
                                config='foo',
                                protocol_override='sso',
+                               caffeinate=False,
                                props=['--some-param=1', '--bar=2']), response)
 
     @mock.patch('os.path.exists', return_value=False)

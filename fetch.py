@@ -24,6 +24,7 @@ import shlex
 import subprocess
 import sys
 
+import caffeinate
 import gclient_utils
 import git_common
 
@@ -215,6 +216,13 @@ def handle_args(argv):
         type=str,
         default=None,
         help='Protocol to use to fetch dependencies, defaults to https.')
+    parser.add_argument(
+        '--caffeinate',
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=('On macOS, prevent idle sleep during the operation. Enabled by'
+              ' default. Use --no-caffeinate to disable. No effect on other'
+              ' platforms.'))
 
     parser.add_argument('config',
                         type=str,
@@ -306,8 +314,9 @@ def run(options, spec, root):
 
 def main():
     args = handle_args(sys.argv)
-    spec, root = run_config_fetch(args.config, args.props)
-    return run(args, spec, root)
+    with caffeinate.scope(actually_caffeinate=args.caffeinate):
+        spec, root = run_config_fetch(args.config, args.props)
+        return run(args, spec, root)
 
 
 if __name__ == '__main__':
