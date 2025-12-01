@@ -1107,7 +1107,9 @@ class _ProvidedDiffCache(_DiffCache):
         with gclient_utils.temporary_file() as diff_file:
             gclient_utils.FileWrite(diff_file, diff)
             try:
-                scm.GIT.Capture(['apply', '--reverse', '--check', diff_file],
+                scm.GIT.Capture([
+                    'apply', '--reverse', '--unidiff-zero', '--check', diff_file
+                ],
                                 cwd=local_root)
             except subprocess.CalledProcessError:
                 raise RuntimeError('Provided diff does not apply cleanly.')
@@ -1119,8 +1121,13 @@ class _ProvidedDiffCache(_DiffCache):
                 if is_file:
                     shutil.copyfile(full_path, copy_dst)
                 scm.GIT.Capture([
-                    'apply', '--reverse', '--directory', tmp_dir,
-                    '--unsafe-paths', diff_file
+                    'apply',
+                    '--reverse',
+                    '--directory',
+                    tmp_dir,
+                    '--unidiff-zero',
+                    '--unsafe-paths',
+                    diff_file,
                 ],
                                 cwd=tmp_dir)
                 # Applying the patch can create a new file if the file at
