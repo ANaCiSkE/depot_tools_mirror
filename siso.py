@@ -241,7 +241,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
     if not os.environ.get("PYTHONPYCACHEPREFIX"):
         os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 
-    environ = os.environ.copy()
+    env = os.environ.copy()
 
     subcmd, out_dir = parse_args(args[1:])
 
@@ -268,7 +268,6 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
         [primary_solution_path, gclient_root_path, gclient_src_root_path]):
         if not base_path:
             continue
-        env = environ.copy()
         sisoenv_path = os.path.join(base_path, 'build', 'config', 'siso',
                                     '.sisoenv')
         if not os.path.exists(sisoenv_path):
