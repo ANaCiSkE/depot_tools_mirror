@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -65,6 +66,10 @@ class Config:
         return self._config_path
 
     @property
+    def is_corp_machine(self):
+        return shutil.which("gcert") is not None
+
+    @property
     def is_googler(self):
         return self.user.endswith("@google.com")
 
@@ -93,7 +98,7 @@ class Config:
                   self._config_path,
                   file=sys.stderr)
             return False
-        if not self.is_googler:
+        if not self.is_googler or not self.is_corp_machine:
             return False
         if self._config.get("status") == "opt-out":
             return False

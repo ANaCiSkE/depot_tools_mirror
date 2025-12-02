@@ -62,8 +62,10 @@ class BuildTelemetryTest(unittest.TestCase):
                 # The cached result should be reused.
                 check_auth.assert_called_once()
 
-    def test_enabled(self):
+    @unittest.mock.patch('shutil.which')
+    def test_enabled(self, mock_shutil):
         test_countdown = 2
+        mock_shutil.return_value = "path"
 
         # Googler auto opt-in.
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -138,6 +140,7 @@ class BuildTelemetryTest(unittest.TestCase):
 
         # Non-Googler
         with tempfile.TemporaryDirectory() as tmpdir:
+            mock_shutil.return_value = None
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
                     'build_telemetry.check_auth') as check_auth:
