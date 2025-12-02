@@ -76,6 +76,12 @@ class TestClient(unittest.TestCase):
 
 
 class TestResultSink(unittest.TestCase):
+    struct_test_dict = {
+        'coarseName': None,
+        'fineName': None,
+        'caseNameComponents': ['function_foo'],
+    }
+
     def test_report(self):
         session = mock.MagicMock()
         sink = rdb_wrapper.ResultSink(session, 'http://host', 'test_id_prefix/')
@@ -85,6 +91,7 @@ class TestResultSink(unittest.TestCase):
             'status': rdb_wrapper.STATUS_PASS,
             'expected': True,
             'duration': '123.000000000s',
+            'testIdStructured': TestResultSink.struct_test_dict,
         }
         session.post.assert_called_once_with(
             'http://host',
@@ -100,6 +107,7 @@ class TestResultSink(unittest.TestCase):
             'status': rdb_wrapper.STATUS_PASS,
             'expected': True,
             'duration': '123.000000000s',
+            'testIdStructured': TestResultSink.struct_test_dict,
             'failureReason': {
                 'primaryErrorMessage': 'Bad CL.',
             },
@@ -121,6 +129,7 @@ class TestResultSink(unittest.TestCase):
             'status': rdb_wrapper.STATUS_PASS,
             'expected': True,
             'duration': '123.000000000s',
+            'testIdStructured': TestResultSink.struct_test_dict,
             'failureReason': {
                 'primaryErrorMessage': expected_truncated_error,
             },

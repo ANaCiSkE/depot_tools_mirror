@@ -37,11 +37,19 @@ class ResultSink(object):
             elapsed_time: the time taken to invoke the presubmit function
             failure_reason (str or None): if set, the failure reason
         """
+        # Source comes from:
+        # infra/go/src/go.chromium.org/luci/resultdb/sink/proto/v1/test_result.proto
+        struct_test_dict = {
+            'coarseName': None,  # Not used for flat tests.
+            'fineName': None,  # Not used for flat tests.
+            'caseNameComponents': [str(function_name)],
+        }
         tr = {
             'testId': self._prefix + function_name,
             'status': status,
             'expected': status == STATUS_PASS,
-            'duration': '{:.9f}s'.format(elapsed_time)
+            'duration': '{:.9f}s'.format(elapsed_time),
+            'testIdStructured': struct_test_dict,
         }
         if failure_reason:
             if len(failure_reason) > _FAILURE_REASON_LENGTH_LIMIT:
