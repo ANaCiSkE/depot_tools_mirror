@@ -70,7 +70,7 @@ ninja --failure_verbose=false -k=0
     @mock.patch('siso.subprocess.call')
     def test_is_subcommand_present(self, mock_call):
 
-        def side_effect(cmd):
+        def side_effect(cmd, *_, **__):
             if cmd[2] in ['collector', 'ninja']:
                 return 0
             return 2
