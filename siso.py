@@ -23,6 +23,7 @@ import gclient_paths
 
 
 _SYSTEM_DICT = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
+_OTLP_HEALTH_PORT = 13133
 
 
 def parse_args(args):
@@ -44,6 +45,78 @@ def parse_args(args):
 # and 2 if it's not present.
 def _is_subcommand_present(siso_path: str, subc: str) -> bool:
     return subprocess.call([siso_path, "help", subc]) == 0
+
+
+# Fetch PID platform independently of possibly running collector
+# and kill it.
+# Return boolean whether the kill was successful or not.
+def _kill_collector() -> bool:
+    output: Optional[subprocess.CompletedProcess] = None
+    pids = []
+    if platform.system() in ["Linux", "Darwin"]:
+        # Use lsof to find the PID of the process listening on the port.
+        # The -t flag causes lsof to produce terse output with process
+        # identifiers only.
+        output = subprocess.run(['lsof', '-t', f'-i:{_OTLP_HEALTH_PORT}'],
+                                capture_output=True)
+        if output.returncode != 0:
+            print(f"Warning: failed to fetch processes: {output.stderr}",
+                  file=sys.stderr)
+            return False
+        # The output of lsof is a list of PIDs, separated by newlines.
+        pids = [int(p) for p in output.stdout.decode('utf-8').strip().split()]
+    elif platform.system() == "Windows":
+        output = subprocess.run(['netstat', '-aon'], capture_output=True)
+        if output.returncode != 0:
+            print(f"Warning: failed to fetch processes: {output.stderr}",
+                  file=sys.stderr)
+            return False
+        result = output.stdout.decode('utf-8', errors='ignore')
+        for line in result.splitlines():
+            #  Result example:
+            #  Proto  Local Address   Foreign Address     State        PID
+            #  TCP    127.0.0.1:13133   0.0.0.0:0       LISTENING     34228
+            parts = line.strip().split()
+            if len(parts) < 4:
+                continue
+            if parts[1] != f'127.0.0.1:{_OTLP_HEALTH_PORT}':
+                continue
+            pid = parts[-1]
+            pids.append(pid)
+    if not pids:
+        print(f"Warning: no processes detected taking {_OTLP_HEALTH_PORT}.",
+              file=sys.stderr)
+        return False
+    # Take first process running on the given port - that's normally the only one.
+    if len(pids) > 1:
+        print(
+            f"Warning: detected multiple processed taking {_OTLP_HEALTH_PORT}: {pids}. Stopping the first one fetched.",
+            file=sys.stderr)
+    pid = pids[0]
+    if platform.system() in ["Linux", "Darwin"]:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            print(
+                f"Killed the {pid} collector that takes {_OTLP_HEALTH_PORT} port."
+            )
+            return True
+        except OSError as e:
+            print(
+                f"Warning: Failed to kill the {pid} collector that takes {_OTLP_HEALTH_PORT} port: {e}",
+                file=sys.stderr)
+            return False
+    elif platform.system() == "Windows":
+        res = subprocess.run(['taskkill', '/F', '/T', '/PID', f"{pid}"],
+                             capture_output=True)
+        if res.returncode != 0:
+            print(
+                f"Warning: Failed to kill the {pid} collector that takes {_OTLP_HEALTH_PORT} port: {res.stderr}",
+                file=sys.stderr)
+            return False
+        print(
+            f"Killed the {pid} collector that takes {_OTLP_HEALTH_PORT} port.")
+        return True
+    return False
 
 
 def check_outdir(subcmd, out_dir):

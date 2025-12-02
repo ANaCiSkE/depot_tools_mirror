@@ -392,6 +392,203 @@ ninja --failure_verbose=false -k=0
                     self.assertEqual(mock_stderr.getvalue(),
                                      tc.get('want_stderr', ''))
 
+    @unittest.skipIf(platform.system() == 'Windows',
+                     'Not applicable on Windows')
+    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('siso.os.kill')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_process_found_and_killed_posix(
+            self, mock_subprocess_run, mock_os_kill, _):
+        mock_subprocess_run.return_value = mock.Mock(stdout=b'123\n',
+                                                     stderr=b'',
+                                                     returncode=0)
+
+        self.assertTrue(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(
+            ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
+        mock_os_kill.assert_called_once_with(123, siso.signal.SIGKILL)
+
+    @unittest.skipIf(platform.system() == 'Windows',
+                     'Not applicable on Windows')
+    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('siso.os.kill')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_process_not_found_posix(self, mock_subprocess_run,
+                                                    mock_os_kill, _):
+        mock_subprocess_run.return_value = mock.Mock(
+            stdout=b'', stderr=b'lsof: no process found\n', returncode=1)
+
+        self.assertFalse(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(
+            ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
+        mock_os_kill.assert_not_called()
+
+    @unittest.skipIf(platform.system() == 'Windows',
+                     'Not applicable on Windows')
+    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('siso.os.kill')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_kill_fails_posix(self, mock_subprocess_run,
+                                             mock_os_kill, _):
+        mock_subprocess_run.return_value = mock.Mock(stdout=b'123\n',
+                                                     stderr=b'',
+                                                     returncode=0)
+        mock_os_kill.side_effect = OSError("Operation not permitted")
+
+        self.assertFalse(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(
+            ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
+        mock_os_kill.assert_called_once_with(123, siso.signal.SIGKILL)
+
+    @unittest.skipIf(platform.system() == 'Windows',
+                     'Not applicable on Windows')
+    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('siso.os.kill')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_no_pids_found_posix(self, mock_subprocess_run,
+                                                mock_os_kill, _):
+        # stdout is empty, so no PIDs.
+        mock_subprocess_run.return_value = mock.Mock(stdout=b'\n',
+                                                     stderr=b'',
+                                                     returncode=0)
+
+        self.assertFalse(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(
+            ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
+        # os.kill should not be called.
+        mock_os_kill.assert_not_called()
+
+    @unittest.skipIf(platform.system() == 'Windows',
+                     'Not applicable on Windows')
+    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('siso.os.kill')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_multiple_pids_found_posix(self, mock_subprocess_run,
+                                                      mock_os_kill, _):
+        # stdout has two PIDs.
+        mock_subprocess_run.return_value = mock.Mock(stdout=b'123\n456\n',
+                                                     stderr=b'',
+                                                     returncode=0)
+
+        self.assertTrue(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(
+            ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
+        # Only the first PID should be killed.
+        mock_os_kill.assert_called_once_with(123, siso.signal.SIGKILL)
+
+    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_process_found_and_killed_windows(
+            self, mock_subprocess_run, _):
+        netstat_output = (
+            f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n'
+        )
+        mock_subprocess_run.side_effect = [
+            mock.Mock(stdout=netstat_output.encode('utf-8'),
+                      stderr=b'',
+                      returncode=0),
+            mock.Mock(stdout=b'', stderr=b'', returncode=0)
+        ]
+
+        self.assertTrue(siso._kill_collector())
+
+        self.assertEqual(mock_subprocess_run.call_count, 2)
+        mock_subprocess_run.assert_has_calls([
+            mock.call(['netstat', '-aon'], capture_output=True),
+            mock.call(
+                ['taskkill', '/F', '/T', '/PID', '1234'],
+                capture_output=True,
+            )
+        ])
+
+    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_process_not_found_windows(self, mock_subprocess_run,
+                                                      _):
+        netstat_output = (
+            b'  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       868\r\n'
+        )
+        mock_subprocess_run.return_value = mock.Mock(stdout=netstat_output,
+                                                     stderr=b'',
+                                                     returncode=0)
+
+        self.assertFalse(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(['netstat', '-aon'],
+                                                    capture_output=True)
+        self.assertEqual(mock_subprocess_run.call_count, 1)
+
+    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_multiple_pids_found_windows(self,
+                                                        mock_subprocess_run, _):
+        netstat_output = (
+            f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n'
+            f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       5678\r\n'
+        )
+        mock_subprocess_run.side_effect = [
+            mock.Mock(stdout=netstat_output.encode('utf-8'),
+                      stderr=b'',
+                      returncode=0),
+            mock.Mock(stdout=b'', stderr=b'', returncode=0)
+        ]
+
+        self.assertTrue(siso._kill_collector())
+
+        self.assertEqual(mock_subprocess_run.call_count, 2)
+        mock_subprocess_run.assert_has_calls([
+            mock.call(['netstat', '-aon'], capture_output=True),
+            # Only the first PID should be killed.
+            mock.call(
+                ['taskkill', '/F', '/T', '/PID', '1234'],
+                capture_output=True,
+            )
+        ])
+
+    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_netstat_fails_windows(self, mock_subprocess_run, _):
+        mock_subprocess_run.return_value = mock.Mock(stdout=b'',
+                                                     stderr=b'netstat error\n',
+                                                     returncode=1)
+
+        self.assertFalse(siso._kill_collector())
+
+        mock_subprocess_run.assert_called_once_with(['netstat', '-aon'],
+                                                    capture_output=True)
+
+    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('siso.subprocess.run')
+    def test_kill_collector_taskkill_fails_windows(self, mock_subprocess_run,
+                                                   _):
+        netstat_output = (
+            f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n'
+        )
+        mock_subprocess_run.side_effect = [
+            mock.Mock(stdout=netstat_output.encode('utf-8'),
+                      stderr=b'',
+                      returncode=0),
+            mock.Mock(stdout=b'',
+                      stderr=b'ERROR: Cannot terminate process.',
+                      returncode=1)
+        ]
+
+        self.assertFalse(siso._kill_collector())
+
+        self.assertEqual(mock_subprocess_run.call_count, 2)
+        mock_subprocess_run.assert_has_calls([
+            mock.call(['netstat', '-aon'], capture_output=True),
+            mock.call(
+                ['taskkill', '/F', '/T', '/PID', '1234'],
+                capture_output=True,
+            )
+        ])
 
 if __name__ == '__main__':
-    unittest.main()
+    # Suppress print to console for unit tests.
+    unittest.main(buffer=True)
