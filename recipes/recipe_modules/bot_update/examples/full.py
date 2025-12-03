@@ -374,6 +374,7 @@ def GenTests(api):
   yield api.test(
       'revisions',
       ci_build(),
+      api.properties(patch=False),
       api.bot_update.revisions({
           'src': '',
           'src/foo': '',
@@ -399,10 +400,35 @@ def GenTests(api):
   yield api.test(
       'revisions-overriding-revision-generation',
       ci_build(),
+      api.properties(patch=False),
       api.bot_update.revisions({
           'infra': 'a' * 40,
       }),
       api.bot_update.post_check_output_json(
           'bot_update (without patch)', check_revisions_overriding_generation),
+      api.post_process(post_process.DropExpectation),
+  )
+
+  def check_revisions_ref_revision_syntax(check, output_json):
+    # Precondition check
+    if not check(output_json['fixed_revisions']['src'] == 'refs/heads/foo:' +
+                 'a' * 40):
+      return  # pragma: no cover
+
+    manifest = output_json['manifest']
+    # When the ref:revision syntax is used, the revision portion should be used
+    # as the revision in the output
+    check(manifest['src']['revision'] == 'a' * 40)
+
+  yield api.test(
+      'ref-revision-syntax',
+      api.buildbucket.generic_build(),
+      api.properties(
+          patch=False,
+          revision_fallback_chain=True,
+          revision='refs/heads/foo:' + 'a' * 40,
+      ),
+      api.bot_update.post_check_output_json(
+          'bot_update (without patch)', check_revisions_ref_revision_syntax),
       api.post_process(post_process.DropExpectation),
   )

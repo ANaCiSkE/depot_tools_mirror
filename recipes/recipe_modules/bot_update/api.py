@@ -637,6 +637,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
         fixed_revisions=fixed_revisions,
         got_revision_mapping=reverse_rev_map,
         patch_root=patch_root,
+        repo_urls=self._test_data.get('repo_urls', None),
         fail_checkout=self._test_data.get('fail_checkout', False),
         fail_patch=self._test_data.get('fail_patch', False),
         commit_positions=self._test_data.get('commit_positions', True),

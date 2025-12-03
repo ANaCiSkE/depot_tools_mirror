@@ -137,25 +137,28 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
         if revision == 'HEAD':
           return self.gen_revision(project_name)
         if revision.startswith('refs/') or revision.startswith('origin/'):
+          if ':' in revision:
+            return revision.split(':', 1)[1]
           return self.gen_revision('{}@{}'.format(project_name, revision))
         return revision
 
-      def choose_revision(project_name):
+      def choose_revision(project_name, revision):
         fixed_revision = (fixed_revisions or {}).get(project_name)
         assert fixed_revision is None or fixed_revision, (
             f'empty fixed_revision provided for {project_name}')
-        revision = revisions.get(project_name)
         match (revision, fixed_revision):
           case ('', _):
             return resolve_revision(project_name, fixed_revision or 'HEAD')
           case (_, None):
             return resolve_revision(project_name, revision)
-          case (_, _) if revision == fixed_revision:
+          case (_, _) if (revision == fixed_revision
+                          or revision == fixed_revision.split(':', 1)[-1]):
             return resolve_revision(project_name, revision)
           case _, _:
 
             def will_generate(rev):
-              return resolve_revision(project_name, rev) != rev
+              return (':' not in rev
+                      and resolve_revision(project_name, rev) != rev)
 
             # If the revision and fixed_revision are different, then the fixed
             # revision must be HEAD or a ref and revision must not be and the
@@ -167,8 +170,8 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
             return revision
 
       resolved_revisions = {
-          project_name: choose_revision(project_name)
-          for project_name in revisions
+          project_name: choose_revision(project_name, revision)
+          for project_name, revision in revisions.items()
       }
 
       for project_name, fixed_revision in fixed_revisions.items():
@@ -192,6 +195,7 @@ class BotUpdateTestApi(recipe_test_api.RecipeTestApi):
             ref = fixed_revision
           else:
             ref = 'refs/heads/main'
+          ref = ref.split(':', 1)[0]
           properties[f'{property_name}_cp'] = '%s@{#%s}' % (
               ref, self.gen_commit_position(project_name))
 
