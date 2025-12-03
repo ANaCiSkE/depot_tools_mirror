@@ -96,3 +96,6 @@ testing_support/google_appengine
 
 # Ignore the file that logs Python 2 scripts run during presubmits.
 /python2_usage.txt
+
+# Ignore gemini-cli configs
+/.gemini/
