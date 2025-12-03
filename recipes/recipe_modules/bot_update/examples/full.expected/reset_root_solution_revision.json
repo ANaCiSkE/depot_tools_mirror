@@ -20,6 +20,7 @@
       "src@b0ff6a5b8b2bd8a31e9b5e29710da5275f0a9322"
     ],
     "env": {
+      "CHROME_HEADLESS": "1",
       "DEPOT_TOOLS_COLLECT_METRICS": "0",
       "GIT_BACKENDINFO": "1",
       "GIT_DAPPER_TRACE": "1",
@@ -148,6 +149,7 @@
       "--no_fetch_tags"
     ],
     "env": {
+      "CHROME_HEADLESS": "1",
       "DEPOT_TOOLS_COLLECT_METRICS": "0",
       "GIT_BACKENDINFO": "1",
       "GIT_DAPPER_TRACE": "1",

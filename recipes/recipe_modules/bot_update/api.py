@@ -331,6 +331,10 @@ class BotUpdateApi(recipe_api.RecipeApi):
     # bytes/second for GIT_HTTP_LOW_SPEED_TIME seconds then such request will be
     # aborted. Otherwise, it would wait for global timeout to be reached.
     env = {
+        # CHROME_HEADLESS makes it so we don't create gclient's _bad_scm dir
+        # and instead just remove/restart checkout from scratch.
+        'CHROME_HEADLESS':
+        '1',
         'GIT_HTTP_LOW_SPEED_LIMIT':
         '102400',  # in bytes
         'GIT_HTTP_LOW_SPEED_TIME':
