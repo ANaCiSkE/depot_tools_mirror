@@ -3349,6 +3349,7 @@ class TestGitCl(unittest.TestCase):
               'infra%2Finfra~1'), {
                   '/COMMIT_MSG': [
                       {
+                          'id': 'comment_id_1',
                           'author': {
                               'email': u'reviewer@example.com'
                           },
@@ -3360,6 +3361,7 @@ class TestGitCl(unittest.TestCase):
                   ],
                   'codereview.settings': [
                       {
+                          'id': 'comment_id_2',
                           'author': {
                               'email': u'owner@example.com'
                           },
@@ -5776,6 +5778,80 @@ class CMDSplitTestCase(CMDTestCaseBase):
         ensureFailure(["--target-range", "5"])
         # Only accepts int args
         ensureFailure(["--target-range", "5", "six"])
+
+
+class TestMergeCommentsIntoThreads(unittest.TestCase):
+
+    def test_merge_comments_into_threads(self):
+        # A simple linear thread.
+        c1 = {
+            'id': 'c1',
+            'updated': '2025-01-01 01:00:00.000000000',
+            'in_reply_to': None,
+        }
+        c2 = {
+            'id': 'c2',
+            'updated': '2025-01-01 02:00:00.000000000',
+            'in_reply_to': 'c1',
+        }
+        c3 = {
+            'id': 'c3',
+            'updated': '2025-01-01 03:00:00.000000000',
+            'in_reply_to': 'c2',
+        }
+
+        # A branching thread.
+        c4 = {
+            'id': 'c4',
+            'updated': '2025-01-01 01:00:00.000000000',
+            'in_reply_to': None,
+        }
+        c5 = {
+            'id': 'c5',
+            'updated': '2025-01-01 02:00:00.000000000',
+            'in_reply_to': 'c4',
+        }
+        c6 = {
+            'id': 'c6',
+            'updated': '2025-01-01 03:00:00.000000000',
+            'in_reply_to': 'c4',
+        }
+
+        # Independent comment.
+        c7 = {
+            'id': 'c7',
+            'updated': '2025-01-01 01:00:00.000000000',
+            'in_reply_to': None,
+        }
+
+        # Comments are shuffled.
+        file_comments = {
+            'path/to/file': [c3, c2, c1, c6, c5, c4, c7],
+        }
+
+        threads = git_cl._merge_comments_into_threads(file_comments)
+
+        # We expect 3 threads.
+        self.assertEqual(len(threads), 3)
+
+        # Helper to extract ids from a thread.
+        def get_ids(thread):
+            return [c.id for c in thread]
+
+        threads_by_root = {thread[0].id: thread for thread in threads}
+
+        # Check thread 1 (c1 -> c2 -> c3)
+        self.assertIn('c1', threads_by_root)
+        self.assertEqual(get_ids(threads_by_root['c1']), ['c1', 'c2', 'c3'])
+
+        # Check thread 2 (c4 -> c5, c6). c5 and c6 are replies to c4.
+        # c5 time: 02:00, c6 time: 03:00.
+        self.assertIn('c4', threads_by_root)
+        self.assertEqual(get_ids(threads_by_root['c4']), ['c4', 'c5', 'c6'])
+
+        # Check thread 3 (c7)
+        self.assertIn('c7', threads_by_root)
+        self.assertEqual(get_ids(threads_by_root['c7']), ['c7'])
 
 
 if __name__ == '__main__':
