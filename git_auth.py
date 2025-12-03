@@ -590,10 +590,10 @@ class ConfigWizard(object):
 
     def _set_oauth_helper(self, parts: urllib.parse.SplitResult, *,
                           scope: scm.GitConfigScope) -> None:
-        cred_key = _creds_helper_key(parts)
+        cred_key = f'credential.{_url_host_url(parts)}.helper'
         self._set_config(cred_key, '', modify_all=True, scope=scope)
         self._set_config(cred_key, 'luci', append=True, scope=scope)
-        self._set_config(_creds_use_http_path_key(parts),
+        self._set_config(f'credential.{_url_host_url(parts)}.useHttpPath',
                          'yes',
                          modify_all=True,
                          scope=scope)
@@ -798,16 +798,6 @@ def _is_gerrit_url(url: str) -> bool:
             '.git.corp.google.com'):
         return True
     return False
-
-
-def _creds_helper_key(parts: urllib.parse.SplitResult) -> str:
-    """Return Git config key for credential helpers."""
-    return f'credential.{_url_host_url(parts)}.helper'
-
-
-def _creds_use_http_path_key(parts: urllib.parse.SplitResult) -> str:
-    """Return Git config key for using path with helpers."""
-    return f'credential.{_url_host_url(parts)}.useHttpPath'
 
 
 def _url_gerrit_sso_url(parts: urllib.parse.SplitResult) -> str:
