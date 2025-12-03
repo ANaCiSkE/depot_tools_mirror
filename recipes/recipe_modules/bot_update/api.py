@@ -70,18 +70,42 @@ class Result:
 
 
 class _TurboCICheckHandler(abc.ABC):
+  """Handler for creating and updating a TurboCI source check.
+
+  Getting a handler should be done by calling
+  _TurboCICheckHandler.create with the ID to use for the check. An empty
+  check ID will result in a no-op handler.
+
+  Before performing the checkout, set_revisions should be called to
+  provide information about the known revisions being checked out and if
+  a patch is being applied, set_gerrit_change should be called to
+  provide information about the change. After those calls are made,
+  create_check should be called to create the check in TurboCI.
+
+  After performing the checkout, set_result should be called to write
+  results into the check and finalize it.
+  """
 
   @staticmethod
-  def create(api, check_id: str, gclient_config):
+  def create(api, check_id: str):
+    """Create a _TurboCiCheckHandler.
+
+    Args:
+      check_id: The ID of the TurboCI check that the handler should
+        create. If empty, a no-op handler will be returned.
+    """
     if not check_id:
       return _DisabledTurboCICheckHandler()
 
-    return _EnabledTurboCiCheckHandler(api, check_id, gclient_config)
+    return _EnabledTurboCiCheckHandler(api, check_id)
 
   @abc.abstractmethod
   def set_gerrit_change(self, gerrit_change: common_pb2.GerritChange,
                         patch_root: str) -> None:
     """Sets the gerrit change that is being checked out.
+
+    Information about the change will be added to the check that is
+    created.
 
     Args:
       gerrit_change: The gerrit change that is being checked out.
@@ -96,14 +120,39 @@ class _TurboCICheckHandler(abc.ABC):
       revisions: collections.abc.Mapping[str, str],
       refs: collections.abc.Mapping[str, str],
   ) -> None:
+    """Set the revisions to be checked out.
+
+    Information about the revisions will be added to the check that is
+    created.
+
+    Args:
+      revisions: Mapping from the solution name/checkout-relative path
+        of a repo to the revision that the repo will be checked out
+        from.
+      refs: Mapping from the solution name/checkout-relative path of a
+        repo to the ref that the repo will be checked out from.
+    """
     raise NotImplementedError()  # pragma: no cover
 
   @abc.abstractmethod
   def create_check(self) -> None:
+    """Create the TurboCI check.
+
+    A check will be created with kind SOURCE and state PLANNED. The
+    check will contain a GobSourceCheckOptions option that contains the
+    revision information specified by set_revisions and the change
+    information specified by set_gerrit_change.
+    """
     raise NotImplementedError()  # pragma: no cover
 
   @abc.abstractmethod
   def set_result(self, result: Result) -> None:
+    """Set the results on the TurboCI check.
+
+    The check will have a GobSourceCheckResults result added that
+    contains details about the change that was applied (if any) and be
+    moved to the FINAL state.
+    """
     raise NotImplementedError()  # pragma: no cover
 
 
@@ -129,12 +178,11 @@ class _DisabledTurboCICheckHandler(_TurboCICheckHandler):
 
 
 class _EnabledTurboCiCheckHandler(_TurboCICheckHandler):
-  """A no-op implementation of _TurboCICheckHandler."""
+  """_TurboCICheckHandler that actually creates a check in TurboCI."""
 
-  def __init__(self, api, check_id: str, gclient_config):
+  def __init__(self, api, check_id: str):
     self._api = api
     self._check_id = check_id
-    self._gclient_config = gclient_config
     self._gerrit_change: common_pb2.GerritChange | None = None
     self._source_check_options = GobSourceCheckOptions()
 
@@ -418,7 +466,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
     assert cfg is not None, (
         'missing gclient_config or forgot api.gclient.set_config(...) before?')
 
-    check_handler = _TurboCICheckHandler.create(self, turboci_check_id, cfg)
+    check_handler = _TurboCICheckHandler.create(self, turboci_check_id)
 
     # Construct our bot_update command.  This basically be inclusive of
     # everything required for bot_update to know:
