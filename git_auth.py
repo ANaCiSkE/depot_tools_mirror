@@ -600,9 +600,11 @@ class ConfigWizard(object):
 
     def _set_sso_rewrite(self, parts: urllib.parse.SplitResult, *,
                          scope: scm.GitConfigScope) -> None:
-        self._set_url_rewrites(_url_gerrit_sso_url(parts),
-                               [_url_root_url(parts)],
-                               scope=scope)
+        self._set_url_rewrites(
+            _url_gerrit_sso_url(parts),
+            [_url_git_root_url(parts),
+             _url_review_root_url(parts)],
+            scope=scope)
 
     def _clear_sso_rewrite(self, parts: urllib.parse.SplitResult, *,
                            scope: scm.GitConfigScope) -> None:
@@ -813,6 +815,28 @@ def _url_gerrit_sso_url(parts: urllib.parse.SplitResult) -> str:
     return f'sso://{_url_shortname(parts)}/'
 
 
+def _url_git_root_url(parts: urllib.parse.SplitResult) -> str:
+    """Format URL as Gerrit host URL with root path.
+
+    Example: https://chromium.googlesource.com/
+    """
+    return parts._replace(netloc=_url_git_host(parts),
+                          path='/',
+                          query='',
+                          fragment='').geturl()
+
+
+def _url_review_root_url(parts: urllib.parse.SplitResult) -> str:
+    """Format URL as Gerrit review host URL with root path.
+
+    Example: https://chromium-review.googlesource.com/
+    """
+    return parts._replace(netloc=_url_review_host(parts),
+                          path='/',
+                          query='',
+                          fragment='').geturl()
+
+
 def _url_host_url(parts: urllib.parse.SplitResult) -> str:
     """Format URL with host only (no path).
 
@@ -822,13 +846,12 @@ def _url_host_url(parts: urllib.parse.SplitResult) -> str:
     return parts._replace(path='', query='', fragment='').geturl()
 
 
-def _url_root_url(parts: urllib.parse.SplitResult) -> str:
-    """Format URL with root path.
+def _url_git_host(parts: urllib.parse.SplitResult) -> str:
+    """Format URL as Gerrit host.
 
-    Example: https://chromium.googlesource.com/
-    Example: https://chromium-review.googlesource.com/
+    Example: chromium.googlesource.com
     """
-    return parts._replace(path='/', query='', fragment='').geturl()
+    return f'{_url_shortname(parts)}.googlesource.com'
 
 
 def _url_review_host(parts: urllib.parse.SplitResult) -> str:

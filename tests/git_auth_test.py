@@ -94,8 +94,23 @@ class TestConfigWizard(unittest.TestCase):
             'https://chromium.googlesource.com/chromium/tools/depot_tools.git')
         self.wizard._configure_sso(parts, scope='global')
         want = {
-            'url.sso://chromium/.insteadof':
-            ['https://chromium.googlesource.com/'],
+            'url.sso://chromium/.insteadof': [
+                'https://chromium.googlesource.com/',
+                'https://chromium-review.googlesource.com/'
+            ],
+        }
+        self.assertEqual(self.global_state, want)
+
+    def test_configure_review_sso_global(self):
+        parts = urllib.parse.urlsplit(
+            'https://chromium-review.googlesource.com/chromium/tools/depot_tools.git'
+        )
+        self.wizard._configure_sso(parts, scope='global')
+        want = {
+            'url.sso://chromium/.insteadof': [
+                'https://chromium.googlesource.com/',
+                'https://chromium-review.googlesource.com/'
+            ],
         }
         self.assertEqual(self.global_state, want)
 
@@ -109,13 +124,28 @@ class TestConfigWizard(unittest.TestCase):
         }
         self.assertEqual(self.global_state, want)
 
+    def test_configure_review_oauth_global(self):
+        parts = urllib.parse.urlsplit(
+            'https://chromium-review.googlesource.com/chromium/tools/depot_tools.git'
+        )
+        self.wizard._configure_oauth(parts, scope='global')
+        want = {
+            'credential.https://chromium-review.googlesource.com.helper':
+            ['', 'luci'],
+            'credential.https://chromium-review.googlesource.com.usehttppath':
+            ['yes'],
+        }
+        self.assertEqual(self.global_state, want)
+
     def test_configure_sso_global_oauth_local(self):
         parts = urllib.parse.urlsplit(
             'https://chromium.googlesource.com/chromium/tools/depot_tools.git')
         self.wizard._configure_sso(parts, scope='global')
         want = {
-            'url.sso://chromium/.insteadof':
-            ['https://chromium.googlesource.com/'],
+            'url.sso://chromium/.insteadof': [
+                'https://chromium.googlesource.com/',
+                'https://chromium-review.googlesource.com/'
+            ],
         }
         self.assertEqual(self.global_state, want)
         self.wizard._configure_oauth(parts, scope='local')
@@ -130,7 +160,34 @@ class TestConfigWizard(unittest.TestCase):
                 os.getcwd(),
                 'url.https://chromium.googlesource.com/chromium/tools/depot_tools.git.insteadof'
             ), [
-                'https://chromium.googlesource.com/chromium/tools/depot_tools.git'
+                'https://chromium.googlesource.com/chromium/tools/depot_tools.git',
+            ])
+
+    def test_configure_review_sso_global_oauth_local(self):
+        parts = urllib.parse.urlsplit(
+            'https://chromium-review.googlesource.com/chromium/tools/depot_tools.git'
+        )
+        self.wizard._configure_sso(parts, scope='global')
+        want = {
+            'url.sso://chromium/.insteadof': [
+                'https://chromium.googlesource.com/',
+                'https://chromium-review.googlesource.com/'
+            ],
+        }
+        self.assertEqual(self.global_state, want)
+        self.wizard._configure_oauth(parts, scope='local')
+        self.assertEqual(
+            scm.GIT.GetConfigList(
+                os.getcwd(),
+                'credential.https://chromium-review.googlesource.com.helper'),
+            ['', 'luci'])
+        # Ensure that we're overriding the global overwrite rule
+        self.assertEqual(
+            scm.GIT.GetConfigList(
+                os.getcwd(),
+                'url.https://chromium-review.googlesource.com/chromium/tools/depot_tools.git.insteadof'
+            ), [
+                'https://chromium-review.googlesource.com/chromium/tools/depot_tools.git',
             ])
 
     def test_check_gitcookies_same(self):
