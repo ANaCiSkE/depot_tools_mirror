@@ -13,6 +13,8 @@ from recipe_engine import recipe_api, turboci
 from recipe_engine.config_types import Path
 
 from PB.go.chromium.org.luci.buildbucket.proto import common as common_pb2
+from PB.turboci.data.chrome.depot_tools.v1.bot_update_results import (
+    BotUpdateResults)
 from PB.turboci.data.gerrit.v1.gob_source_check_options import (
     GobSourceCheckOptions)
 from PB.turboci.data.gerrit.v1.gob_source_check_results import (
@@ -253,13 +255,22 @@ class _EnabledTurboCiCheckHandler(_TurboCICheckHandler):
           # last_modification_time, submitted_time, current_revision, revisions,
           # owner, reviewers, labels, messages, change_id, topic, is_owner_bot?
       )
+    bot_update_check_results = BotUpdateResults()
+    for path, manifest_commit in result.manifest.items():
+      host, project = self._api.m.gitiles.parse_repo_url(
+          manifest_commit['repository'])
+      commit = bot_update_check_results.manifest[path]
+      commit.host = host.removesuffix('.googlesource.com')
+      commit.project = project
+      commit.id = manifest_commit['revision']
+
     # TODO: crbug.com/443496677 - Add a result type to expose the bot_update
     # manifest
     turboci.write_nodes(
         turboci.reason('bot_update completed'),
         turboci.check(
             self._check_id,
-            results=[gob_source_check_results],
+            results=[gob_source_check_results, bot_update_check_results],
             state='CHECK_STATE_FINAL',
         ))
 

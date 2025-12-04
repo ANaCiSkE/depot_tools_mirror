@@ -59,18 +59,18 @@
 
 Recipe module to ensure a checkout is consistent on a bot.
 
-#### **class [BotUpdateApi](/recipes/recipe_modules/bot_update/api.py#266)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
+#### **class [BotUpdateApi](/recipes/recipe_modules/bot_update/api.py#277)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
 
-&mdash; **def [\_\_call\_\_](/recipes/recipe_modules/bot_update/api.py#275)(self, name, cmd, \*\*kwargs):**
+&mdash; **def [\_\_call\_\_](/recipes/recipe_modules/bot_update/api.py#286)(self, name, cmd, \*\*kwargs):**
 
 Wrapper for easy calling of bot_update.
 
-&mdash; **def [deapply\_patch](/recipes/recipe_modules/bot_update/api.py#904)(self, bot_update_result):**
+&mdash; **def [deapply\_patch](/recipes/recipe_modules/bot_update/api.py#915)(self, bot_update_result):**
 
 Deapplies a patch, taking care of DEPS and solution revisions properly.
     
 
-&mdash; **def [ensure\_checkout](/recipes/recipe_modules/bot_update/api.py#390)(self, gclient_config=None, \*, suffix=None, patch=True, update_presentation=True, patch_root=None, with_branch_heads=False, with_tags=False, no_fetch_tags=False, refs=None, clobber=False, root_solution_revision=None, gerrit_no_reset=False, gerrit_no_rebase_patch_ref=False, assert_one_gerrit_change=True, patch_refs=None, ignore_input_commit=False, add_blamelists=False, set_output_commit=False, step_test_data=None, enforce_fetch=False, download_topics=False, recipe_revision_overrides=None, step_tags=None, clean_ignored=False, turboci_check_id: str='', \*\*kwargs):**
+&mdash; **def [ensure\_checkout](/recipes/recipe_modules/bot_update/api.py#401)(self, gclient_config=None, \*, suffix=None, patch=True, update_presentation=True, patch_root=None, with_branch_heads=False, with_tags=False, no_fetch_tags=False, refs=None, clobber=False, root_solution_revision=None, gerrit_no_reset=False, gerrit_no_rebase_patch_ref=False, assert_one_gerrit_change=True, patch_refs=None, ignore_input_commit=False, add_blamelists=False, set_output_commit=False, step_test_data=None, enforce_fetch=False, download_topics=False, recipe_revision_overrides=None, step_tags=None, clean_ignored=False, turboci_check_id: str='', \*\*kwargs):**
 
 Args:
   * gclient_config: The gclient configuration to use when running bot_update.
@@ -113,7 +113,7 @@ Args:
     if a non-empty value is provided and the gclient config doesn't have
     exactly 1 solution.
 
-&mdash; **def [get\_project\_revision\_properties](/recipes/recipe_modules/bot_update/api.py#881)(self, project_name, gclient_config=None):**
+&mdash; **def [get\_project\_revision\_properties](/recipes/recipe_modules/bot_update/api.py#892)(self, project_name, gclient_config=None):**
 
 Returns all property names used for storing the checked-out revision of
 a given project.
@@ -127,14 +127,14 @@ Args:
 Returns (list of str): All properties that'll hold the checked-out revision
     of the given project. An empty list if no such properties exist.
 
-&emsp; **@property**<br>&mdash; **def [last\_returned\_properties](/recipes/recipe_modules/bot_update/api.py#294)(self):**
+&emsp; **@property**<br>&mdash; **def [last\_returned\_properties](/recipes/recipe_modules/bot_update/api.py#305)(self):**
 
-&mdash; **def [resolve\_fixed\_revision](/recipes/recipe_modules/bot_update/api.py#832)(self, bot_update_result, name):**
+&mdash; **def [resolve\_fixed\_revision](/recipes/recipe_modules/bot_update/api.py#843)(self, bot_update_result, name):**
 
 Sets a fixed revision for a single dependency using project revision
 properties.
 
-&mdash; **def [step\_name](/recipes/recipe_modules/bot_update/api.py#921)(self, patch, suffix):**
+&mdash; **def [step\_name](/recipes/recipe_modules/bot_update/api.py#932)(self, patch, suffix):**
 ### *recipe_modules* / [depot\_tools](/recipes/recipe_modules/depot_tools)
 
 [DEPS](/recipes/recipe_modules/depot_tools/__init__.py#6): [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/runtime][recipe_engine/recipe_modules/runtime]
@@ -1125,10 +1125,10 @@ Raises:
 &mdash; **def [RunSteps](/recipes/recipe_modules/bot_update/tests/ensure_checkout_return_custom_result.py#25)(api, expected_checkout_dir, expected_source_root_name, expected_patch_root_name):**
 ### *recipes* / [bot\_update:tests/ensure\_checkout\_turboci\_checks](/recipes/recipe_modules/bot_update/tests/ensure_checkout_turboci_checks.py)
 
-[DEPS](/recipes/recipe_modules/bot_update/tests/ensure_checkout_turboci_checks.py#16): [bot\_update](#recipe_modules-bot_update), [gclient](#recipe_modules-gclient), [recipe\_engine/assertions][recipe_engine/recipe_modules/assertions], [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties]
+[DEPS](/recipes/recipe_modules/bot_update/tests/ensure_checkout_turboci_checks.py#18): [bot\_update](#recipe_modules-bot_update), [gclient](#recipe_modules-gclient), [recipe\_engine/assertions][recipe_engine/recipe_modules/assertions], [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties]
 
 
-&mdash; **def [RunSteps](/recipes/recipe_modules/bot_update/tests/ensure_checkout_turboci_checks.py#34)(api, turboci_check_id: (str | None), bar_revision: str):**
+&mdash; **def [RunSteps](/recipes/recipe_modules/bot_update/tests/ensure_checkout_turboci_checks.py#36)(api, turboci_check_id: (str | None), bar_revision: str):**
 ### *recipes* / [depot\_tools:examples/full](/recipes/recipe_modules/depot_tools/examples/full.py)
 
 [DEPS](/recipes/recipe_modules/depot_tools/examples/full.py#6): [depot\_tools](#recipe_modules-depot_tools), [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/runtime][recipe_engine/recipe_modules/runtime], [recipe\_engine/step][recipe_engine/recipe_modules/step]

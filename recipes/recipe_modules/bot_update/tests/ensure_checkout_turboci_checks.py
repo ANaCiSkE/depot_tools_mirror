@@ -8,6 +8,8 @@ from PB.turboci.graph.orchestrator.v1.check_kind import CheckKind
 from PB.turboci.graph.orchestrator.v1.check_state import CheckState
 from PB.turboci.graph.orchestrator.v1.graph_view import GraphView
 from PB.turboci.data.gerrit.v1.gerrit_change_info import GerritChangeInfo
+from PB.turboci.data.chrome.depot_tools.v1.bot_update_results import (
+    BotUpdateResults)
 from PB.turboci.data.gerrit.v1.gob_source_check_options import (
     GobSourceCheckOptions)
 from PB.turboci.data.gerrit.v1.gob_source_check_results import (
@@ -111,6 +113,27 @@ def GenTests(api):
     ]
     assert_(gob_source_check_results == expected_gob_source_check_results)
 
+    bot_update_check_results = turboci.get_results(BotUpdateResults, check_view)
+    expected_bot_update_check_results = [
+        BotUpdateResults(
+            manifest={
+                'bar':
+                BotUpdateResults.GitCommit(
+                    host='fake-host',
+                    project='bar',
+                    id='b' * 40,
+                ),
+                'foo':
+                BotUpdateResults.GitCommit(
+                    host='fake-host',
+                    project='foo',
+                    id='a' * 40,
+                ),
+            }),
+    ]
+    assert_(bot_update_check_results == expected_bot_update_check_results)
+
+
   yield api.test(
       'check-ci',
       api.properties(
@@ -163,6 +186,26 @@ def GenTests(api):
     ]
     assert_(gob_source_check_results == expected_gob_source_check_results)
 
+    bot_update_check_results = turboci.get_results(BotUpdateResults, check_view)
+    expected_bot_update_check_results = [
+        BotUpdateResults(
+            manifest={
+                'bar':
+                BotUpdateResults.GitCommit(
+                    host='fake-host',
+                    project='bar',
+                    id='b' * 40,
+                ),
+                'foo':
+                BotUpdateResults.GitCommit(
+                    host='fake-host',
+                    project='foo',
+                    id='a' * 40,
+                ),
+            }),
+    ]
+    assert_(bot_update_check_results == expected_bot_update_check_results)
+
   yield api.test(
       'check-ci-revision-only',
       api.properties(
@@ -174,6 +217,7 @@ def GenTests(api):
           git_ref=None,
           revision='a' * 40,
       ),
+      api.bot_update.revisions({'bar': 'b' * 40}),
       api.bot_update.repo_urls({
           'foo': f'{_FOO_REPO_URL}.git',
           'bar': f'{_BAR_REPO_URL}.git',
@@ -233,6 +277,26 @@ def GenTests(api):
     ]
     assert_(gob_source_check_results == expected_gob_source_check_results)
 
+    bot_update_check_results = turboci.get_results(BotUpdateResults, check_view)
+    expected_bot_update_check_results = [
+        BotUpdateResults(
+            manifest={
+                'bar':
+                BotUpdateResults.GitCommit(
+                    host='fake-host',
+                    project='bar',
+                    id='b' * 40,
+                ),
+                'foo':
+                BotUpdateResults.GitCommit(
+                    host='fake-host',
+                    project='foo',
+                    id='a' * 40,
+                ),
+            }),
+    ]
+    assert_(bot_update_check_results == expected_bot_update_check_results)
+
   yield api.test(
       'check-try',
       api.properties(
@@ -244,6 +308,10 @@ def GenTests(api):
           change_number=123456,
           patch_set=7,
       ),
+      api.bot_update.revisions({
+          'foo': 'a' * 40,
+          'bar': 'b' * 40,
+      }),
       api.bot_update.repo_urls({
           'foo': f'{_FOO_REPO_URL}.git',
           'bar': f'{_BAR_REPO_URL}.git',
