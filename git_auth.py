@@ -312,8 +312,6 @@ class ConfigWizard(object):
         self._println(f"Repo remote is {remote_url}")
 
         local_email = self._check_local_email()
-        email = global_email
-        scope = 'global'
         if local_email and local_email != global_email:
             self._println()
             self._println(
@@ -323,6 +321,13 @@ class ConfigWizard(object):
             )
             email = local_email
             scope = 'local'
+        else:
+            self._println(
+                "Since you don't have a different local email, we'll set up auth in your global config"
+            )
+            self._println('alongside your globally configured email.')
+            email = global_email
+            scope = 'global'
         self._println()
         parts = urllib.parse.urlsplit(remote_url)
         return self._configure_host(parts, email, scope=scope)
