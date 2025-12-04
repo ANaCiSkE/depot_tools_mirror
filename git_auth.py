@@ -340,6 +340,9 @@ class ConfigWizard(object):
             self._configure_sso(parts, scope=scope)
             return _ConfigInfo(method=_ConfigMethod.SSO)
         self._configure_oauth(parts, scope=scope)
+        if scope == 'global':
+            # Clear any potential overriding local config
+            self._clear_local_host_config(parts)
         return _ConfigInfo(method=_ConfigMethod.OAUTH)
 
     def _configure_sso(self, parts: urllib.parse.SplitResult, *,
@@ -357,6 +360,17 @@ class ConfigWizard(object):
             # Override a potential SSO rewrite set in the global config
             self._set_url_rewrite_override(parts, scope=scope)
         self._clear_sso_rewrite(parts, scope=scope)
+
+    def _clear_local_host_config(self, parts: urllib.parse.SplitResult):
+        """Clear auth config for one Gerrit host.
+
+        This is used to clear any local config that might override a
+        correct global config, as we default to configuring the global
+        config if the local config has the same email, but the local
+        config might have stale settings.
+        """
+        self._clear_url_rewrite_override(parts, scope='local')
+        self._clear_sso_rewrite(parts, scope='local')
 
     # Fixing competing auth
 
