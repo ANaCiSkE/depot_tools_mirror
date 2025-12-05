@@ -83,8 +83,9 @@ def _kill_collector() -> bool:
                 continue
             if parts[1] != f'127.0.0.1:{_OTLP_HEALTH_PORT}':
                 continue
-            pid = parts[-1]
-            pids.append(pid)
+            pids.append(int(parts[-1]))
+    # Windows may return processes with PID 0, which is definitely not what we want.
+    pids = [pid for pid in pids if pid != 0]
     if not pids:
         print(f"Warning: no processes detected taking {_OTLP_HEALTH_PORT}.",
               file=sys.stderr)

@@ -470,7 +470,7 @@ ninja --failure_verbose=false -k=0
     def test_kill_collector_multiple_pids_found_posix(self, mock_subprocess_run,
                                                       mock_os_kill, _):
         # stdout has two PIDs.
-        mock_subprocess_run.return_value = mock.Mock(stdout=b'123\n456\n',
+        mock_subprocess_run.return_value = mock.Mock(stdout=b'0\n123\n456\n',
                                                      stderr=b'',
                                                      returncode=0)
 
@@ -528,6 +528,8 @@ ninja --failure_verbose=false -k=0
     def test_kill_collector_multiple_pids_found_windows(self,
                                                         mock_subprocess_run, _):
         netstat_output = (
+            f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       0\r\n'
+            f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       0\r\n'
             f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n'
             f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       5678\r\n'
         )
