@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 The Chromium Authors. All rights reserved.
+# Copyright 2024 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """This script is a wrapper around the siso binary that is pulled to
@@ -8,6 +8,8 @@ binary when run inside a gclient source tree, so users can just type
 "siso" on the command line."""
 
 import argparse
+import json
+import http.client
 import os
 import platform
 import shlex
@@ -15,6 +17,8 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
+from enum import Enum
 from typing import Optional
 
 import build_telemetry
@@ -23,6 +27,7 @@ import gclient_paths
 
 
 _SYSTEM_DICT = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
+_OTLP_DEFAULT_TCP_ENDPOINT = "127.0.0.1:4317"
 _OTLP_HEALTH_PORT = 13133
 
 
@@ -119,6 +124,99 @@ def _kill_collector() -> bool:
         print(
             f"Killed the {pid} collector that takes {_OTLP_HEALTH_PORT} port.")
         return True
+    return False
+
+
+# Start collector when present.
+# Returns boolean whether collector has started successfully and a potential sockets path.
+def _start_collector(siso_path: str, sockets_file: Optional[str],
+                     project: str) -> bool:
+    if not _is_subcommand_present(siso_path, "collector"):
+        print(f"Collector is not present in the submitted siso: {siso_path}")
+        return False
+
+    class Status(Enum):
+        HEALTHY = 1
+        WRONG_PROJECT = 2
+        WRONG_ENDPOINT = 3
+        UNHEALTHY = 4
+        DEAD = 5
+
+    def collector_status() -> Status:
+        conn = http.client.HTTPConnection(f"localhost:{_OTLP_HEALTH_PORT}")
+        try:
+            conn.request("GET", "/health/status")
+        except ConnectionError:
+            return Status.DEAD
+        response = conn.getresponse()
+
+        if response.status != 200:
+            return Status.DEAD
+
+        status = json.loads(response.read())
+        if not status["healthy"] or status["status"] != "StatusOK":
+            return Status.UNHEALTHY
+        if fetch_project(conn) != project:
+            return Status.WRONG_PROJECT
+        endpoint = fetch_receiver_endpoint(conn)
+
+        expected_endpoint = sockets_file or _OTLP_DEFAULT_TCP_ENDPOINT
+        if endpoint != expected_endpoint:
+            return Status.WRONG_ENDPOINT
+
+        return Status.HEALTHY
+
+    def fetch_project(conn: http.client.HTTPConnection) -> str:
+        conn.request("GET", "/health/config")
+        response = conn.getresponse()
+        resp_json = json.loads(response.read())
+        try:
+            return resp_json["exporters"]["googlecloud"]["project"]
+        except KeyError:
+            return ""
+
+    def fetch_receiver_endpoint(conn: http.client.HTTPConnection) -> str:
+        conn.request("GET", "/health/config")
+        response = conn.getresponse()
+        resp_json = json.loads(response.read())
+        try:
+            return resp_json["receivers"]["otlp"]["protocols"]["grpc"][
+                "endpoint"]
+        except KeyError:
+            return ""
+
+    # Closure fetch parameters.
+    def start_collector() -> None:
+        # Use Popen as it's non blocking.
+        creationflags = 0
+        if platform.system() == "Windows":
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        cmd = [siso_path, "collector", "--project", project]
+        if sockets_file:
+            cmd += ["--otel_socket", sockets_file]
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            creationflags=creationflags,
+        )
+
+    start = time.time()
+    status = collector_status()
+    if status == Status.HEALTHY:
+        return True
+    if status != Status.DEAD:
+        if not _kill_collector():
+            return False
+
+    start_collector()
+
+    while time.time() - start < 1:
+        status = collector_status()
+        if status == Status.HEALTHY:
+            return True
+        time.sleep(0.05)
     return False
 
 
