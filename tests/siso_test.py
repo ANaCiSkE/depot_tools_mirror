@@ -815,7 +815,7 @@ ninja --failure_verbose=false -k=0
 
     @mock.patch('siso.platform.system', return_value='Linux')
     @mock.patch('siso.json.loads')
-    def test_start_collector_wrong_project_then_healthy(self, mock_json_loads,
+    def test_start_collector_wrong_project_no_restart(self, mock_json_loads,
                                                         _mock_system):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
@@ -824,7 +824,6 @@ ninja --failure_verbose=false -k=0
                                        status_responses=[(200, None),
                                                          (200, None)],
                                        config_responses=[(200, None),
-                                                         (200, None),
                                                          (200, None)])
 
         status_healthy = {'healthy': True, 'status': 'StatusOK'}
@@ -844,37 +843,15 @@ ninja --failure_verbose=false -k=0
                 }
             }
         }
-        config_project_full = {
-            'exporters': {
-                'googlecloud': {
-                    'project': project
-                }
-            },
-            'receivers': {
-                'otlp': {
-                    'protocols': {
-                        'grpc': {
-                            'endpoint': siso._OTLP_DEFAULT_TCP_ENDPOINT
-                        }
-                    }
-                }
-            }
-        }
         mock_json_loads.side_effect = [
-            status_healthy, config_wrong_project_full, status_healthy,
-            config_project_full, config_project_full
+            status_healthy, config_wrong_project_full
         ]
 
         result = siso._start_collector(siso_path, None, project)
 
         self.assertTrue(result)
-        m.subprocess_popen.assert_called_once_with(
-            [siso_path, "collector", "--project", project],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            creationflags=0)
-        m.kill_collector.assert_called_once()
+        m.subprocess_popen.assert_not_called()
+        m.kill_collector.assert_not_called()
 
     @mock.patch('siso.json.loads')
     def test_start_collector_already_healthy(self, mock_json_loads):
