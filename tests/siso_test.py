@@ -11,6 +11,7 @@ import unittest
 import platform
 from unittest import mock
 import subprocess
+import itertools
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
@@ -343,7 +344,7 @@ ninja --failure_verbose=false -k=0
                     path, length = siso._resolve_sockets_folder(tc["env"])
 
                     expected_path = tc["want_path"]
-                    # If the desired path is too long, the function will fall back to /tmp/siso
+                    # If the desired path is too long, the function will fall back to /tmp/<user>/siso
                     if (104 - len(tc["want_path"]) - 6) < 1:
                         expected_path = os.path.join("/tmp", user, "siso")
 
@@ -1254,25 +1255,18 @@ ninja --failure_verbose=false -k=0
 
     @mock.patch('siso.platform.system', return_value='Linux')
     @mock.patch('siso.json.loads')
-    def test_start_collector_with_sockets_file(self, mock_json_loads,
-                                               _mock_system):
-        m = self._start_collector_mocks()
+    @mock.patch('os.path.isfile', return_value=False)
+    @mock.patch('os.path.exists')
+    @mock.patch('os.remove')
+    def test_start_collector_with_sockets_file(self, mock_os_remove,
+                                               mock_os_exists, mock_os_isfile,
+                                               mock_json_loads, _mock_system):
         siso_path = "siso_path"
         project = "test-project"
         sockets_file = "/tmp/test-socket.sock"
-        self._configure_http_responses(m.mock_conn,
-                                       status_responses=[(404, None),
-                                                         (200, None)],
-                                       config_responses=[(200, None),
-                                                         (200, None)])
 
         status_healthy = {'healthy': True, 'status': 'StatusOK'}
-        config_project_full_with_socket = {
-            'exporters': {
-                'googlecloud': {
-                    'project': project
-                }
-            },
+        config_with_socket = {
             'receivers': {
                 'otlp': {
                     'protocols': {
@@ -1283,23 +1277,61 @@ ninja --failure_verbose=false -k=0
                 }
             }
         }
-        mock_json_loads.side_effect = [
-            status_healthy, config_project_full_with_socket,
-            config_project_full_with_socket
-        ]
 
-        result = siso._start_collector(siso_path, sockets_file, project)
+        test_cases = {
+            "socket_exists": {
+                "os_path_exists_side_effect": itertools.repeat(True),
+                "expected_result": True,
+                "http_status_responses": [(404, None), (200, None)],
+                "json_loads_side_effect": [status_healthy, config_with_socket],
+                "expected_os_exists_calls": 2,
+            },
+            "appears_later": {
+                "os_path_exists_side_effect": [False] * 8 + [True],
+                "expected_result": True,
+                "http_status_responses": [(404, None)] + [(200, None)] * 9,
+                "json_loads_side_effect":
+                [status_healthy, config_with_socket] * 9,
+                "expected_os_exists_calls": 9,
+            },
+            "never_appears": {
+                "os_path_exists_side_effect": [False] * 10,
+                "expected_result": False,
+                "http_status_responses": [(404, None)] + [(200, None)] * 9,
+                "json_loads_side_effect":
+                [status_healthy, config_with_socket] * 9,
+                "expected_os_exists_calls": 10,
+            },
+        }
 
-        self.assertTrue(result)
-        m.subprocess_popen.assert_called_once_with([
-            siso_path, "collector", "--project", project, "--collector_address",
-            f"unix://{sockets_file}"
-        ],
-                                                   stdout=subprocess.DEVNULL,
-                                                   stderr=subprocess.DEVNULL,
-                                                   start_new_session=True,
-                                                   creationflags=0)
-        m.kill_collector.assert_not_called()
+        for name, tc in test_cases.items():
+            with self.subTest(name):
+                m = self._start_collector_mocks()
+                mock_os_exists.reset_mock()
+                mock_os_exists.side_effect = tc["os_path_exists_side_effect"]
+                mock_json_loads.reset_mock()
+                mock_json_loads.side_effect = tc["json_loads_side_effect"]
+
+                self._configure_http_responses(
+                    m.mock_conn,
+                    status_responses=list(tc["http_status_responses"]),
+                    config_responses=[(200, None)] * 20)
+
+                result = siso._start_collector(siso_path, sockets_file, project)
+
+                self.assertEqual(result, tc["expected_result"])
+                m.subprocess_popen.assert_called_once_with(
+                    [
+                        siso_path, "collector", "--project", project,
+                        "--collector_address", f"unix://{sockets_file}"
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                    creationflags=0)
+                m.kill_collector.assert_not_called()
+                self.assertEqual(mock_os_exists.call_count,
+                                 tc["expected_os_exists_calls"])
 
 if __name__ == '__main__':
     # Suppress print to console for unit tests.
