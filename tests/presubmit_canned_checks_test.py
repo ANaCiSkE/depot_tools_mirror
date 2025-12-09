@@ -660,5 +660,102 @@ class CheckNewDEPSHooksHasRequiredReviewersTest(unittest.TestCase):
                     self.assertEqual(0, len(results))
 
 
+class CheckAyeAyeTest(unittest.TestCase):
+
+    def setUp(self):
+        super(CheckAyeAyeTest, self).setUp()
+        self.addCleanup(mock.patch.stopall)
+
+        self.input_api = MockInputApi()
+        self.output_api = MockOutputApi()
+
+        self.mock_repo_root = mock.patch.object(self.input_api.change,
+                                                'RepositoryRoot',
+                                                create=True).start()
+        self.mock_repo_root.return_value = '/fake/repo/root'
+
+        self.mock_popen = mock.patch.object(self.input_api.subprocess,
+                                            'Popen',
+                                            autospec=True).start()
+        self.mock_proc = mock.Mock()
+        self.mock_popen.return_value = self.mock_proc
+        self.input_api.subprocess.PIPE = subprocess.PIPE
+        self.input_api.subprocess.STDOUT = subprocess.STDOUT
+
+        self.mock_exists = mock.patch.object(presubmit_canned_checks._os.path,
+                                             'exists',
+                                             autospec=True).start()
+        self.mock_exists.return_value = True
+
+    def test_ayeaye_findings(self):
+        # Simulate alint output with color codes
+        alint_output = (
+            "\x1b[31mERROR:\x1b[0m This is an error.\n"
+            "Some other info line\n"
+            "\x1b[33mWARNING:\x1b[0m This is a warning.\n"
+            "\x1b[94mINFO:\x1b[0m This is an info.\n"
+            "\x1b[31mERROR:\x1b[0m Another error.\n"
+            "\x1b[33mWARNING:\x1b[0m Another warning.").encode('utf-8')
+        self.mock_proc.communicate.return_value = (alint_output, b'')
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckAyeAye(self.input_api,
+                                                      self.output_api)
+
+        self.assertEqual(len(results), 4)
+
+        result_types = sorted([r.type for r in results])
+        self.assertEqual(result_types, ['error', 'error', 'warning', 'warning'])
+
+        messages = sorted([r.message for r in results])
+        expected_messages = sorted([
+            "This is an error.",
+            "Another error.",
+            "This is a warning.",
+            "Another warning.",
+        ])
+        self.assertEqual(messages, expected_messages)
+
+        self.mock_popen.assert_called_once_with(
+            ['/google/bin/releases/alint/alint'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd='/fake/repo/root')
+
+    def test_ayeaye_no_findings(self):
+        self.mock_proc.communicate.return_value = (
+            b"\x1b[94mINFO:\x1b[0m All good", b'')
+        self.mock_proc.returncode = 0
+        results = presubmit_canned_checks.CheckAyeAye(self.input_api,
+                                                      self.output_api)
+        self.assertEqual(len(results), 0)
+
+    def test_ayeaye_alint_not_found(self):
+        self.mock_exists.return_value = False
+        results = presubmit_canned_checks.CheckAyeAye(self.input_api,
+                                                      self.output_api)
+        self.assertEqual(len(results), 0)
+
+    def test_ayeaye_subprocess_exception(self):
+        self.mock_popen.side_effect = Exception("BOOM")
+        results = presubmit_canned_checks.CheckAyeAye(self.input_api,
+                                                      self.output_api)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].type, 'error')
+        # Exact message depends on Exception type, so check for key parts
+        self.assertIn("Unexpected error in CheckAyeAye:", results[0].message)
+        self.assertIn("BOOM", results[0].message)
+
+    def test_ayeaye_alint_fails(self):
+        alint_output = (
+            "\x1b[31mERROR:\x1b[0m Failed to run.\n").encode('utf-8')
+        self.mock_proc.communicate.return_value = (alint_output, b'')
+        self.mock_proc.returncode = 1  # Non-zero return code
+        results = presubmit_canned_checks.CheckAyeAye(self.input_api,
+                                                      self.output_api)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].type, 'error')
+        self.assertIn("Failed to run.", results[0].message)
+
 if __name__ == '__main__':
     unittest.main()
