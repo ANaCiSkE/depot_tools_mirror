@@ -8,6 +8,7 @@ binary when run inside a gclient source tree, so users can just type
 "siso" on the command line."""
 
 import argparse
+import getpass
 import json
 import http.client
 import os
@@ -173,15 +174,14 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
         except KeyError:
             return ""
 
-    # Closure fetch parameters.
-    def start_collector() -> None:
+    def start_collector(sockets_file: Optional[str]) -> None:
         # Use Popen as it's non blocking.
         creationflags = 0
         if platform.system() == "Windows":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         cmd = [siso_path, "collector", "--project", project]
         if sockets_file:
-            cmd += ["--otel_socket", sockets_file]
+            cmd += ["--collector_address", f"unix://{sockets_file}"]
         subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -198,7 +198,18 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
         if not _kill_collector():
             return False
 
-    start_collector()
+    # Delete possibly existing sockets file.
+    if sockets_file and os.path.exists(sockets_file):
+        try:
+            os.remove(sockets_file)
+        except OSError as e:
+            print(f"Failed to remove {sockets_file} due to {e}. " +
+                  "Having existing sockets file is known to cause " +
+                  "permission issues among others. Not using collector.",
+                  file=sys.stderr)
+            return False
+
+    start_collector(sockets_file)
 
     while time.time() - start < 1:
         status = collector_status()
@@ -279,6 +290,76 @@ def apply_telemetry_flags(args: list[str], env: dict[str, str]) -> list[str]:
     if project_env_var in env:
         return args + flags_to_add + [f"--metrics_project={env[project_env_var]}"]
     # Default case - no flags are set, so don't add any
+    return args
+
+
+def _fetch_metrics_project(args: list[str], env: dict[str, str]) -> str:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-metrics_project", "--metrics_project")
+    parser.add_argument("-project", "--project")
+    metrics_env_var = "RBE_metrics_project"
+    project_env_var = "SISO_PROJECT"
+    known_args, _ = parser.parse_known_args(args)
+    if known_args.metrics_project:
+        return known_args.metrics_project
+    if known_args.project:
+        return known_args.project
+    if metrics_env_var in env:
+        return env[metrics_env_var]
+    if project_env_var in env:
+        return env[project_env_var]
+    return ""
+
+
+def _resolve_sockets_folder(env: dict[str, str]) -> tuple[str, int]:
+    path = "/tmp"
+    user = getpass.getuser()
+    if sys.platform == "linux":
+        path = env.get("XDG_RUNTIME_DIR", "/tmp")
+    elif sys.platform == "darwin":
+        path = env.get("TMPDIR", "/tmp")
+    path = os.path.join(path, user, "siso")
+    # socks path sizes are severely limited.
+    # Linux SHOULD be 108 but we will got with conservative MacOS number.
+    # 6 is for .sock + /
+    allowed_length = 104 - len(path) - 6
+    if allowed_length < 1:
+        path = os.path.join("/tmp", user, "siso")
+        allowed_length = 104 - len(path) - 6
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    return path, allowed_length
+
+
+def _handle_collector_args(siso_path: str, args: list[str],
+                           env: dict[str, str]) -> list[str]:
+    parser = argparse.ArgumentParser()
+    # Can only be implicit. enable_collector=true will fail.
+    parser.add_argument("-enable_collector",
+                        "--enable_collector",
+                        action='store_true',
+                        default=False)
+    known_args, _ = parser.parse_known_args(args)
+    if not known_args.enable_collector:
+        return args
+    project = _fetch_metrics_project(args, env)
+    if not project:
+        return args
+    sockets_file = None
+    if sys.platform in ["darwin", "linux"]:
+        path, remainder_len = _resolve_sockets_folder(env)
+        sockets_file = os.path.join(path, f"{project[:remainder_len]}.sock")
+
+    started = _start_collector(siso_path, sockets_file, project)
+    if started:
+        if sockets_file:
+            args.append(f"--collector_address=unix://{sockets_file}")
+    else:
+        print("Collector never came to life", file=sys.stderr)
+        if "-enable_collector" in args:
+            args.remove("-enable_collector")
+        elif "--enable_collector" in args:
+            args.remove("--enable_collector")
+        args.append("--enable_collector=false")
     return args
 
 
@@ -471,6 +552,8 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
         ]
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
+                processed_args = _handle_collector_args(siso_path,
+                                                        processed_args, env)
                 check_outdir(subcmd, out_dir)
                 return caffeinate.call([siso_path] + processed_args, env=env)
         print(
