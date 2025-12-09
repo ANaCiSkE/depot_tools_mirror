@@ -61,6 +61,16 @@ def GenTests(api):
              post_process.StepCommandContains, 'presubmit', ['--dry_run']) +
          api.post_process(post_process.DropExpectation))
 
+  yield (api.test('module_scheme_experiment') +
+         api.runtime(is_experimental=False) + api.buildbucket.try_build(
+             experiments={'presubmit.resultdb_module': 100}) +
+         api.cq(run_mode=api.cq.DRY_RUN) +
+         api.post_process(post_process.StatusSuccess) +
+         api.post_process(post_process.StepCommandContains, 'presubmit', [
+             'rdb', 'stream', '-module-scheme', 'flat', '-module-name',
+             '//:presubmit', '--'
+         ]) + api.post_process(post_process.DropExpectation))
+
   yield (api.test('skip_owners') + api.runtime(is_experimental=False) +
          api.buildbucket.try_build(project='infra') +
          api.properties(skip_owners=True) +

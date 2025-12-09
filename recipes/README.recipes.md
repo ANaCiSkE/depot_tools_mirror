@@ -847,7 +847,7 @@ Raises:
 
 Returns a presubmit step.
 
-&mdash; **def [execute](/recipes/recipe_modules/presubmit/api.py#115)(self, bot_update_step, skip_owners=False, run_all=False):**
+&mdash; **def [execute](/recipes/recipe_modules/presubmit/api.py#120)(self, bot_update_step, skip_owners=False, run_all=False):**
 
 Runs presubmit and sets summary markdown if applicable.
 
@@ -861,7 +861,7 @@ Args:
 Returns:
   a RawResult object, suitable for being returned from RunSteps.
 
-&mdash; **def [prepare](/recipes/recipe_modules/presubmit/api.py#48)(self, root_solution_revision=None):**
+&mdash; **def [prepare](/recipes/recipe_modules/presubmit/api.py#53)(self, root_solution_revision=None):**
 
 Sets up a presubmit run.
 
@@ -880,7 +880,7 @@ Returns:
 
 &emsp; **@property**<br>&mdash; **def [presubmit\_support\_path](/recipes/recipe_modules/presubmit/api.py#25)(self):**
 
-&mdash; **def [upload\_findings\_from\_result](/recipes/recipe_modules/presubmit/api.py#219)(self, result_json):**
+&mdash; **def [upload\_findings\_from\_result](/recipes/recipe_modules/presubmit/api.py#224)(self, result_json):**
 
 Parse code findings from presubmit results and then upload them.
 

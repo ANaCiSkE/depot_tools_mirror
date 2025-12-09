@@ -36,6 +36,11 @@ class PresubmitApi(recipe_api.RecipeApi):
       cmd.extend(['--json_output', self.m.json.output()])
       if self.m.resultdb.enabled:
         kwargs['wrapper'] = ('rdb', 'stream', '--')
+        if ('presubmit.resultdb_module'
+            in self.m.buildbucket.build.input.experiments):
+          kwargs['wrapper'] = ('rdb', 'stream', '-module-scheme', 'flat',
+                               '-module-name', '//:presubmit', '--')
+
       return self.m.step(name, cmd, **kwargs)
 
   @property
