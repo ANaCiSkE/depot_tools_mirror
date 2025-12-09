@@ -759,3 +759,109 @@ class CheckAyeAyeTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CheckForCommitObjectsTest(unittest.TestCase):
+
+    def setUp(self):
+        self.input_api = MockInputApi()
+        self.input_api.change.scm = 'git'
+        self.input_api.subprocess = mock.Mock()
+        self.output_api = MockOutputApi()
+
+        self.patcher = mock.patch('presubmit_canned_checks._ParseDeps')
+        self.mock_parse_deps = self.patcher.start()
+        self.mock_parse_deps.return_value = {'git_dependencies': 'DEPS'}
+
+    def tearDown(self):
+        self.patcher.stop()
+
+    def testNoGitlinks(self):
+        # No gitlinks at all.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'100644 blob 1234\tfile.txt\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(0, len(results))
+
+    def testGitlinkFound(self):
+        # One gitlink found.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'160000 commit 1234\tsubmodule\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(1, len(results))
+        self.assertEqual('submodule', results[0].items[0])
+
+    def testGitlinkMiddle(self):
+        # Gitlink in the middle of other files.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'100644 blob 1111\tfile1\0'
+            b'160000 commit 2222\tsubmodule\0'
+            b'100644 blob 3333\tfile2\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(1, len(results))
+        self.assertEqual('submodule', results[0].items[0])
+
+    def testGitlinkStart(self):
+        # Gitlink at the very start.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'160000 commit 2222\tsubmodule\0'
+            b'100644 blob 3333\tfile2\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(1, len(results))
+        self.assertEqual('submodule', results[0].items[0])
+
+    def testGitlinkEnd(self):
+        # Gitlink at the very end.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'100644 blob 3333\tfile2\0'
+            b'160000 commit 2222\tsubmodule\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(1, len(results))
+        self.assertEqual('submodule', results[0].items[0])
+
+    def testMultipleGitlinks(self):
+        # Multiple gitlinks.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'160000 commit 1111\tsub1\0'
+            b'100644 blob 2222\tfile\0'
+            b'160000 commit 3333\tsub2\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(1, len(results))
+        self.assertEqual(2, len(results[0].items))
+        self.assertIn('sub1', results[0].items)
+        self.assertIn('sub2', results[0].items)
+
+    def testFalsePositiveText(self):
+        # "160000" in filename but not mode.
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'100644 blob 1234\t160000_file.txt\0'
+        ]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+        self.assertEqual(0, len(results))

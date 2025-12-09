@@ -71,6 +71,11 @@ OFF_UNLESS_MANUALLY_ENABLED_LINT_FILTERS = [
 
 _CORP_LINK_KEYWORD = '.corp.google'
 
+# Git Tree Mode for a "gitlink" (submodule).
+# See https://git-scm.com/docs/git-ls-tree#_output_format
+_GIT_MODE_SUBMODULE = b'160000'
+
+
 ### Description checks
 
 
@@ -2073,17 +2078,33 @@ def CheckForCommitObjects(input_api, output_api):
         ['git', 'ls-tree', '-r', '--full-tree', '-z', 'HEAD'],
         cwd=input_api.PresubmitLocalPath())
 
+    if _GIT_MODE_SUBMODULE not in full_tree:
+        return []
+
     # commit_tree_entries holds all commit entries (ie gitlink, submodule
     # record).
     commit_tree_entries = []
-    for entry in full_tree.strip().split(b'\00'):
-        if not entry.startswith(b'160000'):
-            # Remove entries that we don't care about. 160000 indicates a
-            # gitlink.
-            continue
-        tree_entry = parse_tree_entry(entry.decode('utf-8'))
-        if tree_entry[1] == 'commit':
-            commit_tree_entries.append(tree_entry)
+    pos = 0
+    while True:
+        pos = full_tree.find(_GIT_MODE_SUBMODULE, pos)
+        if pos == -1:
+            break
+
+        # Check if this occurrence is at the start of an entry.
+        # It must be at the start of the string or preceded by a null terminator.
+        if pos == 0 or full_tree[pos - 1] == 0:
+            # Find the end of this entry.
+            end = full_tree.find(b'\0', pos)
+            entry = full_tree[pos:end]
+
+            tree_entry = parse_tree_entry(entry.decode('utf-8'))
+            if tree_entry[1] == 'commit':
+                commit_tree_entries.append(tree_entry)
+
+            pos = end + 1
+        else:
+            # If not at start of entry, advance to look for next occurrence.
+            pos += 1
 
     # No gitlinks found, return early.
     if len(commit_tree_entries) == 0:
