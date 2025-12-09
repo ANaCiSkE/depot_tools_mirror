@@ -250,10 +250,10 @@ def temporary_file():
         os.remove(name)
 
 
-def safe_rename(old, new):
-    """Renames a file reliably.
+def safe_replace(old, new):
+    """Renames a file reliably, overwriting the destination if it exists.
 
-    Sometimes os.rename does not work because a dying git process keeps a handle
+    Sometimes os.replace does not work because a dying git process keeps a handle
     on it for a few seconds. An exception is then thrown, which make the program
     give up what it was doing and remove what was deleted.
     The only solution is to catch the exception and try again until it works.
@@ -262,7 +262,7 @@ def safe_rename(old, new):
     retries = 100
     for i in range(retries):
         try:
-            os.rename(old, new)
+            os.replace(old, new)
             break
         except OSError:
             if i == (retries - 1):

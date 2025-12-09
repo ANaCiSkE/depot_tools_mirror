@@ -419,4 +419,31 @@ class GClientUtilsTest(trial_dir.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
+
+class SafeReplaceTest(unittest.TestCase):
+
+    def setUp(self):
+        self.mock_os = mock.patch('gclient_utils.os').start()
+        self.addCleanup(mock.patch.stopall)
+
+    def testReplace(self):
+        gclient_utils.safe_replace('old', 'new')
+        self.mock_os.replace.assert_called_with('old', 'new')
+
+    def testReplaceRetry(self):
+        self.mock_os.replace.side_effect = [OSError, OSError, None]
+        with mock.patch('time.sleep') as mock_sleep:
+            gclient_utils.safe_replace('old', 'new')
+            self.assertEqual(self.mock_os.replace.call_count, 3)
+            self.assertEqual(mock_sleep.call_count, 2)
+
+    def testReplaceFailure(self):
+        self.mock_os.replace.side_effect = OSError
+        with mock.patch('time.sleep'):
+            with self.assertRaises(OSError):
+                gclient_utils.safe_replace('old', 'new')
+
+
+
+
 # vim: ts=2:sw=2:tw=80:et:

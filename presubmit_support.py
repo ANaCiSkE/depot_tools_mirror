@@ -45,6 +45,8 @@ import gclient_paths  # Exposed through the API
 import gclient_utils
 import git_footers
 import gerrit_util
+from gerrit_cache import GerritCache
+import lockfile
 import owners_client
 import owners_finder
 import presubmit_canned_checks
@@ -499,12 +501,14 @@ class GerritAccessor(object):
 
     To avoid excessive Gerrit calls, caches the results.
     """
-    def __init__(self, url=None, project=None, branch=None):
+
+    def __init__(self, url=None, project=None, branch=None, root=None):
         self.host = urlparse.urlparse(url).netloc if url else None
         self.project = project
         self.branch = branch
         self.cache = {}
         self.code_owners_enabled = None
+        self.persistent_cache = GerritCache(root)
 
     def _FetchChangeDetail(self, issue):
         # Separate function to be easily mocked in tests.
@@ -597,8 +601,19 @@ class GerritAccessor(object):
 
     def IsCodeOwnersEnabledOnRepo(self):
         if self.code_owners_enabled is None:
-            self.code_owners_enabled = gerrit_util.IsCodeOwnersEnabledOnRepo(
-                self.host, self.project)
+            if self.persistent_cache:
+                key = GerritCache.get_repo_code_owners_enabled_key(
+                    self.host, self.project)
+                self.code_owners_enabled = self.persistent_cache.getBoolean(key)
+                if self.code_owners_enabled is None:
+                    self.code_owners_enabled = gerrit_util.IsCodeOwnersEnabledOnRepo(
+                        self.host, self.project)
+                    self.persistent_cache.setBoolean(key,
+                                                     self.code_owners_enabled)
+            else:
+                self.code_owners_enabled = gerrit_util.IsCodeOwnersEnabledOnRepo(
+                    self.host, self.project)
+
         return self.code_owners_enabled
 
 
@@ -790,7 +805,8 @@ class InputApi(object):
                 self.owners_client = owners_client.GetCodeOwnersClient(
                     host=self.gerrit.host,
                     project=self.gerrit.project,
-                    branch=self.gerrit.branch)
+                    branch=self.gerrit.branch,
+                    cache=self.gerrit.persistent_cache)
             except Exception as e:
                 print('Failed to set owners_client - %s' % str(e))
         self.owners_finder = owners_finder.OwnersFinder
@@ -807,6 +823,7 @@ class InputApi(object):
                                                             '<hash_set>') else
             (a, b, header) for (a, b, header) in cpplint._re_pattern_templates
         ]
+
 
     def SetTimeout(self, timeout):
         self.thread_pool.timeout = timeout
@@ -2335,7 +2352,8 @@ def _parse_gerrit_options(parser, options):
     if options.gerrit_url:
         gerrit_obj = GerritAccessor(url=options.gerrit_url,
                                     project=options.gerrit_project,
-                                    branch=options.gerrit_branch)
+                                    branch=options.gerrit_branch,
+                                    root=options.root)
 
     if not options.gerrit_fetch:
         return gerrit_obj

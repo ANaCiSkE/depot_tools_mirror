@@ -1421,7 +1421,7 @@ class GitWrapper(SCMWrapper):
                 logging.debug(
                     'Cloned into temporary dir, moving to checkout_path')
                 gclient_utils.safe_makedirs(self.checkout_path)
-                gclient_utils.safe_rename(
+                gclient_utils.safe_replace(
                     os.path.join(tmp_dir, '.git'),
                     os.path.join(self.checkout_path, '.git'))
             except:
