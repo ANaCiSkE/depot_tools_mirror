@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env vpython3
 # Copyright (c) 2024 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -8,7 +8,6 @@ import os
 import shlex
 import sys
 import unittest
-import platform
 from unittest import mock
 import subprocess
 import itertools
@@ -88,9 +87,7 @@ ninja --failure_verbose=false -k=0
         self.assertTrue(siso._is_subcommand_present('siso_path', 'ninja'))
         self.assertFalse(siso._is_subcommand_present('siso_path', 'unknown'))
 
-    def test_apply_metrics_labels(self):
-        user_system = siso._SYSTEM_DICT.get(platform.system(),
-                                            platform.system())
+        user_system = siso._SYSTEM_DICT.get(sys.platform, sys.platform)
         test_cases = {
             'no_labels': {
                 'args': ['ninja', '-C', 'out/Default'],
@@ -336,11 +333,7 @@ ninja --failure_verbose=false -k=0
 
         for name, tc in test_cases.items():
             with self.subTest(name):
-                # The code under test uses sys.platform, which is lowercase.
-                platform_value = tc["platform"].lower()
-                if platform_value == 'windows':
-                    platform_value = 'win32'
-                with mock.patch('sys.platform', new=platform_value):
+                with mock.patch('sys.platform', new=tc["platform"].lower()):
                     path, length = siso._resolve_sockets_folder(tc["env"])
 
                     expected_path = tc["want_path"]
@@ -355,9 +348,9 @@ ninja --failure_verbose=false -k=0
                     self.assertTrue(os.path.isdir(path))
 
     @mock.patch('siso._start_collector')
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso._fetch_metrics_project', return_value='test-project')
-    def test_handle_collector_args_disabled(self, mock_fetch, mock_system,
+    def test_handle_collector_args_disabled(self, mock_fetch,
                                             mock_start_collector):
         siso_path = 'path/to/siso'
         out_dir = 'out/Default'
@@ -370,13 +363,11 @@ ninja --failure_verbose=false -k=0
         mock_fetch.assert_not_called()
         mock_start_collector.assert_not_called()
 
-    @unittest.skipIf(platform.system() == 'Windows',
+    @unittest.skipIf(sys.platform == 'win32',
                      'Skipping Linux-specific test on Windows')
     @mock.patch('siso._start_collector', return_value=True)
-    @mock.patch('siso.platform.system', return_value='Linux')
     @mock.patch('sys.platform', new='linux')
-    def test_handle_collector_args_starts_linux(self, mock_system,
-                                                mock_start_collector):
+    def test_handle_collector_args_starts_linux(self, mock_start_collector):
         siso_path = 'path/to/siso'
         env = {'SISO_PROJECT': 'test-project', 'XDG_RUNTIME_DIR': '/tmp/run'}
         args = ['ninja', '--enable_collector']
@@ -401,10 +392,9 @@ ninja --failure_verbose=false -k=0
                 siso_path, sockets_file, 'test-project')
 
     @mock.patch('siso._start_collector', return_value=True)
-    @mock.patch('siso.platform.system', return_value='Windows')
     @mock.patch('siso._fetch_metrics_project', return_value='test-project')
     @mock.patch('sys.platform', new='win32')
-    def test_handle_collector_args_starts_windows(self, mock_fetch, mock_system,
+    def test_handle_collector_args_starts_windows(self, mock_fetch,
                                                   mock_start_collector):
         siso_path = 'path/to/siso'
         env = {'SISO_PROJECT': 'test-project'}
@@ -418,13 +408,11 @@ ninja --failure_verbose=false -k=0
         mock_start_collector.assert_called_once_with(siso_path, None,
                                                      'test-project')
 
-    @unittest.skipIf(platform.system() == 'Windows',
+    @unittest.skipIf(sys.platform == 'win32',
                      'Skipping Linux-specific test on Windows')
     @mock.patch('siso._start_collector', return_value=False)
-    @mock.patch('siso.platform.system', return_value='Linux')
     @mock.patch('sys.platform', new='linux')
-    def test_handle_collector_args_fails(self, mock_system,
-                                         mock_start_collector):
+    def test_handle_collector_args_fails(self, mock_start_collector):
         siso_path = 'path/to/siso'
         env = {'SISO_PROJECT': 'test-project', 'XDG_RUNTIME_DIR': '/tmp/run'}
         args = ['ninja', '--enable_collector']
@@ -445,11 +433,11 @@ ninja --failure_verbose=false -k=0
             mock_start_collector.assert_called_once_with(
                 siso_path, sockets_file, 'test-project')
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.remove')
     def test_start_collector_removes_existing_socket_file(
-            self, mock_os_remove, mock_os_path_exists, mock_system):
+            self, mock_os_remove, mock_os_path_exists):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -477,12 +465,11 @@ ninja --failure_verbose=false -k=0
             mock_os_path_exists.assert_called_with(sockets_file)
             mock_os_remove.assert_called_with(sockets_file)
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('os.path.exists', return_value=True)
     @mock.patch('os.remove', side_effect=OSError("Permission denied"))
     def test_start_collector_remove_socket_file_fails(self, mock_os_remove,
-                                                      mock_os_path_exists,
-                                                      mock_system):
+                                                      mock_os_path_exists):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -516,8 +503,7 @@ ninja --failure_verbose=false -k=0
 
 
     def test_process_args(self):
-        user_system = siso._SYSTEM_DICT.get(platform.system(),
-                                            platform.system())
+        user_system = siso._SYSTEM_DICT.get(sys.platform, sys.platform)
         processed_args = ['-gflag', 'ninja', '-sflag', '-C', 'out/Default']
 
         test_cases = {
@@ -694,13 +680,12 @@ ninja --failure_verbose=false -k=0
                     self.assertEqual(mock_stderr.getvalue(),
                                      tc.get('want_stderr', ''))
 
-    @unittest.skipIf(platform.system() == 'Windows',
-                     'Not applicable on Windows')
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @unittest.skipIf(sys.platform == 'win32', 'Not applicable on Windows')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.os.kill')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_process_found_and_killed_posix(
-            self, mock_subprocess_run, mock_os_kill, _):
+            self, mock_subprocess_run, mock_os_kill):
         mock_subprocess_run.return_value = mock.Mock(stdout=b'123\n',
                                                      stderr=b'',
                                                      returncode=0)
@@ -711,13 +696,12 @@ ninja --failure_verbose=false -k=0
             ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
         mock_os_kill.assert_called_once_with(123, siso.signal.SIGKILL)
 
-    @unittest.skipIf(platform.system() == 'Windows',
-                     'Not applicable on Windows')
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @unittest.skipIf(sys.platform == 'win32', 'Not applicable on Windows')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.os.kill')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_process_not_found_posix(self, mock_subprocess_run,
-                                                    mock_os_kill, _):
+                                                    mock_os_kill):
         mock_subprocess_run.return_value = mock.Mock(
             stdout=b'', stderr=b'lsof: no process found\n', returncode=1)
 
@@ -727,13 +711,12 @@ ninja --failure_verbose=false -k=0
             ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
         mock_os_kill.assert_not_called()
 
-    @unittest.skipIf(platform.system() == 'Windows',
-                     'Not applicable on Windows')
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @unittest.skipIf(sys.platform == 'win32', 'Not applicable on Windows')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.os.kill')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_kill_fails_posix(self, mock_subprocess_run,
-                                             mock_os_kill, _):
+                                             mock_os_kill):
         mock_subprocess_run.return_value = mock.Mock(stdout=b'123\n',
                                                      stderr=b'',
                                                      returncode=0)
@@ -745,13 +728,12 @@ ninja --failure_verbose=false -k=0
             ['lsof', '-t', f'-i:{siso._OTLP_HEALTH_PORT}'], capture_output=True)
         mock_os_kill.assert_called_once_with(123, siso.signal.SIGKILL)
 
-    @unittest.skipIf(platform.system() == 'Windows',
-                     'Not applicable on Windows')
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @unittest.skipIf(sys.platform == 'win32', 'Not applicable on Windows')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.os.kill')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_no_pids_found_posix(self, mock_subprocess_run,
-                                                mock_os_kill, _):
+                                                mock_os_kill):
         # stdout is empty, so no PIDs.
         mock_subprocess_run.return_value = mock.Mock(stdout=b'\n',
                                                      stderr=b'',
@@ -764,13 +746,12 @@ ninja --failure_verbose=false -k=0
         # os.kill should not be called.
         mock_os_kill.assert_not_called()
 
-    @unittest.skipIf(platform.system() == 'Windows',
-                     'Not applicable on Windows')
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @unittest.skipIf(sys.platform == 'win32', 'Not applicable on Windows')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.os.kill')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_multiple_pids_found_posix(self, mock_subprocess_run,
-                                                      mock_os_kill, _):
+                                                      mock_os_kill):
         # stdout has two PIDs.
         mock_subprocess_run.return_value = mock.Mock(stdout=b'0\n123\n456\n',
                                                      stderr=b'',
@@ -783,10 +764,10 @@ ninja --failure_verbose=false -k=0
         # Only the first PID should be killed.
         mock_os_kill.assert_called_once_with(123, siso.signal.SIGKILL)
 
-    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('sys.platform', new='win32')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_process_found_and_killed_windows(
-            self, mock_subprocess_run, _):
+            self, mock_subprocess_run):
         netstat_output = (
             f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n'
         )
@@ -808,10 +789,10 @@ ninja --failure_verbose=false -k=0
             )
         ])
 
-    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('sys.platform', new='win32')
     @mock.patch('siso.subprocess.run')
-    def test_kill_collector_process_not_found_windows(self, mock_subprocess_run,
-                                                      _):
+    def test_kill_collector_process_not_found_windows(self,
+                                                      mock_subprocess_run):
         netstat_output = (
             b'  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       868\r\n'
         )
@@ -825,10 +806,10 @@ ninja --failure_verbose=false -k=0
                                                     capture_output=True)
         self.assertEqual(mock_subprocess_run.call_count, 1)
 
-    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('sys.platform', new='win32')
     @mock.patch('siso.subprocess.run')
     def test_kill_collector_multiple_pids_found_windows(self,
-                                                        mock_subprocess_run, _):
+                                                        mock_subprocess_run):
         netstat_output = (
             f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       0\r\n'
             f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       0\r\n'
@@ -854,9 +835,9 @@ ninja --failure_verbose=false -k=0
             )
         ])
 
-    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('sys.platform', new='win32')
     @mock.patch('siso.subprocess.run')
-    def test_kill_collector_netstat_fails_windows(self, mock_subprocess_run, _):
+    def test_kill_collector_netstat_fails_windows(self, mock_subprocess_run):
         mock_subprocess_run.return_value = mock.Mock(stdout=b'',
                                                      stderr=b'netstat error\n',
                                                      returncode=1)
@@ -866,10 +847,9 @@ ninja --failure_verbose=false -k=0
         mock_subprocess_run.assert_called_once_with(['netstat', '-aon'],
                                                     capture_output=True)
 
-    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('sys.platform', new='win32')
     @mock.patch('siso.subprocess.run')
-    def test_kill_collector_taskkill_fails_windows(self, mock_subprocess_run,
-                                                   _):
+    def test_kill_collector_taskkill_fails_windows(self, mock_subprocess_run):
         netstat_output = (
             f'  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n'
         )
@@ -970,10 +950,9 @@ ninja --failure_verbose=false -k=0
         self.assertFalse(result)
         m.is_subcommand_present.assert_called_once_with(siso_path, 'collector')
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
-    def test_start_collector_dead_then_healthy(self, mock_json_loads,
-                                               _mock_system):
+    def test_start_collector_dead_then_healthy(self, mock_json_loads):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -1015,10 +994,9 @@ ninja --failure_verbose=false -k=0
             creationflags=0)
         m.kill_collector.assert_not_called()
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
-    def test_start_collector_unhealthy_then_healthy(self, mock_json_loads,
-                                                    _mock_system):
+    def test_start_collector_unhealthy_then_healthy(self, mock_json_loads):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -1062,10 +1040,9 @@ ninja --failure_verbose=false -k=0
             creationflags=0)
         m.kill_collector.assert_called_once()
 
-    @mock.patch('siso.platform.system', return_value='Windows')
+    @mock.patch('sys.platform', new='win32')
     @mock.patch('siso.json.loads')
-    def test_start_collector_dead_then_healthy_windows(self, mock_json_loads,
-                                                       _mock_system):
+    def test_start_collector_dead_then_healthy_windows(self, mock_json_loads):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -1111,10 +1088,9 @@ ninja --failure_verbose=false -k=0
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             m.kill_collector.assert_not_called()
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
-    def test_start_collector_wrong_project_no_restart(self, mock_json_loads,
-                                                        _mock_system):
+    def test_start_collector_wrong_project_no_restart(self, mock_json_loads):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -1188,8 +1164,8 @@ ninja --failure_verbose=false -k=0
         m.subprocess_popen.assert_not_called()
         m.kill_collector.assert_not_called()
 
-    @mock.patch('siso.platform.system', return_value='Linux')
-    def test_start_collector_never_healthy(self, _mock_system):
+    @mock.patch('sys.platform', new='linux')
+    def test_start_collector_never_healthy(self):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -1206,10 +1182,9 @@ ninja --failure_verbose=false -k=0
             creationflags=0)
         m.kill_collector.assert_not_called()
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
-    def test_start_collector_healthy_after_retries(self, mock_json_loads,
-                                                   _mock_system):
+    def test_start_collector_healthy_after_retries(self, mock_json_loads):
         m = self._start_collector_mocks()
         siso_path = "siso_path"
         project = "test-project"
@@ -1253,14 +1228,14 @@ ninja --failure_verbose=false -k=0
             creationflags=0)
         m.kill_collector.assert_not_called()
 
-    @mock.patch('siso.platform.system', return_value='Linux')
+    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
     @mock.patch('os.path.isfile', return_value=False)
     @mock.patch('os.path.exists')
     @mock.patch('os.remove')
     def test_start_collector_with_sockets_file(self, mock_os_remove,
                                                mock_os_exists, mock_os_isfile,
-                                               mock_json_loads, _mock_system):
+                                               mock_json_loads):
         siso_path = "siso_path"
         project = "test-project"
         sockets_file = "/tmp/test-socket.sock"

@@ -12,12 +12,11 @@ import getpass
 import json
 import http.client
 import os
-import platform
+import sys
 import shlex
 import shutil
 import signal
 import subprocess
-import sys
 import time
 from enum import Enum
 from typing import Optional
@@ -27,7 +26,7 @@ import caffeinate
 import gclient_paths
 
 
-_SYSTEM_DICT = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
+_SYSTEM_DICT = {"win32": "windows", "darwin": "mac", "linux": "linux"}
 _OTLP_DEFAULT_TCP_ENDPOINT = "127.0.0.1:4317"
 _OTLP_HEALTH_PORT = 13133
 
@@ -61,7 +60,7 @@ def _is_subcommand_present(siso_path: str, subc: str) -> bool:
 def _kill_collector() -> bool:
     output: Optional[subprocess.CompletedProcess] = None
     pids = []
-    if platform.system() in ["Linux", "Darwin"]:
+    if sys.platform in ["linux", "darwin"]:
         # Use lsof to find the PID of the process listening on the port.
         # The -t flag causes lsof to produce terse output with process
         # identifiers only.
@@ -73,7 +72,7 @@ def _kill_collector() -> bool:
             return False
         # The output of lsof is a list of PIDs, separated by newlines.
         pids = [int(p) for p in output.stdout.decode('utf-8').strip().split()]
-    elif platform.system() == "Windows":
+    elif sys.platform == "win32":
         output = subprocess.run(['netstat', '-aon'], capture_output=True)
         if output.returncode != 0:
             print(f"Warning: failed to fetch processes: {output.stderr}",
@@ -102,7 +101,7 @@ def _kill_collector() -> bool:
             f"Warning: detected multiple processed taking {_OTLP_HEALTH_PORT}: {pids}. Stopping the first one fetched.",
             file=sys.stderr)
     pid = pids[0]
-    if platform.system() in ["Linux", "Darwin"]:
+    if sys.platform in ["linux", "darwin"]:
         try:
             os.kill(pid, signal.SIGKILL)
             print(
@@ -114,7 +113,7 @@ def _kill_collector() -> bool:
                 f"Warning: Failed to kill the {pid} collector that takes {_OTLP_HEALTH_PORT} port: {e}",
                 file=sys.stderr)
             return False
-    elif platform.system() == "Windows":
+    elif sys.platform == "win32":
         res = subprocess.run(['taskkill', '/F', '/T', '/PID', f"{pid}"],
                              capture_output=True)
         if res.returncode != 0:
@@ -181,7 +180,7 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
     def start_collector(sockets_file: Optional[str]) -> None:
         # Use Popen as it's non blocking.
         creationflags = 0
-        if platform.system() == "Windows":
+        if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         cmd = [siso_path, "collector", "--project", project]
         if sockets_file:
@@ -238,7 +237,7 @@ def check_outdir(subcmd, out_dir):
 
 
 def apply_metrics_labels(args: list[str]) -> list[str]:
-    user_system = _SYSTEM_DICT.get(platform.system(), platform.system())
+    user_system = _SYSTEM_DICT.get(sys.platform, sys.platform)
 
     # TODO(ovsienko) - add targets to the processing. For this, the Siso needs to understand lists.
     for arg in args[1:]:
