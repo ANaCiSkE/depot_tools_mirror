@@ -2,3 +2,6 @@
 venvPath = 'recipes/.recipe_deps/_venv'
 venv = 'normal'
 extraPaths = ['recipes/.recipe_deps/_path']
+
+[tool.coverage.run]
+disable_warnings = ["no-ctracer"]

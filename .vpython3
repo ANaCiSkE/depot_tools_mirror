@@ -102,3 +102,9 @@ wheel: <
   name: "infra/python/wheels/lxml/${vpython_platform}"
   version: "version:4.9.3"
 >
+
+# To be used by developers running unit test coverage.
+wheel: <
+  name: "infra/python/wheels/coverage-py3"
+  version: "version:7.13.0"
+>
