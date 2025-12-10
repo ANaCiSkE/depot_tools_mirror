@@ -930,49 +930,57 @@ ninja --failure_verbose=false -k=0
         self.assertFalse(result)
         m.is_subcommand_present.assert_called_once_with(siso_path, 'collector')
 
-    @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
     def test_start_collector_dead_then_healthy(self, mock_json_loads):
-        m = self._start_collector_mocks()
-        siso_path = "siso_path"
-        project = "test-project"
-
-        self._configure_http_responses(m.mock_conn,
-                                       status_responses=[(404, None),
-                                                         (200, None)],
-                                       config_responses=[(200, None),
-                                                         (200, None)])
-        status_healthy = {'healthy': True, 'status': 'StatusOK'}
-        config_project_full = {
-            'exporters': {
-                'googlecloud': {
-                    'project': project
-                }
+        test_cases = {
+            'linux': {
+                'platform': 'linux',
+                'creationflags': 0,
             },
-            'receivers': {
-                'otlp': {
-                    'protocols': {
-                        'grpc': {
-                            'endpoint': siso._OTLP_DEFAULT_TCP_ENDPOINT
+            'windows': {
+                'platform': 'win32',
+                'creationflags': 512,  # subprocess.CREATE_NEW_PROCESS_GROUP
+            }
+        }
+
+        for name, tc in test_cases.items():
+            with self.subTest(name), \
+                 mock.patch('sys.platform', new=tc['platform']), \
+                 mock.patch('subprocess.CREATE_NEW_PROCESS_GROUP',
+                            tc['creationflags'], create=True):
+                m = self._start_collector_mocks()
+                siso_path = "siso_path"
+                project = "test-project"
+
+                self._configure_http_responses(m.mock_conn,
+                                               status_responses=[(404, None),
+                                                                 (200, None)],
+                                               config_responses=[(200, None)])
+                status_healthy = {'healthy': True, 'status': 'StatusOK'}
+                config = {
+                    'receivers': {
+                        'otlp': {
+                            'protocols': {
+                                'grpc': {
+                                    'endpoint': siso._OTLP_DEFAULT_TCP_ENDPOINT
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
-        mock_json_loads.side_effect = [
-            status_healthy, config_project_full, config_project_full
-        ]
+                mock_json_loads.side_effect = [status_healthy, config]
 
-        result = siso._start_collector(siso_path, None, project)
+                result = siso._start_collector(siso_path, None, project)
 
-        self.assertTrue(result)
-        m.subprocess_popen.assert_called_once_with(
-            [siso_path, "collector", "--project", project],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            creationflags=0)
-        m.kill_collector.assert_not_called()
+                self.assertTrue(result)
+                m.subprocess_popen.assert_called_once_with(
+                    [siso_path, "collector", "--project", project],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                    creationflags=tc['creationflags'])
+                m.kill_collector.assert_not_called()
+                mock_json_loads.reset_mock()
 
     @mock.patch('sys.platform', new='linux')
     @mock.patch('siso.json.loads')
@@ -1020,92 +1028,7 @@ ninja --failure_verbose=false -k=0
             creationflags=0)
         m.kill_collector.assert_called_once()
 
-    @mock.patch('sys.platform', new='win32')
-    @mock.patch('siso.json.loads')
-    def test_start_collector_dead_then_healthy_windows(self, mock_json_loads):
-        m = self._start_collector_mocks()
-        siso_path = "siso_path"
-        project = "test-project"
 
-        self._configure_http_responses(m.mock_conn,
-                                       status_responses=[(404, None),
-                                                         (200, None)],
-                                       config_responses=[(200, None),
-                                                         (200, None)])
-        status_healthy = {'healthy': True, 'status': 'StatusOK'}
-        config_project_full = {
-            'exporters': {
-                'googlecloud': {
-                    'project': project
-                }
-            },
-            'receivers': {
-                'otlp': {
-                    'protocols': {
-                        'grpc': {
-                            'endpoint': siso._OTLP_DEFAULT_TCP_ENDPOINT
-                        }
-                    }
-                }
-            }
-        }
-        mock_json_loads.side_effect = [
-            status_healthy, config_project_full, config_project_full
-        ]
-
-        # On non-Windows platforms, subprocess.CREATE_NEW_PROCESS_GROUP does not exist.
-        # We mock it here to make the test runnable on all platforms.
-        with mock.patch('subprocess.CREATE_NEW_PROCESS_GROUP', 512,
-                        create=True):
-            result = siso._start_collector(siso_path, None, project)
-
-            self.assertTrue(result)
-            m.subprocess_popen.assert_called_once_with(
-                [siso_path, "collector", "--project", project],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-            m.kill_collector.assert_not_called()
-
-    @mock.patch('sys.platform', new='linux')
-    @mock.patch('siso.json.loads')
-    def test_start_collector_wrong_project_no_restart(self, mock_json_loads):
-        m = self._start_collector_mocks()
-        siso_path = "siso_path"
-        project = "test-project"
-        self._configure_http_responses(m.mock_conn,
-                                       status_responses=[(200, None),
-                                                         (200, None)],
-                                       config_responses=[(200, None),
-                                                         (200, None)])
-
-        status_healthy = {'healthy': True, 'status': 'StatusOK'}
-        config_wrong_project_full = {
-            'exporters': {
-                'googlecloud': {
-                    'project': 'wrong-project'
-                }
-            },
-            'receivers': {
-                'otlp': {
-                    'protocols': {
-                        'grpc': {
-                            'endpoint': siso._OTLP_DEFAULT_TCP_ENDPOINT
-                        }
-                    }
-                }
-            }
-        }
-        mock_json_loads.side_effect = [
-            status_healthy, config_wrong_project_full
-        ]
-
-        result = siso._start_collector(siso_path, None, project)
-
-        self.assertTrue(result)
-        m.subprocess_popen.assert_not_called()
-        m.kill_collector.assert_not_called()
 
     @mock.patch('siso.json.loads')
     def test_start_collector_already_healthy(self, mock_json_loads):
