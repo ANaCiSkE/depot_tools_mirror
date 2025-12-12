@@ -75,6 +75,10 @@ _CORP_LINK_KEYWORD = '.corp.google'
 # See https://git-scm.com/docs/git-ls-tree#_output_format
 _GIT_MODE_SUBMODULE = b'160000'
 
+# Windows command line character limit. See
+# https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/command-line-string-limitation
+_WIN_COMMAND_LINE_CHAR_LIMIT = 8191
+
 
 ### Description checks
 
@@ -316,7 +320,7 @@ def CheckChangeLintsClean(input_api,
 
     # Use VS error format on Windows to make it easier to step through the
     # results.
-    if input_api.platform == 'win32':
+    if input_api.is_windows:
         cpplint._SetOutputFormat('vs7')
 
     if source_file_filter == None:
@@ -1329,7 +1333,7 @@ def _FetchAllFiles(input_api, files_to_check, files_to_skip):
     # can break another unmodified file.
     # Use code similar to InputApi.FilterSourceFile()
     def Find(filepath, filters):
-        if input_api.platform == 'win32':
+        if input_api.is_windows:
             filepath = filepath.replace('\\', '/')
 
         for item in filters:
@@ -1435,7 +1439,7 @@ def GetPylint(input_api,
         # the command-line, so we pass arguments via a pipe.
         tool = input_api.os_path.join(_HERE, 'pylint-' + version)
         kwargs = {'env': env}
-        if input_api.platform == 'win32':
+        if input_api.is_windows:
             # On Windows, scripts on the current directory take precedence over
             # PATH. When `pylint.bat` calls `vpython3`, it will execute the
             # `vpython3` of the depot_tools under test instead of the one in the
@@ -2085,7 +2089,12 @@ def CheckForCommitObjects(input_api, output_api):
             input_api.os_path.relpath(f.AbsoluteLocalPath(), repo_root)
             for f in affected_files
         ]
-        cmd.extend(['--'] + files_to_check)
+        # On Windows, the command line is limited to 8191 characters.
+        cmd_len = len(' '.join(cmd + ['--'] + files_to_check))
+        if (input_api.is_windows and cmd_len > _WIN_COMMAND_LINE_CHAR_LIMIT):
+            cmd.extend(['-r'])
+        else:
+            cmd.extend(['--'] + files_to_check)
     else:
         cmd.extend(['-r'])
 
@@ -2844,7 +2853,7 @@ def CheckInclusiveLanguage(input_api,
         local_dir = input_api.os_path.dirname(affected_file.LocalPath())
 
         # Excluded paths use forward slashes.
-        if input_api.platform == 'win32':
+        if input_api.is_windows:
             local_dir = local_dir.replace('\\', '/')
 
         return local_dir in excluded_paths

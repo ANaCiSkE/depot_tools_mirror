@@ -910,6 +910,44 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertEqual(1, len(results))
         self.assertIn('submodule', results[0].items)
 
+    def testWindowsCommandLineLimit(self):
+        # On Windows, if the command line is too long, we should fall back to a
+        # recursive ls-tree.
+        self.input_api.platform = 'win32'
+        self.input_api.files = [
+            MockAffectedFile('a' * 100, '') for i in range(100)
+        ]
+        self.input_api.subprocess.check_output.return_value = b''
+
+        presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+
+        # The first call is to `git show HEAD:DEPS`.
+        # The second call is to `git ls-tree`.
+        self.assertEqual(2, self.input_api.subprocess.check_output.call_count)
+        ls_tree_cmd = self.input_api.subprocess.check_output.call_args_list[1][0][0]
+        self.assertIn('-r', ls_tree_cmd)
+
+    def testWindowsCommandLineNotTooLong(self):
+        # On Windows, if the command line is not too long, we should pass the
+        # file list.
+        self.input_api.platform = 'win32'
+        self.input_api.files = [
+            MockAffectedFile('foo.txt', '')
+        ]
+        self.input_api.subprocess.check_output.return_value = b''
+
+        presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+
+        # The first call is to `git show HEAD:DEPS`.
+        # The second call is to `git ls-tree`.
+        self.assertEqual(2, self.input_api.subprocess.check_output.call_count)
+        ls_tree_cmd = self.input_api.subprocess.check_output.call_args_list[1][0][0]
+        self.assertNotIn('-r', ls_tree_cmd)
+        self.assertIn('--', ls_tree_cmd)
+        self.assertIn('foo.txt', ls_tree_cmd)
+
 
 if __name__ == '__main__':
     unittest.main()

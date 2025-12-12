@@ -81,6 +81,10 @@ class MockInputApi(object):
         self.presubmit_local_path = os.path.dirname(__file__)
         self.logging = logging.getLogger('PRESUBMIT')
 
+    @property
+    def is_windows(self):
+        return self.platform == 'win32'
+
     def CreateMockFileInPath(self, f_list):
         self.os_path.exists = lambda x: x in f_list
 
