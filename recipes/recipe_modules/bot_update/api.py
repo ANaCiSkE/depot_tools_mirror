@@ -912,8 +912,18 @@ class BotUpdateApi(recipe_api.RecipeApi):
         if project == project_name
     )
 
-  def deapply_patch(self, bot_update_result):
+  def deapply_patch(
+      self,
+      bot_update_result,
+      *,
+      turboci_check_id: str = '',
+  ):
     """Deapplies a patch, taking care of DEPS and solution revisions properly.
+
+    Args:
+      turboci_check_id: The ID of the source check to create for checking out
+        the unpatched code. See documentation of the turboci_check_id parameter
+        of ensure_checkout for more information.
     """
     # We only override first solution here to make sure that we correctly revert
     # changes to DEPS file, which is particularly important for auto-rolls. It
@@ -926,8 +936,10 @@ class BotUpdateApi(recipe_api.RecipeApi):
         bot_update_result.properties[rev_property])
     self._resolve_fixed_revisions(bot_update_result)
 
-    self.ensure_checkout(
-        patch=False, no_fetch_tags=True, update_presentation=False)
+    self.ensure_checkout(patch=False,
+                         no_fetch_tags=True,
+                         update_presentation=False,
+                         turboci_check_id=turboci_check_id)
 
   def step_name(self, patch, suffix):
     name = 'bot_update'

@@ -65,10 +65,14 @@ Recipe module to ensure a checkout is consistent on a bot.
 
 Wrapper for easy calling of bot_update.
 
-&mdash; **def [deapply\_patch](/recipes/recipe_modules/bot_update/api.py#915)(self, bot_update_result):**
+&mdash; **def [deapply\_patch](/recipes/recipe_modules/bot_update/api.py#915)(self, bot_update_result, \*, turboci_check_id: str=''):**
 
 Deapplies a patch, taking care of DEPS and solution revisions properly.
-    
+
+Args:
+  turboci_check_id: The ID of the source check to create for checking out
+    the unpatched code. See documentation of the turboci_check_id parameter
+    of ensure_checkout for more information.
 
 &mdash; **def [ensure\_checkout](/recipes/recipe_modules/bot_update/api.py#401)(self, gclient_config=None, \*, suffix=None, patch=True, update_presentation=True, patch_root=None, with_branch_heads=False, with_tags=False, no_fetch_tags=False, refs=None, clobber=False, root_solution_revision=None, gerrit_no_reset=False, gerrit_no_rebase_patch_ref=False, assert_one_gerrit_change=True, patch_refs=None, ignore_input_commit=False, add_blamelists=False, set_output_commit=False, step_test_data=None, enforce_fetch=False, download_topics=False, recipe_revision_overrides=None, step_tags=None, clean_ignored=False, turboci_check_id: str='', \*\*kwargs):**
 
@@ -134,7 +138,7 @@ Returns (list of str): All properties that'll hold the checked-out revision
 Sets a fixed revision for a single dependency using project revision
 properties.
 
-&mdash; **def [step\_name](/recipes/recipe_modules/bot_update/api.py#932)(self, patch, suffix):**
+&mdash; **def [step\_name](/recipes/recipe_modules/bot_update/api.py#944)(self, patch, suffix):**
 ### *recipe_modules* / [depot\_tools](/recipes/recipe_modules/depot_tools)
 
 [DEPS](/recipes/recipe_modules/depot_tools/__init__.py#6): [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/runtime][recipe_engine/recipe_modules/runtime]
