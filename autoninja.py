@@ -150,7 +150,7 @@ def _quote_for_cmd(arg):
 
 def _print_cmd(cmd):
     shell_quoter = shlex.quote
-    if sys.platform.startswith("win"):
+    if sys.platform == "win32":
         shell_quoter = _quote_for_cmd
     print(*[shell_quoter(arg) for arg in cmd], file=sys.stderr)
 
@@ -250,7 +250,7 @@ def _check_reclient_cfgs(output_dir):
             cr_build_revision = f.read().strip()
     rewrapper_cfg_path = os.path.join(
         root_dir, "buildtools/reclient_cfgs/chromium-browser-clang/rewrapper_")
-    if sys.platform.startswith("win"):
+    if sys.platform == "win32":
         rewrapper_cfg_path += "windows.cfg"
     elif sys.platform == "darwin":
         rewrapper_cfg_path += "mac.cfg"
@@ -408,7 +408,7 @@ def _main_inner(input_args,
             # even if use_remoteexec=true is set.
             project = _siso_rbe_project(output_dir)
 
-        if sys.platform.startswith("win") or sys.platform == "darwin":
+        if sys.platform in ["win32", "darwin"]:
             _check_reclient_cfgs(output_dir)
 
         if _has_internal_checkout(output_dir):
@@ -613,7 +613,7 @@ def _main_inner(input_args,
 def _upload_ninjalog(args, exit_code, build_duration):
     # Run upload script without wait.
     creationflags = 0
-    if platform.system() == "Windows":
+    if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
     cmd = [
         sys.executable,
@@ -648,7 +648,7 @@ def _upload_sisolog(input_args: list[str], build_id: str):
 
         # Run upload script without wait.
         creationflags = 0
-        if platform.system() == "Windows":
+        if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         cmd = [
             sys.executable,
@@ -687,7 +687,7 @@ def main(args):
     exit_code = 127
     telemetry_cfg = build_telemetry.load_config()
     should_collect_logs = telemetry_cfg.enabled()
-    if sys.platform.startswith("win") and len(args) == 2:
+    if sys.platform == "win32" and len(args) == 2:
         input_args = args[:1] + args[1].split()
     try:
         exit_code = _main_inner(input_args, build_id, telemetry_cfg)

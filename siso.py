@@ -463,7 +463,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
 
     signal.signal(signal.SIGINT, _ignore)
 
-    if not sys.platform.startswith('win'):
+    if sys.platform != "win32":
         signal.signal(signal.SIGTERM, lambda signum, frame: None)
 
     # On Windows the siso.bat script passes along the arguments enclosed in
@@ -472,7 +472,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
     # detected, we need to split the argument. This means that arguments
     # containing actual spaces are not supported by siso.bat, but that is not a
     # real limitation.
-    if sys.platform.startswith('win') and len(args) == 2:
+    if sys.platform == "win32" and len(args) == 2:
         args = args[:1] + args[1].split()
 
     # macOS's python sets CPATH, LIBRARY_PATH, SDKROOT implicitly.
