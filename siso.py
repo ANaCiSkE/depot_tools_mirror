@@ -31,7 +31,7 @@ _OTLP_DEFAULT_TCP_ENDPOINT = "127.0.0.1:4317"
 _OTLP_HEALTH_PORT = 13133
 
 
-def parse_args(args):
+def parse_args(args: list[str]) -> tuple[str, str]:
     subcmd = ''
     out_dir = "."
     for i, arg in enumerate(args):
@@ -225,7 +225,7 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
     return False
 
 
-def check_outdir(subcmd, out_dir):
+def check_outdir(out_dir: str) -> None:
     ninja_marker = os.path.join(out_dir, ".ninja_deps")
     if os.path.exists(ninja_marker):
         print("depot_tools/siso.py: %s contains Ninja state file.\n"
@@ -369,7 +369,7 @@ def _handle_collector_args(siso_path: str, args: list[str],
     return args
 
 
-def load_sisorc(rcfile):
+def load_sisorc(rcfile: str) -> tuple[list[str], dict[str, list[str]]]:
     if not os.path.exists(rcfile):
         return [], {}
     global_flags = []
@@ -437,12 +437,13 @@ def _process_args(global_flags: list[str], subcmd_flags: dict[str, list[str]],
     return new_args
 
 
-def _is_google_corp_machine():
+def _is_google_corp_machine() -> bool:
     """This assumes that corp machine has gcert binary in known location."""
     return shutil.which("gcert") is not None
 
 
-def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
+def main(args: list[str],
+         telemetry_cfg: Optional[build_telemetry.Config] = None):
     # Do not raise KeyboardInterrupt on SIGINT so as to give siso time to run
     # cleanup tasks. Siso will be terminated immediately after the second
     # Ctrl-C.
@@ -560,7 +561,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
             if siso_path and os.path.isfile(siso_path):
                 processed_args = _handle_collector_args(siso_path,
                                                         processed_args, env)
-                check_outdir(subcmd, out_dir)
+                check_outdir(out_dir)
                 return caffeinate.call([siso_path] + processed_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
