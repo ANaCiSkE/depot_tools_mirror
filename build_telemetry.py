@@ -25,15 +25,7 @@ class Config:
 
     def __init__(self, config_path, countdown):
         self._config_path = config_path
-        self._config = None
         self._notice_displayed = False
-        self._countdown = countdown
-
-    def load(self):
-        """Loads the build telemetry config."""
-        if self._config:
-            return
-
         config = {}
         if os.path.isfile(self._config_path):
             with open(self._config_path) as f:
@@ -48,13 +40,11 @@ class Config:
             config = {
                 "user": check_auth().get("email", ""),
                 "status": None,
-                "countdown": self._countdown,
+                "countdown": countdown,
                 "version": VERSION,
             }
         if not config.get("user"):
             config["user"] = check_auth().get("email", "")
-
-
         self._config = config
 
     def save(self):
@@ -75,29 +65,17 @@ class Config:
 
     @property
     def user(self):
-        if not self._config:
-            return
         return self._config.get("user", "")
-
 
     @property
     def countdown(self):
-        if not self._config:
-            return
         return self._config.get("countdown")
 
     @property
     def version(self):
-        if not self._config:
-            return
         return self._config.get("version")
 
     def enabled(self):
-        if not self._config:
-            print("WARNING: depot_tools.build_telemetry: %s is not loaded." %
-                  self._config_path,
-                  file=sys.stderr)
-            return False
         if not self.is_googler or not self.is_corp_machine:
             return False
         if self._config.get("status") == "opt-out":
@@ -147,9 +125,7 @@ class Config:
 
 def load_config(cfg_path=_DEFAULT_CONFIG_PATH, countdown=_DEFAULT_COUNTDOWN):
     """Loads the config from the default location."""
-    cfg = Config(cfg_path, countdown)
-    cfg.load()
-    return cfg
+    return Config(cfg_path, countdown)
 
 
 def check_auth():
@@ -162,7 +138,7 @@ def check_auth():
             stderr=subprocess.DEVNULL,
             timeout=3,
         )
-    except Exception as e:
+    except Exception:
         return {}
     try:
         return json.loads(out)
