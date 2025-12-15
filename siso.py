@@ -456,7 +456,7 @@ def main(args, telemetry_cfg: Optional[build_telemetry.Config] = None):
     def _ignore(signum, frame):
         try:
             # Call the original signal handler.
-            original_sigint_handler(signum, frame)
+            original_sigint_handler(signum, frame)  # type: ignore
         except KeyboardInterrupt:
             # Do not reraise KeyboardInterrupt so as to not kill siso too early.
             pass
