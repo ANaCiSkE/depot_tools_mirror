@@ -74,7 +74,7 @@ def FindClangFormatScriptInChromiumTree(script_name):
     tools_path = gclient_paths.GetBuildtoolsPath()
     if not tools_path:
         raise NotFoundError(
-            'Could not find checkout in any parent of the current path.\n',
+            'Could not find checkout in any parent of the current path.\n'
             'Set CHROMIUM_BUILDTOOLS_PATH to use outside of a chromium '
             'checkout.')
 
