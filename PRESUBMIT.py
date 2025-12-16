@@ -217,3 +217,7 @@ def CheckPatchFormatted(input_api, output_api):
 
 def CheckFreezeOnCommit(input_api, output_api):
     return input_api.canned_checks.CheckInfraFreeze(input_api, output_api)
+
+
+def CheckAyeAye(input_api, output_api):
+    return input_api.canned_checks.CheckAyeAye(input_api, output_api)
