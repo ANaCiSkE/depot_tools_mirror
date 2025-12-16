@@ -31,7 +31,7 @@ import platform
 import re
 import subprocess
 import sys
-import time
+import urllib.error
 import urllib.request
 
 import build_telemetry
