@@ -10,6 +10,7 @@ set VERSION_FILE=%~dp0cipd_client_version
 set CIPD_BINARY=%~dp0.cipd_client.exe
 set CIPD_PLATFORM=windows-amd64
 set PLATFORM_OVERRIDE_FILE=%~dp0.cipd_client_platform
+set CIPD_IMPL=%~dp0.cipd_impl.ps1
 
 :: Uncomment to recognize arm64 by default.
 :: if %PROCESSOR_ARCHITECTURE%==ARM64 (
@@ -75,13 +76,13 @@ exit /b %EXPORT_ERRORLEVEL%
 :: and unzipping the depot_tools.zip distribution, we clear the Zone.Identifier
 :: alternate data stream. This is equivalent to clicking the "Unblock" button
 :: in the file's properties dialog.
-echo.>"%~dp0.cipd_impl.ps1:Zone.Identifier"
+echo.>"%CIPD_IMPL%:Zone.Identifier"
 powershell -NoProfile -ExecutionPolicy RemoteSigned ^
-    -File "%~dp0.cipd_impl.ps1" ^
-    -CipdBinary "%CIPD_BINARY%" ^
-    -Platform "%CIPD_PLATFORM%" ^
-    -BackendURL "%CIPD_BACKEND%" ^
-    -VersionFile "%VERSION_FILE%" ^
+    -Command "& \"%CIPD_IMPL%\"" ^
+    "-CipdBinary \"%CIPD_BINARY%\"" ^
+    "-Platform \"%CIPD_PLATFORM%\"" ^
+    "-BackendURL \"%CIPD_BACKEND%\"" ^
+    "-VersionFile \"%VERSION_FILE%\"" ^
   <nul
 if %ERRORLEVEL% equ 0 (
   :: Need to call SELF_UPDATE to setup .cipd_version file.
