@@ -84,11 +84,10 @@ def _process_diff(diff: str, src_root: str, dst_root: str) -> str:
         return ""
 
     has_chunk_header = HEADER_DELIMITER in diff
+
+    header, body = diff, ""
     if has_chunk_header:
         header, body = diff.split(HEADER_DELIMITER, maxsplit=1)
-    else:
-        # Only the file mode changed.
-        header = diff
 
     norm_src = src_root.rstrip(os.sep)
     norm_dst = dst_root.rstrip(os.sep)
