@@ -333,20 +333,26 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
         self.authenticator = gerrit_util.ChainedAuthenticator(
             [gerrit_util.GitCredsAuthenticator()])
 
+    @mock.patch('gerrit_util.GitCredsAuthenticator.gerrit_account_exists',
+                return_value=True)
+    @mock.patch('gerrit_util.GitCredsAuthenticator._is_usehttppath_set',
+                return_value=True)
     @mock.patch('auth.GerritAuthenticator.get_access_token',
                 return_value="Bearer abcd")
-    def testEnsureAuthenticated(self, mock_get_access_token):
+    def testEnsureAuthenticated(self, mock_get_access_token, _set, _exists):
         bypassable, err_msg = self.authenticator.ensure_authenticated(
             gerrit_host='chromium-review.googlesource.com',
             git_host="chromium.googlesource.com")
         mock_get_access_token.assert_called_once()
-        mock_get_authorization_header.assert_not_called()
-        self.assertTrue(bypassable)
+        self.assertTrue(bypassable, msg=err_msg)
         self.assertEqual(err_msg, "")
 
+    @mock.patch('gerrit_util.GitCredsAuthenticator._is_usehttppath_set',
+                return_value=True)
     @mock.patch('auth.GerritAuthenticator.get_authorization_header',
                 return_value="BearerReAuth xyz")
-    def testEnsureAuthenticated(self, mock_get_authorization_header):
+    def testEnsureAuthenticatedWithReAuth(self, mock_get_authorization_header,
+                                          _):
         reauth_context = auth.ReAuthContext(
             host="chromium-review.googlesource.com", project="chromium/src")
         gerrit_host = "chromium-review.googlesource.com"
@@ -358,8 +364,24 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
             reauth_context=reauth_context)
 
         mock_get_authorization_header.assert_called_once_with(reauth_context)
-        self.assertTrue(bypassable)
+        self.assertTrue(bypassable, msg=err_msg)
         self.assertEqual(err_msg, "")
+
+    @mock.patch('gerrit_util.GitCredsAuthenticator._is_usehttppath_set',
+                return_value=False)
+    def testEnsureAuthenticatedMissingUseHttpPath(self, _):
+        reauth_context = auth.ReAuthContext(
+            host="chromium-review.googlesource.com", project="chromium/src")
+        gerrit_host = "chromium-review.googlesource.com"
+        git_host = "chromium.googlesource.com"
+
+        bypassable, err_msg = self.authenticator.ensure_authenticated(
+            gerrit_host=gerrit_host,
+            git_host=git_host,
+            reauth_context=reauth_context)
+
+        self.assertFalse(bypassable)
+        self.assertRegex(err_msg, "You have not set credential.useHttpPath")
 
     @mock.patch('auth.GerritAuthenticator.get_authorization_header',
                 side_effect=auth.GitReAuthRequiredError())
