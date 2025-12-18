@@ -212,6 +212,7 @@ def boringssl(c):
   soln.name = 'boringssl'
   soln.url = 'https://boringssl.googlesource.com/boringssl.git'
   soln.deps_file = 'util/bot/DEPS'
+  c.got_revision_mapping['boringssl'] = 'got_revision'
 
 @config_ctx()
 def dart(c):
