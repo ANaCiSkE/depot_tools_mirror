@@ -115,19 +115,19 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
         "--enable_cloud_profiler"
     ],
                  id="some_already_applied_no_env_flags"),
-    pytest.param([
-        "ninja", "-C", "out/Default", "--metrics_project", "some_project"
-    ], {}, [
-        "ninja", "-C", "out/Default", "--metrics_project", "some_project",
-        "--enable_cloud_monitoring", "--enable_cloud_profiler",
-        "--enable_cloud_trace", "--enable_cloud_logging", "--enable_collector"
-    ],
-                 id="metrics_project_set"),
+    pytest.param(
+        ["ninja", "-C", "out/Default", "--metrics_project", "some_project"], {},
+        [
+            "ninja", "-C", "out/Default", "--metrics_project", "some_project",
+            "--enable_cloud_monitoring", "--enable_cloud_profiler",
+            "--enable_cloud_trace", "--enable_cloud_logging"
+        ],
+        id="metrics_project_set"),
     pytest.param(["ninja", "-C", "out/Default"],
                  {"RBE_metrics_project": "some_project"}, [
                      "ninja", "-C", "out/Default", "--enable_cloud_monitoring",
                      "--enable_cloud_profiler", "--enable_cloud_trace",
-                     "--enable_cloud_logging", "--enable_collector"
+                     "--enable_cloud_logging"
                  ],
                  id="metrics_project_set_thru_env"),
     pytest.param(["ninja", "-C", "out/Default", "--project", "some_project"],
@@ -135,15 +135,14 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
                      "ninja", "-C", "out/Default", "--project", "some_project",
                      "--enable_cloud_monitoring", "--enable_cloud_profiler",
                      "--enable_cloud_trace", "--enable_cloud_logging",
-                     "--enable_collector", "--metrics_project=some_project"
+                     "--metrics_project=some_project"
                  ],
                  id="cloud_project_set"),
     pytest.param(["ninja", "-C", "out/Default"],
                  {"SISO_PROJECT": "some_project"}, [
                      "ninja", "-C", "out/Default", "--enable_cloud_monitoring",
                      "--enable_cloud_profiler", "--enable_cloud_trace",
-                     "--enable_cloud_logging", "--enable_collector",
-                     "--metrics_project=some_project"
+                     "--enable_cloud_logging", "--metrics_project=some_project"
                  ],
                  id="cloud_project_set_thru_env"),
     pytest.param(
@@ -151,8 +150,7 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
         {"SISO_PROJECT": "some_project"}, [
             "ninja", "-C", "out/Default", "--enable_cloud_profiler=false",
             "--enable_cloud_monitoring", "--enable_cloud_trace",
-            "--enable_cloud_logging", "--enable_collector",
-            "--metrics_project=some_project"
+            "--enable_cloud_logging", "--metrics_project=some_project"
         ],
         id="respects_set_flags"),
 ])
@@ -521,7 +519,6 @@ def test_start_collector_remove_socket_file_fails(
                 "--enable_cloud_profiler",
                 "--enable_cloud_trace",
                 "--enable_cloud_logging",
-                "--enable_collector",
                 "--metrics_project=test-project",
             ],
             "",
@@ -539,7 +536,6 @@ def test_start_collector_remove_socket_file_fails(
                 "--enable_cloud_profiler",
                 "--enable_cloud_trace",
                 "--enable_cloud_logging",
-                "--enable_collector",
                 "--metrics_project=test-project",
             ],
             "",
@@ -611,7 +607,6 @@ def test_start_collector_remove_socket_file_fails(
                 "--enable_cloud_profiler",
                 "--enable_cloud_trace",
                 "--enable_cloud_logging",
-                "--enable_collector",
                 "--metrics_project=telemetry-project",
             ],
             "depot_tools/siso.py: %s\n"

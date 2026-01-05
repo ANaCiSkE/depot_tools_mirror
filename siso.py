@@ -256,7 +256,7 @@ def apply_metrics_labels(args: list[str]) -> list[str]:
 def apply_telemetry_flags(args: list[str], env: dict[str, str]) -> list[str]:
     telemetry_flags = [
         "enable_cloud_monitoring", "enable_cloud_profiler",
-        "enable_cloud_trace", "enable_cloud_logging", "enable_collector"
+        "enable_cloud_trace", "enable_cloud_logging"
     ]
     # Despite go.dev/issue/68312 being fixed, the issue is still reproducible
     # for googlers. Due to this, the flag is still applied while the
