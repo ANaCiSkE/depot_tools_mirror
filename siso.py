@@ -131,10 +131,6 @@ def _kill_collector() -> bool:
 # Returns boolean whether collector has started successfully and a potential sockets path.
 def _start_collector(siso_path: str, sockets_file: Optional[str],
                      project: str) -> bool:
-    if not _is_subcommand_present(siso_path, "collector"):
-        print(f"Collector is not present in the submitted siso: {siso_path}")
-        return False
-
     class Status(Enum):
         HEALTHY = 1
         WRONG_ENDPOINT = 2
@@ -253,11 +249,14 @@ def apply_metrics_labels(args: list[str]) -> list[str]:
     return args + ["--metrics_labels", ",".join(result)]
 
 
-def apply_telemetry_flags(args: list[str], env: dict[str, str]) -> list[str]:
+def apply_telemetry_flags(args: list[str], env: dict[str, str],
+                          siso_path: str) -> list[str]:
     telemetry_flags = [
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
     ]
+    if _is_subcommand_present(siso_path, "collector"):
+        telemetry_flags.append("enable_collector")
     # Despite go.dev/issue/68312 being fixed, the issue is still reproducible
     # for googlers. Due to this, the flag is still applied while the
     # issue is being investigated.
@@ -425,7 +424,7 @@ def _fix_system_limits() -> None:
 # Utility function to produce actual command line flags for Siso.
 def _process_args(global_flags: list[str], subcmd_flags: dict[str, list[str]],
                   args: list[str], subcmd: str, should_collect_logs: bool,
-                  env: dict[str, str]) -> list[str]:
+                  siso_path: str, env: dict[str, str]) -> list[str]:
     new_args = apply_sisorc(global_flags, subcmd_flags, args, subcmd)
     if args != new_args:
         print('depot_tools/siso.py: %s' % shlex.join(new_args), file=sys.stderr)
@@ -433,7 +432,7 @@ def _process_args(global_flags: list[str], subcmd_flags: dict[str, list[str]],
     if subcmd == "ninja":
         new_args = apply_metrics_labels(new_args)
         if should_collect_logs:
-            new_args = apply_telemetry_flags(new_args, env)
+            new_args = apply_telemetry_flags(new_args, env, siso_path)
     return new_args
 
 
@@ -548,8 +547,6 @@ def main(args: list[str],
             return 1
         global_flags, subcmd_flags = load_sisorc(
             os.path.join(base_path, 'build', 'config', 'siso', '.sisorc'))
-        processed_args = _process_args(global_flags, subcmd_flags, args[1:],
-                                       subcmd, should_collect_logs, env)
         siso_paths = [
             siso_override_path,
             os.path.join(base_path, 'third_party', 'siso', 'cipd',
@@ -559,6 +556,10 @@ def main(args: list[str],
         ]
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
+                processed_args = _process_args(global_flags, subcmd_flags,
+                                               args[1:], subcmd,
+                                               should_collect_logs, siso_path,
+                                               env)
                 processed_args = _handle_collector_args(siso_path,
                                                         processed_args, env)
                 check_outdir(out_dir)

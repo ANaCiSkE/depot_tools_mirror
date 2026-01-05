@@ -103,6 +103,12 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
     assert got == want
 
 
+@pytest.fixture
+def siso_subcmd_present(mocker: Any) -> Generator[None, None, None]:
+    mocker.patch("siso._is_subcommand_present", return_value=True)
+    yield
+
+
 @pytest.mark.parametrize("args, env, want", [
     pytest.param(["ninja", "-C", "out/Default"], {},
                  ["ninja", "-C", "out/Default"],
@@ -115,19 +121,19 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
         "--enable_cloud_profiler"
     ],
                  id="some_already_applied_no_env_flags"),
-    pytest.param(
-        ["ninja", "-C", "out/Default", "--metrics_project", "some_project"], {},
-        [
-            "ninja", "-C", "out/Default", "--metrics_project", "some_project",
-            "--enable_cloud_monitoring", "--enable_cloud_profiler",
-            "--enable_cloud_trace", "--enable_cloud_logging"
-        ],
-        id="metrics_project_set"),
+    pytest.param([
+        "ninja", "-C", "out/Default", "--metrics_project", "some_project"
+    ], {}, [
+        "ninja", "-C", "out/Default", "--metrics_project", "some_project",
+        "--enable_cloud_monitoring", "--enable_cloud_profiler",
+        "--enable_cloud_trace", "--enable_cloud_logging", "--enable_collector"
+    ],
+                 id="metrics_project_set"),
     pytest.param(["ninja", "-C", "out/Default"],
                  {"RBE_metrics_project": "some_project"}, [
                      "ninja", "-C", "out/Default", "--enable_cloud_monitoring",
                      "--enable_cloud_profiler", "--enable_cloud_trace",
-                     "--enable_cloud_logging"
+                     "--enable_cloud_logging", "--enable_collector"
                  ],
                  id="metrics_project_set_thru_env"),
     pytest.param(["ninja", "-C", "out/Default", "--project", "some_project"],
@@ -135,14 +141,15 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
                      "ninja", "-C", "out/Default", "--project", "some_project",
                      "--enable_cloud_monitoring", "--enable_cloud_profiler",
                      "--enable_cloud_trace", "--enable_cloud_logging",
-                     "--metrics_project=some_project"
+                     "--enable_collector", "--metrics_project=some_project"
                  ],
                  id="cloud_project_set"),
     pytest.param(["ninja", "-C", "out/Default"],
                  {"SISO_PROJECT": "some_project"}, [
                      "ninja", "-C", "out/Default", "--enable_cloud_monitoring",
                      "--enable_cloud_profiler", "--enable_cloud_trace",
-                     "--enable_cloud_logging", "--metrics_project=some_project"
+                     "--enable_cloud_logging", "--enable_collector",
+                     "--metrics_project=some_project"
                  ],
                  id="cloud_project_set_thru_env"),
     pytest.param(
@@ -150,17 +157,19 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
         {"SISO_PROJECT": "some_project"}, [
             "ninja", "-C", "out/Default", "--enable_cloud_profiler=false",
             "--enable_cloud_monitoring", "--enable_cloud_trace",
-            "--enable_cloud_logging", "--metrics_project=some_project"
+            "--enable_cloud_logging", "--enable_collector",
+            "--metrics_project=some_project"
         ],
         id="respects_set_flags"),
 ])
-def test_apply_telemetry_flags(args: List[str], env: Dict[str, str],
-                               want: List[str]) -> None:
-    got = siso.apply_telemetry_flags(args, env)
+def test_apply_telemetry_flags(siso_subcmd_present: Any, args: List[str],
+                               env: Dict[str, str], want: List[str]) -> None:
+    got = siso.apply_telemetry_flags(args, env, "siso_path")
     assert got == want
 
 
-def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
+def test_apply_telemetry_flags_sets_expected_env_var(siso_subcmd_present: Any,
+                                                     mocker: Any) -> None:
     mocker.patch.dict("os.environ", {})
     args = [
         "ninja",
@@ -168,7 +177,7 @@ def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
         "out/Default",
     ]
     env = {}
-    _ = siso.apply_telemetry_flags(args, env)
+    _ = siso.apply_telemetry_flags(args, env, "siso_path")
     assert env.get("GOOGLE_API_USE_CLIENT_CERTIFICATE") == "false"
 
 
@@ -352,8 +361,6 @@ def test_handle_collector_args_fails(siso_test_fixture: Any,
 @pytest.fixture
 def start_collector_mocks(mocker: Any) -> Dict[str, Any]:
     mocks = {
-        "is_subcommand_present":
-        mocker.patch("siso._is_subcommand_present", return_value=True),
         "subprocess_run":
         mocker.patch("siso.subprocess.run"),
         "kill_collector":
@@ -519,6 +526,7 @@ def test_start_collector_remove_socket_file_fails(
                 "--enable_cloud_profiler",
                 "--enable_cloud_trace",
                 "--enable_cloud_logging",
+                "--enable_collector",
                 "--metrics_project=test-project",
             ],
             "",
@@ -536,6 +544,7 @@ def test_start_collector_remove_socket_file_fails(
                 "--enable_cloud_profiler",
                 "--enable_cloud_trace",
                 "--enable_cloud_logging",
+                "--enable_collector",
                 "--metrics_project=test-project",
             ],
             "",
@@ -607,6 +616,7 @@ def test_start_collector_remove_socket_file_fails(
                 "--enable_cloud_profiler",
                 "--enable_cloud_trace",
                 "--enable_cloud_logging",
+                "--enable_collector",
                 "--metrics_project=telemetry-project",
             ],
             "depot_tools/siso.py: %s\n"
@@ -631,14 +641,14 @@ def test_start_collector_remove_socket_file_fails(
             % shlex.join(["-gflag_non_ninja", "other_subcmd", "-sflag_non_ninja", "-C", "out/Default"]),
             id="with_sisorc_non_ninja_subcmd"
         ),])
-def test_process_args(global_flags: List[str], subcmd_flags: Dict[str,
-                                                                  List[str]],
-                      args: List[str], subcmd: str, should_collect_logs: bool,
+def test_process_args(siso_subcmd_present: Any, global_flags: List[str],
+                      subcmd_flags: Dict[str, List[str]], args: List[str],
+                      subcmd: str, should_collect_logs: bool,
                       env: Dict[str, str], want: List[str], want_stderr: str,
                       siso_test_fixture: Any, mocker: Any) -> None:
     mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
     got = siso._process_args(global_flags, subcmd_flags, args, subcmd,
-                             should_collect_logs, env)
+                             should_collect_logs, "siso_path", env)
     assert got == want
     assert mock_stderr.getvalue() == want_stderr
 
@@ -762,18 +772,6 @@ def test_kill_collector_windows(run_effects: List[Tuple[bytes, bytes, int]],
     calls = [mocker.call(c, capture_output=True) for c in expected_calls]
     mock_subprocess_run.assert_has_calls(calls)
     assert mock_subprocess_run.call_count == len(calls)
-
-
-def test_start_collector_subcommand_not_present(
-        start_collector_mocks: Dict[str, Any]) -> None:
-    m = start_collector_mocks
-    m["is_subcommand_present"].return_value = False
-    siso_path = "siso_path"
-    project = "test-project"
-    result = siso._start_collector(siso_path, None, project)
-    assert not result
-    m["is_subcommand_present"].assert_called_once_with(siso_path, "collector")
-
 
 @pytest.mark.parametrize(
     "platform, creationflags",
