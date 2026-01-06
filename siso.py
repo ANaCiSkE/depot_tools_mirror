@@ -45,13 +45,12 @@ def parse_args(args: list[str]) -> tuple[str, str]:
     return subcmd, out_dir
 
 
-# Trivial check if siso contains subcommand.
-# Subcommand completes successfully if subcommand is present, returning 0,
-# and 2 if it's not present.
-def _is_subcommand_present(siso_path: str, subc: str) -> bool:
-    return subprocess.call([siso_path, "help", subc],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL) == 0
+# Trivial check if siso contains subcommand and returns its help page
+# or nothing if subcommand is not present.
+def _subcommand_help(siso_path: str, subc: str) -> str:
+    return subprocess.run([siso_path, "help", subc],
+                          capture_output=True,
+                          text=True).stdout
 
 
 # Fetch PID platform independently of possibly running collector
@@ -255,8 +254,9 @@ def apply_telemetry_flags(args: list[str], env: dict[str, str],
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
     ]
-    if _is_subcommand_present(siso_path, "collector"):
-        telemetry_flags.append("enable_collector")
+    if "collector_address" in _subcommand_help(siso_path, "collector"):
+        if "collector_address" in _subcommand_help(siso_path, "ninja"):
+            telemetry_flags.append("enable_collector")
     # Despite go.dev/issue/68312 being fixed, the issue is still reproducible
     # for googlers. Due to this, the flag is still applied while the
     # issue is being investigated.
