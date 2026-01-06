@@ -2081,8 +2081,13 @@ def CheckForCommitObjects(input_api, output_api):
     # If the number of affected files is small, we can avoid scanning the entire
     # tree.
     affected_files = list(input_api.AffectedFiles())
+
+    # We must scan the full tree if DEPS is modified to ensure that any change
+    # in DEPS is reflected in the gitlinks.
+    deps_modified = any(f.LocalPath() == 'DEPS' for f in affected_files)
+
     cmd = ['git', 'ls-tree', '-z', '--full-tree', 'HEAD']
-    if len(affected_files) < 1000:
+    if len(affected_files) < 1000 and not deps_modified:
         # We need to pass the paths relative to the repository root.
         repo_root = input_api.change.RepositoryRoot()
         files_to_check = [

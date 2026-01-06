@@ -14,6 +14,18 @@ import presubmit_canned_checks
 from testing_support.presubmit_canned_checks_test_mocks import MockInputApi, MockOutputApi, MockFile
 
 
+class MockRelativeFile(MockFile):
+
+    def __init__(self, rel_path, new_contents):
+        # We pass absolute path to super so AbsoluteLocalPath returns absolute path
+        abs_path = os.path.join('/tmp/repo', rel_path)
+        super(MockRelativeFile, self).__init__(abs_path, new_contents)
+        self._rel_path = rel_path
+
+    def LocalPath(self):
+        return self._rel_path
+
+
 class CheckForCommitObjectsTest(unittest.TestCase):
 
     def setUp(self):
@@ -69,6 +81,24 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn('ls-tree', args)
         self.assertIn('--full-tree', args)
         self.assertNotIn('f0.txt', args)
+
+    def testFullTreeExecutionWhenDepsModified(self):
+        # Small CL but DEPS is modified, should run full tree scan
+        self.input_api.files = [
+            MockRelativeFile('DEPS', []),
+            MockRelativeFile('other.txt', [])
+        ]
+
+        self.input_api.subprocess.check_output = mock.Mock(return_value=b'')
+
+        presubmit_canned_checks.CheckForCommitObjects(self.input_api,
+                                                      self.output_api)
+
+        args = self.input_api.subprocess.check_output.call_args[0][0]
+        self.assertIn('ls-tree', args)
+        self.assertIn('--full-tree', args)
+        # Should not list specific files when running full tree
+        self.assertNotIn('other.txt', args)
 
     def testBatchedFoundCommit(self):
         # 1 file, found a commit object (gitlink)
