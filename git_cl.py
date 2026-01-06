@@ -4861,6 +4861,11 @@ def CMDcherry_pick(parser, args):
                       default=None,
                       help='Gerrit host, needed in case the command is used in '
                       'a non-git environment.')
+    parser.add_option('--allow-conflicts',
+                      action='store_true',
+                      default=False,
+                      help='If true, the cherry-pick will be created even if '
+                      'there are conflicts.')
     options, args = parser.parse_args(args)
 
     host = None
@@ -4946,11 +4951,13 @@ def CMDcherry_pick(parser, args):
               f'{original_commit_hash} ("{orig_subj_line}") onto base '
               f'{parent_commit_hash or options.branch + " tip"}...')
         try:
-            new_change_info = gerrit_util.CherryPick(host,
-                                                     change_id,
-                                                     options.branch,
-                                                     message=message,
-                                                     base=parent_commit_hash)
+            new_change_info = gerrit_util.CherryPick(
+                host,
+                change_id,
+                options.branch,
+                message=message,
+                base=parent_commit_hash,
+                allow_conflicts=options.allow_conflicts)
         except gerrit_util.GerritError as e:
             print(f'Failed to create cherry pick "{orig_subj_line}": {e}. '
                   'Please resolve any merge conflicts.')
@@ -4961,6 +4968,8 @@ def CMDcherry_pick(parser, args):
         new_change_num = new_change_info['_number']
         new_change_url = gerrit_util.GetChangePageUrl(host, new_change_num)
         print(f'Created cherry pick of "{orig_subj_line}": {new_change_url}')
+        if new_change_info.get('contains_git_conflicts'):
+            print(f'Warning: Change {new_change_url} contains merge conflicts')
         parent_change_num = new_change_num
 
     return 0

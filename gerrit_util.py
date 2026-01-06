@@ -1702,7 +1702,8 @@ def CherryPick(host,
                destination,
                revision='current',
                message=None,
-               base=None):
+               base=None,
+               allow_conflicts=False):
     """Create a cherry-pick commit from the given change, onto the given
     destination.
     """
@@ -1712,6 +1713,8 @@ def CherryPick(host,
         body['message'] = message
     if base:
         body['base'] = base
+    if allow_conflicts:
+        body['allow_conflicts'] = True
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
 
     # If a cherry pick fails due to a merge conflict, Gerrit returns 409.

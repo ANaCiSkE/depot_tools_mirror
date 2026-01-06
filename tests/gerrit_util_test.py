@@ -349,10 +349,12 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
 
     @mock.patch('gerrit_util.GitCredsAuthenticator._is_usehttppath_set',
                 return_value=True)
+    @mock.patch('gerrit_util.GitCredsAuthenticator.gerrit_account_exists',
+                return_value=True)
     @mock.patch('auth.GerritAuthenticator.get_authorization_header',
                 return_value="BearerReAuth xyz")
     def testEnsureAuthenticatedWithReAuth(self, mock_get_authorization_header,
-                                          _):
+                                          _exists, _set):
         reauth_context = auth.ReAuthContext(
             host="chromium-review.googlesource.com", project="chromium/src")
         gerrit_host = "chromium-review.googlesource.com"
@@ -369,7 +371,12 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
 
     @mock.patch('gerrit_util.GitCredsAuthenticator._is_usehttppath_set',
                 return_value=False)
-    def testEnsureAuthenticatedMissingUseHttpPath(self, _):
+    @mock.patch('gerrit_util.GitCredsAuthenticator.gerrit_account_exists',
+                return_value=True)
+    @mock.patch('auth.GerritAuthenticator.get_authorization_header',
+                return_value="BearerReAuth xyz")
+    def testEnsureAuthenticatedMissingUseHttpPath(self, mock_get_header,
+                                                  _exists, _set):
         reauth_context = auth.ReAuthContext(
             host="chromium-review.googlesource.com", project="chromium/src")
         gerrit_host = "chromium-review.googlesource.com"
@@ -385,7 +392,9 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
 
     @mock.patch('auth.GerritAuthenticator.get_authorization_header',
                 side_effect=auth.GitReAuthRequiredError())
-    def testEnsureAuthenticatedMissingReAuth(self,
+    @mock.patch('gerrit_util.GitCredsAuthenticator.gerrit_account_exists',
+                return_value=True)
+    def testEnsureAuthenticatedMissingReAuth(self, _exists,
                                              mock_get_authorization_header):
         gerrit_host = "chromium-review.googlesource.com"
         git_host = "chromium.googlesource.com"
@@ -831,6 +840,23 @@ class GerritUtilTest(unittest.TestCase):
         mockGetChangeDetail.assert_not_called()
         httpConnKwargs = mockCreateHttpConn.call_args[1]
         self.assertIsNone(httpConnKwargs.get('reauth_context', None))
+
+    @mock.patch('gerrit_util.CreateHttpConn')
+    @mock.patch('gerrit_util.ReadHttpJsonResponse')
+    def testCherryPickWithConflicts(self, mockJsonResponse, mockCreateHttpConn):
+        mockJsonResponse.return_value = {'_number': 1}
+        gerrit_util.CherryPick('host',
+                               'change',
+                               'destination',
+                               allow_conflicts=True)
+        mockCreateHttpConn.assert_called_once_with(
+            'host',
+            'changes/change/revisions/current/cherrypick',
+            reqtype='POST',
+            body={
+                'destination': 'destination',
+                'allow_conflicts': True
+            })
 
 class SSOAuthenticatorTest(unittest.TestCase):
 
