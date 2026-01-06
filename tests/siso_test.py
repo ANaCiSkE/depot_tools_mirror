@@ -181,6 +181,25 @@ def test_apply_telemetry_flags_sets_expected_env_var(siso_subcmd_present: Any,
     assert env.get("GOOGLE_API_USE_CLIENT_CERTIFICATE") == "false"
 
 
+def test_apply_telemetry_flags_collector_not_present(mocker: Any) -> None:
+
+    def mock_subcommand(_: str, subcmd: str) -> bool:
+        if subcmd == "collector":
+            return False
+        return True
+
+    mocker.patch("siso._is_subcommand_present", side_effect=mock_subcommand)
+    args = ["ninja", "-C", "out/Default", "--metrics_project", "some_project"]
+    env = {}
+    want = [
+        "ninja", "-C", "out/Default", "--metrics_project", "some_project",
+        "--enable_cloud_monitoring", "--enable_cloud_profiler",
+        "--enable_cloud_trace", "--enable_cloud_logging"
+    ]
+    got = siso.apply_telemetry_flags(args, env, "siso_path")
+    assert got == want
+
+
 @pytest.mark.parametrize("args, env, want", [
     pytest.param(
         ["--metrics_project", "proj1"], {}, "proj1", id="metrics_project_arg"),
