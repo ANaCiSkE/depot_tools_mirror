@@ -380,12 +380,14 @@ def test_handle_collector_args_starts_windows(mocker: Any) -> None:
     siso_path = "path/to/siso"
     env = {"SISO_PROJECT": "test-project"}
     args = ["ninja", "--enable_collector"]
-    original_args = list(args)
 
     result = siso._handle_collector_args(siso_path, args, env)
 
-    assert result == ["ninja", "--enable_collector"]
-    mock_fetch.assert_called_once_with(original_args, env)
+    assert result == [
+        "ninja", "--enable_collector",
+        f"--collector_address={siso._OTLP_DEFAULT_TCP_ENDPOINT}"
+    ]
+    mock_fetch.assert_called_once_with(args, env)
     mock_start_collector.assert_called_once_with(siso_path, None,
                                                  "test-project")
 
@@ -875,12 +877,14 @@ def test_start_collector_dead_then_healthy(platform: str, creationflags: int,
     result = siso._start_collector(siso_path, None, project)
 
     assert result
-    m["subprocess_popen"].assert_called_once_with(
-        [siso_path, "collector", "--project", project],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        creationflags=creationflags)
+    m["subprocess_popen"].assert_called_once_with([
+        siso_path, "collector", "--project", project, "--collector_address",
+        siso._OTLP_DEFAULT_TCP_ENDPOINT
+    ],
+                                                  stdout=subprocess.DEVNULL,
+                                                  stderr=subprocess.DEVNULL,
+                                                  start_new_session=True,
+                                                  creationflags=creationflags)
     m["kill_collector"].assert_not_called()
 
 
@@ -922,12 +926,14 @@ def test_start_collector_unhealthy_then_healthy(
     result = siso._start_collector(siso_path, None, project)
 
     assert result
-    m["subprocess_popen"].assert_called_once_with(
-        [siso_path, "collector", "--project", project],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        creationflags=0)
+    m["subprocess_popen"].assert_called_once_with([
+        siso_path, "collector", "--project", project, "--collector_address",
+        siso._OTLP_DEFAULT_TCP_ENDPOINT
+    ],
+                                                  stdout=subprocess.DEVNULL,
+                                                  stderr=subprocess.DEVNULL,
+                                                  start_new_session=True,
+                                                  creationflags=0)
     m["kill_collector"].assert_called_once()
 
 
@@ -982,12 +988,14 @@ def test_start_collector_never_healthy(start_collector_mocks: Dict[str, Any],
 
     siso._start_collector(siso_path, None, project)
 
-    m["subprocess_popen"].assert_called_once_with(
-        [siso_path, "collector", "--project", project],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        creationflags=0)
+    m["subprocess_popen"].assert_called_once_with([
+        siso_path, "collector", "--project", project, "--collector_address",
+        siso._OTLP_DEFAULT_TCP_ENDPOINT
+    ],
+                                                  stdout=subprocess.DEVNULL,
+                                                  stderr=subprocess.DEVNULL,
+                                                  start_new_session=True,
+                                                  creationflags=0)
     m["kill_collector"].assert_not_called()
 
 
@@ -1029,12 +1037,14 @@ def test_start_collector_healthy_after_retries(start_collector_mocks: Dict[str,
     result = siso._start_collector(siso_path, None, project)
 
     assert result
-    m["subprocess_popen"].assert_called_once_with(
-        [siso_path, "collector", "--project", project],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        creationflags=0)
+    m["subprocess_popen"].assert_called_once_with([
+        siso_path, "collector", "--project", project, "--collector_address",
+        siso._OTLP_DEFAULT_TCP_ENDPOINT
+    ],
+                                                  stdout=subprocess.DEVNULL,
+                                                  stderr=subprocess.DEVNULL,
+                                                  start_new_session=True,
+                                                  creationflags=0)
     m["kill_collector"].assert_not_called()
 
 

@@ -180,6 +180,8 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
         cmd = [siso_path, "collector", "--project", project]
         if sockets_file:
             cmd += ["--collector_address", f"unix://{sockets_file}"]
+        else:
+            cmd += ["--collector_address", _OTLP_DEFAULT_TCP_ENDPOINT]
         subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -358,6 +360,8 @@ def _handle_collector_args(siso_path: str, args: list[str],
     if started:
         if sockets_file:
             args.append(f"--collector_address=unix://{sockets_file}")
+        else:
+            args.append(f"--collector_address={_OTLP_DEFAULT_TCP_ENDPOINT}")
     else:
         print("Collector never came to life", file=sys.stderr)
         if "-enable_collector" in args:
