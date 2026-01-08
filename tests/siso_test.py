@@ -270,7 +270,7 @@ def test_handle_collector_args_starts_linux(siso_test_fixture: Any,
         return "test-project"
 
     def start_collector_side_effect(siso_path, sockets_file, project, env):
-        env["SISO_COLLECTOR_ADDRESS"] = f"unix://{sockets_file}"
+        env["SISO_COLLECTOR_ADDRESS"] = sockets_file
         return True
 
     mock_start_collector.side_effect = start_collector_side_effect
@@ -280,9 +280,10 @@ def test_handle_collector_args_starts_linux(siso_test_fixture: Any,
 
     sockets_file = os.path.join("/tmp", "run", "testuser", "siso",
                                 "test-project.sock")
-    mock_start_collector.assert_called_once_with(siso_path, sockets_file,
+    expected_endpoint = f"unix://{sockets_file}"
+    mock_start_collector.assert_called_once_with(siso_path, expected_endpoint,
                                                  "test-project", res_env)
-    assert res_env["SISO_COLLECTOR_ADDRESS"] == f"unix://{sockets_file}"
+    assert res_env["SISO_COLLECTOR_ADDRESS"] == expected_endpoint
 
 
 def test_handle_collector_args_starts_windows(mocker: Any) -> None:
@@ -304,8 +305,8 @@ def test_handle_collector_args_starts_windows(mocker: Any) -> None:
 
     assert res_env["SISO_COLLECTOR_ADDRESS"] == siso._OTLP_DEFAULT_TCP_ENDPOINT
     mock_fetch.assert_called_once_with(args, env)
-    mock_start_collector.assert_called_once_with(siso_path, None,
-                                                 "test-project", res_env)
+    mock_start_collector.assert_called_once_with(
+        siso_path, siso._OTLP_DEFAULT_TCP_ENDPOINT, "test-project", res_env)
 
 
 @pytest.mark.skipif(sys.platform == "win32",
@@ -333,7 +334,8 @@ def test_handle_collector_args_fails(siso_test_fixture: Any,
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
     sockets_file = os.path.join("/tmp", "run", "testuser", "siso",
                                 "test-project.sock")
-    mock_start_collector.assert_called_once_with(siso_path, sockets_file,
+    expected_endpoint = f"unix://{sockets_file}"
+    mock_start_collector.assert_called_once_with(siso_path, expected_endpoint,
                                                  "test-project", res_env)
 
 
@@ -397,68 +399,39 @@ def _configure_http_responses(
     mock_conn.getresponse.side_effect = getresponse_side_effect
 
 
-def test_start_collector_removes_existing_socket_file(
-        start_collector_mocks: Dict[str, Any], mocker: Any) -> None:
+def test_handle_collector_removes_existing_socket_file(
+        siso_test_fixture: Any, start_collector_mocks: Dict[str, Any],
+        mocker: Any) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_os_path_exists = mocker.patch("os.path.exists", return_value=True)
     mock_os_remove = mocker.patch("os.remove")
+    mocker.patch("siso._fetch_metrics_project", return_value="test-project")
+    mocker.patch("siso._start_collector", return_value=True)
 
     siso_path = "siso_path"
-    project = "test-project"
-    sockets_file = os.path.join("/tmp", "test.sock")
-    _configure_http_responses(mocker,
-                              start_collector_mocks["mock_conn"],
-                              status_responses=[(404, None), (200, None)],
-                              config_responses=[(200, None), (200, None)])
-    status_healthy = {"healthy": True, "status": "StatusOK"}
-    config = {
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": sockets_file
-                    }
-                }
-            }
-        }
-    }
-    mocker.patch("siso.json.loads",
-                 side_effect=[status_healthy, config, config])
-    siso._start_collector(siso_path, sockets_file, project, {})
+    sockets_file = os.path.join("/tmp", "testuser", "siso", "test-project.sock")
+
+    siso._handle_collector(siso_path, ["ninja"], {})
+
     mock_os_path_exists.assert_called_with(sockets_file)
     mock_os_remove.assert_called_with(sockets_file)
 
 
-def test_start_collector_remove_socket_file_fails(
-        start_collector_mocks: Dict[str, Any], mocker: Any) -> None:
+def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
+                                                   start_collector_mocks: Dict[
+                                                       str, Any],
+                                                   mocker: Any) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_os_path_exists = mocker.patch("os.path.exists", return_value=True)
     mock_os_remove = mocker.patch("os.remove",
                                   side_effect=OSError("Permission denied"))
     mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+    mocker.patch("siso._fetch_metrics_project", return_value="test-project")
 
     siso_path = "siso_path"
-    project = "test-project"
-    sockets_file = os.path.join("/tmp", "test.sock")
-    _configure_http_responses(mocker,
-                              start_collector_mocks["mock_conn"],
-                              status_responses=[(404, None), (200, None)],
-                              config_responses=[(200, None), (200, None)])
-    status_healthy = {"healthy": True, "status": "StatusOK"}
-    config = {
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": siso._OTLP_DEFAULT_TCP_ENDPOINT
-                    }
-                }
-            }
-        }
-    }
-    mocker.patch("siso.json.loads",
-                 side_effect=[status_healthy, config, config])
-    siso._start_collector(siso_path, sockets_file, project, {})
+    sockets_file = os.path.join("/tmp", "testuser", "siso", "test-project.sock")
+
+    siso._handle_collector(siso_path, ["ninja"], {})
 
     mock_os_path_exists.assert_called_with(sockets_file)
     mock_os_remove.assert_called_with(sockets_file)
@@ -787,7 +760,8 @@ def test_start_collector_dead_then_healthy(platform: str, creationflags: int,
     mock_json_loads.side_effect = [status_healthy, config]
 
     env = {}
-    result = siso._start_collector(siso_path, None, project, env)
+    result = siso._start_collector(siso_path, siso._OTLP_DEFAULT_TCP_ENDPOINT,
+                                   project, env)
 
     assert result
     m["subprocess_popen"].assert_called_once_with(
@@ -836,7 +810,8 @@ def test_start_collector_unhealthy_then_healthy(
     ]
 
     env = {}
-    result = siso._start_collector(siso_path, None, project, env)
+    result = siso._start_collector(siso_path, siso._OTLP_DEFAULT_TCP_ENDPOINT,
+                                   project, env)
 
     assert result
     m["subprocess_popen"].assert_called_once_with(
@@ -881,7 +856,8 @@ def test_start_collector_already_healthy(start_collector_mocks: Dict[str, Any],
         status_healthy, config_project_full, config_project_full
     ]
 
-    result = siso._start_collector(siso_path, None, project, {})
+    result = siso._start_collector(siso_path, siso._OTLP_DEFAULT_TCP_ENDPOINT,
+                                   project, {})
 
     assert result
     m["subprocess_popen"].assert_not_called()
@@ -899,7 +875,8 @@ def test_start_collector_never_healthy(start_collector_mocks: Dict[str, Any],
                               status_responses=[(404, None)])
 
     env = {}
-    siso._start_collector(siso_path, None, project, env)
+    siso._start_collector(siso_path, siso._OTLP_DEFAULT_TCP_ENDPOINT, project,
+                          env)
 
     m["subprocess_popen"].assert_called_once_with(
         [siso_path, "collector", "--project", project],
@@ -947,7 +924,8 @@ def test_start_collector_healthy_after_retries(start_collector_mocks: Dict[str,
     ]
 
     env = {}
-    result = siso._start_collector(siso_path, None, project, env)
+    result = siso._start_collector(siso_path, siso._OTLP_DEFAULT_TCP_ENDPOINT,
+                                   project, env)
 
     assert result
     m["subprocess_popen"].assert_called_once_with(
@@ -961,28 +939,20 @@ def test_start_collector_healthy_after_retries(start_collector_mocks: Dict[str,
 
 
 @pytest.mark.parametrize(
-    "os_path_exists_side_effect, expected_result, http_status_responses, json_loads_side_effect_values, expected_os_exists_calls",
-    [
-        (itertools.repeat(True), True, [
-            (404, None), (200, None)
-        ], ["status_healthy", "config_with_socket"], 2),
-        ([False] * 8 + [True], True, [(404, None)] + [(200, None)] * 9,
-         ["status_healthy", "config_with_socket"] * 9, 9),
-        ([False] * 10, False, [(404, None)] + [(200, None)] * 9,
-         ["status_healthy", "config_with_socket"] * 9, 10),
+    "expected_result, http_status_responses, json_loads_side_effect_values", [
+        (True, [(404, None),
+                (200, None)], ["status_healthy", "config_with_socket"]),
+        (True, [(404, None)] + [(404, None)] * 5 + [(200, None)],
+         ["status_healthy", "config_with_socket"]),
+        (False, [(404, None)] * 30, []),
     ],
-    ids=["socket_exists", "appears_later", "never_appears"])
+    ids=["healthy_immediately", "healthy_later", "never_healthy"])
 def test_start_collector_with_sockets_file(
         start_collector_mocks: Dict[str, Any], mocker: Any,
-        os_path_exists_side_effect: Any, expected_result: bool,
-        http_status_responses: List[Tuple[int, Any]],
-        json_loads_side_effect_values: List[str],
-        expected_os_exists_calls: int) -> None:
+        expected_result: bool, http_status_responses: List[Tuple[int, Any]],
+        json_loads_side_effect_values: List[str]) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_json_loads = mocker.patch("siso.json.loads")
-    mocker.patch("os.path.isfile", return_value=False)
-    mock_os_exists = mocker.patch("os.path.exists")
-    mocker.patch("os.remove")
     siso_path = "siso_path"
     project = "test-project"
     sockets_file = os.path.join("/tmp", "test-socket.sock")
@@ -1008,7 +978,6 @@ def test_start_collector_with_sockets_file(
     ]
 
     m = start_collector_mocks
-    mock_os_exists.side_effect = os_path_exists_side_effect
     mock_json_loads.side_effect = json_loads_side_effect
 
     _configure_http_responses(mocker,
@@ -1028,8 +997,6 @@ def test_start_collector_with_sockets_file(
         env=env,
         creationflags=0)
     m["kill_collector"].assert_not_called()
-    assert mock_os_exists.call_count == expected_os_exists_calls
-
 
 # Stanza to have pytest be executed.
 if __name__ == "__main__":

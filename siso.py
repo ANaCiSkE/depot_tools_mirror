@@ -119,15 +119,14 @@ def _kill_collector() -> bool:
 
 
 # Start collector when present.
-# Returns boolean whether collector has started successfully and a potential sockets path.
-def _start_collector(siso_path: str, sockets_file: Optional[str], project: str,
+# Returns boolean whether collector has started successfully.
+def _start_collector(siso_path: str, expected_endpoint: str, project: str,
                      env: dict[str, str]) -> bool:
     class Status(Enum):
         HEALTHY = 1
         WRONG_ENDPOINT = 2
-        NO_SOCKETS = 3
-        UNHEALTHY = 4
-        DEAD = 5
+        UNHEALTHY = 3
+        DEAD = 4
 
     def collector_status() -> Status:
         conn = http.client.HTTPConnection(f"localhost:{_OTLP_HEALTH_PORT}")
@@ -145,12 +144,9 @@ def _start_collector(siso_path: str, sockets_file: Optional[str], project: str,
             return Status.UNHEALTHY
         endpoint = fetch_receiver_endpoint(conn)
 
-        expected_endpoint = sockets_file or _OTLP_DEFAULT_TCP_ENDPOINT
-        if endpoint != expected_endpoint:
+        # Collector is liable to drop unix:// part from socks.
+        if not expected_endpoint.endswith(endpoint):
             return Status.WRONG_ENDPOINT
-        if sockets_file:
-            if not os.path.exists(sockets_file):
-                return Status.NO_SOCKETS
 
         return Status.HEALTHY
 
@@ -167,16 +163,12 @@ def _start_collector(siso_path: str, sockets_file: Optional[str], project: str,
         except KeyError:
             return ""
 
-    def start_collector(sockets_file: Optional[str]) -> None:
+    def start_collector() -> None:
         # Use Popen as it's non blocking.
         creationflags = 0
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         cmd = [siso_path, "collector", "--project", project]
-        if sockets_file:
-            env["SISO_COLLECTOR_ADDRESS"] = f"unix://{sockets_file}"
-        else:
-            env["SISO_COLLECTOR_ADDRESS"] = _OTLP_DEFAULT_TCP_ENDPOINT
         subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -194,18 +186,7 @@ def _start_collector(siso_path: str, sockets_file: Optional[str], project: str,
         if not _kill_collector():
             return False
 
-    # Delete possibly existing sockets file.
-    if sockets_file and os.path.exists(sockets_file):
-        try:
-            os.remove(sockets_file)
-        except OSError as e:
-            print(f"Failed to remove {sockets_file} due to {e}. " +
-                  "Having existing sockets file is known to cause " +
-                  "permission issues among others. Not using collector.",
-                  file=sys.stderr)
-            return False
-
-    start_collector(sockets_file)
+    start_collector()
 
     while time.time() - start < 1:
         status = collector_status()
@@ -337,12 +318,24 @@ def _handle_collector(siso_path: str, args: list[str],
     if not project:
         lenv.pop("SISO_COLLECTOR_ADDRESS", None)
         return lenv
-    sockets_file = None
     if sys.platform in ["darwin", "linux"]:
         path, remainder_len = _resolve_sockets_folder(env)
         sockets_file = os.path.join(path, f"{project[:remainder_len]}.sock")
+        if os.path.exists(sockets_file):
+            try:
+                os.remove(sockets_file)
+            except OSError as e:
+                print(f"Failed to remove {sockets_file} due to {e}. " +
+                      "Having existing sockets file is known to cause " +
+                      "permission issues among others. Not using collector.",
+                      file=sys.stderr)
+                return lenv
+        expected_endpoint = f"unix://{sockets_file}"
+    else:
+        expected_endpoint = _OTLP_DEFAULT_TCP_ENDPOINT
+    lenv["SISO_COLLECTOR_ADDRESS"] = expected_endpoint
 
-    started = _start_collector(siso_path, sockets_file, project, lenv)
+    started = _start_collector(siso_path, expected_endpoint, project, lenv)
     if not started:
         print("Collector never came to life", file=sys.stderr)
         lenv.pop("SISO_COLLECTOR_ADDRESS", None)
