@@ -141,9 +141,9 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
         conn = http.client.HTTPConnection(f"localhost:{_OTLP_HEALTH_PORT}")
         try:
             conn.request("GET", "/health/status")
+            response = conn.getresponse()
         except ConnectionError:
             return Status.DEAD
-        response = conn.getresponse()
 
         if response.status != 200:
             return Status.DEAD
@@ -163,8 +163,11 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
         return Status.HEALTHY
 
     def fetch_receiver_endpoint(conn: http.client.HTTPConnection) -> str:
-        conn.request("GET", "/health/config")
-        response = conn.getresponse()
+        try:
+            conn.request("GET", "/health/config")
+            response = conn.getresponse()
+        except ConnectionError:
+            return ""
         resp_json = json.loads(response.read())
         try:
             return resp_json["receivers"]["otlp"]["protocols"]["grpc"][
