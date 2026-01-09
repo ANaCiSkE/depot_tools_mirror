@@ -45,14 +45,6 @@ def parse_args(args: list[str]) -> tuple[str, str]:
     return subcmd, out_dir
 
 
-# Trivial check if siso contains subcommand and returns its help page
-# or nothing if subcommand is not present.
-def _subcommand_help(siso_path: str, subc: str) -> str:
-    return subprocess.run([siso_path, "help", subc],
-                          capture_output=True,
-                          text=True).stdout
-
-
 # Fetch PID platform independently of possibly running collector
 # and kill it.
 # Return boolean whether the kill was successful or not.
@@ -127,15 +119,14 @@ def _kill_collector() -> bool:
 
 
 # Start collector when present.
-# Returns boolean whether collector has started successfully and a potential sockets path.
-def _start_collector(siso_path: str, sockets_file: Optional[str],
-                     project: str) -> bool:
+# Returns boolean whether collector has started successfully.
+def _start_collector(siso_path: str, expected_endpoint: str, project: str,
+                     env: dict[str, str]) -> bool:
     class Status(Enum):
         HEALTHY = 1
         WRONG_ENDPOINT = 2
-        NO_SOCKETS = 3
-        UNHEALTHY = 4
-        DEAD = 5
+        UNHEALTHY = 3
+        DEAD = 4
 
     def collector_status() -> Status:
         conn = http.client.HTTPConnection(f"localhost:{_OTLP_HEALTH_PORT}")
@@ -153,13 +144,9 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
             return Status.UNHEALTHY
         endpoint = fetch_receiver_endpoint(conn)
 
-        expected_endpoint = sockets_file or _OTLP_DEFAULT_TCP_ENDPOINT
-        if endpoint != expected_endpoint:
+        # Collector is liable to drop unix:// part from socks.
+        if not expected_endpoint.endswith(endpoint):
             return Status.WRONG_ENDPOINT
-        if sockets_file:
-            if not os.path.exists(sockets_file):
-                return Status.NO_SOCKETS
-
         return Status.HEALTHY
 
     def fetch_receiver_endpoint(conn: http.client.HTTPConnection) -> str:
@@ -175,21 +162,18 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
         except KeyError:
             return ""
 
-    def start_collector(sockets_file: Optional[str]) -> None:
+    def start_collector() -> None:
         # Use Popen as it's non blocking.
         creationflags = 0
         if sys.platform == "win32":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         cmd = [siso_path, "collector", "--project", project]
-        if sockets_file:
-            cmd += ["--collector_address", f"unix://{sockets_file}"]
-        else:
-            cmd += ["--collector_address", _OTLP_DEFAULT_TCP_ENDPOINT]
         subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
+            env=env,
             creationflags=creationflags,
         )
 
@@ -200,9 +184,8 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
     if status != Status.DEAD:
         if not _kill_collector():
             return False
-
-    # Delete possibly existing sockets file.
-    if sockets_file and os.path.exists(sockets_file):
+    if os.path.exists(
+            sockets_file := expected_endpoint.removeprefix("unix://")):
         try:
             os.remove(sockets_file)
         except OSError as e:
@@ -212,7 +195,7 @@ def _start_collector(siso_path: str, sockets_file: Optional[str],
                   file=sys.stderr)
             return False
 
-    start_collector(sockets_file)
+    start_collector()
 
     while time.time() - start < 1:
         status = collector_status()
@@ -259,9 +242,6 @@ def apply_telemetry_flags(args: list[str], env: dict[str, str],
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
     ]
-    if "collector_address" in _subcommand_help(siso_path, "collector"):
-        if "collector_address" in _subcommand_help(siso_path, "ninja"):
-            telemetry_flags.append("enable_collector")
     # Despite go.dev/issue/68312 being fixed, the issue is still reproducible
     # for googlers. Due to this, the flag is still applied while the
     # issue is being investigated.
@@ -340,39 +320,24 @@ def _resolve_sockets_folder(env: dict[str, str]) -> tuple[str, int]:
     return path, allowed_length
 
 
-def _handle_collector_args(siso_path: str, args: list[str],
-                           env: dict[str, str]) -> list[str]:
-    parser = argparse.ArgumentParser()
-    # Can only be implicit. enable_collector=true will fail.
-    parser.add_argument("-enable_collector",
-                        "--enable_collector",
-                        action='store_true',
-                        default=False)
-    known_args, _ = parser.parse_known_args(args)
-    if not known_args.enable_collector:
-        return args
+def _handle_collector(siso_path: str, args: list[str],
+                      env: dict[str, str]) -> dict[str, str]:
     project = _fetch_metrics_project(args, env)
+    lenv = env.copy()
     if not project:
-        return args
-    sockets_file = None
+        return lenv
     if sys.platform in ["darwin", "linux"]:
         path, remainder_len = _resolve_sockets_folder(env)
         sockets_file = os.path.join(path, f"{project[:remainder_len]}.sock")
-
-    started = _start_collector(siso_path, sockets_file, project)
-    if started:
-        if sockets_file:
-            args.append(f"--collector_address=unix://{sockets_file}")
-        else:
-            args.append(f"--collector_address={_OTLP_DEFAULT_TCP_ENDPOINT}")
+        expected_endpoint = f"unix://{sockets_file}"
     else:
+        expected_endpoint = _OTLP_DEFAULT_TCP_ENDPOINT
+    lenv["SISO_COLLECTOR_ADDRESS"] = expected_endpoint
+    started = _start_collector(siso_path, expected_endpoint, project, lenv)
+    if not started:
         print("Collector never came to life", file=sys.stderr)
-        if "-enable_collector" in args:
-            args.remove("-enable_collector")
-        elif "--enable_collector" in args:
-            args.remove("--enable_collector")
-        args.append("--enable_collector=false")
-    return args
+        lenv.pop("SISO_COLLECTOR_ADDRESS", None)
+    return lenv
 
 
 def load_sisorc(rcfile: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -567,8 +532,8 @@ def main(args: list[str],
                                                args[1:], subcmd,
                                                should_collect_logs, siso_path,
                                                env)
-                processed_args = _handle_collector_args(siso_path,
-                                                        processed_args, env)
+                if should_collect_logs:
+                    env = _handle_collector(siso_path, processed_args, env)
                 check_outdir(out_dir)
                 return caffeinate.call([siso_path] + processed_args, env=env)
         print(
