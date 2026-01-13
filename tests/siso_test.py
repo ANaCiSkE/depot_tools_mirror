@@ -211,6 +211,18 @@ def test_apply_metrics_labels(args: List[str], want: List[str]) -> None:
             ],
             id="respects_set_flags",
         ),
+        pytest.param(
+            ["ninja", "--help"],
+            {},
+            ["ninja", "--help"],
+            id="help_flag",
+        ),
+        pytest.param(
+            ["ninja", "-h"],
+            {},
+            ["ninja", "-h"],
+            id="short_help_flag",
+        ),
     ],
 )
 def test_apply_telemetry_flags(args: List[str], env: Dict[str, str],
@@ -285,6 +297,8 @@ def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
         ),
         pytest.param(["-project", "proj2"], {}, "proj2",
                      id="short_project_arg"),
+        pytest.param(["--help"], {}, "", id="help_flag"),
+        pytest.param(["-h"], {}, "", id="short_help_flag"),
     ],
 )
 def test_fetch_metrics_project(args: List[str], env: Dict[str, str],

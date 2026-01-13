@@ -262,7 +262,7 @@ def apply_telemetry_flags(args: list[str], env: dict[str, str],
     # gets set the same as project by default.
     # TODO: remove this code after we make sure all clients are using new siso versions.
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(add_help=False)
 
     parser.add_argument("-metrics_project", "--metrics_project")
     parser.add_argument("-project", "--project")
@@ -284,7 +284,7 @@ def apply_telemetry_flags(args: list[str], env: dict[str, str],
 
 
 def _fetch_metrics_project(args: list[str], env: dict[str, str]) -> str:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-metrics_project", "--metrics_project")
     parser.add_argument("-project", "--project")
     metrics_env_var = "RBE_metrics_project"
