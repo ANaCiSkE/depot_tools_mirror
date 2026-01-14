@@ -325,11 +325,11 @@ def _resolve_sockets_folder(env: dict[str, str]) -> tuple[str, int]:
     return path, allowed_length
 
 
-def _handle_collector(siso_path: str, args: list[str], subcmd: str,
+def _handle_collector(siso_path: str, args: list[str],
                       env: dict[str, str]) -> dict[str, str]:
     project = _fetch_metrics_project(args, env)
     lenv = env.copy()
-    if not project or subcmd != "ninja":
+    if not project:
         return lenv
     if not {"-h", "--help", "-help"}.isdisjoint(args):
         return lenv
@@ -428,9 +428,6 @@ def main(args: list[str],
     # cleanup tasks. Siso will be terminated immediately after the second
     # Ctrl-C.
     original_sigint_handler = signal.getsignal(signal.SIGINT)
-    if not telemetry_cfg:
-        telemetry_cfg = build_telemetry.load_config()
-    should_collect_logs = telemetry_cfg.enabled()
 
     _fix_system_limits()
 
@@ -473,7 +470,10 @@ def main(args: list[str],
 
     env = os.environ.copy()
 
+    if not telemetry_cfg:
+        telemetry_cfg = build_telemetry.load_config()
     subcmd, out_dir = parse_args(args[1:])
+    should_collect_logs = telemetry_cfg.enabled() and subcmd == "ninja"
 
     # Get gclient root + src.
     primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
@@ -542,8 +542,7 @@ def main(args: list[str],
                                                should_collect_logs, siso_path,
                                                env)
                 if should_collect_logs:
-                    env = _handle_collector(siso_path, processed_args, subcmd,
-                                            env)
+                    env = _handle_collector(siso_path, processed_args, env)
                 check_outdir(out_dir)
                 return caffeinate.call([siso_path] + processed_args, env=env)
         print(

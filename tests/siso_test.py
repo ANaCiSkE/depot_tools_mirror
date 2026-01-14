@@ -374,20 +374,18 @@ def test_handle_collector_args_disabled(start_collector_mocks: Dict[str, Any],
     out_dir = "out/Default"
     env = {"SISO_PROJECT": "test-project"}
     args = ["ninja", "-C", out_dir]
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
     mock_fetch.assert_called_once_with(args, env)
     m["subprocess_popen"].assert_not_called()
 
 
 @pytest.mark.parametrize(
-    "args, subcmd, project_val",
+    "args, project_val",
     [
-        (["-h"], "ninja", "test-project"),
-        (["--help"], "ninja", "test-project"),
-        (["-help"], "ninja", "test-project"),
-        ([], "other", "test-project"),
-        ([], "ninja", ""),
+        (["-h"], "test-project"),
+        (["--help"], "test-project"),
+        (["-help"], "test-project"),
     ],
 )
 def test_handle_collector_skipped(
@@ -395,7 +393,6 @@ def test_handle_collector_skipped(
     start_collector_mocks: Dict[str, Any],
     mocker: Any,
     args: List[str],
-    subcmd: str,
     project_val: str,
 ) -> None:
     mocker.patch("sys.platform", new="linux")
@@ -403,7 +400,7 @@ def test_handle_collector_skipped(
     siso_path = "siso_path"
     env = {}
 
-    res_env = siso._handle_collector(siso_path, args, subcmd, env)
+    res_env = siso._handle_collector(siso_path, args, env)
 
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
     start_collector_mocks["subprocess_popen"].assert_not_called()
@@ -481,7 +478,7 @@ def test_handle_collector_removes_existing_socket_file(
     mocker.patch("siso._fetch_metrics_project", return_value="test-project")
     siso_path = "siso_path"
     sockets_file = os.path.join("/tmp", "testuser", "siso", "test-project.sock")
-    siso._handle_collector(siso_path, ["ninja"], "ninja", {})
+    siso._handle_collector(siso_path, ["ninja"], {})
     mock_os_path_exists.assert_called_with(sockets_file)
     mock_os_remove.assert_called_with(sockets_file)
 
@@ -498,7 +495,7 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
     mocker.patch("siso._fetch_metrics_project", return_value="test-project")
     siso_path = "siso_path"
     sockets_file = os.path.join("/tmp", "testuser", "siso", "test-project.sock")
-    siso._handle_collector(siso_path, ["ninja"], "ninja", {})
+    siso._handle_collector(siso_path, ["ninja"], {})
     mock_os_path_exists.assert_called_with(sockets_file)
     mock_os_remove.assert_called_with(sockets_file)
     assert f"Failed to remove {sockets_file}" in mock_stderr.getvalue()
@@ -943,7 +940,7 @@ def test_handle_collector_dead_then_healthy(
     mock_json_loads.side_effect = [status_healthy, config]
     env = {}
     args = ["--project", project]
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
     assert res_env.get("SISO_COLLECTOR_ADDRESS")
     if platform == "linux":
         assert res_env["SISO_COLLECTOR_ADDRESS"] == f"unix://{endpoint}"
@@ -1003,7 +1000,7 @@ def test_handle_collector_unhealthy_then_healthy(siso_test_fixture: Any,
     ]
     env = {}
     args = ["--project", project]
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
     assert res_env.get("SISO_COLLECTOR_ADDRESS") == f"unix://{endpoint}"
 
     m["subprocess_popen"].assert_called_once_with(
@@ -1056,7 +1053,7 @@ def test_handle_collector_already_healthy(siso_test_fixture: Any,
     ]
     env = {}
     args = ["--project", project]
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
     assert res_env.get("SISO_COLLECTOR_ADDRESS") == f"unix://{endpoint}"
     m["subprocess_popen"].assert_not_called()
     m["kill_collector"].assert_not_called()
@@ -1085,7 +1082,7 @@ def test_handle_collector_never_healthy(siso_test_fixture: Any,
                               status_responses=[(404, None)])
     env = {}
     args = ["--project", project]
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
     # If never healthy, handle_collector removes the address from env
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
 
@@ -1169,7 +1166,7 @@ def test_handle_collector_lifecycle(
 
     env = {}
     args = ["--project", project]
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
 
     if expected_result:
         assert res_env.get("SISO_COLLECTOR_ADDRESS") == f"unix://{endpoint}"
@@ -1237,7 +1234,7 @@ def test_handle_collector_missing_sockets_file_appears_later(
     env = {}
     args = ["--project", project]
 
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
 
     assert res_env.get("SISO_COLLECTOR_ADDRESS") == f"unix://{endpoint}"
 
@@ -1288,7 +1285,7 @@ def test_handle_collector_missing_sockets_file_never_appears(
     env = {}
     args = ["--project", project]
 
-    res_env = siso._handle_collector(siso_path, args, "ninja", env)
+    res_env = siso._handle_collector(siso_path, args, env)
 
     # Should fail to find socket file, so no address in env.
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
