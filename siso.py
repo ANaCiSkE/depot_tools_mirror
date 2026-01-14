@@ -325,11 +325,13 @@ def _resolve_sockets_folder(env: dict[str, str]) -> tuple[str, int]:
     return path, allowed_length
 
 
-def _handle_collector(siso_path: str, args: list[str],
+def _handle_collector(siso_path: str, args: list[str], subcmd: str,
                       env: dict[str, str]) -> dict[str, str]:
     project = _fetch_metrics_project(args, env)
     lenv = env.copy()
-    if not project:
+    if not project or subcmd != "ninja":
+        return lenv
+    if not {"-h", "--help", "-help"}.isdisjoint(args):
         return lenv
     if sys.platform in ["darwin", "linux"]:
         path, remainder_len = _resolve_sockets_folder(env)
@@ -539,9 +541,9 @@ def main(args: list[str],
                                                args[1:], subcmd,
                                                should_collect_logs, siso_path,
                                                env)
-                if should_collect_logs and subcmd == 'ninja' and {"-h", "--help", "-help"
-                                            }.isdisjoint(processed_args):
-                    env = _handle_collector(siso_path, processed_args, env)
+                if should_collect_logs:
+                    env = _handle_collector(siso_path, processed_args, subcmd,
+                                            env)
                 check_outdir(out_dir)
                 return caffeinate.call([siso_path] + processed_args, env=env)
         print(
