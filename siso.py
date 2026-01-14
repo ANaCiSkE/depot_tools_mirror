@@ -537,7 +537,7 @@ def main(args: list[str],
                                                args[1:], subcmd,
                                                should_collect_logs, siso_path,
                                                env)
-                if should_collect_logs and {"-h", "--help", "-help"
+                if should_collect_logs and subcmd == 'ninja' and {"-h", "--help", "-help"
                                             }.isdisjoint(processed_args):
                     env = _handle_collector(siso_path, processed_args, env)
                 check_outdir(out_dir)
