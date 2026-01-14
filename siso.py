@@ -127,6 +127,7 @@ def _start_collector(siso_path: str, expected_endpoint: str, project: str,
         WRONG_ENDPOINT = 2
         UNHEALTHY = 3
         DEAD = 4
+        MISSING_SOCKETS_FILE = 5
 
     def collector_status() -> Status:
         conn = http.client.HTTPConnection(f"localhost:{_OTLP_HEALTH_PORT}")
@@ -147,6 +148,10 @@ def _start_collector(siso_path: str, expected_endpoint: str, project: str,
         # Collector is liable to drop unix:// part from socks.
         if not expected_endpoint.endswith(endpoint):
             return Status.WRONG_ENDPOINT
+
+        if expected_endpoint.startswith(
+                "unix://") and not os.path.exists(endpoint):
+            return Status.MISSING_SOCKETS_FILE
         return Status.HEALTHY
 
     def fetch_receiver_endpoint(conn: http.client.HTTPConnection) -> str:
