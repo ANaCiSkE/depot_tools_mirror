@@ -16,6 +16,7 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 sys.path.insert(0, _ROOT_DIR)
 
 import gclient_utils
+import metadata.scan
 import metadata.validate
 import metadata.validation_result
 import metadata.fields.known
@@ -26,6 +27,35 @@ _VALID_METADATA_FILEPATH = os.path.join(_THIS_DIR, "data",
                                         "README.chromium.test.multi-valid")
 _INVALID_METADATA_FILEPATH = os.path.join(_THIS_DIR, "data",
                                           "README.chromium.test.multi-invalid")
+
+
+class ScanTest(unittest.TestCase):
+
+    def test_main_passes_is_open_source_flag(self):
+        with (unittest.mock.patch("metadata.discover.find_metadata_files",
+                                  return_value=["/path/to/README.chromium"]),
+              unittest.mock.patch("metadata.validate.validate_file",
+                                  return_value=[]) as mock_validate,
+              unittest.mock.patch("os.path.exists", return_value=True),
+              unittest.mock.patch("os.path.isdir", return_value=True)):
+
+            # Test with flag --is-open-source-project
+            with unittest.mock.patch(
+                    "sys.argv",
+                ["scan.py", "--is-open-source-project", "/path/to/repo"]):
+                metadata.scan.main()
+                mock_validate.assert_called_with(
+                    "/path/to/README.chromium",
+                    repo_root_dir=os.path.abspath("/path/to/repo"),
+                    is_open_source_project=True)
+
+            # Test without flag
+            with unittest.mock.patch("sys.argv", ["scan.py", "/path/to/repo"]):
+                metadata.scan.main()
+                mock_validate.assert_called_with(
+                    "/path/to/README.chromium",
+                    repo_root_dir=os.path.abspath("/path/to/repo"),
+                    is_open_source_project=False)
 
 
 class MetadataValidationTestCase(unittest.TestCase):

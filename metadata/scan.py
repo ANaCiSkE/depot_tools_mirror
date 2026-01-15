@@ -27,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         help=("The path to the repository's root directory, which will be "
               "scanned for Chromium metadata files, e.g. '~/chromium/src'."),
     )
+    parser.add_argument(
+        "--is-open-source-project",
+        action="store_true",
+        help="Whether the project is open source (allows reciprocal licenses).",
+    )
 
     args = parser.parse_args()
 
@@ -60,8 +65,10 @@ def main() -> None:
     #  * list of validation result strings for that reason and severity.
     all_reasons = defaultdict(lambda: {"files": [], "results": set()})
     for filepath in metadata_files:
-        file_results = metadata.validate.validate_file(filepath,
-                                                       repo_root_dir=src_dir)
+        file_results = metadata.validate.validate_file(
+            filepath,
+            repo_root_dir=src_dir,
+            is_open_source_project=config.is_open_source_project)
         invalid = False
         if file_results:
             relpath = os.path.relpath(filepath, start=src_dir)
