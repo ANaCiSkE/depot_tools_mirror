@@ -224,25 +224,25 @@ def check_outdir(out_dir: str) -> None:
         sys.exit(1)
 
 
-def apply_metrics_labels(args: list[str]) -> list[str]:
+def apply_telemetry_flags(args: list[str], env: dict[str, str]) -> list[str]:
     user_system = _SYSTEM_DICT.get(sys.platform, sys.platform)
 
+    user_provided_labels_present = False
     # TODO(ovsienko) - add targets to the processing. For this, the Siso needs to understand lists.
     for arg in args[1:]:
         # Respect user provided labels, abort.
         if arg.startswith("--metrics_labels") or arg.startswith(
                 "-metrics_labels"):
-            return args
+            user_provided_labels_present = True
+            break
 
-    result = []
-    result.append("type=developer")
-    result.append("tool=siso")
-    result.append(f"host_os={user_system}")
-    return args + ["--metrics_labels", ",".join(result)]
+    if not user_provided_labels_present:
+        result = []
+        result.append("type=developer")
+        result.append("tool=siso")
+        result.append(f"host_os={user_system}")
+        args += ["--metrics_labels", ",".join(result)]
 
-
-def apply_telemetry_flags(args: list[str], env: dict[str, str],
-                          siso_path: str) -> list[str]:
     telemetry_flags = [
         "enable_cloud_monitoring", "enable_cloud_profiler",
         "enable_cloud_trace", "enable_cloud_logging"
@@ -331,8 +331,6 @@ def _handle_collector(siso_path: str, args: list[str],
     lenv = env.copy()
     if not project:
         return lenv
-    if not {"-h", "--help", "-help"}.isdisjoint(args):
-        return lenv
     if sys.platform in ["darwin", "linux"]:
         path, remainder_len = _resolve_sockets_folder(env)
         sockets_file = os.path.join(path, f"{project[:remainder_len]}.sock")
@@ -402,21 +400,6 @@ def _fix_system_limits() -> None:
                 pass
 
 
-# Utility function to produce actual command line flags for Siso.
-def _process_args(global_flags: list[str], subcmd_flags: dict[str, list[str]],
-                  args: list[str], subcmd: str, should_collect_logs: bool,
-                  siso_path: str, env: dict[str, str]) -> list[str]:
-    new_args = apply_sisorc(global_flags, subcmd_flags, args, subcmd)
-    if args != new_args:
-        print('depot_tools/siso.py: %s' % shlex.join(new_args), file=sys.stderr)
-    # Add ninja specific flags.
-    if subcmd == "ninja":
-        new_args = apply_metrics_labels(new_args)
-        if should_collect_logs:
-            new_args = apply_telemetry_flags(new_args, env, siso_path)
-    return new_args
-
-
 def _is_google_corp_machine() -> bool:
     """This assumes that corp machine has gcert binary in known location."""
     return shutil.which("gcert") is not None
@@ -473,7 +456,12 @@ def main(args: list[str],
     if not telemetry_cfg:
         telemetry_cfg = build_telemetry.load_config()
     subcmd, out_dir = parse_args(args[1:])
-    should_collect_logs = telemetry_cfg.enabled() and subcmd == "ninja"
+
+    def is_help_req(args: list[str]) -> bool:
+        return {"-h", "--help", "-help"}.isdisjoint(args)
+
+    should_collect_logs = all(
+        (telemetry_cfg.enabled(), subcmd == "ninja", is_help_req(args)))
 
     # Get gclient root + src.
     primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
@@ -537,14 +525,17 @@ def main(args: list[str],
         ]
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
-                processed_args = _process_args(global_flags, subcmd_flags,
-                                               args[1:], subcmd,
-                                               should_collect_logs, siso_path,
-                                               env)
+                new_args = apply_sisorc(global_flags, subcmd_flags, args[1:],
+                                        subcmd)
+                if args[1:] != new_args:
+                    print('depot_tools/siso.py: %s' % shlex.join(new_args),
+                          file=sys.stderr)
+                # Add ninja specific flags.
                 if should_collect_logs:
-                    env = _handle_collector(siso_path, processed_args, env)
+                    new_args = apply_telemetry_flags(new_args, env)
+                    env = _handle_collector(siso_path, new_args, env)
                 check_outdir(out_dir)
-                return caffeinate.call([siso_path] + processed_args, env=env)
+                return caffeinate.call([siso_path] + new_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',
