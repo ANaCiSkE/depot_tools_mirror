@@ -81,7 +81,7 @@ def main(args):
     PruneVirtualEnv()
     gn = FindGnTool()
     if gn:
-        subprocess.call([gn] + args[1:])
+        return subprocess.call([gn] + args[1:])
     return 2
 
 
