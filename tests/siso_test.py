@@ -7,18 +7,67 @@ import io
 import os
 import shlex
 import sys
+import json
 import pytest
 import subprocess
 import itertools
+from unittest.mock import DEFAULT
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Generator, Optional
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 import siso
+import build_telemetry
+import gclient_paths
 
 # These are required for fixtures to work.
 # pylint: disable=redefined-outer-name,unused-argument
+
+
+# The functions are annotated with lru and the state is preserved between tests.
+@pytest.fixture(autouse=True)
+def clear_gclient_paths_caches():
+    gclient_paths.FindGclientRoot.cache_clear()
+    gclient_paths._GetPrimarySolutionPathInternal.cache_clear()
+    gclient_paths._GetBuildtoolsPathInternal.cache_clear()
+    gclient_paths._GetGClientSolutions.cache_clear()
+
+
+def _get_siso_config_dir(tmp_path: Path) -> Path:
+    return tmp_path / "src" / "build" / "config" / "siso"
+
+
+def _get_sisoenv_path(tmp_path: Path) -> Path:
+    return _get_siso_config_dir(tmp_path) / ".sisoenv"
+
+
+def _get_siso_bin_dir(tmp_path: Path) -> Path:
+    return tmp_path / "src" / "third_party" / "siso" / "cipd"
+
+
+def _get_siso_bin_path(tmp_path: Path) -> Path:
+    return _get_siso_bin_dir(tmp_path) / ('siso' + gclient_paths.GetExeSuffix())
+
+
+def create_telemetry_cfg(tmp_path: Path,
+                         mocker: Any,
+                         enabled: bool = True) -> build_telemetry.Config:
+    config_path = tmp_path / "build_telemetry.cfg"
+    status = "opt-in" if enabled else "opt-out"
+    config_data = {
+        "user": "test@google.com",
+        "status": status,
+        "countdown": 0,
+        "version": 1
+    }
+    config_path.write_text(json.dumps(config_data))
+
+    mocker.patch("build_telemetry.shutil.which", return_value="/bin/gcert")
+
+    config = build_telemetry.Config(str(config_path), 0)
+    mocker.patch("build_telemetry.load_config", return_value=config)
+    return config
 
 
 @pytest.fixture
@@ -26,11 +75,34 @@ def siso_test_fixture(tmp_path: Path,
                       mocker: Any) -> Generator[None, None, None]:
     # Replace trial dir functionality with tmp_parth.
     previous_dir = os.getcwd()
-    os.chdir(tmp_path)
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+    os.chdir(tmp_path / "src")
     mocker.patch("siso.getpass.getuser", return_value="testuser")
     yield
     os.chdir(previous_dir)
 
+
+@pytest.fixture
+def siso_project_setup(siso_test_fixture: None, tmp_path: Path,
+                       mocker: Any) -> None:
+    sisoenv_dir = _get_siso_config_dir(tmp_path)
+    sisoenv_dir.mkdir(parents=True, exist_ok=True)
+    (sisoenv_dir / ".sisoenv").write_text("SISO_PROJECT=test-project\n")
+
+    siso_bin_dir = _get_siso_bin_dir(tmp_path)
+    siso_bin_dir.mkdir(parents=True, exist_ok=True)
+    siso_bin_path = _get_siso_bin_path(tmp_path)
+    siso_bin_path.write_text("")
+    os.chmod(siso_bin_path, 0o755)
+
+    (tmp_path / ".gclient").write_text("")
+    (tmp_path / ".gclient_entries").write_text("entries = {'src': '...'}")
+    (tmp_path / "src" / "out" / "Default").mkdir(parents=True, exist_ok=True)
+
+    mocker.patch("siso._handle_collector", side_effect=lambda _p, _a, e: e)
+
+    # Create enabled telemetry config by default
+    create_telemetry_cfg(tmp_path, mocker, enabled=True)
 
 def test_load_sisorc_no_file(siso_test_fixture: Any) -> None:
     global_flags, subcmd_flags = siso.load_sisorc(
@@ -373,19 +445,45 @@ def test_resolve_sockets_folder(
     assert os.path.isdir(path)
 
 
-def test_handle_collector_args_disabled(start_collector_mocks: Dict[str, Any],
-                                        mocker: Any) -> None:
-    mock_fetch = mocker.patch("siso._fetch_metrics_project", return_value="")
-    m = start_collector_mocks
-    mocker.patch("sys.platform", new="linux")
-    siso_path = "path/to/siso"
-    out_dir = "out/Default"
-    env = {"SISO_PROJECT": "test-project"}
-    args = ["ninja", "-C", out_dir]
-    res_env = siso._handle_collector(siso_path, args, env)
-    assert "SISO_COLLECTOR_ADDRESS" not in res_env
-    mock_fetch.assert_called_once_with(args, env)
-    m["subprocess_popen"].assert_not_called()
+@pytest.mark.parametrize(
+    "args, subcmd, project_val, telemetry_enabled",
+    [
+        (["-h"], "ninja", "test-project", True),
+        (["--help"], "ninja", "test-project", True),
+        (["-help"], "ninja", "test-project", True),
+        ([], "other", "test-project", True),
+        ([], "ninja", "", True),
+        ([], "ninja", "test-project", False),
+    ],
+)
+def test_main_handle_collector_skipped(
+    siso_project_setup: None,
+    tmp_path: Path,
+    mocker: Any,
+    args: List[str],
+    subcmd: str,
+    project_val: str,
+    telemetry_enabled: bool,
+) -> None:
+    _get_sisoenv_path(tmp_path).write_text("")
+    siso_bin_path = _get_siso_bin_path(tmp_path)
+
+    mocker.patch("siso._fetch_metrics_project", return_value=project_val)
+
+    runner = mocker.Mock(return_value=0)
+    telemetry_cfg = create_telemetry_cfg(tmp_path,
+                                         mocker,
+                                         enabled=telemetry_enabled)
+
+    siso.main(["siso.py"] + args + ([subcmd] if subcmd else []),
+              telemetry_cfg=telemetry_cfg,
+              env={"SISO_PATH": str(siso_bin_path)},
+              runner=runner)
+
+    # Verify that the runner was NOT passed a collector address in its env
+    _, called_kwargs = runner.call_args
+    called_env = called_kwargs.get("env", {})
+    assert "SISO_COLLECTOR_ADDRESS" not in called_env
 
 
 @pytest.fixture
@@ -483,8 +581,244 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
     assert f"Failed to remove {sockets_file}" in mock_stderr.getvalue()
 
 
+@pytest.mark.parametrize(
+    "global_flags, subcmd_flags, args, should_collect_logs, env, want, want_stderr",
+    [
+        pytest.param(
+            [],
+            {},
+            ["other", "-C", "out/Default"],
+            True,
+            {},
+            ["other", "-C", "out/Default"],
+            "",
+            id="no_ninja",
+        ),
+        pytest.param(
+            [],
+            {},
+            ["ninja", "-C", "out/Default"],
+            False,
+            {},
+            [
+                "ninja",
+                "-C",
+                "out/Default",
+            ],
+            "",
+            id="ninja_no_logs",
+        ),
+        pytest.param(
+            [],
+            {},
+            ["ninja", "-C", "out/Default"],
+            True,
+            {},
+            [
+                "ninja",
+                "-C",
+                "out/Default",
+                "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+            ],
+            "",
+            id="ninja_with_logs_no_project",
+        ),
+        pytest.param(
+            [],
+            {},
+            ["ninja", "-C", "out/Default", "--project=test-project"],
+            True,
+            {},
+            [
+                "ninja",
+                "-C",
+                "out/Default",
+                "--project=test-project",
+                "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                "--enable_cloud_monitoring",
+                "--enable_cloud_profiler",
+                "--enable_cloud_trace",
+                "--enable_cloud_logging",
+                "--metrics_project=test-project",
+            ],
+            "",
+            id="ninja_with_logs_with_project_in_args",
+        ),
+        pytest.param(
+            [],
+            {},
+            ["ninja", "-C", "out/Default"],
+            True,
+            {"SISO_PROJECT": "test-project"},
+            [
+                "ninja",
+                "-C",
+                "out/Default",
+                "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                "--enable_cloud_monitoring",
+                "--enable_cloud_profiler",
+                "--enable_cloud_trace",
+                "--enable_cloud_logging",
+                "--metrics_project=test-project",
+            ],
+            "",
+            id="ninja_with_logs_with_project_in_env",
+        ),
+        pytest.param(
+            ["-gflag"],
+            {"ninja": ["-sflag"]},
+            ["ninja", "-C", "out/Default"],
+            False,
+            {},
+            [
+                "-gflag",
+                "ninja",
+                "-sflag",
+                "-C",
+                "out/Default",
+            ],
+            "depot_tools/siso.py: %s\n" %
+            shlex.join(["-gflag", "ninja", "-sflag", "-C", "out/Default"]),
+            id="with_sisorc",
+        ),
+        pytest.param(
+            ["-gflag_only"],
+            {},
+            ["ninja", "-C", "out/Default"],
+            False,
+            {},
+            [
+                "-gflag_only",
+                "ninja",
+                "-C",
+                "out/Default",
+            ],
+            "depot_tools/siso.py: %s\n" %
+            shlex.join(["-gflag_only", "ninja", "-C", "out/Default"]),
+            id="with_sisorc_global_flags_only",
+        ),
+        pytest.param(
+            [],
+            {"ninja": ["-sflag_only"]},
+            ["ninja", "-C", "out/Default"],
+            False,
+            {},
+            [
+                "ninja",
+                "-sflag_only",
+                "-C",
+                "out/Default",
+            ],
+            "depot_tools/siso.py: %s\n" %
+            shlex.join(["ninja", "-sflag_only", "-C", "out/Default"]),
+            id="with_sisorc_subcmd_flags_only",
+        ),
+        pytest.param(
+            ["-gflag_tel"],
+            {"ninja": ["-sflag_tel"]},
+            ["ninja", "-C", "out/Default"],
+            True,
+            {"SISO_PROJECT": "telemetry-project"},
+            [
+                "-gflag_tel",
+                "ninja",
+                "-sflag_tel",
+                "-C",
+                "out/Default",
+                "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                "--enable_cloud_monitoring",
+                "--enable_cloud_profiler",
+                "--enable_cloud_trace",
+                "--enable_cloud_logging",
+                "--metrics_project=telemetry-project",
+            ],
+            "depot_tools/siso.py: %s\n" % shlex.join(
+                ["-gflag_tel", "ninja", "-sflag_tel", "-C", "out/Default"]),
+            id="with_sisorc_global_and_subcmd_flags_and_telemetry",
+        ),
+        pytest.param(
+            ["-gflag_non_ninja"],
+            {"other_subcmd": ["-sflag_non_ninja"]},
+            ["other_subcmd", "-C", "out/Default"],
+            True,
+            {"SISO_PROJECT": "telemetry-project"},
+            [
+                "-gflag_non_ninja",
+                "other_subcmd",
+                "-sflag_non_ninja",
+                "-C",
+                "out/Default",
+            ],
+            "depot_tools/siso.py: %s\n" % shlex.join([
+                "-gflag_non_ninja",
+                "other_subcmd",
+                "-sflag_non_ninja",
+                "-C",
+                "out/Default",
+            ]),
+            id="with_sisorc_non_ninja_subcmd",
+        ),
+    ],
+)
+def test_main_process_args(
+    global_flags: List[str],
+    subcmd_flags: Dict[str, List[str]],
+    args: List[str],
+    should_collect_logs: bool,
+    env: Dict[str, str],
+    want: List[str],
+    want_stderr: str,
+    siso_project_setup: None,
+    tmp_path: Path,
+    mocker: Any,
+) -> None:
+    # Clear .sisoenv to avoid interference with test cases that set environment variables
+    _get_sisoenv_path(tmp_path).write_text("")
 
+    # Setup dummy project structure using real files to avoid mocking 'open'
+    siso_bin_path = _get_siso_bin_path(tmp_path)
 
+    # Create .sisorc if flags are provided
+    sisorc_path = _get_siso_config_dir(tmp_path) / ".sisorc"
+    if sisorc_path.exists():
+        sisorc_path.unlink()
+    if global_flags or subcmd_flags:
+        with open(sisorc_path, "w") as f:
+            for flag in global_flags:
+                f.write(f"{flag}\n")
+            for subcmd, flags in subcmd_flags.items():
+                f.write(f"{subcmd} {' '.join(flags)}\n")
+
+    mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+    runner = mocker.Mock(return_value=0)
+    telemetry_cfg = create_telemetry_cfg(tmp_path,
+                                         mocker,
+                                         enabled=should_collect_logs)
+
+    # Provide a SISO_PATH to point to our dummy binary
+    env_with_path = env.copy()
+    env_with_path["SISO_PATH"] = str(siso_bin_path)
+
+    siso.main(["siso.py"] + args,
+              telemetry_cfg=telemetry_cfg,
+              env=env_with_path,
+              runner=runner)
+
+    # Verify runner was called with the expected arguments
+    assert runner.call_count == 1
+    called_args = runner.call_args[0][0]
+    # The first argument is the siso path, the rest are the processed args
+    assert called_args[0] == str(siso_bin_path)
+    assert called_args[1:] == want
+
+    actual_stderr = mock_stderr.getvalue()
+    expected_full_stderr = f"depot_tools/siso.py: Using Siso binary from SISO_PATH: {siso_bin_path}.\n"
+    expected_full_stderr += want_stderr
+    assert actual_stderr == expected_full_stderr
 
 # Else it won"t even compile on Windows.
 if sys.platform != "win32":
@@ -954,7 +1288,7 @@ def test_handle_collector_missing_sockets_file_appears_later(
     def socket_file_sideeff(path: str) -> bool:
         if path.endswith(".sock"):
             return next(socket_exists_vals)
-        return True
+        return DEFAULT
 
     mocker.patch("os.path.exists", side_effect=socket_file_sideeff)
 
@@ -1005,7 +1339,12 @@ def test_handle_collector_missing_sockets_file_never_appears(
 ) -> None:
     mocker.patch("sys.platform", new="linux")
 
-    mocker.patch("os.path.exists", return_value=False)
+    def socket_file_sideeff(path: str) -> bool:
+        if path.endswith(".sock"):
+            return False
+        return DEFAULT
+
+    mocker.patch("os.path.exists", side_effect=socket_file_sideeff)
 
     m = start_collector_mocks
     siso_path = "siso_path"
@@ -1047,6 +1386,202 @@ def test_handle_collector_missing_sockets_file_never_appears(
 
     # Should fail to find socket file, so no address in env.
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
+
+
+@pytest.mark.parametrize(
+    "file_exists, expected_exit",
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+def test_check_outdir(tmp_path: Path, mocker: Any, file_exists: bool,
+                      expected_exit: bool) -> None:
+    out_dir = tmp_path / "out" / "Default"
+    out_dir.mkdir(parents=True)
+    if file_exists:
+        (out_dir / ".ninja_deps").touch()
+
+    mock_exit = mocker.patch("sys.exit")
+    mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+
+    siso.check_outdir(str(out_dir))
+
+    if expected_exit:
+        mock_exit.assert_called_once_with(1)
+        assert "contains Ninja state file" in mock_stderr.getvalue()
+    else:
+        mock_exit.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "is_corp, expected_msg_part",
+    [
+        (True, "gclient custom vars is correct"),
+        (False, "backend_config/README.md"),
+    ],
+)
+def test_main_backend_star_missing(siso_project_setup: None, tmp_path: Path,
+                                   mocker: Any, is_corp: bool,
+                                   expected_msg_part: str) -> None:
+    # Setup project structure
+    backend_config_dir = _get_siso_config_dir(tmp_path) / "backend_config"
+    backend_config_dir.mkdir()
+    # Ensure backend.star does NOT exist
+
+    mocker.patch("siso._is_google_corp_machine", return_value=is_corp)
+    mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+
+    exit_code = siso.main(["siso.py", "ninja", "-C", "out/Default"])
+
+    assert exit_code == 1
+    assert expected_msg_part in mock_stderr.getvalue()
+
+
+def test_main_siso_binary_missing(siso_project_setup: None, tmp_path: Path,
+                                  mocker: Any) -> None:
+    # Remove created siso.
+    siso_bin_path = _get_siso_bin_path(tmp_path)
+    siso_bin_path.unlink()
+
+    mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+
+    exit_code = siso.main(["siso.py", "ninja", "-C", "out/Default"])
+
+    assert exit_code == 1
+    assert "Could not find siso in third_party/siso" in mock_stderr.getvalue()
+
+
+def test_main_siso_override_path_missing(siso_project_setup: None,
+                                         tmp_path: Path, mocker: Any) -> None:
+    # Setup project structure (minimal needed to reach the check)
+    mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+
+    # Set SISO_PATH to a non-existent file
+    env = {"SISO_PATH": str(tmp_path / "non_existent_siso")}
+
+    exit_code = siso.main(["siso.py", "ninja", "-C", "out/Default"], env=env)
+
+    assert exit_code == 1
+    assert "Could not find Siso at provided SISO_PATH" in mock_stderr.getvalue()
+
+
+def test_main_sisoenv_missing(siso_project_setup: None, tmp_path: Path,
+                              mocker: Any) -> None:
+    # Setup project structure
+    # Do NOT create .sisoenv
+    sisoenv_file = _get_sisoenv_path(tmp_path)
+    sisoenv_file.unlink()
+
+    mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
+
+    exit_code = siso.main(["siso.py", "ninja", "-C", "out/Default"])
+
+    assert exit_code == 1
+    assert "Could not find .sisoenv" in mock_stderr.getvalue()
+
+
+@pytest.mark.parametrize(
+    "env, expected_val",
+    [
+        ({}, "1"),
+        ({
+            "PYTHONDONTWRITEBYTECODE": "0"
+        }, "0"),
+        ({
+            "PYTHONPYCACHEPREFIX": "/tmp/pycache"
+        }, None),
+        ({
+            "PYTHONPYCACHEPREFIX": "/tmp/pycache",
+            "PYTHONDONTWRITEBYTECODE": "0"
+        }, "0"),
+    ],
+)
+def test_env_python_dont_write_bytecode(siso_project_setup: None, mocker: Any,
+                                        env: Dict[str, str],
+                                        expected_val: Optional[str]) -> None:
+    runner = mocker.Mock(return_value=0)
+
+    siso.main(["siso.py", "ninja"], env=env, runner=runner)
+
+    assert runner.called
+    call_env = runner.call_args[1]["env"]
+    if expected_val is None:
+        assert "PYTHONDONTWRITEBYTECODE" not in call_env
+    else:
+        assert call_env.get("PYTHONDONTWRITEBYTECODE") == expected_val
+
+
+def test_main_fallback_to_siso_path(siso_project_setup: None, tmp_path: Path,
+                                    mocker: Any) -> None:
+    # Setup: valid solution path but NO .sisoenv
+    sisoenv_file = _get_sisoenv_path(tmp_path)
+    sisoenv_file.unlink()
+
+    # Setup valid SISO_PATH
+    siso_bin = tmp_path / "custom_siso"
+    siso_bin.touch()
+    os.chmod(siso_bin, 0o755)
+
+    runner = mocker.Mock(return_value=0)
+
+    env = {"SISO_PATH": str(siso_bin)}
+
+    exit_code = siso.main(["siso.py", "ninja", "-C", "out/Default"],
+                          env=env,
+                          runner=runner)
+
+    assert exit_code == 0
+    # Verify runner called with override path
+    cmd = runner.call_args[0][0]
+    assert cmd[0] == str(siso_bin)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Only for Windows")
+def test_main_windows_arg_splitting(mocker: Any) -> None:
+    mocker.patch("siso.signal.signal")
+
+    # Mock internals to bypass file checks
+    mocker.patch("os.path.isfile", return_value=True)  # For SISO_PATH check
+
+    runner = mocker.Mock(return_value=0)
+    env = {"SISO_PATH": "C:\\siso.exe"}
+
+    # Pass a single string argument simulating siso.bat behavior
+    # "siso.py" is args[0], "ninja -C out/Default" is args[1]
+    args = ["siso.py", "ninja -C out/Default"]
+
+    # As the env is incomplete on windows send a mocked false telemetry.
+    telemetry_cfg = mocker.Mock()
+    telemetry_cfg.enabled.return_value = False
+    siso.main(args, env=env, runner=runner, telemetry_cfg=telemetry_cfg)
+
+    # Verify args were split
+    cmd = runner.call_args[0][0]
+    assert cmd == ["C:\\siso.exe", "ninja", "-C", "out/Default"]
+
+
+def test_main_e2e(siso_project_setup: None, tmp_path: Path,
+                  mocker: Any) -> None:
+    # siso binary, already set up.
+    siso_bin = _get_siso_bin_path(tmp_path)
+
+    runner = mocker.Mock(return_value=0)
+
+    args = ["siso.py", "ninja", "-C", str(tmp_path)]
+
+    # run
+    exit_code = siso.main(args, runner=runner)
+
+    assert exit_code == 0
+    # Verify runner was called with siso binary and processed args.
+    called_args, _ = runner.call_args
+    cmd = called_args[0]
+    assert cmd[0] == str(siso_bin)
+    assert "ninja" in cmd
+    assert "-C" in cmd
+    assert str(tmp_path) in cmd
+    assert any(arg.startswith("--metrics_labels") for arg in cmd)
 
 
 # Stanza to have pytest be executed.

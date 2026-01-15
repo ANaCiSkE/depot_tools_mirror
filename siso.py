@@ -19,7 +19,7 @@ import signal
 import subprocess
 import time
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional
 
 import build_telemetry
 import caffeinate
@@ -406,11 +406,16 @@ def _is_google_corp_machine() -> bool:
 
 
 def main(args: list[str],
-         telemetry_cfg: Optional[build_telemetry.Config] = None):
+         telemetry_cfg: Optional[build_telemetry.Config] = None,
+         env: Optional[dict[str, str]] = None,
+         runner: Callable = caffeinate.call) -> int:
     # Do not raise KeyboardInterrupt on SIGINT so as to give siso time to run
     # cleanup tasks. Siso will be terminated immediately after the second
     # Ctrl-C.
     original_sigint_handler = signal.getsignal(signal.SIGINT)
+
+    # To prevent issues with shared state, always work with a copy.
+    env = (os.environ if env is None else env).copy()
 
     _fix_system_limits()
 
@@ -441,27 +446,25 @@ def main(args: list[str],
     #
     # Removing those environment variables to avoid affecting clang's behaviors.
     if sys.platform == 'darwin':
-        os.environ.pop("CPATH", None)
-        os.environ.pop("LIBRARY_PATH", None)
-        os.environ.pop("SDKROOT", None)
+        env.pop("CPATH", None)
+        env.pop("LIBRARY_PATH", None)
+        env.pop("SDKROOT", None)
 
     # if user doesn't set PYTHONPYCACHEPREFIX and PYTHONDONTWRITEBYTECODE
     # set PYTHONDONTWRITEBYTECODE=1 not to create many *.pyc in workspace
     # and keep workspace clean.
-    if not os.environ.get("PYTHONPYCACHEPREFIX"):
-        os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-
-    env = os.environ.copy()
+    if not env.get("PYTHONPYCACHEPREFIX"):
+        env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 
     if not telemetry_cfg:
         telemetry_cfg = build_telemetry.load_config()
     subcmd, out_dir = parse_args(args[1:])
 
-    def is_help_req(args: list[str]) -> bool:
+    def no_help_flag(args: list[str]) -> bool:
         return {"-h", "--help", "-help"}.isdisjoint(args)
 
     should_collect_logs = all(
-        (telemetry_cfg.enabled(), subcmd == "ninja", is_help_req(args)))
+        (telemetry_cfg.enabled(), subcmd == "ninja", no_help_flag(args)))
 
     # Get gclient root + src.
     primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
@@ -470,7 +473,7 @@ def main(args: list[str],
     if gclient_root_path:
         gclient_src_root_path = os.path.join(gclient_root_path, 'src')
 
-    siso_override_path = os.environ.get('SISO_PATH')
+    siso_override_path = env.get("SISO_PATH", "")
     if siso_override_path:
         print('depot_tools/siso.py: Using Siso binary from SISO_PATH: %s.' %
               siso_override_path,
@@ -535,14 +538,14 @@ def main(args: list[str],
                     new_args = apply_telemetry_flags(new_args, env)
                     env = _handle_collector(siso_path, new_args, env)
                 check_outdir(out_dir)
-                return caffeinate.call([siso_path] + new_args, env=env)
+                return runner([siso_path] + new_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',
             file=sys.stderr)
         return 1
     if siso_override_path:
-        return caffeinate.call([siso_override_path] + args[1:], env=env)
+        return runner([siso_override_path] + args[1:], env=env)
 
     print(
         'depot_tools/siso.py: Could not find .sisoenv under build/config/siso '
