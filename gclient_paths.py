@@ -122,6 +122,8 @@ def _GetBuildtoolsPathInternal(cwd, override):
 
     # buildtools may be in the gclient root.
     gclient_root = FindGclientRoot(os.getcwd())
+    if not gclient_root:
+        return None
     buildtools_path = os.path.join(gclient_root, 'buildtools')
     if os.path.exists(buildtools_path):
         return buildtools_path
@@ -185,3 +187,17 @@ def GetGClientPrimarySolutionURL(gclient_root_dir_path):
     if solutions:
         return solutions[0].get('url')
     return None
+
+
+def FindInPath(name: str):
+    """Shutil.which replacement that skips depot_tools in PATH."""
+    env_path = os.getenv('PATH')
+    if not env_path:
+        return
+    for bin_dir in env_path.split(os.pathsep):
+        if bin_dir.rstrip(os.sep).endswith('depot_tools'):
+            # skip depot_tools to avoid calling gn.py infinitely.
+            continue
+        path = os.path.join(bin_dir, name + GetExeSuffix())
+        if os.path.isfile(path):
+            return path
