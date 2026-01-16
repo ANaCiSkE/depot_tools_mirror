@@ -5,6 +5,7 @@
 
 import os
 import sys
+import json
 import unittest
 import unittest.mock
 
@@ -56,6 +57,65 @@ class ScanTest(unittest.TestCase):
                     "/path/to/README.chromium",
                     repo_root_dir=os.path.abspath("/path/to/repo"),
                     is_open_source_project=False)
+
+    def test_main_generates_json_summary(self):
+        # Mock results for validation: one invalid, one valid.
+        mock_result = unittest.mock.MagicMock(
+            spec=metadata.validation_result.ValidationResult)
+        mock_result.get_severity_prefix.return_value = "ERROR"
+        mock_result.get_reason.return_value = "Test reason"
+        mock_result.is_fatal.return_value = True
+        mock_result.__str__.return_value = "ERROR - Test reason"
+
+        repo_path = os.path.abspath("/path/to/repo")
+        metadata_file_1 = os.path.join(repo_path, "README.chromium.1")
+        metadata_file_2 = os.path.join(repo_path, "README.chromium.2")
+
+        def mock_validate_file(filepath, **kwargs):
+            if filepath == metadata_file_1:
+                return [mock_result]
+            return []
+
+        with (unittest.mock.patch(
+                "metadata.discover.find_metadata_files",
+                return_value=[metadata_file_1, metadata_file_2]),
+              unittest.mock.patch("metadata.validate.validate_file",
+                                  side_effect=mock_validate_file),
+              unittest.mock.patch("os.path.exists", return_value=True),
+              unittest.mock.patch("os.path.isdir", return_value=True),
+              unittest.mock.patch("metadata.scan.open",
+                                  unittest.mock.mock_open()) as mock_file):
+
+            json_path = "/path/to/summary.json"
+            with unittest.mock.patch(
+                    "sys.argv",
+                ["scan.py", "--json-summary", json_path, repo_path]):
+                metadata.scan.main()
+
+                # Check that the file was opened for writing.
+                mock_file.assert_called_once_with(json_path, "w")
+
+                # Verify that the JSON content was written.
+                handle = mock_file()
+                written_data = "".join(call.args[0]
+                                       for call in handle.write.call_args_list)
+                parsed_data = json.loads(written_data)
+                self.assertDictEqual(
+                    parsed_data, {
+                        "summary": {
+                            "invalid_files": 1,
+                            "total_files": 2
+                        },
+                        "files": {
+                            "README.chromium.1": [{
+                                "severity": "ERROR",
+                                "fatal": True,
+                                "message": "ERROR - Test reason",
+                                "reason": "Test reason",
+                            }]
+                        },
+                    })
+
 
 
 class MetadataValidationTestCase(unittest.TestCase):
