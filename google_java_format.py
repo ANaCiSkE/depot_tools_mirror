@@ -42,10 +42,16 @@ def FindGoogleJavaFormat():
 def main(args):
     google_java_format = FindGoogleJavaFormat()
     if google_java_format is None:
-        # Fail silently. It could be we are on an old chromium revision,
-        # or that it is a non-chromium project. https://crbug.com/1491627.
-        print('google-java-format not found, skipping java formatting.')
-        return 0
+        # If google-java-format cannot be found, it could be we are on an
+        # old chromium revision, or that it is a non-chromium project.
+        # https://crbug.com/1491627.
+        #
+        # Signal an error (matching google-java-format's exit status for
+        # a usage error), otherwise the caller is allowed to interpret this
+        # script's stdout as the formatted code.
+        print('google-java-format not found, skipping java formatting.',
+              file=sys.stderr)
+        return 2
 
     # Add some visibility to --help showing where the tool lives, since this
     # redirection can be a little opaque.
