@@ -852,6 +852,19 @@ def CheckLicense(input_api,
                     current_year):
                 # If we're using the built-in license_re on a new file then make
                 # sure the year is correct.
+                # skip the new year check in January to give some slag
+                # where submitting year N-1 is allowed.
+                if issue := input_api.change.issue:
+                    info = input_api.gerrit.GetChangeInfo(issue)
+                    created_time = datetime.datetime.fromisoformat(info.created + 'Z')
+                    cl_creation_year = int(created_time.strftime('%Y'))
+                    last_year = int(input_api.time.strftime('%Y')) - 1
+                    current_month = int(input_api.time.strftime('%m'))
+                    if (current_month == 1
+                        and match.groups()[0] == str(last_year)
+                        and cl_creation_year == last_year):
+                        continue
+
                 wrong_year_new_files.append(f.LocalPath())
         elif not license_re.search(contents):
             bad_files.append(f.LocalPath())
