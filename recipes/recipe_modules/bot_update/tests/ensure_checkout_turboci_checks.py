@@ -78,8 +78,7 @@ def GenTests(api):
 
   def check_ci_graph_assert(assert_, graph: GraphView):
     check_id = 'fake-check-id'
-    check = graph.checks[check_id].check
-    assert_(list(graph.checks.keys()) == [check_id])
+    check = turboci.get_check_view(graph, check_id).check
 
     assert_(check.kind == CheckKind.CHECK_KIND_SOURCE)
     assert_(check.state == CheckState.CHECK_STATE_FINAL)
@@ -155,8 +154,7 @@ def GenTests(api):
 
   def check_ci_revision_only_graph_assert(assert_, graph: GraphView):
     check_id = 'fake-check-id'
-    check = graph.checks[check_id].check
-    assert_(list(graph.checks.keys()) == [check_id])
+    check = turboci.get_check_view(graph, check_id).check
 
     assert_(check.kind == CheckKind.CHECK_KIND_SOURCE)
     assert_(check.state == CheckState.CHECK_STATE_FINAL)
@@ -228,8 +226,7 @@ def GenTests(api):
 
   def check_try_graph_assert(assert_, graph: GraphView):
     check_id = 'fake-check-id'
-    check = graph.checks[check_id].check
-    assert_(list(graph.checks.keys()) == [check_id])
+    check = turboci.get_check_view(graph, check_id).check
 
     assert_(check.kind == CheckKind.CHECK_KIND_SOURCE)
     assert_(check.state == CheckState.CHECK_STATE_FINAL)
