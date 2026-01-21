@@ -856,7 +856,7 @@ def CheckLicense(input_api,
                 # where submitting year N-1 is allowed.
                 if issue := input_api.change.issue:
                     info = input_api.gerrit.GetChangeInfo(issue)
-                    created_time = datetime.datetime.fromisoformat(info.created + 'Z')
+                    created_time = datetime.datetime.fromisoformat(info["created"] + 'Z')
                     cl_creation_year = int(created_time.strftime('%Y'))
                     last_year = int(input_api.time.strftime('%Y')) - 1
                     current_month = int(input_api.time.strftime('%m'))
