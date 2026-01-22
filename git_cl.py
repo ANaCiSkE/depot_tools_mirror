@@ -3667,7 +3667,9 @@ class Changelist(object):
             print('git-cl: Added Change-Id to commit message.')
             return new_log_desc
 
-        DieWithError('ERROR: Gerrit commit-msg hook not installed.')
+        DieWithError(
+            'ERROR: Missing Change-Id in commit message. Maybe gerrit commit-msg hook is not installed?'
+        )
 
     def CannotTriggerTryJobReason(self):
         try:
