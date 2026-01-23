@@ -123,7 +123,8 @@ class GitApi(recipe_api.RecipeApi):
                progress=True,
                tags=False,
                depth=None,
-               no_auto_gc=False):
+               no_auto_gc=False,
+               run_maintenance=False):
     """Performs a full git checkout and returns sha1 of checked out revision.
 
     Args:
@@ -160,6 +161,7 @@ class GitApi(recipe_api.RecipeApi):
       * depth (int): if > 0, limit fetching to the given number of commits from
         the tips of the remote tree.
       * no_auto_gc: whether to turn off the automatic garbage collection.
+      * run_maintenance: run additional maintenance step to optimize repo data.
 
     Returns: If the checkout was successful, this returns the commit hash of
       the checked-out-repo. Otherwise this returns None.
@@ -285,6 +287,16 @@ class GitApi(recipe_api.RecipeApi):
             previous_result=count_objects_before_fetch,
             step_test_data=lambda: self.m.raw_io.test_api.stream_output(
                 self.test_api.count_objects_output(2000)))
+
+      if run_maintenance:
+        self('maintenance',
+             'run',
+             '--task',
+             'gc',
+             '--task',
+             'commit-graph',
+             name='git maintenance%s' % step_suffix,
+             raise_on_failure=False)
 
       if file_name:
         self('checkout', '-f', checkout_ref, '--', file_name,

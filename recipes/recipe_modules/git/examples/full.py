@@ -46,7 +46,8 @@ def RunSteps(api):
       use_git_cache=api.properties.get('use_git_cache'),
       tags=api.properties.get('tags'),
       depth=api.properties.get('depth'),
-      no_auto_gc=api.properties.get('no_auto_gc'))
+      no_auto_gc=api.properties.get('no_auto_gc'),
+      run_maintenance=api.properties.get('run_maintenance'))
 
   assert retVal == "deadbeef", (
     "expected retVal to be %r but was %r" % ("deadbeef", retVal))
@@ -178,3 +179,6 @@ def GenTests(api):
 
   yield (api.test('git-fetch-without-auto-gc') +
          api.properties(no_auto_gc=True))
+
+  yield (api.test('git-fetch-with-maintenance') +
+         api.properties(run_maintenance=True))
