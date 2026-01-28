@@ -2989,6 +2989,7 @@ def CheckAyeAye(input_api, output_api):
         return text
 
     alint_path = '/google/bin/releases/alint/alint'
+    command = [alint_path, '--', '-t=9s']
     if not _os.path.exists(alint_path):
         return []
 
@@ -3000,7 +3001,7 @@ def CheckAyeAye(input_api, output_api):
         ]
 
     try:
-        process = input_api.subprocess.Popen([alint_path],
+        process = input_api.subprocess.Popen(command,
                                              stdout=input_api.subprocess.PIPE,
                                              stderr=input_api.subprocess.STDOUT,
                                              cwd=repo_root)

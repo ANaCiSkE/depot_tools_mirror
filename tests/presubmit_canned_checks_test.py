@@ -717,7 +717,7 @@ class CheckAyeAyeTest(unittest.TestCase):
         self.assertEqual(messages, expected_messages)
 
         self.mock_popen.assert_called_once_with(
-            ['/google/bin/releases/alint/alint'],
+            ['/google/bin/releases/alint/alint', '--', '-t=9s'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd='/fake/repo/root')
