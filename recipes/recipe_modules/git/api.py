@@ -292,9 +292,13 @@ class GitApi(recipe_api.RecipeApi):
         self('maintenance',
              'run',
              '--task',
-             'gc',
+             'incremental-repack',
              '--task',
              'commit-graph',
+             '--task',
+             'loose-objects',
+             '--task',
+             'pack-refs',
              name='git maintenance%s' % step_suffix,
              raise_on_failure=False)
 
