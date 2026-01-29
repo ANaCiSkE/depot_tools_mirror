@@ -43,7 +43,8 @@ import subprocess2 as subprocess
 # Shortcut.
 presubmit_canned_checks = presubmit.presubmit_canned_checks
 
-RUNNING_PY_CHECKS_TEXT = ('Running presubmit upload checks ...\n')
+RUNNING_PY_CHECKS_TEXT = (
+    'Running presubmit upload checks on branch mychange ...\n')
 
 # Access to a protected member XXX of a client class
 # pylint: disable=protected-access
@@ -1818,8 +1819,10 @@ class OutputApiUnittest(PresubmitTestsBase):
 class AffectedFileUnittest(PresubmitTestsBase):
     def testAffectedFile(self):
         gclient_utils.FileRead.return_value = 'whatever\ncookie'
+        diff_cache = mock.Mock()
+        diff_cache.GetNewContents.return_value = None
         af = presubmit.GitAffectedFile('foo/blat.cc', 'M', self.fake_root_dir,
-                                       None)
+                                       diff_cache)
         self.assertEqual(presubmit.normpath('foo/blat.cc'), af.LocalPath())
         self.assertEqual('M', af.Action())
         self.assertEqual(['whatever', 'cookie'], af.NewContents())
@@ -1827,7 +1830,10 @@ class AffectedFileUnittest(PresubmitTestsBase):
     def testAffectedFileNotExists(self):
         notfound = 'notfound.cc'
         gclient_utils.FileRead.side_effect = IOError
-        af = presubmit.AffectedFile(notfound, 'A', self.fake_root_dir, None)
+        diff_cache = mock.Mock()
+        diff_cache.GetNewContents.return_value = None
+        af = presubmit.AffectedFile(notfound, 'A', self.fake_root_dir,
+                                    diff_cache)
         self.assertEqual([], af.NewContents())
 
     def testIsTestableFile(self):

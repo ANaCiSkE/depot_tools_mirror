@@ -14,6 +14,7 @@ sys.path.insert(0, ROOT_DIR)
 
 import gclient_utils
 import presubmit_support
+import scm
 import subprocess2
 from testing_support import fake_repos
 
@@ -521,6 +522,47 @@ class PresubmitResultTest(unittest.TestCase):
             False,
         }
         self.assertEqual(result.json_format(), expected)
+
+
+class GitDiffCacheTest(unittest.TestCase):
+
+    def testGetNewContentsWithEndCommit(self):
+        diff_cache = presubmit_support._GitDiffCache('upstream', 'end_commit')
+        with mock.patch('scm.GIT.GetOldContents') as mock_get_old_contents:
+            mock_get_old_contents.return_value = 'content'
+            self.assertEqual(diff_cache.GetNewContents('path', 'root'),
+                             'content')
+            mock_get_old_contents.assert_called_once_with('root',
+                                                          'path',
+                                                          branch='end_commit')
+
+    def testGetNewContentsWithoutEndCommit(self):
+        diff_cache = presubmit_support._GitDiffCache('upstream', None)
+        self.assertIsNone(diff_cache.GetNewContents('path', 'root'))
+
+
+class AffectedFileTest(unittest.TestCase):
+
+    def testNewContentsUsesDiffCache(self):
+        diff_cache = mock.Mock()
+        diff_cache.GetNewContents.return_value = ['cached_content']
+        affected_file = presubmit_support.AffectedFile('path', 'M', 'root',
+                                                       diff_cache)
+        self.assertEqual(affected_file.NewContents(), ['cached_content'])
+        diff_cache.GetNewContents.assert_called_once_with('path', 'root')
+
+    def testNewContentsFallbackToDisk(self):
+        diff_cache = mock.Mock()
+        diff_cache.GetNewContents.return_value = None
+        affected_file = presubmit_support.AffectedFile('path', 'M', 'root',
+                                                       diff_cache)
+        with mock.patch('gclient_utils.FileRead') as mock_file_read:
+            mock_file_read.return_value = 'disk_content'
+            self.assertEqual(affected_file.NewContents(), ['disk_content'])
+            diff_cache.GetNewContents.assert_called_once_with('path', 'root')
+            mock_file_read.assert_called_once_with(
+                affected_file.AbsoluteLocalPath(), 'rU')
+
 
 if __name__ == "__main__":
     unittest.main()
