@@ -99,7 +99,10 @@ def siso_project_setup(siso_test_fixture: None, tmp_path: Path,
     (tmp_path / ".gclient_entries").write_text("entries = {'src': '...'}")
     (tmp_path / "src" / "out" / "Default").mkdir(parents=True, exist_ok=True)
 
-    mocker.patch("siso._handle_collector", side_effect=lambda _p, _a, e: e)
+    mocker.patch("siso._get_siso_subcmds",
+                 return_value={"ninja", "query", "other"})
+    mocker.patch("siso._handle_collector",
+                 side_effect=lambda _p, _a, e, subcmd="": e)
 
     # Create enabled telemetry config by default
     create_telemetry_cfg(tmp_path, mocker, enabled=True)
@@ -125,42 +128,111 @@ ninja --failure_verbose=false -k=0
     assert subcmd_flags == {"ninja": ["--failure_verbose=false", "-k=0"]}
 
 
-def test_apply_sisorc_none(siso_test_fixture: Any) -> None:
-    new_args = siso.apply_sisorc([], {}, ["ninja", "-C", "out/Default"],
-                                 "ninja")
-    assert new_args == ["ninja", "-C", "out/Default"]
-
-
-def test_apply_sisorc_nosubcmd(siso_test_fixture: Any) -> None:
-    new_args = siso.apply_sisorc([], {"ninja": ["-k=0"]}, ["-version"], "")
-    assert new_args == ["-version"]
-
-
-def test_apply_sisorc(siso_test_fixture: Any) -> None:
-    new_args = siso.apply_sisorc(
-        ["-credential_helper=luci-auth"],
-        {"ninja": ["-k=0"]},
-        ["-log_dir=/tmp", "ninja", "-C", "out/Default"],
-        "ninja",
-    )
-    assert new_args == [
-        "-credential_helper=luci-auth",
-        "-log_dir=/tmp",
-        "ninja",
-        "-k=0",
-        "-C",
-        "out/Default",
-    ]
+@pytest.mark.parametrize(
+    "args, subcmds, want",
+    [
+        pytest.param(
+            [
+                "-mutexprofile", "siso_mutex.prof", "ninja", "-project",
+                "rbe-chrome-untrusted", "--enable_cloud_logging", "-C",
+                "out/Default"
+            ],
+            {"ninja", "query"},
+            (["-mutexprofile", "siso_mutex.prof"], "ninja", [
+                "-project", "rbe-chrome-untrusted", "--enable_cloud_logging",
+                "-C", "out/Default"
+            ]),
+            id="complex_global_flags",
+        ),
+        pytest.param(
+            ["ninja", "-C", "out/Default"],
+            {"ninja", "query"},
+            ([], "ninja", ["-C", "out/Default"]),
+            id="simple_ninja",
+        ),
+        pytest.param(
+            ["-v", "1", "ninja"],
+            {"ninja", "query"},
+            (["-v", "1"], "ninja", []),
+            id="flag_with_value_before_subcmd",
+        ),
+        pytest.param(
+            ["--version"],
+            {"ninja", "query"},
+            (["--version"], "", []),
+            id="no_subcmd",
+        ),
+    ],
+)
+def test_split_args(args: List[str], subcmds: set[str],
+                    want: Tuple[List[str], str,
+                                List[str]], mocker: Any) -> None:
+    mocker.patch("siso._get_siso_subcmds", return_value=subcmds)
+    got = siso.split_args(args, "siso")
+    assert got == want
 
 
 @pytest.mark.parametrize(
-    "args, env, want",
+    "args, want",
     [
         pytest.param(
+            ["-C", "out/Debug", "ninja"],
+            "out/Debug",
+            id="C_before_subcmd",
+        ),
+        pytest.param(
+            ["-Cout/Release", "ninja"],
+            "out/Release",
+            id="C_compact_before_subcmd",
+        ),
+        pytest.param(
             ["ninja", "-C", "out/Default"],
+            "out/Default",
+            id="simple_ninja",
+        ),
+        pytest.param(
+            ["ninja", "-Cout/Release"],
+            "out/Release",
+            id="C_compact_after_subcmd",
+        ),
+        pytest.param(
+            ["--version"],
+            ".",
+            id="no_outdir",
+        ),
+    ],
+)
+def test_fetch_out_dir(args: List[str], want: str) -> None:
+    got = siso.fetch_out_dir(args)
+    assert got == want
+
+
+def test_get_siso_subcmds(mocker: Any) -> None:
+    mock_run = mocker.patch("siso.subprocess.run")
+    mock_run.return_value = mocker.Mock(
+        returncode=0,
+        stdout="""Usage: siso <flags> <subcommand> <subcommand args>
+
+Subcommands:
+        collector        OTEL collector daemon
+        ninja            build the requests targets as ninja
+
+Subcommands for auth:
+        auth-check       prints current auth status
+        login            login to siso system
+        logout           logout from siso system
+""")
+    got = siso._get_siso_subcmds("siso")
+    assert got == {"collector", "ninja", "auth-check", "login", "logout"}
+
+
+@pytest.mark.parametrize(
+    "subcmd_args, env, want",
+    [
+        pytest.param(
+            ["-C", "out/Default"],
             {},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--metrics_labels",
@@ -170,7 +242,6 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
         ),
         pytest.param(
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--enable_cloud_monitoring",
@@ -178,7 +249,6 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             ],
             {},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--enable_cloud_monitoring",
@@ -189,10 +259,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="some_already_applied_no_env_flags",
         ),
         pytest.param(
-            ["ninja", "-C", "out/Default", "--metrics_project", "some_project"],
+            ["-C", "out/Default", "--metrics_project", "some_project"],
             {},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--metrics_project",
@@ -207,10 +276,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="metrics_project_set",
         ),
         pytest.param(
-            ["ninja", "-C", "out/Default"],
+            ["-C", "out/Default"],
             {"RBE_metrics_project": "some_project"},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--metrics_labels",
@@ -223,10 +291,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="metrics_project_set_thru_env",
         ),
         pytest.param(
-            ["ninja", "-C", "out/Default", "--project", "some_project"],
+            ["-C", "out/Default", "--project", "some_project"],
             {},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--project",
@@ -242,10 +309,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="cloud_project_set",
         ),
         pytest.param(
-            ["ninja", "-C", "out/Default"],
+            ["-C", "out/Default"],
             {"SISO_PROJECT": "some_project"},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--metrics_labels",
@@ -259,10 +325,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="cloud_project_set_thru_env",
         ),
         pytest.param(
-            ["ninja", "-C", "out/Default", "--enable_cloud_profiler=false"],
+            ["-C", "out/Default", "--enable_cloud_profiler=false"],
             {"SISO_PROJECT": "some_project"},
             [
-                "ninja",
                 "-C",
                 "out/Default",
                 "--enable_cloud_profiler=false",
@@ -276,10 +341,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="respects_set_flags",
         ),
         pytest.param(
-            ["ninja", "--help"],
+            ["--help"],
             {},
             [
-                "ninja",
                 "--help",
                 "--metrics_labels",
                 f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
@@ -287,10 +351,9 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="help_flag",
         ),
         pytest.param(
-            ["ninja", "-h"],
+            ["-h"],
             {},
             [
-                "ninja",
                 "-h",
                 "--metrics_labels",
                 f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
@@ -298,33 +361,32 @@ def test_apply_sisorc(siso_test_fixture: Any) -> None:
             id="short_help_flag",
         ),
         pytest.param(
-            ["ninja", "-C", "out/Default", "--metrics_labels=foo=bar"],
+            ["-C", "out/Default", "--metrics_labels=foo=bar"],
             {},
-            ["ninja", "-C", "out/Default", "--metrics_labels=foo=bar"],
+            ["-C", "out/Default", "--metrics_labels=foo=bar"],
             id="labels_exist",
         ),
     ],
 )
-def test_apply_telemetry_flags(args: List[str], env: Dict[str, str],
+def test_apply_telemetry_flags(subcmd_args: List[str], env: Dict[str, str],
                                want: List[str]) -> None:
-    got = siso.apply_telemetry_flags(args, env)
+    got = siso.apply_telemetry_flags(subcmd_args, env)
     assert got == want
 
 
 def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
     mocker.patch.dict("os.environ", {})
-    args = [
-        "ninja",
+    subcmd_args = [
         "-C",
         "out/Default",
     ]
     env = {}
-    _ = siso.apply_telemetry_flags(args, env)
+    _ = siso.apply_telemetry_flags(subcmd_args, env)
     assert env.get("GOOGLE_API_USE_CLIENT_CERTIFICATE") == "false"
 
 
 @pytest.mark.parametrize(
-    "args, env, want",
+    "subcmd_args, env, want",
     [
         pytest.param(
             ["--metrics_project", "proj1"],
@@ -377,13 +439,11 @@ def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
         ),
         pytest.param(["-project", "proj2"], {}, "proj2",
                      id="short_project_arg"),
-        pytest.param(["--help"], {}, "", id="help_flag"),
-        pytest.param(["-h"], {}, "", id="short_help_flag"),
     ],
 )
-def test_fetch_metrics_project(args: List[str], env: Dict[str, str],
+def test_fetch_metrics_project(subcmd_args: List[str], env: Dict[str, str],
                                want: str) -> None:
-    got = siso._fetch_metrics_project(args, env)
+    got = siso._fetch_metrics_project(subcmd_args, env)
     assert got == want
 
 
@@ -621,7 +681,10 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--metrics_labels",
                 f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
             ],
-            "",
+            "depot_tools/siso.py: %s\n" % shlex.join([
+                "ninja", "-C", "out/Default", "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}"
+            ]),
             id="ninja_with_logs_no_project",
         ),
         pytest.param(
@@ -643,7 +706,14 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--enable_cloud_logging",
                 "--metrics_project=test-project",
             ],
-            "",
+            "depot_tools/siso.py: %s\n" % shlex.join([
+                "ninja", "-C", "out/Default", "--project=test-project",
+                "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                "--enable_cloud_monitoring", "--enable_cloud_profiler",
+                "--enable_cloud_trace", "--enable_cloud_logging",
+                "--metrics_project=test-project"
+            ]),
             id="ninja_with_logs_with_project_in_args",
         ),
         pytest.param(
@@ -664,7 +734,13 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--enable_cloud_logging",
                 "--metrics_project=test-project",
             ],
-            "",
+            "depot_tools/siso.py: %s\n" % shlex.join([
+                "ninja", "-C", "out/Default", "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                "--enable_cloud_monitoring", "--enable_cloud_profiler",
+                "--enable_cloud_trace", "--enable_cloud_logging",
+                "--metrics_project=test-project"
+            ]),
             id="ninja_with_logs_with_project_in_env",
         ),
         pytest.param(
@@ -736,26 +812,32 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--enable_cloud_logging",
                 "--metrics_project=telemetry-project",
             ],
-            "depot_tools/siso.py: %s\n" % shlex.join(
-                ["-gflag_tel", "ninja", "-sflag_tel", "-C", "out/Default"]),
+            "depot_tools/siso.py: %s\n" % shlex.join([
+                "-gflag_tel", "ninja", "-sflag_tel", "-C", "out/Default",
+                "--metrics_labels",
+                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                "--enable_cloud_monitoring", "--enable_cloud_profiler",
+                "--enable_cloud_trace", "--enable_cloud_logging",
+                "--metrics_project=telemetry-project"
+            ]),
             id="with_sisorc_global_and_subcmd_flags_and_telemetry",
         ),
         pytest.param(
             ["-gflag_non_ninja"],
-            {"other_subcmd": ["-sflag_non_ninja"]},
-            ["other_subcmd", "-C", "out/Default"],
+            {"query": ["-sflag_non_ninja"]},
+            ["query", "-C", "out/Default"],
             True,
             {"SISO_PROJECT": "telemetry-project"},
             [
                 "-gflag_non_ninja",
-                "other_subcmd",
+                "query",
                 "-sflag_non_ninja",
                 "-C",
                 "out/Default",
             ],
             "depot_tools/siso.py: %s\n" % shlex.join([
                 "-gflag_non_ninja",
-                "other_subcmd",
+                "query",
                 "-sflag_non_ninja",
                 "-C",
                 "out/Default",
@@ -1031,7 +1113,7 @@ def test_handle_collector_dead_then_healthy(
     }
     mock_json_loads.side_effect = [status_healthy, config]
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
     res_env = siso._handle_collector(siso_path, args, env)
     assert res_env.get("SISO_COLLECTOR_ADDRESS")
     if platform == "linux":
@@ -1091,7 +1173,7 @@ def test_handle_collector_unhealthy_then_healthy(siso_test_fixture: Any,
         config_project_full,
     ]
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
     res_env = siso._handle_collector(siso_path, args, env)
     assert res_env.get("SISO_COLLECTOR_ADDRESS") == f"unix://{endpoint}"
 
@@ -1144,7 +1226,7 @@ def test_handle_collector_already_healthy(siso_test_fixture: Any,
         config_project_full,
     ]
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
     res_env = siso._handle_collector(siso_path, args, env)
     assert res_env.get("SISO_COLLECTOR_ADDRESS") == f"unix://{endpoint}"
     m["subprocess_popen"].assert_not_called()
@@ -1173,7 +1255,7 @@ def test_handle_collector_never_healthy(siso_test_fixture: Any,
                               m["mock_conn"],
                               status_responses=[(404, None)])
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
     res_env = siso._handle_collector(siso_path, args, env)
     # If never healthy, handle_collector removes the address from env
     assert "SISO_COLLECTOR_ADDRESS" not in res_env
@@ -1257,7 +1339,7 @@ def test_handle_collector_lifecycle(
     m["subprocess_popen"].side_effect = popen_side_effect
 
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
     res_env = siso._handle_collector(siso_path, args, env)
 
     if expected_result:
@@ -1324,7 +1406,7 @@ def test_handle_collector_missing_sockets_file_appears_later(
     ]
 
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
 
     res_env = siso._handle_collector(siso_path, args, env)
 
@@ -1380,7 +1462,7 @@ def test_handle_collector_missing_sockets_file_never_appears(
         [status_healthy, config_with_socket])
 
     env = {}
-    args = ["--project", project]
+    args = ["ninja", "--project", project]
 
     res_env = siso._handle_collector(siso_path, args, env)
 
@@ -1582,6 +1664,66 @@ def test_main_e2e(siso_project_setup: None, tmp_path: Path,
     assert "-C" in cmd
     assert str(tmp_path) in cmd
     assert any(arg.startswith("--metrics_labels") for arg in cmd)
+
+
+def test_main_dynamic_subcmds_e2e(siso_project_setup: None, tmp_path: Path,
+                                  mocker: Any) -> None:
+    siso_bin = _get_siso_bin_path(tmp_path)
+    runner = mocker.Mock(return_value=0)
+
+    # Mock _get_siso_subcmds to return dynamic subcmds including a custom one
+    mocker.patch("siso._get_siso_subcmds",
+                 return_value={"custom_subcmd", "ninja"})
+
+    args = ["siso.py", "-mutexprofile", "prof", "custom_subcmd", "-flag"]
+
+    exit_code = siso.main(args, runner=runner)
+
+    assert exit_code == 0
+    called_args, _ = runner.call_args
+    cmd = called_args[0]
+    assert cmd[0] == str(siso_bin)
+
+    # Check that custom_subcmd was correctly identified
+    assert "custom_subcmd" in cmd
+    custom_idx = cmd.index("custom_subcmd")
+    # -mutexprofile and prof should be before custom_subcmd
+    assert cmd[custom_idx - 2] == "-mutexprofile"
+    assert cmd[custom_idx - 1] == "prof"
+    assert cmd[custom_idx + 1] == "-flag"
+
+
+def test_main_complex_args_e2e(siso_project_setup: None, tmp_path: Path,
+                               mocker: Any) -> None:
+    siso_bin = _get_siso_bin_path(tmp_path)
+    runner = mocker.Mock(return_value=0)
+
+    # Complex command similar to the reported issue.
+    args = [
+        "siso.py", "-mutexprofile", "siso_mutex.prof", "ninja", "-project",
+        "rbe-chrome-untrusted", "--enable_cloud_logging", "-C",
+        str(tmp_path / "src" / "out" / "Default")
+    ]
+
+    exit_code = siso.main(args, runner=runner)
+
+    assert exit_code == 0
+    called_args, _ = runner.call_args
+    cmd = called_args[0]
+    assert cmd[0] == str(siso_bin)
+
+    # Subcommand should be "ninja" at index 3 (after -mutexprofile prof)
+    assert cmd[3] == "ninja"
+    # Pre-subcommand args should be preserved
+    assert cmd[1] == "-mutexprofile"
+    assert cmd[2] == "siso_mutex.prof"
+
+    # Telemetry flags should be AFTER ninja
+    ninja_idx = cmd.index("ninja")
+    assert any(arg.startswith("--metrics_labels") for arg in cmd[ninja_idx:])
+    assert any(
+        arg.startswith("--metrics_project=rbe-chrome-untrusted")
+        for arg in cmd[ninja_idx:])
 
 
 # Stanza to have pytest be executed.
