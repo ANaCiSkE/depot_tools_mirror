@@ -1055,10 +1055,6 @@ class _DiffCache(object):
         """Get the old version for a particular path."""
         raise NotImplementedError()
 
-    def GetNewContents(self, path, local_root):
-        """Get the new version for a particular path."""
-        raise NotImplementedError()
-
 
 class _GitDiffCache(_DiffCache):
     """DiffCache implementation for git; gets all file diffs at once."""
@@ -1099,11 +1095,6 @@ class _GitDiffCache(_DiffCache):
     def GetOldContents(self, path, local_root):
         return scm.GIT.GetOldContents(local_root, path, branch=self._upstream)
 
-    def GetNewContents(self, path, local_root):
-        if not self._end_commit:
-            return None
-        return scm.GIT.GetOldContents(local_root, path, branch=self._end_commit)
-
 
 class _ProvidedDiffCache(_DiffCache):
     """Caches diffs from the provided diff file."""
@@ -1119,9 +1110,6 @@ class _ProvidedDiffCache(_DiffCache):
         if self._diffs_by_file == None:
             self._diffs_by_file = _parse_unified_diff(self._diff)
         return self._diffs_by_file.get(path, '')
-
-    def GetNewContents(self, path, local_root):
-        return None
 
     def GetOldContents(self, path, local_root):
         """Get the old version for a particular path."""
@@ -1255,13 +1243,8 @@ class AffectedFile(object):
         if self._cached_new_contents is None or flush_cache:
             self._cached_new_contents = []
             try:
-                new_contents = self._diff_cache.GetNewContents(
-                    self.LocalPath(), self._local_root)
-                if new_contents is not None:
-                    self._cached_new_contents = new_contents
-                else:
-                    self._cached_new_contents = gclient_utils.FileRead(
-                        self.AbsoluteLocalPath(), 'rU').splitlines()
+                self._cached_new_contents = gclient_utils.FileRead(
+                    self.AbsoluteLocalPath(), 'rU').splitlines()
             except IOError:
                 pass  # File not found?  That's fine; maybe it was deleted.
             except UnicodeDecodeError as e:
@@ -2127,9 +2110,7 @@ def DoPresubmitChecks(change,
         running_msg = 'Running presubmit '
         running_msg += 'commit ' if committing else 'upload '
         running_msg += 'checks '
-        if change.Name() and change.Name() != 'no name':
-            running_msg += f'on branch {change.Name()} '
-        elif branch := scm.GIT.GetBranch(change.RepositoryRoot()):
+        if branch := scm.GIT.GetBranch(change.RepositoryRoot()):
             running_msg += f'on branch {branch} '
         running_msg += '...\n'
         sys.stdout.write(running_msg)
