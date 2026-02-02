@@ -270,7 +270,7 @@ def _check_reclient_cfgs(output_dir):
                 "You have wrong version of reclient_cfgs "
                 "not matched with third_party/llvm-build.\n"
                 " cr_build_revision=" + cr_build_revision + "\n"
-                " recleint_cfgs=" + rewrapper_cfg_revision + "\n"
+                " reclient_cfgs=" + rewrapper_cfg_revision + "\n"
                 "Make sure you have 'download_remoteexec_cfg' in "
                 ".gclient custom_vars and run 'gclient runhooks'\n",
                 file=sys.stderr,
