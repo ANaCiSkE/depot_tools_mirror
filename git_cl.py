@@ -7069,7 +7069,7 @@ def _RunSwiftFormat(opts, paths, top_dir, diffs):
     else:
         cmd += ['format', '-i']
     cmd += paths
-    swift_format_exitcode = subprocess2.call(cmd)
+    swift_format_exitcode = subprocess2.call(cmd, stderr=subprocess2.STDOUT)
 
     if opts.dry_run and swift_format_exitcode != 0:
         return 2
