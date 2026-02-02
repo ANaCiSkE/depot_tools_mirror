@@ -37,6 +37,8 @@ class GClientSmokeGcs(gclient_smoketest_base.GClientSmokeBase):
         tree.update({
             'src/another_gcs_dep/extracted_dir/extracted_file':
             'extracted text',
+            'src/zip_gcs_dep/extracted_dir/extracted_file':
+            'extracted text',
             'src/gcs_dep/extracted_dir/extracted_file':
             'extracted text',
             'src/gcs_dep_with_output_file/clang-format-no-extract':
@@ -53,7 +55,9 @@ class GClientSmokeGcs(gclient_smoketest_base.GClientSmokeBase):
                'gs://456bucket/Linux/llvmfile.tar.gz\n'
                'src/gcs_dep:deadbeef: gs://123bucket/deadbeef\n'
                'src/gcs_dep_with_output_file:clang-format-version123: '
-               'gs://789bucket/clang-format-version123\n' % {
+               'gs://789bucket/clang-format-version123\n'
+               'src/zip_gcs_dep:windows/payload.zip: '
+               'gs://456bucket/windows/payload.zip\n' % {
                    'base': self.git_base,
                })
         self.check((out, '', 0), results)
@@ -67,7 +71,9 @@ class GClientSmokeGcs(gclient_smoketest_base.GClientSmokeBase):
                'gs://456bucket/Linux/llvmfile.tar.gz\n'
                'src/gcs_dep:deadbeef: gs://123bucket/deadbeef\n'
                'src/gcs_dep_with_output_file:clang-format-version123: '
-               'gs://789bucket/clang-format-version123\n' % {
+               'gs://789bucket/clang-format-version123\n'
+               'src/zip_gcs_dep:windows/payload.zip: '
+               'gs://456bucket/windows/payload.zip\n' % {
                    'base': self.git_base,
                    'hash1': self.githash('repo_22', 1),
                })

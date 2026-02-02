@@ -936,6 +936,16 @@ deps = {
                 'generation': 1542380408102455,
             }]
           },
+          'src/zip_gcs_dep': {
+            'bucket': '456bucket',
+            'dep_type': 'gcs',
+            'objects': [{
+                'object_name': 'windows/payload.zip',
+                'sha256sum': 'abcd123',
+                'size_bytes': 10000,
+                'generation': 1542380408102455,
+            }]
+          },
           'src/gcs_dep_with_output_file': {
             'bucket': '789bucket',
             'dep_type': 'gcs',

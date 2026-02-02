@@ -97,6 +97,7 @@ import tarfile
 import tempfile
 import time
 import urllib.parse
+import zipfile
 
 from collections.abc import Collection, Mapping, Sequence
 
@@ -2882,6 +2883,19 @@ class GcsDependency(Dependency):
                                 calculated=calculated_size_bytes,
                             ))
 
+        self._MaybeExtractArtifact()
+
+        if os.getenv('GCLIENT_TEST') != '1':
+            code, err = download_from_google_storage.set_executable_bit(
+                self.artifact_output_file, self.url, gsutil)
+            if code != 0:
+                raise Exception(f'{code}: {err}')
+
+        self.WriteToFile(calculated_sha256sum, self.hash_file)
+        self.WriteToFile(str(1), self.migration_toggle_file)
+
+    def _MaybeExtractArtifact(self):
+        """Extracts the artifact. Only tar and zip files supported atm."""
         if tarfile.is_tarfile(self.artifact_output_file):
             with tarfile.open(self.artifact_output_file, 'r:*') as tar:
                 formatted_names = []
@@ -2912,14 +2926,13 @@ class GcsDependency(Dependency):
 
                 tar.extractall(path=self.output_dir, filter=TarFilter)
 
-        if os.getenv('GCLIENT_TEST') != '1':
-            code, err = download_from_google_storage.set_executable_bit(
-                self.artifact_output_file, self.url, gsutil)
-            if code != 0:
-                raise Exception(f'{code}: {err}')
+        elif zipfile.is_zipfile(self.artifact_output_file):
+            with zipfile.ZipFile(self.artifact_output_file) as zip_file:
+                content_file = os.path.join(
+                    self.output_dir, f'.{self.file_prefix}_content_names')
+                self.WriteToFile(json.dumps(zip_file.namelist()), content_file)
 
-        self.WriteToFile(calculated_sha256sum, self.hash_file)
-        self.WriteToFile(str(1), self.migration_toggle_file)
+                zip_file.extractall(path=self.output_dir)
 
     #override
     def GetScmName(self):
