@@ -49,8 +49,10 @@ def main(args):
         # Signal an error (matching google-java-format's exit status for
         # a usage error), otherwise the caller is allowed to interpret this
         # script's stdout as the formatted code.
-        print('google-java-format not found, skipping java formatting.',
-              file=sys.stderr)
+        print(
+            'google-java-format not found. Please run "gclient sync" to '
+            'download build tools.',
+            file=sys.stderr)
         return 2
 
     # Add some visibility to --help showing where the tool lives, since this
