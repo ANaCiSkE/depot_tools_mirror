@@ -453,6 +453,29 @@ def CMDaddMessage(parser, args):
     write_result(result, opt)
 
 
+@subcommand.usage('[args ...]')
+def CMDcontent(parser, args):
+    """View the content of a file from a change."""
+    parser.add_option('-c', '--change', type=str, help='change number')
+    parser.add_option('--path', help='path for file')
+    parser.add_option('-r', '--revision', default='current', help='revision id')
+
+    (opt, args) = parser.parse_args(args)
+    if not opt.change:
+        parser.error('--change is required')
+    if not opt.path:
+        parser.error('--path is required')
+
+    result = gerrit_util.GetFileContents(
+        urllib.parse.urlparse(opt.host).netloc,
+        opt.change,
+        opt.path,
+        opt.revision,
+    )
+    # Write bytes directly to stdout, write_result assumes json output.
+    sys.stdout.buffer.write(result)
+
+
 @subcommand.usage('')
 def CMDrestore(parser, args):
     """Restores a Gerrit change."""

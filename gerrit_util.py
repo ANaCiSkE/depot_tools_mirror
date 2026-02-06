@@ -1732,14 +1732,14 @@ def CherryPickCommit(host, project, commit, destination):
     return ReadHttpJsonResponse(conn)
 
 
-def GetFileContents(host, change, path):
+def GetFileContents(host, change, path, revision='current'):
     """Get the contents of a file with the given path in the given revision.
 
     Returns:
         A bytes object with the file's contents.
     """
-    path = 'changes/%s/revisions/current/files/%s/content' % (
-        change, urllib.parse.quote(path, ''))
+    path = 'changes/%s/revisions/%s/files/%s/content' % (
+        change, revision, urllib.parse.quote(path, ''))
     conn = CreateHttpConn(host, path, reqtype='GET')
     return base64.b64decode(ReadHttpResponse(conn).read())
 
