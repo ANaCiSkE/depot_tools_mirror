@@ -7,6 +7,10 @@ from recipe_engine import recipe_test_api
 
 class GerritTestApi(recipe_test_api.RecipeTestApi):
 
+  def get_file_content_response_data(self, content):
+    """Returns a StepTestData object for get_file_content()."""
+    return self.m.raw_io.stream_output_text(content)
+
   @staticmethod
   def gerrit_change_data(change_number=91827, patchset=1, **kwargs):
     # Exemplary change. Note: This contains only a subset of the key/value pairs

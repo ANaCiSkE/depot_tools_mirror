@@ -259,6 +259,51 @@ class GerritApi(recipe_api.RecipeApi):
         **kwargs
     ).json.output
 
+  def get_file_content(self,
+                       host,
+                       change,
+                       path,
+                       revision='current',
+                       step_test_data=None,
+                       verbose=False):
+    """Gets the content of a file from a change.
+
+    Args:
+      host: Gerrit host to query.
+      change: The change number.
+      path: The file path.
+      revision: The revision number or ID.
+      step_test_data: Optional mock test data.
+      verbose: Whether to enable verbose logging.
+
+    Returns:
+      The content of the file.
+    """
+    args = [
+        'content',
+        '--host',
+        host,
+        '--change',
+        change,
+        '--path',
+        path,
+        '--revision',
+        revision,
+    ]
+    if verbose:
+      args.append('--verbose')
+
+    if not step_test_data:
+      step_test_data = lambda: self.m.raw_io.test_api.stream_output_text(
+          'example content')
+
+    return self(
+        'get file content',
+        args,
+        stdout=self.m.raw_io.output_text(),
+        step_test_data=step_test_data,
+    ).stdout
+
   def get_related_changes(self,
                           host,
                           change,

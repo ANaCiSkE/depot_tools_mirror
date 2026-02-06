@@ -6,6 +6,7 @@
 DEPS = [
     'gerrit',
     'recipe_engine/json',
+    'recipe_engine/raw_io',
     'recipe_engine/step',
 ]
 
@@ -106,6 +107,11 @@ def RunSteps(api):
   api.gerrit.abandon_change(host, 123, 'bad roll', verbose=True)
   api.gerrit.restore_change(host, 123, 'nevermind', verbose=True)
 
+  api.gerrit.get_file_content(host,
+                              change='123',
+                              path='path/to/file.txt',
+                              verbose=True)
+
   api.gerrit.get_change_description(
       host,
       change=122,
@@ -115,24 +121,27 @@ def RunSteps(api):
 
 
 def GenTests(api):
-  yield (api.test('basic', status="INFRA_FAILURE") +
-         api.step_data('gerrit create_gerrit_branch (v8/v8 test)',
-                       api.gerrit.make_gerrit_create_branch_response_data()) +
-         api.step_data('gerrit create_gerrit_tag (v8/v8 1.0)',
-                       api.gerrit.make_gerrit_create_tag_response_data()) +
-         api.step_data('gerrit raw_create_tag',
-                       api.gerrit.make_gerrit_create_tag_response_data()) +
-         api.step_data('gerrit create change at (v8/v8 main)',
-                       api.gerrit.update_files_response_data()) +
-         api.step_data('verify the patchset exists on CL 91827.gerrit changes',
-                       api.gerrit.get_empty_changes_response_data()) +
-         api.step_data('gerrit submit change 91827',
-                       api.gerrit.update_files_response_data(status='MERGED')) +
-         api.step_data('gerrit get_gerrit_branch (v8/v8 main)',
-                       api.gerrit.make_gerrit_get_branch_response_data()) +
-         api.step_data('gerrit move changes',
-                       api.gerrit.get_move_change_response_data(branch='main'))
-         + api.step_data('gerrit relatedchanges',
-                         api.gerrit.get_related_changes_response_data()) +
-         api.step_data('gerrit changes empty query',
-                       api.gerrit.get_empty_changes_response_data()))
+  yield (
+      api.test('basic', status="INFRA_FAILURE") +
+      api.step_data('gerrit create_gerrit_branch (v8/v8 test)',
+                    api.gerrit.make_gerrit_create_branch_response_data()) +
+      api.step_data('gerrit create_gerrit_tag (v8/v8 1.0)',
+                    api.gerrit.make_gerrit_create_tag_response_data()) +
+      api.step_data('gerrit raw_create_tag',
+                    api.gerrit.make_gerrit_create_tag_response_data()) +
+      api.step_data('gerrit create change at (v8/v8 main)',
+                    api.gerrit.update_files_response_data()) +
+      api.step_data('verify the patchset exists on CL 91827.gerrit changes',
+                    api.gerrit.get_empty_changes_response_data()) +
+      api.step_data('gerrit submit change 91827',
+                    api.gerrit.update_files_response_data(status='MERGED')) +
+      api.step_data('gerrit get_gerrit_branch (v8/v8 main)',
+                    api.gerrit.make_gerrit_get_branch_response_data()) +
+      api.step_data('gerrit move changes',
+                    api.gerrit.get_move_change_response_data(branch='main')) +
+      api.step_data('gerrit relatedchanges',
+                    api.gerrit.get_related_changes_response_data()) +
+      api.step_data('gerrit changes empty query',
+                    api.gerrit.get_empty_changes_response_data()) +
+      api.step_data('gerrit get file content',
+                    api.gerrit.get_file_content_response_data('file content')))

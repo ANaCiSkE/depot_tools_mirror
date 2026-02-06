@@ -294,9 +294,9 @@ Module for interact with Gerrit endpoints
 
 Wrapper for easy calling of gerrit_utils steps.
 
-&mdash; **def [abandon\_change](/recipes/recipe_modules/gerrit/api.py#306)(self, host, change, message=None, name=None, step_test_data=None, verbose=False):**
+&mdash; **def [abandon\_change](/recipes/recipe_modules/gerrit/api.py#351)(self, host, change, message=None, name=None, step_test_data=None, verbose=False):**
 
-&mdash; **def [add\_message](/recipes/recipe_modules/gerrit/api.py#381)(self, host: str, change: int, message: str, revision: (str | int)='current', automatic_attention_set_update: Optional[bool]=None, step_name: str=None, step_test_data: (Callable[([], StepTestData)] | None)=None, verbose: bool=False):**
+&mdash; **def [add\_message](/recipes/recipe_modules/gerrit/api.py#426)(self, host: str, change: int, message: str, revision: (str | int)='current', automatic_attention_set_update: Optional[bool]=None, step_name: str=None, step_test_data: (Callable[([], StepTestData)] | None)=None, verbose: bool=False):**
 
 Add a message to a change at given revision.
 
@@ -369,6 +369,21 @@ Returns:
   A list of change dicts as documented here:
       https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 
+&mdash; **def [get\_file\_content](/recipes/recipe_modules/gerrit/api.py#262)(self, host, change, path, revision='current', step_test_data=None, verbose=False):**
+
+Gets the content of a file from a change.
+
+Args:
+  host: Gerrit host to query.
+  change: The change number.
+  path: The file path.
+  revision: The revision number or ID.
+  step_test_data: Optional mock test data.
+  verbose: Whether to enable verbose logging.
+
+Returns:
+  The content of the file.
+
 &mdash; **def [get\_gerrit\_branch](/recipes/recipe_modules/gerrit/api.py#124)(self, host, project, branch, verbose=False, \*\*kwargs):**
 
 Gets a branch from given project and commit
@@ -376,7 +391,7 @@ Gets a branch from given project and commit
 Returns:
   The revision of the branch
 
-&mdash; **def [get\_related\_changes](/recipes/recipe_modules/gerrit/api.py#262)(self, host, change, revision='current', step_test_data=None, verbose=False):**
+&mdash; **def [get\_related\_changes](/recipes/recipe_modules/gerrit/api.py#307)(self, host, change, revision='current', step_test_data=None, verbose=False):**
 
 Queries related changes for a given host, change, and revision.
 
@@ -410,13 +425,13 @@ Returns:
   A dict for the target revision as documented here:
       https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 
-&mdash; **def [move\_changes](/recipes/recipe_modules/gerrit/api.py#430)(self, host, project, from_branch, to_branch, step_test_data=None, verbose=False):**
+&mdash; **def [move\_changes](/recipes/recipe_modules/gerrit/api.py#475)(self, host, project, from_branch, to_branch, step_test_data=None, verbose=False):**
 
-&mdash; **def [restore\_change](/recipes/recipe_modules/gerrit/api.py#333)(self, host, change, message=None, name=None, step_test_data=None, verbose=False):**
+&mdash; **def [restore\_change](/recipes/recipe_modules/gerrit/api.py#378)(self, host, change, message=None, name=None, step_test_data=None, verbose=False):**
 
-&mdash; **def [set\_change\_label](/recipes/recipe_modules/gerrit/api.py#360)(self, host, change, label_name, label_value, name=None, step_test_data=None, verbose=False):**
+&mdash; **def [set\_change\_label](/recipes/recipe_modules/gerrit/api.py#405)(self, host, change, label_name, label_value, name=None, step_test_data=None, verbose=False):**
 
-&mdash; **def [update\_files](/recipes/recipe_modules/gerrit/api.py#457)(self, host, project, branch, new_contents_by_file_path, commit_msg, params=frozenset(['status=NEW']), cc_list=frozenset([]), submit=False, submit_later=False, step_test_data_create_change=None, step_test_data_submit_change=None, verbose=False):**
+&mdash; **def [update\_files](/recipes/recipe_modules/gerrit/api.py#502)(self, host, project, branch, new_contents_by_file_path, commit_msg, params=frozenset(['status=NEW']), cc_list=frozenset([]), submit=False, submit_later=False, step_test_data_create_change=None, step_test_data_submit_change=None, verbose=False):**
 
 Update a set of files by creating and submitting a Gerrit CL.
 
@@ -1166,10 +1181,10 @@ Raises:
 &mdash; **def [RunSteps](/recipes/recipe_modules/gclient/tests/sync_failure.py#14)(api):**
 ### *recipes* / [gerrit:examples/full](/recipes/recipe_modules/gerrit/examples/full.py)
 
-[DEPS](/recipes/recipe_modules/gerrit/examples/full.py#6): [gerrit](#recipe_modules-gerrit), [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/step][recipe_engine/recipe_modules/step]
+[DEPS](/recipes/recipe_modules/gerrit/examples/full.py#6): [gerrit](#recipe_modules-gerrit), [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step]
 
 
-&mdash; **def [RunSteps](/recipes/recipe_modules/gerrit/examples/full.py#13)(api):**
+&mdash; **def [RunSteps](/recipes/recipe_modules/gerrit/examples/full.py#14)(api):**
 ### *recipes* / [git:examples/full](/recipes/recipe_modules/git/examples/full.py)
 
 [DEPS](/recipes/recipe_modules/git/examples/full.py#6): [git](#recipe_modules-git), [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step]

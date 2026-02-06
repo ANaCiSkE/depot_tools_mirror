@@ -816,6 +816,27 @@
     "cmd": [
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
+      "content",
+      "--host",
+      "https://chromium-review.googlesource.com",
+      "--change",
+      "123",
+      "--path",
+      "path/to/file.txt",
+      "--revision",
+      "current",
+      "--verbose"
+    ],
+    "env": {
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "gerrit get file content"
+  },
+  {
+    "cmd": [
+      "vpython3",
+      "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
       "--host",
       "https://chromium-review.googlesource.com",
