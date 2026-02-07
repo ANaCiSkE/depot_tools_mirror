@@ -89,10 +89,9 @@ def initialize(service_name,
         cfg.flush()
 
     default_resource = otel_resources.Resource.create({
-        otel_resources.SERVICE_NAME:
-        service_name,
-        'telemetry.version':
-        _TELEMETRY_VERSION,
+        otel_resources.SERVICE_NAME: service_name,
+        'telemetry.version': _TELEMETRY_VERSION,
+        'user.id': cfg.trace_config.user_uuid(),
     })
 
     detected_resource = otel_resources.get_aggregated_resources([
