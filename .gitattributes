@@ -24,6 +24,7 @@
 /git*                         recipes
 /git-credential-luci          -recipes
 /gn                           recipes
+/jj/*.py                      recipes
 /ninja*                       recipes
 /pylint*                      recipes
 /repo                         recipes
