@@ -109,6 +109,7 @@ import gclient_paths
 import gclient_scm
 import gclient_utils
 import git_cache
+import jj.scm
 import metrics
 import metrics_utils
 import scm as scm_git
@@ -1722,6 +1723,7 @@ def _detect_host_os():
 class GitDependency(Dependency):
     """A Dependency object that represents a single git checkout."""
     _is_env_cog = None
+    _scm = None
 
     @staticmethod
     def _IsCog():
@@ -1752,13 +1754,25 @@ class GitDependency(Dependency):
         if self._IsCog():
             return gclient_scm.CogWrapper()
 
-        return gclient_scm.GitWrapper(self.url,
-                                      self.root.root_dir,
-                                      self.name,
-                                      self.outbuf,
-                                      out_cb,
-                                      print_outbuf=self.print_outbuf)
+        # Even if only the main repo uses jj, we direct all submodules to also
+        # use the jj wrapper. This works because:
+        # * JjWrapper falls back to GitWrapper since it extends GitWrapper
+        # * JjWrapper can convert submodules to colocated jj/git repos as well.
+        if GitDependency._scm is None:
+            if os.path.exists(os.path.join(self.root.root_dir, self.name,
+                                           '.jj')):
+                GitDependency._scm = jj.scm.JjWrapper
+            else:
+                GitDependency._scm = gclient_scm.GitWrapper
 
+        return GitDependency._scm(
+            self.url,
+            self.root.root_dir,
+            self.name,
+            self.outbuf,
+            out_cb,
+            print_outbuf=self.print_outbuf,
+        )
 
 class GClient(GitDependency):
     """Object that represent a gclient checkout. A tree of Dependency(), one per
