@@ -6,7 +6,7 @@ from recipe_engine import post_process, recipe_api, turboci
 
 from PB.turboci.graph.orchestrator.v1.check_kind import CheckKind
 from PB.turboci.graph.orchestrator.v1.check_state import CheckState
-from PB.turboci.graph.orchestrator.v1.graph_view import GraphView
+from PB.turboci.graph.orchestrator.v1.workplan import WorkPlan
 from PB.turboci.data.gerrit.v1.gerrit_change_info import GerritChangeInfo
 from PB.turboci.data.chrome.depot_tools.v1.bot_update_results import (
     BotUpdateResults)
@@ -59,8 +59,8 @@ def GenTests(api):
           'bar': f'{_BAR_REPO_URL}.git',
       }),
       api.post_process(post_process.DropExpectation),
-      api.assert_turboci_graph(
-          lambda assert_, graph: assert_(not graph.checks)),
+      api.assert_workplan(
+          lambda assert_, workplan: assert_(not workplan.checks)),
   )
 
   yield api.test(
@@ -72,13 +72,13 @@ def GenTests(api):
           'bar': f'{_BAR_REPO_URL}.git',
       }),
       api.post_process(post_process.DropExpectation),
-      api.assert_turboci_graph(
-          lambda assert_, graph: assert_(not graph.checks)),
+      api.assert_workplan(
+          lambda assert_, workplan: assert_(not workplan.checks)),
   )
 
-  def check_ci_graph_assert(assert_, graph: GraphView):
+  def check_ci_workplan_assert(assert_, workplan: WorkPlan):
     check_id = 'fake-check-id'
-    check = turboci.get_check_view(graph, check_id).check
+    check = turboci.get_check_by_short_id(workplan, check_id)
 
     assert_(check.kind == CheckKind.CHECK_KIND_SOURCE)
     assert_(check.state == CheckState.CHECK_STATE_FINAL)
@@ -148,13 +148,13 @@ def GenTests(api):
           'foo': f'{_FOO_REPO_URL}.git',
           'bar': f'{_BAR_REPO_URL}.git',
       }),
-      api.assert_turboci_graph(check_ci_graph_assert),
+      api.assert_workplan(check_ci_workplan_assert),
       api.post_process(post_process.DropExpectation),
   )
 
-  def check_ci_revision_only_graph_assert(assert_, graph: GraphView):
+  def check_ci_revision_only_workplan_assert(assert_, workplan: WorkPlan):
     check_id = 'fake-check-id'
-    check = turboci.get_check_view(graph, check_id).check
+    check = turboci.get_check_by_short_id(workplan, check_id)
 
     assert_(check.kind == CheckKind.CHECK_KIND_SOURCE)
     assert_(check.state == CheckState.CHECK_STATE_FINAL)
@@ -220,13 +220,13 @@ def GenTests(api):
           'foo': f'{_FOO_REPO_URL}.git',
           'bar': f'{_BAR_REPO_URL}.git',
       }),
-      api.assert_turboci_graph(check_ci_revision_only_graph_assert),
+      api.assert_workplan(check_ci_revision_only_workplan_assert),
       api.post_process(post_process.DropExpectation),
   )
 
-  def check_try_graph_assert(assert_, graph: GraphView):
+  def check_try_workplan_assert(assert_, workplan: WorkPlan):
     check_id = 'fake-check-id'
-    check = turboci.get_check_view(graph, check_id).check
+    check = turboci.get_check_by_short_id(workplan, check_id)
 
     assert_(check.kind == CheckKind.CHECK_KIND_SOURCE)
     assert_(check.state == CheckState.CHECK_STATE_FINAL)
@@ -313,6 +313,6 @@ def GenTests(api):
           'foo': f'{_FOO_REPO_URL}.git',
           'bar': f'{_BAR_REPO_URL}.git',
       }),
-      api.assert_turboci_graph(check_try_graph_assert),
+      api.assert_workplan(check_try_workplan_assert),
       api.post_process(post_process.DropExpectation),
   )
