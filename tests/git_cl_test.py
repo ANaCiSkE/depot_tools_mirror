@@ -5594,6 +5594,17 @@ class CMDOwnersTestCase(CMDTestCaseBase):
                 '',
             ]), sys.stdout.getvalue())
 
+    @mock.patch('owners_finder.OwnersFinder')
+    @mock.patch('git_cl.Changelist.GetIssue', return_value=None)
+    def testNoIssueNumber(self, _mock_get_issue, mock_owners_finder):
+        mock_owners_finder.return_value.run.return_value = 0
+        self.assertEqual(0, git_cl.main(['owners']))
+        mock_owners_finder.assert_called_once_with(['foo', 'bar'],
+                                                   'author', [],
+                                                   mock.ANY,
+                                                   disable_color=None,
+                                                   ignore_author=None)
+
     def testBatch(self):
         self.assertEqual(0, git_cl.main(['owners', '--batch']))
         self.assertIn('a@example.com', sys.stdout.getvalue())

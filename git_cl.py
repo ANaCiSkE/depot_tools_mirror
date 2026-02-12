@@ -6811,7 +6811,8 @@ def CMDowners(parser, args):
 
     return owners_finder.OwnersFinder(
         affected_files,
-        author, [] if options.ignore_current else cl.GetReviewers(),
+        author, [] if
+        (options.ignore_current or not cl.GetIssue()) else cl.GetReviewers(),
         cl.owners_client,
         disable_color=options.no_color,
         ignore_author=options.ignore_self).run()
