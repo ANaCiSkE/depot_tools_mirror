@@ -54,3 +54,21 @@ def depot_tools_config_path(file):
             shutil.move(legacy_path, expected_path)
 
     return expected_path
+
+
+def find_config_file(path, config_filename, top_dir=None):
+    """Recursively finds a configuration file in parent directories."""
+    current_path = os.path.abspath(path)
+    if os.path.isfile(current_path):
+        current_path = os.path.dirname(current_path)
+
+    while True:
+        config_file = os.path.join(current_path, config_filename)
+        if os.path.isfile(config_file):
+            return config_file
+        if current_path == top_dir or current_path == os.path.dirname(
+                current_path):
+            break
+        current_path = os.path.dirname(current_path)
+
+    return None

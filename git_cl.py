@@ -72,6 +72,7 @@ import setup_color
 import split_cl
 import subcommand
 import subprocess2
+import utils
 import swift_format
 import watchlists
 
@@ -741,6 +742,21 @@ def _FindYapfConfigFile(fpath, yapf_config_cache, top_dir=None):
             ret = _FindYapfConfigFile(parent_dir, yapf_config_cache, top_dir)
     yapf_config_cache[fpath] = ret
     return ret
+
+
+def _FindMarkdownConfigFile(fpath: str,
+                            markdown_config_cache: dict[str, str | None],
+                            top_dir: str | None = None) -> str | None:
+    """Checks if a .style.mdformat file is in any parent directory of fpath
+    until top_dir.
+
+    Recursively checks parent directories to find the config file and if none
+    is found returns None. Uses markdown_config_cache as a cache.
+    """
+    if fpath not in markdown_config_cache:
+        markdown_config_cache[fpath] = utils.find_config_file(
+            fpath, '.style.mdformat', top_dir)
+    return markdown_config_cache[fpath]
 
 
 def _GetYapfIgnorePatterns(top_dir):
@@ -7142,6 +7158,38 @@ def _RunYapf(opts, paths, top_dir, diffs):
     return return_value
 
 
+def _RunMarkdownFormat(opts: optparse.Values, paths: list[str], top_dir: str,
+                       diffs: Mapping[str, str] | None) -> int:
+    depot_tools_path = os.path.dirname(os.path.abspath(__file__))
+    markdown_tool = os.path.join(depot_tools_path, 'markdown_format.py')
+
+    # Used for caching.
+    markdown_configs: dict[str, str | None] = {}
+
+    # Only format files that have a .style.mdformat file in an ancestor
+    # directory.
+    paths = [
+        p for p in paths
+        if _FindMarkdownConfigFile(p, markdown_configs, top_dir) is not None
+    ]
+
+    if not paths:
+        return 0
+
+    return_value = 0
+    cmd = ['vpython3', markdown_tool]
+    if opts.diff:
+        cmd.append('--diff')
+    elif opts.dry_run:
+        cmd.append('--check')
+
+    exit_code = subprocess2.call(cmd + paths)
+    if exit_code == 2:
+        return_value = 2
+
+    return return_value
+
+
 def _RunGnFormat(opts, paths, top_dir, diffs):
     cmd = [sys.executable, os.path.join(DEPOT_TOOLS, 'gn.py'), 'format']
     if opts.dry_run or opts.diff:
@@ -7245,7 +7293,8 @@ def _RunLUCICfgFormat(opts, paths, top_dir, diffs):
     return ret
 
 
-FormatterFunction = Callable[[Any, list[str], str, str], int]
+FormatterFunction = Callable[
+    [optparse.Values, list[str], str, Optional[Mapping[str, str]]], int]
 
 
 def _SplitDiffsByFile(diff_string: str) -> Dict[str, str]:
@@ -7308,7 +7357,13 @@ def _FindFilesToFormat(
 @subcommand.usage('[files or directories to diff]')
 @metrics.collector.collect_metrics('git cl format')
 def CMDformat(parser: optparse.OptionParser, args: list[str]):
-    """Runs auto-formatting tools (clang-format etc.) on the diff."""
+    """Runs auto-formatting tools (clang-format etc.) on the diff.
+
+    Specific languages can be opted-in for automatic formatting by placing
+    marker files in the directory hierarchy:
+      - Python: .style.yapf
+      - Markdown: .style.mdformat
+    """
     clang_exts = ['.cc', '.cpp', '.h', '.m', '.mm', '.proto']
     GN_EXTS = ['.gn', '.gni', '.typemap']
     parser.add_option('--full',
@@ -7442,6 +7497,7 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     formatters: list[tuple[list[str], FormatterFunction]] = [
         (GN_EXTS, _RunGnFormat),
         (['.xml'], _RunMetricsXMLFormat),
+        (['.md'], _RunMarkdownFormat),
     ]
     if not opts.no_java:
         formatters.append((['.java'], _RunGoogleJavaFormat))
@@ -7531,7 +7587,6 @@ def CMDlol(parser, args):
 
 
 def CMDversion(parser, args):
-    import utils
     print(utils.depot_tools_version())
 
 

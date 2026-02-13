@@ -85,6 +85,23 @@ then need to change A?
 In practice, this comes up pretty rarely. Suggestions for better workflows are
 welcome.
 
+
+## Auto-formatting
+
+`git cl format` can be used to automatically format your changes. While some
+languages (like C++ and GN) are always formatted, others require an explicit
+opt-in by placing a marker file in the directory hierarchy:
+
+1. **Python**: Place a `.style.yapf` file in an ancestor directory to enable
+   formatting with `yapf`.
+2. **Markdown**: Place a `.style.mdformat` file in an ancestor directory to
+   enable formatting with `mdformat`. (Note for `jj` users in the Chromium
+   repo: you must also update the file patterns in `tools/jj/config.toml`).
+
+When one of these markers is found, `git cl format` will automatically include
+those files in its formatting pass.
+
+
 ## Bash auto completion
 
 1. Ensure that your base git commands are autocompleted

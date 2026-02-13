@@ -5080,6 +5080,83 @@ class CMDFormatTestCase(unittest.TestCase):
             git_cl._FilterYapfIgnoredFiles(
                 files, git_cl._GetYapfIgnorePatterns(self._top_dir)))
 
+    def _make_markdown_config(self, path):
+        self._make_temp_file(os.path.join(path, '.style.mdformat'), [])
+
+    def testMarkdownFormat(self):
+        self._make_markdown_config('agents')
+        to_be_fixed_md = os.path.join(self._top_dir, 'agents/to_be_fixed.md')
+        remain_intact_md = os.path.join(self._top_dir, 'other/remain_intact.md')
+        self._make_temp_file('agents/to_be_fixed.md',
+                             ['#  Hello', '', 'world  '])
+        self._make_temp_file('other/remain_intact.md',
+                             ['#  Hello', '', 'world  '])
+
+        files = [to_be_fixed_md, remain_intact_md]
+        mock_opts = mock.Mock(check=False, dry_run=False, diff=False)
+
+        # Only agents/to_be_fixed.md should be formatted because of the config file.
+        # other/remain_intact.md won't be formatted.
+        ret = git_cl._RunMarkdownFormat(mock_opts, files, self._top_dir, None)
+        self.assertEqual(0, ret)
+
+        with open(to_be_fixed_md, 'r') as f:
+            self.assertEqual('# Hello\n\nworld\n', f.read())
+
+        with open(remain_intact_md, 'r') as f:
+            self.assertEqual('#  Hello\n\nworld  ', f.read())
+
+    def testMarkdownFormatCheck(self):
+        self._make_markdown_config('agents')
+        foo_md = os.path.join(self._top_dir, 'agents/foo.md')
+        self._make_temp_file('agents/foo.md', ['#  Hello', '', 'world  '])
+
+        files = [foo_md]
+        # --check should return 2 if files are unformatted
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        self.assertEqual(
+            git_cl._RunMarkdownFormat(mock_opts, files, self._top_dir, None), 2)
+
+        with open(foo_md, 'r') as f:
+            self.assertEqual('#  Hello\n\nworld  ', f.read())
+
+    @mock.patch('git_cl.subprocess2.call')
+    def testMarkdownFormatDiff(self, mock_call):
+        self._make_markdown_config('agents')
+        foo_md = os.path.join(self._top_dir, 'agents/foo.md')
+        # Add an empty string at the end so it ends with a newline
+        self._make_temp_file('agents/foo.md', ['#  Hello', '', 'world  ', ''])
+
+        captured_stdout = []
+
+        def fake_call(cmd, **kwargs):
+            import subprocess
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            captured_stdout.append(res.stdout)
+            return res.returncode
+
+        mock_call.side_effect = fake_call
+
+        files = [foo_md]
+        # --diff should return 2 if there's a diff, but not modify the file.
+        mock_opts = mock.Mock(dry_run=False, diff=True)
+        ret = git_cl._RunMarkdownFormat(mock_opts, files, self._top_dir, None)
+        self.assertEqual(2, ret)
+
+        with open(foo_md, 'r') as f:
+            self.assertEqual('#  Hello\n\nworld  \n', f.read())
+
+        stdout_val = captured_stdout[0]
+        expected_diff = (f'--- a/{foo_md}\n'
+                         f'+++ b/{foo_md}\n'
+                         '@@ -1,3 +1,3 @@\n'
+                         '-#  Hello\n'
+                         '+# Hello\n'
+                         ' \n'
+                         '-world  \n'
+                         '+world\n')
+        self.assertEqual(expected_diff, stdout_val)
+
     def _run_command_mock(self, return_value):
         def f(*args, **kwargs):
             if 'stdin' in kwargs:
