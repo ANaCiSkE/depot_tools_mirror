@@ -42,6 +42,20 @@ def resolve_build_id(project, bucket, builder, build_number):
     return result.get('id') if result else None
 
 
+def get_build(build_id):
+    """Retrieves detailed information about a build."""
+    if build_id.startswith('b'):
+        build_id = build_id[1:]
+    payload = {
+        'id': build_id,
+        'mask': {
+            'fields': 'id,builder,number,status,summaryMarkdown,output'
+        }
+    }
+    return run_prpc('cr-buildbucket.appspot.com',
+                    'buildbucket.v2.Builds.GetBuild', payload)
+
+
 def find_cl_builds(cl_number, patchset=None, host=None):
     """Finds failed/infra-failed builds for a specific CL and patchset."""
     if not host:
@@ -149,9 +163,9 @@ def fetch_log_snippet(res_name):
 
     # Prefer "Test Log" or similar
     artifacts = result['artifacts']
-    target = next(
-        (a for a in artifacts if a['artifactId'] in ('test_log', 'stdout')),
-        artifacts[0])
+    target = next((a for a in artifacts
+                   if a['artifactId'] in ('test_log', 'stdout', 'logs')),
+                  artifacts[0])
 
     url = target['fetchUrl']
     cmd = ['curl', '-sL', url]
@@ -208,6 +222,10 @@ def main():
     p.add_argument('--builder', required=True)
     p.add_argument('--build-number', required=True)
 
+    # get-build
+    p = subparsers.add_parser('get-build')
+    p.add_argument('--build-id', required=True)
+
     # find-cl-builds
     p = subparsers.add_parser('find-cl-builds')
     p.add_argument('--cl', required=True)
@@ -229,6 +247,8 @@ def main():
         print(
             resolve_build_id(args.project, args.bucket, args.builder,
                              args.build_number))
+    elif args.command == 'get-build':
+        print(json.dumps(get_build(args.build_id), indent=2))
     elif args.command == 'find-cl-builds':
         print(
             json.dumps(find_cl_builds(args.cl, args.patchset, args.host),
