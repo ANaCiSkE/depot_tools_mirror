@@ -41,6 +41,11 @@ def gitiles_get(parsed_url, handler, attempts):
   # This insanity is due to CreateHttpConn interface :(
   host = parsed_url.netloc
   path = parsed_url.path
+
+  # Prevent double quoting.
+  if urllib.parse.unquote(path) == path:
+    path = urllib.parse.quote(path)
+
   if parsed_url.query:
     path += '?%s' % (parsed_url.query, )
 
