@@ -6953,6 +6953,21 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
                         cwd=top_dir,
                         env=env,
                         shell=sys.platform.startswith('win32'))
+
+    if stdout:
+        # Filter out full-deletion diffs produced by clang-format-diff.py for
+        # files that are ignored by clang-format.
+        filtered_diffs = []
+        for file_diff in re.split(r'^(?=--- )', stdout, flags=re.MULTILINE):
+            if not file_diff.strip():
+                continue
+            if re.search(r'^@@ -1(?:,\d+)? \+0,0 @@',
+                         file_diff,
+                         flags=re.MULTILINE):
+                continue
+            filtered_diffs.append(file_diff)
+        stdout = "".join(filtered_diffs)
+
     if opts.diff:
         sys.stdout.write(stdout)
     if opts.dry_run and len(stdout) > 0:

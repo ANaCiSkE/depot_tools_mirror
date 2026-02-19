@@ -5197,7 +5197,7 @@ class CMDFormatTestCase(unittest.TestCase):
         mock_opts = mock.Mock(full=False, dry_run=False, diff=False)
 
         # Diff
-        git_cl.RunCommand.retrun_value = 0
+        git_cl.RunCommand.return_value = ""
         return_value = git_cl._RunClangFormatDiff(mock_opts, files,
                                                   self._top_dir, diffs)
         self.assertEqual(0, return_value)
@@ -5210,6 +5210,38 @@ class CMDFormatTestCase(unittest.TestCase):
             env=mock.ANY,
             shell=mock.ANY,
         )
+
+    def testClangFormatDiffFilter(self):
+        diffs = git_cl._SplitDiffsByFile(test_format_input_diff)
+        files = [f for f in diffs if f.endswith('.h')]
+        mock_opts = mock.Mock(full=False, dry_run=True, diff=True)
+
+        # Simulate clang-format-diff.py returning a full-deletion diff for an
+        # ignored file, plus a regular valid diff for another file.
+        mock_stdout = ("--- a/ignored_file.h\n"
+                       "+++ b/ignored_file.h\n"
+                       "@@ -1,10 +0,0 @@\n"
+                       "-deleted\n"
+                       "--- a/valid_file.h\n"
+                       "+++ b/valid_file.h\n"
+                       "@@ -5,2 +5,2 @@\n"
+                       "-old\n"
+                       "+new\n")
+        git_cl.RunCommand.return_value = mock_stdout
+
+        with mock.patch('sys.stdout.write') as mock_stdout_write:
+            return_value = git_cl._RunClangFormatDiff(mock_opts, files,
+                                                      self._top_dir, diffs)
+
+            self.assertEqual(2, return_value)
+
+            expected_output = ("--- a/valid_file.h\n"
+                               "+++ b/valid_file.h\n"
+                               "@@ -5,2 +5,2 @@\n"
+                               "-old\n"
+                               "+new\n")
+            mock_stdout_write.assert_called_once_with(expected_output)
+
 
     def testYapfignoreExplicit(self):
         self._make_yapfignore(['foo/bar.py', 'foo/bar/baz.py'])
