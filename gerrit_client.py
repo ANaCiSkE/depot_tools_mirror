@@ -418,6 +418,50 @@ def CMDsetlabel(parser, args):
 
 
 @subcommand.usage('[args ...]')
+def CMDaddpatchsetcomment(parser, args):
+    """Adds a patchset level comment to a given change at given revision."""
+    parser.add_option('-c', '--change', type=str, help='This accepts both gerrit Change-ID or change number.')
+    parser.add_option(
+        '-r',
+        '--revision',
+        type=str,
+        default='current',
+        help='revision ID. See '
+        'https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id '
+        'for acceptable format')
+    parser.add_option('-m', '--message', type=str, help='message to add')
+    # This default matches the Gerrit REST API & web UI defaults.
+    parser.add_option('--automatic-attention-set-update',
+                      action='store_true',
+                      help='Update the attention set (default)')
+    parser.add_option('--no-automatic-attention-set-update',
+                      dest='automatic_attention_set_update',
+                      action='store_false',
+                      help='Do not update the attention set')
+    parser.add_option('--unresolved',
+                      action='store_true',
+                      help='Mark the comment as unresolved (default)')
+    parser.add_option('--resolved',
+                      dest='unresolved',
+                      action='store_false',
+                      help='Mark the comment as resolved')
+    (opt, args) = parser.parse_args(args)
+    if not opt.change:
+        parser.error('--change is required')
+    if not opt.message:
+        parser.error('--message is required')
+
+    result = gerrit_util.SetReview(
+        urllib.parse.urlparse(opt.host).netloc,
+        opt.change,
+        revision=opt.revision,
+        comments={'/PATCHSET_LEVEL': [{'message': opt.message, 'unresolved': opt.unresolved}]},
+        automatic_attention_set_update=opt.automatic_attention_set_update)
+    logging.info(result)
+    write_result(result, opt)
+
+
+@subcommand.usage('[args ...]')
 def CMDaddMessage(parser, args):
     """Adds a message to a given change at given revision."""
     parser.add_option('-c', '--change', type=int, help='change number')

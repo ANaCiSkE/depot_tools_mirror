@@ -1895,7 +1895,8 @@ def SetReview(host,
               notify=None,
               ready=None,
               automatic_attention_set_update: Optional[bool] = None,
-              project: Optional[str] = None):
+              project: Optional[str] = None,
+              comments: Optional[Dict[str, Any]] = None):
     """Sets labels and/or adds a message to a code review.
 
     https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-review
@@ -1904,7 +1905,7 @@ def SetReview(host,
     requirements, and attach an ReAuth credential to the request. `project`
     can be optionally be provided to save one Gerrit server round-trip.
     """
-    if not msg and not labels:
+    if not any([msg, labels, comments]):
         return
     path = f'changes/{change}/revisions/{revision}/review'
     body: Dict[str, Any] = {'drafts': 'KEEP'}
@@ -1912,6 +1913,8 @@ def SetReview(host,
         body['message'] = msg
     if labels:
         body['labels'] = labels
+    if comments:
+        body['comments'] = comments
     if notify is not None:
         body['notify'] = 'ALL' if notify else 'NONE'
     if ready:
