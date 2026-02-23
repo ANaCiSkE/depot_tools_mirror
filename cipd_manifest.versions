@@ -198,68 +198,68 @@ infra/tools/dirmd/windows-arm64
 	8ADPs_UheAvIrVy_PBzeiw6BDVks5PDN7P80yfOpyHkC
 
 infra/tools/luci-auth/linux-386
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	MOjJwazJ4GE9E5EH5jXfKBgx1muHKebshP2EuFadvAEC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	rbs6BPLOl-JHi7pweFNnX3xd7jb6ZKmfRfamP3z7uqIC
 
 infra/tools/luci-auth/linux-amd64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	MjXoV1YtIedMEIR37MqNqe_BfTiFWSVtCoeSM_5cQpMC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	yMb5cflT-U6cjHjwCGYg1GEhIGxHQlkEdxTItwXXZXMC
 
 infra/tools/luci-auth/linux-arm64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	Xv3a-uhNVuHgxmDMG4jDBqhJ0fWW1lyWVzHneTIQZcsC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	_jg8PX8ELaOBabWgKQgTRSZQgCcFgUenI9tFMIPtfHIC
 
 infra/tools/luci-auth/linux-armv6l
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	brKwNzV3-3B_lx16w5jkNpinDGgvPGRk7xG76IXwm44C
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	UEvJQwbiCgwCx3cIPc8_GBHhgo07nNuli5AoVDyAoGgC
 
 infra/tools/luci-auth/linux-loong64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	Oes-enHavKl9f0cdXmgbXyMk03uwjG4E5LQ6gluliO4C
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	W9R0E-2iVROfOWAtYijaX0Xk8-E1i8Ced3nc2BwOeWQC
 
 infra/tools/luci-auth/linux-mips64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	MDmlcQU6Ww30s6nXV5E7_ZQQe1KVmOElbuRyCm4-f5QC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	kN__DM-WMvOq_6P5myyYxipWadaU5WWCGqfp3vSQs3oC
 
 infra/tools/luci-auth/linux-mips64le
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	zLcWI0l5-Y6lPaBOUVXoYFwP6oK_w-JpuUG8KIMaNfsC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	ExvLqMuAOlSDuRNUcLg8YkDG-BwQ2SOAOj63nJxxuosC
 
 infra/tools/luci-auth/linux-mipsle
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	tP1g5ktYlIIcukPkRPgVG6DSOCKT7N9OpJKKi3lp7v4C
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	oYuLZcpFRvlm4I7B3KnNE3vJOHOt_K9qu4-n-Q_c0N4C
 
 infra/tools/luci-auth/linux-ppc64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	-gK8JGoSffD4l2X3Y71AE-Da6tlrFGMX_-1W4NWWxQIC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	sGnOLMmbSP3ssK6jVTrM6PUisYPe21c6oHURSje1YM8C
 
 infra/tools/luci-auth/linux-ppc64le
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	VwlyN7hjDd2AnXJZ1MNL__e0-327dKOQeqZwNN939HYC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	Db7LjOSV-5OzeQ-ep6jRqYYDAeDFu2hTnRNMGySMBhoC
 
 infra/tools/luci-auth/linux-riscv64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	5kAZNqURHfQafeV-n94xLCA3C2jTcdFbls7heRBUh2IC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	LsCehjRUZRncqBaS6nX9BnWlTquaXL3Cx5nfkpPNPWAC
 
 infra/tools/luci-auth/linux-s390x
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	8G4Wu7KPxOEHic8b0aBesKqFIZgk2vestBMsmV9yp9cC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	hHNly6ewHqNlZsurtsiNN1OlmFgG9gg9BdEkoq7bbv8C
 
 infra/tools/luci-auth/mac-amd64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	oaPgUrNLtbRZWr8-t8fVYMMnuNu5y-khJaZEP7iAIbwC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	UuCpdxUp_WWdXOe06Omv7H-zt9Qhq-WNziXkDoTMiQEC
 
 infra/tools/luci-auth/mac-arm64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	v4EaNPN9V7L8fsEb6gGH6pSwjSfGqeIhS2IZBQV4vJQC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	ZslnOP37TmCxyI6jsPduyuF-3_jLoAT1t-c0B313FOYC
 
 infra/tools/luci-auth/windows-amd64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	oHO_ILlx1jbSVmiZauIh4T7yomLwg05MQZNBi4buS5kC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	u7thcw_ycTI6fHf0nEVOUMFiDAMsQzLCJOMNkvQ8rQwC
 
 infra/tools/luci-auth/windows-arm64
-	git_revision:072101cbfec3372b812ff510df8547d7b4187bea
-	V_GPNZhnRyvjuoFLgijjPuDcHujetLkcevMKfMJoBhEC
+	git_revision:21504d3595ac903ef60bac732d885cd8e6ed92ba
+	1mbLSoK2DmZq6RfDy4Xdn9ABQsNMXkvHGPWfnnlO8yoC
 
 infra/tools/luci/git-credential-luci/linux-386
 	git_revision:3fde0dfb3a18fbd049c259e0f10ba57b97ac9b33
