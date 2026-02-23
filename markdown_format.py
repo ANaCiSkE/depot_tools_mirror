@@ -14,6 +14,18 @@
 #   name: "infra/python/wheels/mdformat-py3"
 #   version: "version:0.7.22"
 # >
+# wheel: <
+#   name: "infra/python/wheels/mdit-py-plugins-py3"
+#   version: "version:0.5.0"
+# >
+# wheel: <
+#   name: "infra/python/wheels/mdformat_frontmatter-py3"
+#   version: "version:2.0.10"
+# >
+# wheel: <
+#   name: "infra/python/wheels/ruamel_yaml-py3"
+#   version: "version:0.17.16"
+# >
 # [VPYTHON:END]
 
 # Copyright 2026 The Chromium Authors
@@ -112,7 +124,9 @@ def process_stdin(args: argparse.Namespace) -> int:
             return 0
 
     try:
-        formatted = mdformat.text(original, options={'wrap': int(_WRAP_WIDTH)})
+        formatted = mdformat.text(original,
+                                  options={'wrap': int(_WRAP_WIDTH)},
+                                  extensions={'frontmatter'})
     except Exception as e:
         sys.stderr.write(f'Error formatting: {e}\n')
         return 1
@@ -149,7 +163,8 @@ def process_files(args: argparse.Namespace) -> int:
 
         try:
             formatted = mdformat.text(original,
-                                      options={'wrap': int(_WRAP_WIDTH)})
+                                      options={'wrap': int(_WRAP_WIDTH)},
+                                      extensions={'frontmatter'})
         except Exception as e:
             print(f'Error formatting {path}: {e}', file=sys.stderr)
             return_value = 1
