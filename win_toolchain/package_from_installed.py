@@ -23,7 +23,7 @@ frameworks-> Visual C++ MFC for ARM64 (which also brings in ATL for ARM64).
 3. Use Add or Remove Programs to find the Windows SDK installed with VS
 and modify it to include the debuggers.
 4. Run this script, which will build a <sha1>.zip, something like this:
-  python package_from_installed.py 2022 -w 10.0.22621.0|<SDK version>
+  python package_from_installed.py 2026 -w 10.0.26100.0
 
 Express is not yet supported by this script, but patches welcome (it's not too
 useful as the resulting zip can't be redistributed, and most will presumably
@@ -47,7 +47,9 @@ import get_toolchain_if_necessary
 _vs_version = None
 _win_version = None
 _vc_tools = None
-SUPPORTED_VS_VERSIONS = ['2022']
+SUPPORTED_VS_VERSION = '2026'
+SUPPORTED_VS_FILESYSTEM_NAME = '18'
+EXPECTED_SDK_VERSION = '10.0.26100.0'
 _allow_multiple_vs_installs = False
 
 
@@ -57,8 +59,8 @@ def GetVSPath():
     # version is installed.
     command = (r'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
                r'\vswhere.exe -prerelease')
+    vs_path_marker = 'resolvedInstallationPath: '
     vs_version_marker = 'catalog_productLineVersion: '
-    vs_path_marker = 'installationPath: '
     output = subprocess.check_output(command, universal_newlines=True)
     vs_path = None
     vs_installs_count = 0
@@ -70,7 +72,7 @@ def GetVSPath():
             vs_installs_count += 1
         if line.startswith(vs_version_marker):
             # The version for that path comes later
-            if line[len(vs_version_marker):] == _vs_version:
+            if line[len(vs_version_marker):] == SUPPORTED_VS_FILESYSTEM_NAME:
                 matching_vs_path = vs_path
 
     if vs_installs_count == 0:
@@ -86,6 +88,7 @@ def GetVSPath():
         else:
             print('Multiple VS installs were detected. This is unsupported. '
                   'Proceeding anyway')
+
     return matching_vs_path
 
 
@@ -500,15 +503,15 @@ def RenameToSha1(output):
 
 
 def main():
-    usage = 'usage: %prog [options] 2022'
+    usage = 'usage: %prog [options] 2026'
     parser = optparse.OptionParser(usage)
     parser.add_option('-w',
                       '--winver',
                       action='store',
                       type='string',
                       dest='winver',
-                      default='10.0.22621.0',
-                      help='Windows SDK version, such as 10.0.22621.0')
+                      default=EXPECTED_SDK_VERSION,
+                      help='Windows SDK version, such as 10.0.26100.0')
     parser.add_option('-d',
                       '--dryrun',
                       action='store_true',
@@ -549,8 +552,9 @@ def main():
     if options.repackage_dir:
         files = BuildRepackageFileList(options.repackage_dir)
     else:
-        if len(args) != 1 or args[0] not in SUPPORTED_VS_VERSIONS:
-            print('Must specify 2022')
+        if len(args) != 1 or args[0] != SUPPORTED_VS_VERSION:
+            print('This script only supports Visual Studio',
+                  SUPPORTED_VS_VERSION)
             parser.print_help()
             return 1
 
