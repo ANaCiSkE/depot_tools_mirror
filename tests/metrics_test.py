@@ -63,6 +63,8 @@ class MetricsCollectorTest(unittest.TestCase):
         mock.patch('metrics.gclient_utils.GetOperatingSystem',
                    lambda: 'linux').start()
         mock.patch('metrics.detect_host_arch.HostArch', lambda: 'x86').start()
+        mock.patch('metrics.metrics_utils.get_edit_monitor_state',
+                   lambda: None).start()
         mock.patch('metrics_utils.get_repo_timestamp', lambda _: 1234).start()
         mock.patch('metrics_utils.get_git_version', lambda: '2.18.1').start()
 
@@ -174,6 +176,25 @@ class MetricsCollectorTest(unittest.TestCase):
 
         fun()
         self.assert_collects_metrics({'foo': 'bar'})
+
+    @mock.patch('metrics.metrics_utils.get_edit_monitor_state',
+                lambda: 'enabled')
+    def test_collects_edit_monitor_state(self):
+        self.FileRead.side_effect = [
+            '{"is-googler": true, "countdown": 0, "opt-in": null, "version": 0}'
+        ]
+
+        @self.collector.collect_metrics('fun')
+        def fun():
+            pass
+
+        fun()
+
+        self.assert_collects_metrics(
+            {'env_vars': [{
+                'name': 'EDIT_MONITOR_STATE',
+                'value': 'enabled'
+            }]})
 
     def test_collects_metrics_when_opted_in(self):
         """Tests that metrics are collected when the user opts-in."""
@@ -820,6 +841,23 @@ class MetricsUtilsTest(unittest.TestCase):
         result = metrics_utils.extract_known_subcommand_args(
             ['foo=bar', 'another_unkwnon_arg'])
         self.assertEqual([], result)
+
+    def test_get_edit_monitor_state(self):
+        """Tests that we can get the edit monitor state from the environment."""
+        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "enabled"}):
+            self.assertEqual("enabled", metrics_utils.get_edit_monitor_state())
+
+        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "control"}):
+            self.assertEqual("control", metrics_utils.get_edit_monitor_state())
+
+        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "running"}):
+            self.assertIsNone(metrics_utils.get_edit_monitor_state())
+
+        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "enbabled"}):
+            self.assertIsNone(metrics_utils.get_edit_monitor_state())
+
+        with mock.patch.dict(os.environ, clear=True):
+            self.assertIsNone(metrics_utils.get_edit_monitor_state())
 
 
 if __name__ == '__main__':

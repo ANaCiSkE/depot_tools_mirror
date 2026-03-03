@@ -2,12 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import re
 import os
-import scm
-import subprocess2
+import re
 import sys
 import urllib.parse
+
+import scm
+import subprocess2
 
 # Current version of metrics recording.
 # When we add new metrics, the version number will be increased, we display the
@@ -155,6 +156,15 @@ KNOWN_SUBCOMMAND_ARGS = {
     'notify=NONE', 'private', 'r', 'ready', 'topic', 'wip'
 }
 
+VALID_EDIT_MONITOR_STATES = frozenset({'control', 'enabled'})
+
+
+def get_edit_monitor_state():
+    """Returns the state of the Edit Monitor."""
+    state = os.environ.get('EDIT_MONITOR_STATE')
+    if state in VALID_EDIT_MONITOR_STATES:
+        return state
+    return None
 
 def get_python_version():
     """Return the python version in the major.minor.micro format."""

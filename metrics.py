@@ -238,6 +238,12 @@ class MetricsCollector(object):
         self.add('python_version', metrics_utils.get_python_version())
         self.add('host_os', gclient_utils.GetOperatingSystem())
         self.add('host_arch', detect_host_arch.HostArch())
+        state = metrics_utils.get_edit_monitor_state()
+        if state:
+            self.add_repeated('env_vars', {
+                'name': 'EDIT_MONITOR_STATE',
+                'value': state
+            })
 
         depot_tools_age = metrics_utils.get_repo_timestamp(DEPOT_TOOLS)
         if depot_tools_age is not None:

@@ -3,17 +3,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import glob
+import contextlib
+import io
 import multiprocessing
 import os
 import os.path
-import io
 import sys
 import unittest
-import contextlib
 from unittest import mock
-
-from parameterized import parameterized
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
@@ -41,6 +38,27 @@ class AutoninjaTest(trial_dir.TestCase):
     def tearDown(self):
         os.chdir(self.previous_dir)
         super(AutoninjaTest, self).tearDown()
+
+    @mock.patch('subprocess.Popen')
+    def test_upload_ninjalog(self, mock_popen):
+        with mock.patch.dict(os.environ):
+            os.environ.pop('EDIT_MONITOR_STATE', None)
+            autoninja._upload_ninjalog(['autoninja.py', 'arg1', 'arg2'], 0, 10)
+            mock_popen.assert_called_once()
+            cmd = mock_popen.call_args[0][0]
+            self.assertIn('--cmdline', cmd)
+            self.assertEqual(cmd[cmd.index('--cmdline') + 1:], ['arg1', 'arg2'])
+            self.assertNotIn('--edit_monitor_state', cmd)
+
+    @mock.patch('subprocess.Popen')
+    def test_upload_ninjalog_with_edit_monitor(self, mock_popen):
+        with mock.patch.dict(os.environ, {'EDIT_MONITOR_STATE': 'enabled'}):
+            autoninja._upload_ninjalog(['autoninja.py', 'arg1', 'arg2'], 0, 10)
+            mock_popen.assert_called_once()
+            cmd = mock_popen.call_args[0][0]
+            self.assertEqual(cmd[cmd.index('--edit_monitor_state'):], [
+                '--edit_monitor_state', 'enabled', '--cmdline', 'arg1', 'arg2'
+            ])
 
     def test_autoninja(self):
         """Test that by default (= no GN args) autoninja delegates to ninja."""

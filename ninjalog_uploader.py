@@ -17,8 +17,8 @@ See also the privacy review. http://eldar/assessments/656778450
 """
 
 import argparse
-import getpass
 import contextlib
+import getpass
 import gzip
 import http
 import io
@@ -130,7 +130,8 @@ def GetJflag(cmdline):
             return int(cmdline[i][len("-j"):])
 
 
-def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user):
+def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user,
+                edit_monitor_state):
     """Get metadata for uploaded ninjalog.
 
     Returned metadata has schema defined in
@@ -168,6 +169,7 @@ def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user):
         "is_cloudtop": False,
         "build_configs": build_configs,
         "explicit_build_config_keys": explicit_keys,
+        "edit_monitor_state": edit_monitor_state,
         "targets": GetBuildTargetFromCommandLine(cmdline),
     }
 
@@ -276,6 +278,12 @@ def main():
                         type=int,
                         help="total duration spent on autoninja (secounds)")
     parser.add_argument(
+        "--edit_monitor_state",
+        default="",
+        choices=["control", "enabled"],
+        help="State of the Edit Monitor.",
+    )
+    parser.add_argument(
         "--cmdline",
         required=True,
         nargs=argparse.REMAINDER,
@@ -311,8 +319,14 @@ def main():
         logging.info("ninjalog is already uploaded.")
         return 0
 
-    metadata = GetMetadata(args.cmdline, ninjalog, args.exit_code,
-                           args.build_duration, cfg.user)
+    metadata = GetMetadata(
+        args.cmdline,
+        ninjalog,
+        args.exit_code,
+        args.build_duration,
+        cfg.user,
+        args.edit_monitor_state,
+    )
     exit_code = UploadNinjaLog(args.server, ninjalog, metadata)
     if exit_code == 0:
         last_upload_file.touch()

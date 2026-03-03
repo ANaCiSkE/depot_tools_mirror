@@ -33,11 +33,10 @@ import build_telemetry
 import gclient_paths
 import gclient_utils
 import gn_helper
+import metrics_utils
 import ninja
-import ninjalog_uploader
 import reclient_helper
 import siso
-
 
 _SISO_SUGGESTION = """You're still using Ninja.
 Please run 'gn clean {output_dir}' when convenient to
@@ -262,7 +261,7 @@ def _check_reclient_cfgs(output_dir):
             rewrapper_cfg_lines = f.readlines()
     if cr_build_revision and rewrapper_cfg_lines:
         rewrapper_cfg_revision = rewrapper_cfg_lines[0].strip().lstrip("# ")
-        if not "llvmorg" in rewrapper_cfg_revision:
+        if "llvmorg" not in rewrapper_cfg_revision:
             # linux.cfg may set revision in 2nd line.
             rewrapper_cfg_revision = rewrapper_cfg_lines[1].strip().lstrip("# ")
         if rewrapper_cfg_revision != cr_build_revision:
@@ -615,6 +614,7 @@ def _upload_ninjalog(args, exit_code, build_duration):
     creationflags = 0
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+    edit_monitor_state = metrics_utils.get_edit_monitor_state()
     cmd = [
         sys.executable,
         _NINJALOG_UPLOADER,
@@ -622,8 +622,10 @@ def _upload_ninjalog(args, exit_code, build_duration):
         str(exit_code),
         "--build_duration",
         str(int(build_duration)),
-        "--cmdline",
-    ] + args[1:]
+    ]
+    if edit_monitor_state:
+        cmd.extend(["--edit_monitor_state", edit_monitor_state])
+    cmd.extend(["--cmdline"] + args[1:])
     subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
