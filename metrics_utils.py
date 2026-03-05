@@ -2,13 +2,28 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import logging
 import os
 import re
 import sys
 import urllib.parse
+from enum import StrEnum
 
 import scm
 import subprocess2
+
+
+class EditMonitorState(StrEnum):
+    """The telemetry state for the Edit Monitor.
+
+    Attributes:
+        ENABLED: The edit_monitor daemon is detected and actively running.
+        CONTROL: The edit_monitor daemon is NOT running (e.g. user is in
+                 the control group, opted out, or on an unsupported OS).
+    """
+    ENABLED = 'enabled'
+    CONTROL = 'control'
+
 
 # Current version of metrics recording.
 # When we add new metrics, the version number will be increased, we display the
@@ -156,15 +171,31 @@ KNOWN_SUBCOMMAND_ARGS = {
     'notify=NONE', 'private', 'r', 'ready', 'topic', 'wip'
 }
 
-VALID_EDIT_MONITOR_STATES = frozenset({'control', 'enabled'})
-
 
 def get_edit_monitor_state():
-    """Returns the state of the Edit Monitor."""
-    state = os.environ.get('EDIT_MONITOR_STATE')
-    if state in VALID_EDIT_MONITOR_STATES:
-        return state
-    return None
+    """Returns the state of the Edit Monitor.
+
+    Returns:
+        "enabled" if the process is detected, otherwise "control" (even on error).
+    """
+    if sys.platform.startswith('linux'):
+        try:
+            # Check if edit_monitor is running for chrome
+            # pgrep exits with 0 if a process is found, 1 otherwise.
+            # We look for the binary name and the specific target repo argument.
+            exit_code = subprocess2.call(
+                ['pgrep', '-f', 'edit_monitor.*--target_repo chrome'],
+                stdout=subprocess2.DEVNULL,
+                stderr=subprocess2.DEVNULL,
+            )
+            if exit_code == 0:
+                return EditMonitorState.ENABLED
+        except Exception as e:
+            logging.warning('Failed to pgrep for edit_monitor: %s', e)
+            return EditMonitorState.CONTROL
+
+    return EditMonitorState.CONTROL
+
 
 def get_python_version():
     """Return the python version in the major.minor.micro format."""

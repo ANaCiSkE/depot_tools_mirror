@@ -41,18 +41,20 @@ class AutoninjaTest(trial_dir.TestCase):
 
     @mock.patch('subprocess.Popen')
     def test_upload_ninjalog(self, mock_popen):
-        with mock.patch.dict(os.environ):
-            os.environ.pop('EDIT_MONITOR_STATE', None)
+        with mock.patch('metrics_utils.get_edit_monitor_state',
+                        return_value='control'):
             autoninja._upload_ninjalog(['autoninja.py', 'arg1', 'arg2'], 0, 10)
             mock_popen.assert_called_once()
             cmd = mock_popen.call_args[0][0]
             self.assertIn('--cmdline', cmd)
-            self.assertEqual(cmd[cmd.index('--cmdline') + 1:], ['arg1', 'arg2'])
-            self.assertNotIn('--edit_monitor_state', cmd)
+            self.assertEqual(cmd[cmd.index('--edit_monitor_state'):], [
+                '--edit_monitor_state', 'control', '--cmdline', 'arg1', 'arg2'
+            ])
 
     @mock.patch('subprocess.Popen')
     def test_upload_ninjalog_with_edit_monitor(self, mock_popen):
-        with mock.patch.dict(os.environ, {'EDIT_MONITOR_STATE': 'enabled'}):
+        with mock.patch('metrics_utils.get_edit_monitor_state',
+                        return_value='enabled'):
             autoninja._upload_ninjalog(['autoninja.py', 'arg1', 'arg2'], 0, 10)
             mock_popen.assert_called_once()
             cmd = mock_popen.call_args[0][0]

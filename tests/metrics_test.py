@@ -842,22 +842,46 @@ class MetricsUtilsTest(unittest.TestCase):
             ['foo=bar', 'another_unkwnon_arg'])
         self.assertEqual([], result)
 
-    def test_get_edit_monitor_state(self):
-        """Tests that we can get the edit monitor state from the environment."""
-        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "enabled"}):
-            self.assertEqual("enabled", metrics_utils.get_edit_monitor_state())
+    @mock.patch('metrics_utils.sys.platform', 'linux')
+    @mock.patch('subprocess2.call')
+    def test_get_edit_monitor_state_linux(self, mock_call):
+        """Tests that we can get the edit monitor state on Linux."""
+        mock_call.return_value = 1
+        self.assertEqual(metrics_utils.EditMonitorState.CONTROL,
+                         metrics_utils.get_edit_monitor_state())
+        mock_call.assert_called_with(
+            ['pgrep', '-f', 'edit_monitor.*--target_repo chrome'],
+            stdout=metrics_utils.subprocess2.DEVNULL,
+            stderr=metrics_utils.subprocess2.DEVNULL,
+        )
 
-        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "control"}):
-            self.assertEqual("control", metrics_utils.get_edit_monitor_state())
+        mock_call.return_value = 0
+        self.assertEqual(metrics_utils.EditMonitorState.ENABLED,
+                         metrics_utils.get_edit_monitor_state())
 
-        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "running"}):
-            self.assertIsNone(metrics_utils.get_edit_monitor_state())
+    @mock.patch('metrics_utils.sys.platform', 'darwin')
+    @mock.patch('subprocess2.call')
+    def test_get_edit_monitor_state_mac(self, mock_call):
+        """Tests that we return control on macOS without calling pgrep."""
+        self.assertEqual(metrics_utils.EditMonitorState.CONTROL,
+                         metrics_utils.get_edit_monitor_state())
+        mock_call.assert_not_called()
 
-        with mock.patch.dict(os.environ, {"EDIT_MONITOR_STATE": "enbabled"}):
-            self.assertIsNone(metrics_utils.get_edit_monitor_state())
+    @mock.patch('metrics_utils.sys.platform', 'win32')
+    @mock.patch('subprocess2.call')
+    def test_get_edit_monitor_state_win32(self, mock_call):
+        """Tests that we return control on Windows without calling pgrep."""
+        self.assertEqual(metrics_utils.EditMonitorState.CONTROL,
+                         metrics_utils.get_edit_monitor_state())
+        mock_call.assert_not_called()
 
-        with mock.patch.dict(os.environ, clear=True):
-            self.assertIsNone(metrics_utils.get_edit_monitor_state())
+    @mock.patch('metrics_utils.sys.platform', 'linux')
+    @mock.patch('subprocess2.call')
+    def test_get_edit_monitor_state_exception(self, mock_call):
+        """Tests that we return control when an exception occurs."""
+        mock_call.side_effect = Exception('test exception')
+        self.assertEqual(metrics_utils.EditMonitorState.CONTROL,
+                         metrics_utils.get_edit_monitor_state())
 
 
 if __name__ == '__main__':
