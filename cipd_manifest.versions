@@ -198,68 +198,68 @@ infra/tools/dirmd/windows-arm64
 	8ADPs_UheAvIrVy_PBzeiw6BDVks5PDN7P80yfOpyHkC
 
 infra/tools/luci-auth/linux-386
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	QTkAF3e5unfNUR_mLBVhXIdnun-5hZ8FZZzEKLFXncIC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	k9_mxpxAP9CRN4JMc4JIa2XsXYA_FvWTC9uhfoQJzOcC
 
 infra/tools/luci-auth/linux-amd64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	TUFD-_1ixvI3OPkPPDeWM7E9r-5L9r20LzXc5goQh0wC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	We5D_g9oJwMXQeYsy1NBqgvzy7XKuYXOIhUt4qaj2NAC
 
 infra/tools/luci-auth/linux-arm64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	ecRIP_pA1VfnOpZsileUxJr8ahuHBsST5TJuujX72-sC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	JxHqRWXu0jEUg5mE47LHXOJGATHTfKstsV5dlQZZ2o0C
 
 infra/tools/luci-auth/linux-armv6l
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	mMRf3cfvokqzKUnOUrt2Nfwj3zBLhVHj4hZGh-qaXVEC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	QfcPauNB1rez05L1KQ6uoKJr00sKlAd35kRQboYiApkC
 
 infra/tools/luci-auth/linux-loong64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	QjLipMGKHtRjGj3N57aDARDo7qO53kjshW3YLJZY9z4C
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	e12R2-BnQx6oKPfuEuXqM2hzxSFId8mQSDLuIlTeSVUC
 
 infra/tools/luci-auth/linux-mips64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	lWPV4vLyMITGon5i6YExONhJAUbzGyqal0OOtkYau8YC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	STWh6zKMWxE0526WCmk3wqoLtSdZMyOH3S3gSelpzfMC
 
 infra/tools/luci-auth/linux-mips64le
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	2t6XVdWtnfTtIKJdk_m-z11s1rb9VX2Vw2-ze91Afo4C
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	4IhESDB2a6wkDCuuH8jhlCxLpXPm88K7g67JLPCHAC8C
 
 infra/tools/luci-auth/linux-mipsle
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	TUI6kyMovYP9Qfr8n9ifJ3BuLGcC60TAVZIka-v2quoC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	3X5Asou12kz2KDVfjctu-h1ovliIEeFTIQ-4RVRuS4gC
 
 infra/tools/luci-auth/linux-ppc64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	S6Cr-Ug3L4Cc-ELaURTzTfTpzIhxXiGXKZvxkJKNLLwC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	V6ZfGFvtx_P_xpuyf8IRMa_c7m_CFMJwGnBBxl6N4doC
 
 infra/tools/luci-auth/linux-ppc64le
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	Kz4yR148wFYaZgLs5_xvdkY15uTdkacuFACl0YE-BXsC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	BIOvoph7FIq8XH9XbjiCbz5LhWMXKWu0Xc0t9lI6MPMC
 
 infra/tools/luci-auth/linux-riscv64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	kn4ZKzmAdSOrhrSclwxqUx-o5ODtX5u7ux7XU7sIkasC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	dWhUhmRlb5j08u6A2APWD6rzfxeiBujTrPdYYIzY_msC
 
 infra/tools/luci-auth/linux-s390x
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	0jDo5bAsOZ9Nn_tTiAXhI4GP4dhi1M6FXllKagbG3NYC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	r4fdM0HDTzMI_xtu5UYRyMHRzqBUstddnkwTDdRODzgC
 
 infra/tools/luci-auth/mac-amd64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	JhDl7-TEmwj2iUSXvrp40pML4fx0u-6zBSlQQ4vZiIEC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	2xYNx7bDNOu3yFy7UN06EOMshVHYMdwe6nUYTUakzL0C
 
 infra/tools/luci-auth/mac-arm64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	VdErMZfeOpzHqBGkjTLBF-KynZw7qnkhhqupek3NgnUC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	-MU3gFjtlwuPidsUzuwiCuJrkuqs6bdprlRDqtd1zKUC
 
 infra/tools/luci-auth/windows-amd64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	8-O3hUzWup3tS7JRQw7c4k-xBhYnHm-qCRPFOvEr2_IC
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	VRjhV-e89Z3Syzby5dSoeud5s6PGw-DiGTgr102KamkC
 
 infra/tools/luci-auth/windows-arm64
-	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
-	8ZAVakGbpOaIaN1oYG0ti9pxxItT5EkBM1_PpjlW0B4C
+	git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+	Ojn6y2hdT2NNiRVNJ3nk8CQxwB9hDxeDXHVt22sIOS0C
 
 infra/tools/luci/git-credential-luci/linux-386
 	git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
