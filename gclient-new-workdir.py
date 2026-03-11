@@ -35,17 +35,19 @@ def parse_options():
                         type=os.path.abspath,
                         help='should contain a .gclient file')
     parser.add_argument('new_workdir', help='must not exist')
-    parser.add_argument('--reflink',
-                        action='store_true',
-                        default=None,
-                        help='''force to use "cp --reflink" for speed and disk
-                              space. need supported FS like btrfs or ZFS.''')
+    parser.add_argument(
+        '--reflink',
+        action='store_true',
+        default=None,
+        help='''force to use a copy-on-write flag for speed and disk
+                              space. Needs a supported FS like btrfs, ZFS, or
+                              APFS.''')
     parser.add_argument(
         '--no-reflink',
         action='store_false',
         dest='reflink',
-        help='''force not to use "cp --reflink" even on supported
-                              FS like btrfs or ZFS.''')
+        help='''force not to use a copy-on-write flag even on a supported
+                              FS like btrfs, ZFS, or APFS.''')
     args = parser.parse_args()
 
     if not os.path.exists(args.repository):
@@ -61,12 +63,17 @@ def parse_options():
     return args
 
 
-def support_cow(src, dest):
-    # 'cp --reflink' always succeeds when 'src' is a symlink or a directory
+def get_cp_copy_on_write_flag():
+    return '-c' if sys.platform == 'darwin' else '--reflink'
+
+
+def support_copy_on_write(src, dest):
+    # Use of a copy-on-write flag always succeeds when 'src' is a symlink or a directory
     assert os.path.isfile(src) and not os.path.islink(src)
     try:
-        subprocess.check_output(['cp', '-a', '--reflink', src, dest],
-                                stderr=subprocess.STDOUT)
+        subprocess.check_output(
+            ['cp', '-a', get_cp_copy_on_write_flag(), src, dest],
+            stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError:
         return False
     finally:
@@ -97,7 +104,7 @@ def main():
     else:
         os.makedirs(args.new_workdir)
         if args.reflink is None:
-            args.reflink = support_cow(gclient, new_gclient)
+            args.reflink = support_copy_on_write(gclient, new_gclient)
             if args.reflink:
                 print('Copy-on-write support is detected.')
         os.symlink(gclient, new_gclient)
@@ -110,15 +117,18 @@ def main():
             if args.reflink:
                 if not os.path.exists(workdir):
                     print('Copying: %s' % workdir)
-                    subprocess.check_call(
-                        ['cp', '-a', '--reflink', root, workdir])
+                    subprocess.check_call([
+                        'cp', '-a',
+                        get_cp_copy_on_write_flag(), root, workdir
+                    ])
                 shutil.rmtree(os.path.join(workdir, '.git'))
 
             git_common.make_workdir(os.path.join(root, '.git'),
                                     os.path.join(workdir, '.git'))
             if args.reflink:
                 subprocess.check_call([
-                    'cp', '-a', '--reflink',
+                    'cp', '-a',
+                    get_cp_copy_on_write_flag(),
                     os.path.join(root, '.git', 'index'),
                     os.path.join(workdir, '.git', 'index')
                 ])
@@ -128,7 +138,7 @@ def main():
     if args.reflink:
         print(
             textwrap.dedent('''\
-      The repo was copied with copy-on-write, and the artifacts were retained.
+      The repo was copied using copy-on-write, and the artifacts were retained.
       More details on http://crbug.com/721585.
 
       Depending on your usage pattern, you might want to do "gn gen"
