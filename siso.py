@@ -544,9 +544,31 @@ def main(args: list[str],
                 # Sisorc global flags are actually pre-subcommand flags.
                 pre_args = global_flags + pre_args
 
+                is_ai_agent = any(
+                    env.get(v) for v in ('GEMINI_CLI', 'CLAUDECODE',
+                                         'CODEX_SANDBOX',
+                                         'CURSOR_AGENT', 'AI_AGENT'))
+
                 if subcmd:
                     # Apply subcommand-specific flags from .sisorc
                     subcmd_args = subcmd_flags.get(subcmd, []) + subcmd_args
+
+                    # fast_nop, fast_local, fast_last_failure, fast_exit are set
+                    # to false when stdout is not a TTY (see
+                    # subcmd/ninja/config.go). This makes no-op and small builds
+                    # slower. --batch=false re-enables all four flags so non-TTY
+                    # AI agents get the same performance as interactive
+                    # terminals. --quiet reduces context pollution.
+                    if subcmd == "ninja" and is_ai_agent:
+                        # Verbose printing the logic here to reduce
+                        # hallucinations on slow/failed builds.
+                        print(
+                            'Detected AI agent env. Prepending'
+                            ' --quiet --batch=false to improve'
+                            ' latency and reduce context pollution.'
+                            ' User-supplied flags take precedence.')
+                        subcmd_args = ['--quiet', '--batch=false'
+                                       ] + subcmd_args
 
                     # Add ninja specific flags.
                     should_collect_logs = all(
@@ -564,7 +586,12 @@ def main(args: list[str],
                     print('depot_tools/siso.py: %s' % shlex.join(new_args),
                           file=sys.stderr)
                 check_outdir(out_dir)
-                return runner([siso_path] + new_args, env=env)
+                ret = runner([siso_path] + new_args, env=env)
+                # --quiet suppresses siso's own success output which
+                # can confuse AI agents into thinking the build failed.
+                if is_ai_agent and subcmd == "ninja" and ret == 0:
+                    print('Success')
+                return ret
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',
