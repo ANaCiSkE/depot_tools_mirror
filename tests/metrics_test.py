@@ -65,6 +65,7 @@ class MetricsCollectorTest(unittest.TestCase):
         mock.patch('metrics.detect_host_arch.HostArch', lambda: 'x86').start()
         mock.patch('metrics.metrics_utils.get_edit_monitor_state',
                    lambda: None).start()
+        mock.patch('metrics.gclient_utils.IsEnvCog', lambda: False).start()
         mock.patch('metrics_utils.get_repo_timestamp', lambda _: 1234).start()
         mock.patch('metrics_utils.get_git_version', lambda: '2.18.1').start()
 
@@ -194,6 +195,23 @@ class MetricsCollectorTest(unittest.TestCase):
             {'env_vars': [{
                 'name': 'EDIT_MONITOR_STATE',
                 'value': 'enabled'
+            }]})
+
+    @mock.patch('metrics.gclient_utils.IsEnvCog', lambda: True)
+    def test_collects_is_cog_true(self):
+        self.FileRead.side_effect = [
+            '{"is-googler": true, "countdown": 0, "opt-in": null, "version": 0}'
+        ]
+
+        @self.collector.collect_metrics('fun')
+        def fun():
+            pass
+
+        fun()
+        self.assert_collects_metrics(
+            {'env_vars': [{
+                'name': 'IS_COG',
+                'value': 'true'
             }]})
 
     def test_collects_metrics_when_opted_in(self):

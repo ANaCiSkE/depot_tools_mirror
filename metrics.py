@@ -245,6 +245,10 @@ class MetricsCollector(object):
                 'value': state
             })
 
+        is_cog = gclient_utils.IsEnvCog()
+        if is_cog:
+            self.add_repeated('env_vars', {'name': 'IS_COG', 'value': 'true'})
+
         depot_tools_age = metrics_utils.get_repo_timestamp(DEPOT_TOOLS)
         if depot_tools_age is not None:
             self.add('depot_tools_age', int(depot_tools_age))
