@@ -1136,6 +1136,13 @@ def ParseIssueNumberArgument(arg):
     if not arg.startswith('http') and '.' not in parsed_url.netloc:
         return fail_result
 
+    # Replace corp URLs with googlesource, as all of depot_tools works
+    # on googlesource URLs.
+    if parsed_url.netloc.endswith('.git.corp.google.com'):
+        parsed_url = parsed_url._replace(
+            netloc=parsed_url.netloc[:-len('.git.corp.google.com')] +
+            '.googlesource.com')
+
     # Gerrit's new UI is https://domain/c/project/+/<issue_number>[/[patchset]]
     # But old GWT UI is https://domain/#/c/project/+/<issue_number>[/[patchset]]
     # Short urls like https://domain/<issue_number> can be used, but don't allow

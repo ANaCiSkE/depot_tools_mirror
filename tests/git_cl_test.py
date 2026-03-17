@@ -506,6 +506,12 @@ class TestParseIssueURL(unittest.TestCase):
         self._test('crrev.com/c/2151934', 2151934, None,
                    'chromium-review.googlesource.com')
 
+    def test_corp_urls(self):
+        self._test('https://chromium-review.git.corp.google.com/c/123/4', 123,
+                   4, 'chromium-review.googlesource.com')
+        self._test('chromium-review.git.corp.google.com/123', 123, None,
+                   'chromium-review.googlesource.com')
+
 
 class GitCookiesCheckerTest(unittest.TestCase):
     def setUp(self):
