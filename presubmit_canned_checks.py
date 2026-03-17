@@ -601,7 +601,6 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         'java': 100,
         # This is specifically for Android's handwritten makefiles (Android.mk).
         'mk': 200,
-        'rs': 100,
         '': maxlen,
     }
 
@@ -632,6 +631,10 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
                        '#pragma', '// ' + LINT_THEN_CHANGE_EXCEPTION)
     PY_FILE_EXTS = ('py', )
     PY_EXCEPTIONS = ('import', 'from', '# ' + LINT_THEN_CHANGE_EXCEPTION)
+    # Rust line lengths are handled by rustfmt, so we except *all* Rust lines
+    # from this check.
+    RUST_FILE_EXTS = ('rs', )
+    RUST_EXCEPTIONS = ('')
 
     # Uncap star files. For more info, see:
     # https://bazel.build/build/style-guide#differences-python-style-guide
@@ -647,6 +650,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         (OBJC_FILE_EXTS, OBJC_EXCEPTIONS),
         (PY_FILE_EXTS, PY_EXCEPTIONS),
         (STAR_FILE_EXTS, STAR_EXCEPTIONS),
+        (RUST_FILE_EXTS, RUST_EXCEPTIONS),
     ]
 
     def no_long_lines(file_extension, line):
@@ -747,6 +751,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     if py_file_list:
         errors += check_python_long_lines(py_file_list,
                                           error_formatter=format_error)
+
     if errors:
         msg = 'Found %d lines longer than %s characters (first 5 shown).' % (
             len(errors), maxlen)

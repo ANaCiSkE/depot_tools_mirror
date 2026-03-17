@@ -2562,6 +2562,12 @@ class CannedChecksUnittest(PresubmitTestsBase):
         self.ContentTest(check, 'A ' * 50, 'foo.java', 'A ' * 50 + 'B',
                          'foo.java', presubmit.OutputApi.PresubmitPromptWarning)
 
+    def testCannedCheckRustLongLines(self):
+        check = lambda x, y, _: presubmit_canned_checks.CheckLongLines(x, y, 80)
+        # Rust files should pass even with long lines.
+        self.ContentTest(check, 'A ' * 100, 'foo.rs', 'A ' * 100, 'bar.txt',
+                         presubmit.OutputApi.PresubmitPromptWarning)
+
     def testCannedCheckSpecialJavaLongLines(self):
         check = lambda x, y, _: presubmit_canned_checks.CheckLongLines(x, y, 80)
         self.ContentTest(check, 'import ' + 'A ' * 150, 'foo.java',
