@@ -545,9 +545,9 @@ def main(args: list[str],
                 pre_args = global_flags + pre_args
 
                 is_ai_agent = any(
-                    env.get(v) for v in ('GEMINI_CLI', 'CLAUDECODE',
-                                         'CODEX_SANDBOX',
-                                         'CURSOR_AGENT', 'AI_AGENT'))
+                    env.get(v)
+                    for v in ('GEMINI_CLI', 'CLAUDECODE', 'ANTIGRAVITY_AGENT',
+                              'CODEX_SANDBOX', 'CURSOR_AGENT', 'AI_AGENT'))
 
                 if subcmd:
                     # Apply subcommand-specific flags from .sisorc
