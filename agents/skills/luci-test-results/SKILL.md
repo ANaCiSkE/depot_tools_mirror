@@ -13,7 +13,23 @@ If you have a builder + build number, get the long `<BUILD_ID>`:
 scripts/luci_triage.py resolve-build-id \
   --builder "<BUILDER>" \
   --build-number <NUMBER> \
-  --project chrome
+  --project <PROJECT> \
+  --bucket <BUCKET>
+```
+for a builder URL that starts with
+```
+https://ci.chromium.org/ui/p/<PROJECT>/builders/<BUCKET>/<BUILDER>/<NUMBER>/...
+```
+
+For the URL
+https://ci.chromium.org/ui/p/chromium/builders/try/linux-chromeos-rel/2769679/overview
+you should run the script for this skill with the following arguments:
+```bash
+scripts/luci_triage.py resolve-build-id \
+  --builder "linux-chromeos-rel" \
+  --build-number 2769679 \
+  --project chromium \
+  --bucket try
 ```
 
 ## 2. Find Builds for Gerrit CL
