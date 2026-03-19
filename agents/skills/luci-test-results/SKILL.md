@@ -12,7 +12,8 @@ If you have a builder + build number, get the long `<BUILD_ID>`:
 ```bash
 scripts/luci_triage.py resolve-build-id \
   --builder "<BUILDER>" \
-  --build-number <NUMBER>
+  --build-number <NUMBER> \
+  --project chrome
 ```
 
 ## 2. Find Builds for Gerrit CL
