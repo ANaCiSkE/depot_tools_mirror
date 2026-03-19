@@ -141,9 +141,13 @@ def link_git_repo(src, dest, reflink):
                 os.path.join(dest_git_dir, 'index'),
             ]
         )
+        # Detach the HEAD ref without checking out files or updating the index.
+        subprocess.check_call(
+            ['git', 'update-ref', '--no-deref', 'HEAD', 'HEAD'], cwd=dest
+        )
     else:
-        print('Running: git checkout -f %s' % dest)
-        subprocess.check_call(['git', 'checkout', '-f'], cwd=dest)
+        print('Running: git checkout --detach -f %s' % dest)
+        subprocess.check_call(['git', 'checkout', '--detach', '-f'], cwd=dest)
 
 
 def adopt_git_worktree(src, dest):
