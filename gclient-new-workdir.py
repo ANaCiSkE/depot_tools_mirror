@@ -61,16 +61,14 @@ def parse_options():
         help='''Force not to use a copy-on-write flag when copying even on a '''
         '''supported copy-on-write FS like btrfs, ZFS, or APFS.''')
     parser.add_argument(
-        '--link-root-git-repo-only',
-        action='store_true',
+        '--max-depth',
+        type=int,
         default=None,
-        help='''Force linking only root repository's .git e.g. chromium/src '''
-        '''for better performance. This is the default behavior on supported '''
-        '''copy-on-write FS like btrfs, ZFS, or APFS.''')
-    parser.add_argument('--link-all-git-sub-repos',
-                        action='store_false',
-                        dest='link_root_git_repo_only',
-                        help='''Force linking .git for all sub-repositories.''')
+        help='''Maximum depth to link git repositories. A value of 0 '''
+        '''corresponds to the gclient workspace, a value of 1 corresponds to '''
+        '''sub-directories of the workspace, and so on. A value of -1 means '''
+        '''there is no limit. The default is 1 if copy-on-write is used, '''
+        '''otherwise the default is -1.''')
     args = parser.parse_args()
 
     if not os.path.exists(args.repository):
@@ -215,39 +213,60 @@ def main():
         if not os.path.exists(new_gclient):
             os.symlink(gclient, new_gclient)
 
-        if args.reflink and args.link_root_git_repo_only is None:
+        if args.max_depth is None:
             # Since we're doing a btrfs subvolume snapshot or reflink copy, the
             # sub-repositories will already be present in the copy, and we only
-            # need to link the .git directory for the root repository.
-            args.link_root_git_repo_only = True
+            # need to link the .git directory for the top-level repositories.
+            args.max_depth = 1 if args.reflink else -1
 
-        for root, dirs, _ in os.walk(args.repository):
-            if '.git' in dirs:
-                workdir = root.replace(args.repository, args.new_workdir, 1)
+        visited_dirs = set()
+        for root, dirs, _ in os.walk(args.repository, followlinks=True):
+            # Keep track of visited directories to avoid processing the same
+            # directory multiple times or infinite loops due to symlink cycles.
+            root = os.path.realpath(root)
+            if root in visited_dirs:
+                dirs[:] = []
+                continue
+            visited_dirs.add(root)
 
+            rel_path = os.path.relpath(root, args.repository)
+            if rel_path == '.':
+                current_depth = 0
+            else:
+                current_depth = rel_path.count(os.sep) + 1
+
+            # Check if there's a .git directory before modifying dirs.
+            has_git = '.git' in dirs
+            # Don't descend into the .git directory.
+            if has_git:
+                dirs.remove('.git')
+
+            # If we've reached the max depth, remove all directories from the
+            # list so that os.walk doesn't descend into them.
+            if args.max_depth != -1 and current_depth >= args.max_depth:
+                dirs[:] = []
+
+            # If there's no .git directory, there's nothing to do.
+            if not has_git:
+                continue
+
+            workdir = root.replace(args.repository, args.new_workdir, 1)
+
+            if args.reflink:
+                if not os.path.exists(workdir):
+                    print('Copying: %s' % workdir)
+                    subprocess.check_call(
+                        ['cp', '-a', cp_copy_on_write_flag(), root, workdir]
+                    )
+                shutil.rmtree(os.path.join(workdir, '.git'))
+
+            if args.use_git_worktree:
                 if args.reflink:
-                    if not os.path.exists(workdir):
-                        print('Copying: %s' % workdir)
-                        subprocess.check_call(
-                            ['cp', '-a', cp_copy_on_write_flag(), root, workdir]
-                        )
-                    shutil.rmtree(os.path.join(workdir, '.git'))
-
-                if args.use_git_worktree:
-                    if args.reflink:
-                        adopt_git_worktree(root, workdir)
-                    else:
-                        create_git_worktree(root, workdir)
+                    adopt_git_worktree(root, workdir)
                 else:
-                    link_git_repo(root, workdir, reflink=args.reflink)
-
-                # Break out of the for loop if we're only linking the root git
-                # repository's .git folder and using copy-on-write since all the
-                # sub-repositories will already be copied and we are done here.
-                # Otherwise, we can't avoid visiting all sub-repositories for
-                # checking out the files with git.
-                if args.reflink and args.link_root_git_repo_only:
-                    break
+                    create_git_worktree(root, workdir)
+            else:
+                link_git_repo(root, workdir, reflink=args.reflink)
 
         if args.reflink:
             print(
