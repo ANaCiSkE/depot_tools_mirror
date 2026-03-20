@@ -2361,6 +2361,14 @@ class TestGitCl(unittest.TestCase):
         self.assertIssueAndPatchset(git_short_host='host')
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_patch_gerrit_new_branch_fails(self):
+        self._patch_common()
+        with mock.patch('git_new_branch.create_new_branch', return_value=1):
+            self.assertEqual(git_cl.main(['patch', '-b', 'feature', '123456']),
+                             1)
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     def test_patch_gerrit_guess_by_url(self):
         self._patch_common('else')

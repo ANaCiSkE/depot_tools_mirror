@@ -6318,7 +6318,9 @@ def CMDpatch(parser, args):
             RunGit(['branch', '-D', options.newbranch],
                    stderr=subprocess2.PIPE,
                    error_ok=True)
-        git_new_branch.create_new_branch(options.newbranch)
+        err = git_new_branch.create_new_branch(options.newbranch)
+        if err:
+            return err
 
     cl = Changelist(codereview_host=target_issue_arg.hostname,
                     issue=target_issue_arg.issue)
