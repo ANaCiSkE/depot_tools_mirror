@@ -3011,12 +3011,13 @@ class Changelist(object):
 
         if self.GetBranch():
             self.SetPatchset(patchset)
-            fetched_hash = scm.GIT.ResolveCommit(settings.GetRoot(),
-                                                 'FETCH_HEAD')
-            self._GitSetBranchConfigValue(LAST_UPLOAD_HASH_CONFIG_KEY,
-                                          fetched_hash)
-            self._GitSetBranchConfigValue(GERRIT_SQUASH_HASH_CONFIG_KEY,
-                                          fetched_hash)
+            if not nocommit:
+                fetched_hash = scm.GIT.ResolveCommit(settings.GetRoot(),
+                                                     'FETCH_HEAD')
+                self._GitSetBranchConfigValue(LAST_UPLOAD_HASH_CONFIG_KEY,
+                                              fetched_hash)
+                self._GitSetBranchConfigValue(GERRIT_SQUASH_HASH_CONFIG_KEY,
+                                              fetched_hash)
         else:
             print(
                 'WARNING: You are in detached HEAD state.\n'

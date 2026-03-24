@@ -2347,6 +2347,28 @@ class TestGitCl(unittest.TestCase):
         self.assertIssueAndPatchset(branch='feature')
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_patch_gerrit_no_commit(self):
+        self._patch_common()
+        self.calls += [
+            (([
+                'git', 'fetch', 'https://chromium.googlesource.com/my/repo',
+                'refs/changes/56/123456/7'
+            ], ), ''),
+            ((['git', 'cherry-pick', '--no-commit', 'FETCH_HEAD'], ), ''),
+        ]
+        self.assertEqual(git_cl.main(['patch', '-n', '123456']), 0)
+        self.assertEqual('123456',
+                         scm.GIT.GetBranchConfig('', 'main', 'gerritissue'))
+        self.assertEqual('7',
+                         scm.GIT.GetBranchConfig('', 'main', 'gerritpatchset'))
+        # last-upload-hash should NOT be set.
+        self.assertIsNone(
+            scm.GIT.GetBranchConfig('', 'main', 'last-upload-hash'))
+        self.assertIsNone(
+            scm.GIT.GetBranchConfig('', 'main', 'gerrit-squash-hash'))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     def test_patch_gerrit_force(self):
         self._patch_common('host')
