@@ -605,7 +605,7 @@ def _upload_ninjalog(args, exit_code, build_duration):
     # Run upload script without wait.
     creationflags = 0
     if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        creationflags = subprocess.CREATE_NO_WINDOW
     edit_monitor_state = metrics_utils.get_edit_monitor_state()
     cmd = [
         sys.executable,
@@ -642,7 +642,7 @@ def _upload_sisolog(input_args: list[str], build_id: str):
         # Run upload script without wait.
         creationflags = 0
         if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+            creationflags = subprocess.CREATE_NO_WINDOW
         cmd = [
             sys.executable,
             _GSUTIL_PY,
