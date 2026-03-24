@@ -194,7 +194,7 @@ def _start_collector(siso_path: str, expected_endpoint: str, project: str,
         # Use Popen as it's non blocking.
         creationflags = 0
         if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+            creationflags = subprocess.CREATE_NO_WINDOW
         cmd = [siso_path, "collector", "--project", project]
         subprocess.Popen(
             cmd,
