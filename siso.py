@@ -564,11 +564,12 @@ def main(args: list[str],
                         # hallucinations on slow/failed builds.
                         print(
                             'Detected AI agent env. Prepending'
-                            ' --quiet --batch=false to improve'
-                            ' latency and reduce context pollution.'
+                            ' --quiet --batch=false --heartbeat_period=30s'
+                            ' to improve latency and reduce context pollution.'
                             ' User-supplied flags take precedence.')
-                        subcmd_args = ['--quiet', '--batch=false'
-                                       ] + subcmd_args
+                        subcmd_args = [
+                            '--quiet', '--batch=false', '--heartbeat_period=30s'
+                        ] + subcmd_args
 
                     # Add ninja specific flags.
                     should_collect_logs = all(
