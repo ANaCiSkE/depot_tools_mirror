@@ -50,18 +50,16 @@ def parse_options():
         help='''Use symlinks for .git folders instead of using git worktree.''',
     )
     parser.add_argument(
-        '--reflink',
-        action='store_true',
+        '--copy-on-write',
+        action=argparse.BooleanOptionalAction,
         default=None,
         help='''Force use of a copy-on-write flag when copying for better '''
         '''performance and disk utilization. This is the default behavior on '''
         '''supported copy-on-write FS like btrfs, ZFS, or APFS.''')
-    parser.add_argument(
-        '--no-reflink',
-        action='store_false',
-        dest='reflink',
-        help='''Force not to use a copy-on-write flag when copying even on a '''
-        '''supported copy-on-write FS like btrfs, ZFS, or APFS.''')
+    parser.add_argument('--reflink',
+                        action=argparse.BooleanOptionalAction,
+                        dest='copy_on_write',
+                        help=argparse.SUPPRESS)
     parser.add_argument(
         '--max-depth',
         type=int,
@@ -72,6 +70,12 @@ def parse_options():
         '''there is no limit. The default is 1 if copy-on-write is used, '''
         '''otherwise the default is -1.''')
     args = parser.parse_args()
+
+    if '--reflink' in sys.argv or '--no-reflink' in sys.argv:
+        print(
+            'Warning: --reflink and --no-reflink are deprecated. Use '
+            '--copy-on-write or --no-copy-on-write instead.',
+            file=sys.stderr)
 
     if not os.path.exists(args.repository):
         parser.error('Repository "%s" does not exist.' % args.repository)
@@ -155,12 +159,12 @@ def real_git_dir(repo_path):
     return os.path.realpath(os.path.join(repo_path, relative_git_dir))
 
 
-def link_git_repo(src, dest, reflink):
+def link_git_repo(src, dest, use_copy_on_write):
     print('Linking: %s/.git' % src)
     src_git_dir = real_git_dir(src)
     dest_git_dir = os.path.join(dest, '.git')
     git_common.make_workdir(src_git_dir, dest_git_dir)
-    if reflink:
+    if use_copy_on_write:
         src_index = os.path.join(src_git_dir, 'index')
         dest_index = os.path.join(dest_git_dir, 'index')
         copy_on_write(src_index, dest_index)
@@ -221,7 +225,7 @@ def main():
     if try_btrfs_subvol_snapshot(args.repository, args.new_workdir):
         # If btrfs is being used, reflink support is always present, and there's
         # no benefit to not using it.
-        args.reflink = True
+        args.copy_on_write = True
         used_btrfs_subvol_snapshot = True
     else:
         os.makedirs(args.new_workdir)
@@ -231,9 +235,9 @@ def main():
         gclient = os.path.join(args.repository, '.gclient')
         new_gclient = os.path.join(args.new_workdir, '.gclient')
 
-        if args.reflink is None:
-            args.reflink = support_copy_on_write(gclient, new_gclient)
-            if args.reflink:
+        if args.copy_on_write is None:
+            args.copy_on_write = support_copy_on_write(gclient, new_gclient)
+            if args.copy_on_write:
                 print('Copy-on-write support is detected.')
 
         if not os.path.exists(new_gclient):
@@ -243,7 +247,7 @@ def main():
             # Since we're doing a btrfs subvolume snapshot or reflink copy, the
             # sub-repositories will already be present in the copy, and we only
             # need to link the .git directory for the top-level repositories.
-            args.max_depth = 1 if args.reflink else -1
+            args.max_depth = 1 if args.copy_on_write else -1
 
         visited_dirs = set()
         for root, dirs, _ in os.walk(args.repository, followlinks=True):
@@ -281,21 +285,23 @@ def main():
             else:
                 workdir = os.path.join(args.new_workdir, rel_path)
 
-            if args.reflink:
+            if args.copy_on_write:
                 if not os.path.exists(workdir):
                     print('Copying: %s' % workdir)
                     copy_on_write(root, workdir)
                 shutil.rmtree(os.path.join(workdir, '.git'))
 
             if args.use_git_worktree:
-                if args.reflink:
+                if args.copy_on_write:
                     adopt_git_worktree(root, workdir)
                 else:
                     create_git_worktree(root, workdir)
             else:
-                link_git_repo(root, workdir, reflink=args.reflink)
+                link_git_repo(root,
+                              workdir,
+                              use_copy_on_write=args.copy_on_write)
 
-        if args.reflink:
+        if args.copy_on_write:
             print(
                 textwrap.dedent(
                     '''\
