@@ -89,6 +89,7 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "CC-BY-3.0",
     "CC-BY-4.0",
     "CMU-Mach",
+    "curl",
     "dtoa",
     "FSFAP",
     "FSFULLR",
@@ -135,6 +136,7 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     "Public Domain",
     "Public-Domain-Gutenberg",
     "public-domain-md5",
+    "Public-Domain-Ross-Williams",
     "Public-Domain-Sigslot",
     "Public-Domain-SpanDSP",
     "SPL-SQRT-FLOOR",
@@ -142,6 +144,8 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     # permissive.
     # go/keep-sorted start case=no
     "AMSFonts-2.2",
+    "ietf",
+    "RFC",
     "SolarDesigner",
     "test_fonts",
     # go/keep-sorted end
@@ -158,7 +162,6 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     "BSD-4-Clause-Wasabi",
     "Caffe",
     "CERN",
-    "cURL",
     "dso",
     "Entenssa",
     "FFT2D",
