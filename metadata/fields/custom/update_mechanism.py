@@ -116,7 +116,7 @@ class UpdateMechanismField(field_types.SingleLineTextField):
         # If it's not Autorolled, it SHOULD have a bug link.
         # Only warn for Static, for now.
         elif primary == "Static" and bug_link is None:
-            return vr.ValidationWarning(
+            return vr.ValidationError(
                 reason=f"{self._name} has no link to autoroll exception.",
                 additional=[
                     "Please add a link if an exception bug has been filed.",

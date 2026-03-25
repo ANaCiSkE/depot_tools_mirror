@@ -234,10 +234,10 @@ class FieldValidationTest(unittest.TestCase):
         expect("Static.HardFork (https://crbug.com/12345)",
                ("Static", "HardFork", "https://crbug.com/12345"),
                "parse a namespaced value with a bug")
-        expect("Static", ("Static", None, None),
-               "Allow Static with no bug (should still warn)")
 
         # Test cases that are invalid and should not be parsed.
+        expect("Static", (None, None, None),
+               "Static with no bug to be an error")
         expect("", (None, None, None), "treat empty string as None")
         expect("  ", (None, None, None), "treat whitespace-only string as None")
         expect("Invalid", (None, None, None),

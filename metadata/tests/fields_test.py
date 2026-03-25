@@ -323,8 +323,6 @@ class FieldValidationTest(unittest.TestCase):
                 "Static (http://crbug.com/54321)",
                 "Static (https://crbug/54321)",
                 "Static.HardFork (crbug.com/98765)",
-            ],
-            warning_values=[
                 "Static",
                 "Static.HardFork",
             ],

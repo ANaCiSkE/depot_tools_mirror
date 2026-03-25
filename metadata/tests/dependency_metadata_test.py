@@ -641,7 +641,7 @@ class DependencyValidationTest(unittest.TestCase):
 
         # Test case: ignore:Static (because of update mechanism).
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static")
+        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static (https://crbug.com/12345)")
         self.assertEqual(dependency.vuln_scan_sufficiency,
                          "ignore:Static")
 
