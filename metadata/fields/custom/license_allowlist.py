@@ -114,6 +114,7 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "SGI-B-2.0",
     "Spencer-86",
     "SunPro",
+    "TU-Berlin-1.0",
     "Unicode-3.0",
     "Unicode-DFS-2015",
     "Unicode-DFS-2016",
