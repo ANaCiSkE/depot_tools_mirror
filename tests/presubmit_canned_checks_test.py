@@ -853,6 +853,34 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn('sub1', results[0].items)
         self.assertIn('sub2', results[0].items)
 
+    @mock.patch('configparser.ConfigParser')
+    def testMultipleGitlinksWithSameHashSync(self, mock_config_parser):
+        # Multiple gitlinks with same hash syncing via DEPS.
+        self.mock_parse_deps.return_value = {
+            'git_dependencies': 'SYNC',
+            'deps': {
+                'src/third_party/sub1': 'https://repo.git@1111',
+                'src/third_party/sub2': 'https://repo.git@1111'
+            }
+        }
+        self.input_api.subprocess.check_output.side_effect = [
+            b'',  # git show HEAD:DEPS
+            b'160000 commit 1111\tsrc/third_party/sub1\0'
+            b'160000 commit 1111\tsrc/third_party/sub2\0'
+        ]
+
+        mock_instance = mock_config_parser.return_value
+        mock_instance.items.return_value = [('submodule "sub1"', {
+            'path': 'src/third_party/sub1'
+        }), ('submodule "sub2"', {
+            'path': 'src/third_party/sub2'
+        })]
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api)
+
+        self.assertEqual(0, len(results))
+
     def testFalsePositiveText(self):
         # "160000" in filename but not mode.
         self.input_api.subprocess.check_output.side_effect = [

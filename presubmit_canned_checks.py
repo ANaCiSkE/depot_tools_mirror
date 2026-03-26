@@ -2175,10 +2175,11 @@ def CheckForCommitObjects(input_api, output_api):
 
     assert deps['git_dependencies'] == 'SYNC', 'unexpected git_dependencies.'
 
-    # Create mapping HASH -> PATH
+    # Create mapping HASH -> list of PATHs
     git_submodules = {}
     for commit_tree_entry in commit_tree_entries:
-        git_submodules[commit_tree_entry[2]] = commit_tree_entry[3]
+        git_submodules.setdefault(commit_tree_entry[2],
+                                  []).append(commit_tree_entry[3])
 
     gitmodules_file = input_api.os_path.join(input_api.PresubmitLocalPath(),
                                              '.gitmodules')
@@ -2215,13 +2216,24 @@ def CheckForCommitObjects(input_api, output_api):
             continue
 
         if commit_hash in git_submodules:
-            submodule_path = git_submodules.pop(commit_hash)
-            if not dep_path.endswith(submodule_path):
+            submodule_paths = git_submodules[commit_hash]
+
+            submodule_path = None
+            for i, p in enumerate(submodule_paths):
+                if dep_path.endswith(p):
+                    submodule_path = submodule_paths.pop(i)
+                    break
+
+            if not submodule_paths:
+                del git_submodules[commit_hash]
+
+            if submodule_path is None:
                 # DEPS entry path doesn't point to a gitlink.
+                path_list = ', '.join(submodule_paths)
                 return [
                     output_api.PresubmitError(
                         f'Unexpected DEPS entry {dep_path}.\n'
-                        f'Expected path to end with {submodule_path}.\n'
+                        f'Expected path to end with one of: {path_list}.\n'
                         'Make sure DEPS paths match those in .gitmodules \n'
                         f'and a gitlink exists at {dep_path}.')
                 ]
@@ -2238,9 +2250,10 @@ def CheckForCommitObjects(input_api, output_api):
             mismatch_entries.append(dep_path)
             deps_msg += f"\n [DEPS]      {dep_path} -> {commit_hash}"
 
-    for commit_hash, path in git_submodules.items():
-        mismatch_entries.append(path)
-        deps_msg += f"\n [gitlink]   {path} -> {commit_hash}"
+    for commit_hash, paths in git_submodules.items():
+        for path in paths:
+            mismatch_entries.append(path)
+            deps_msg += f"\n [gitlink]   {path} -> {commit_hash}"
 
     if mismatch_entries:
         return [
