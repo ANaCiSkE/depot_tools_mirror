@@ -5142,6 +5142,23 @@ class CMDFormatTestCase(unittest.TestCase):
         with open(remain_intact_md, 'r') as f:
             self.assertEqual('#  Hello\n\nworld  ', f.read())
 
+    def testMarkdownFormatNumberedList(self):
+        self._make_markdown_config('agents')
+        foo_md = os.path.join(self._top_dir, 'agents/foo.md')
+        self._make_temp_file(
+            'agents/foo.md',
+            ['#  Hello', '', '1. First item', '2. Second item'])
+
+        files = [foo_md]
+        mock_opts = mock.Mock(check=False, dry_run=False, diff=False)
+
+        ret = git_cl._RunMarkdownFormat(mock_opts, files, self._top_dir, None)
+        self.assertEqual(0, ret)
+
+        with open(foo_md, 'r') as f:
+            self.assertEqual('# Hello\n\n1. First item\n2. Second item\n',
+                             f.read())
+
     def testMarkdownFormatCheck(self):
         self._make_markdown_config('agents')
         foo_md = os.path.join(self._top_dir, 'agents/foo.md')

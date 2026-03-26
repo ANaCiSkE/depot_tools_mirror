@@ -125,7 +125,10 @@ def process_stdin(args: argparse.Namespace) -> int:
 
     try:
         formatted = mdformat.text(original,
-                                  options={'wrap': int(_WRAP_WIDTH)},
+                                  options={
+                                      'wrap': int(_WRAP_WIDTH),
+                                      'number': True
+                                  },
                                   extensions={'frontmatter'})
     except Exception as e:
         sys.stderr.write(f'Error formatting: {e}\n')
@@ -163,7 +166,10 @@ def process_files(args: argparse.Namespace) -> int:
 
         try:
             formatted = mdformat.text(original,
-                                      options={'wrap': int(_WRAP_WIDTH)},
+                                      options={
+                                          'wrap': int(_WRAP_WIDTH),
+                                          'number': True
+                                      },
                                       extensions={'frontmatter'})
         except Exception as e:
             print(f'Error formatting {path}: {e}', file=sys.stderr)
