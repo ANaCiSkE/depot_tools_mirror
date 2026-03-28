@@ -3052,3 +3052,39 @@ def CheckAyeAye(input_api, output_api):
             output_api.PresubmitError(
                 f"Unexpected error in CheckAyeAye: {type(e).__name__} - {e}")
         ]
+
+
+def CheckSkillFiles(input_api, output_api):
+    """Validates SKILL.md files have correct frontmatter and formatting."""
+    skill_files = [
+        f.AbsoluteLocalPath()
+        for f in input_api.AffectedFiles(include_deletes=False)
+        if f.LocalPath().endswith('SKILL.md')
+    ]
+
+    if not skill_files:
+        return []
+
+    validator_path = _os.path.join(_HERE, 'agents', 'skills', 'skill-validator',
+                                   'scripts', 'skill_validator.py')
+
+    cmd = ['vpython3', validator_path] + skill_files
+    try:
+        p = input_api.subprocess.Popen(cmd,
+                                       stdout=input_api.subprocess.PIPE,
+                                       stderr=input_api.subprocess.PIPE)
+        stdout, stderr = p.communicate()
+    except OSError as e:
+        return [
+            output_api.PresubmitError(f'Failed to run skill validator: {e}.\n'
+                                      'Is vpython3 in your PATH?')
+        ]
+
+    if p.returncode != 0:
+        message = (f'Skill validator ({validator_path}) failed with exit '
+                   f'code {p.returncode}.')
+        long_text = (f'STDOUT:\n{stdout.decode("utf-8", "replace")}\n'
+                     f'STDERR:\n{stderr.decode("utf-8", "replace")}\n')
+        return [output_api.PresubmitError(message, long_text=long_text)]
+
+    return []

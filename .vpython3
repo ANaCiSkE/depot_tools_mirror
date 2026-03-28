@@ -143,3 +143,10 @@ wheel: <
   name: "infra/python/wheels/coverage-py3"
   version: "version:7.13.0"
 >
+
+# Used by:
+#   agents/skills/skill-validator/scripts/skill_validator.py
+wheel: <
+  name: "infra/python/wheels/pyyaml/${vpython_platform}"
+  version: "version:5.4.1.chromium.1"
+>
