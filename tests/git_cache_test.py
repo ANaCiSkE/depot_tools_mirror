@@ -223,6 +223,23 @@ class GitCacheTest(unittest.TestCase):
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate(reset_fetch_config=True)
 
+    @mock.patch('gclient_utils.exponential_backoff_retry')
+    def testSetSymbolicRefIgnoreUnknown(self, mock_retry):
+        mock_retry.return_value = 'HEAD branch: (unknown)'
+        mirror = git_cache.Mirror(self.origin_dir)
+        with mock.patch.object(mirror, 'RunGit') as mock_rungit:
+            mirror._set_symbolic_ref()
+            mock_rungit.assert_not_called()
+
+    @mock.patch('gclient_utils.exponential_backoff_retry')
+    def testSetSymbolicRefKnown(self, mock_retry):
+        mock_retry.return_value = 'HEAD branch: main'
+        mirror = git_cache.Mirror(self.origin_dir)
+        with mock.patch.object(mirror, 'RunGit') as mock_rungit:
+            mirror._set_symbolic_ref()
+            mock_rungit.assert_called_once_with(
+                ['symbolic-ref', 'HEAD', 'refs/heads/main'])
+
 
 class GitCacheDirTest(unittest.TestCase):
     def setUp(self):
@@ -282,11 +299,11 @@ class GitCacheDirTest(unittest.TestCase):
             os.environ.pop('GIT_CACHE_PATH', None)
             os.environ['GIT_CONFIG'] = 'disabled'
 
-            with self.assertRaisesRegexp(RuntimeError, 'cache\.cachepath'):
+            with self.assertRaisesRegex(RuntimeError, 'cache\.cachepath'):
                 git_cache.Mirror.GetCachePath()
 
             # negatively cached value still raises
-            with self.assertRaisesRegexp(RuntimeError, 'cache\.cachepath'):
+            with self.assertRaisesRegex(RuntimeError, 'cache\.cachepath'):
                 git_cache.Mirror.GetCachePath()
         finally:
             for name, val in zip(('GIT_CACHE_PATH', 'GIT_CONFIG'),

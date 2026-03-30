@@ -465,8 +465,8 @@ class Mirror(object):
                                             cwd=self.mirror_path).decode(
                                                 'utf-8', 'ignore').strip())
         default_branch_regexp = re.compile(r'HEAD branch: (.*)')
-        m = default_branch_regexp.search(remote_info, re.MULTILINE)
-        if m:
+        m = default_branch_regexp.search(remote_info)
+        if m and m.groups()[0] != '(unknown)':
             self.RunGit(['symbolic-ref', 'HEAD', 'refs/heads/' + m.groups()[0]])
 
 
@@ -574,9 +574,14 @@ class Mirror(object):
             gclient_utils.rmtree(recursed_dir)
 
         # The folder is <git number>
-        gen_number = subprocess.check_output(
-            [self.git_exe, '--git-dir', self.mirror_path,
-             'number']).decode('utf-8', 'ignore').strip()
+        try:
+            gen_number = subprocess.check_output(
+                [self.git_exe, '--git-dir', self.mirror_path,
+                 'number']).decode('utf-8', 'ignore').strip()
+        except subprocess.CalledProcessError:
+            self.print('Could not calculate generation number for HEAD; '
+                       'skipping bootstrap update.')
+            return
         gsutil = Gsutil(path=self.gsutil_exe, boto_path=None)
 
         dest_prefix = '%s/%s' % (self._gs_path, gen_number)
