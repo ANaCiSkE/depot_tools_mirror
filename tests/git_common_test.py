@@ -535,24 +535,32 @@ class GitMutableFunctionsTest(git_test_utils.GitRepoReadWriteTestBase,
         self.repo.git('checkout', '-t', '-b', 'parent_gone', 'to_delete')
         self.repo.git('branch', '-D', 'to_delete')
 
+        self.repo.git('checkout', '-t', '-b', 'frozen_branch', 'main')
+        self.repo.git('commit', '--allow-empty', '-m', 'FREEZE.indexed')
+
         supports_track = (self.repo.run(self.gc.get_git_version) >=
                           self.gc.MIN_UPSTREAM_TRACK_GIT_VERSION)
-        actual = self.repo.run(self.gc.get_branches_info, supports_track)
+        actual = self.repo.run(self.gc.get_branches_info, supports_track, True)
 
         expected = {
             'happybranch': (self.repo.run(self.gc.hash_one,
                                           'happybranch',
                                           short=True), 'main',
-                            1 if supports_track else None, None),
-            'child': (self.repo.run(self.gc.hash_one, 'child',
-                                    short=True), 'happybranch', None, None),
+                            1 if supports_track else None, None, False),
+            'child':
+            (self.repo.run(self.gc.hash_one, 'child',
+                           short=True), 'happybranch', None, None, False),
             'main': (self.repo.run(self.gc.hash_one, 'main',
-                                   short=True), '', None, None),
+                                   short=True), '', None, None, False),
+            'frozen_branch': (self.repo.run(self.gc.hash_one,
+                                            'frozen_branch',
+                                            short=True), 'main',
+                              1 if supports_track else None, None, True),
             '':
             None,
-            'parent_gone': (self.repo.run(self.gc.hash_one,
-                                          'parent_gone',
-                                          short=True), 'to_delete', None, None),
+            'parent_gone':
+            (self.repo.run(self.gc.hash_one, 'parent_gone',
+                           short=True), 'to_delete', None, None, False),
             'to_delete':
             None
         }
@@ -590,11 +598,11 @@ class GitMutableFunctionsTest(git_test_utils.GitRepoReadWriteTestBase,
         actual = self.repo.run(self.gc.get_branches_info, True)
         expected = {
             'foobarA': (self.repo.run(self.gc.hash_one, 'foobarA',
-                                      short=True), 'main', 2, None),
+                                      short=True), 'main', 2, None, False),
             'foobarB': (self.repo.run(self.gc.hash_one, 'foobarB',
-                                      short=True), 'foobarA', None, 1),
+                                      short=True), 'foobarA', None, 1, False),
             'main': (self.repo.run(self.gc.hash_one, 'main',
-                                   short=True), '', None, None),
+                                   short=True), '', None, None, False),
             '':
             None
         }

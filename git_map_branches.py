@@ -131,7 +131,8 @@ class BranchMapper(object):
     def start(self):
         self.__root = git_common.root()
         self.__branches_info = get_branches_info(
-            include_tracking_status=self.verbosity >= 1)
+            include_tracking_status=self.verbosity >= 1,
+            include_frozen_status=self.verbosity >= 3)
         if (self.verbosity >= 2):
             # Avoid heavy import unless necessary.
             from git_cl import get_cl_statuses, color_for_status, Changelist
@@ -311,6 +312,9 @@ class BranchMapper(object):
             if self.verbosity > 2:
                 line.append('{} ({})'.format(url, status) if url else '',
                             color=color)
+
+                is_frozen = branch_info and branch_info.is_frozen
+                line.append('[frozen]' if is_frozen else '', color=Fore.CYAN)
             else:
                 line.append(url or '', color=color)
 

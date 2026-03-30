@@ -1351,7 +1351,7 @@ def get_num_commits(branch):
     return None
 
 
-def get_branches_info(include_tracking_status):
+def get_branches_info(include_tracking_status, include_frozen_status=False):
     format_string = (
         '--format=%(refname:short):%(objectname:short):%(upstream:short):')
 
@@ -1360,14 +1360,22 @@ def get_branches_info(include_tracking_status):
             MIN_UPSTREAM_TRACK_GIT_VERSION):  # pragma: no cover
         format_string += '%(upstream:track)'
 
+    format_string += ':'
+    if include_frozen_status:
+        format_string += '%(subject)'
+
     info_map = {}
     data = run('for-each-ref', format_string, 'refs/heads')
     assert isinstance(data, str)
-    BranchesInfo = collections.namedtuple('BranchesInfo',
-                                          'hash upstream commits behind')
+    BranchesInfo = collections.namedtuple(
+        'BranchesInfo', 'hash upstream commits behind is_frozen')
     for line in data.splitlines():
-        (branch, branch_hash, upstream_branch,
-         tracking_status) = line.split(':')
+        parts = line.split(':', 4)
+        branch = parts[0]
+        branch_hash = parts[1]
+        upstream_branch = parts[2]
+        tracking_status = parts[3]
+        subject = parts[4] if len(parts) > 4 else ''
 
         commits = None
         if include_tracking_status:
@@ -1376,10 +1384,13 @@ def get_branches_info(include_tracking_status):
         behind_match = re.search(r'behind (\d+)', tracking_status)
         behind = int(behind_match.group(1)) if behind_match else None
 
+        is_frozen = bool(FREEZE_MATCHER.match(subject)) if subject else False
+
         info_map[branch] = BranchesInfo(hash=branch_hash,
                                         upstream=upstream_branch,
                                         commits=commits,
-                                        behind=behind)
+                                        behind=behind,
+                                        is_frozen=is_frozen)
 
     # Set None for upstreams which are not branches (e.g empty upstream, remotes
     # and deleted upstream branches).
