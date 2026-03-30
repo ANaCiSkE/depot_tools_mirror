@@ -75,6 +75,65 @@ class BasicTests(unittest.TestCase):
             gclient_scm.SCMWrapper._get_first_remote_url(FAKE_PATH),
             'first-value')
 
+    def testDeleteOrMoveRoot(self):
+        root_dir = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(root_dir, 'some_file'), 'w') as f:
+                f.write('foo')
+            wrapper = gclient_scm.SCMWrapper(
+                url='git://foo',
+                root_dir=root_dir,
+                relpath='.',
+                out_fh=StringIO(),
+            )
+            wrapper._DeleteOrMove(False)
+
+            bad_scm_dir = os.path.join(root_dir, '_bad_scm')
+            self.assertTrue(os.path.exists(bad_scm_dir))
+
+            subdirs = os.listdir(bad_scm_dir)
+            self.assertEqual(len(subdirs), 1)
+            dest_path = os.path.join(bad_scm_dir, subdirs[0])
+            self.assertTrue(subdirs[0].startswith('gclient_root'))
+
+            self.assertTrue(os.path.exists(os.path.join(dest_path,
+                                                        'some_file')))
+            self.assertFalse(os.path.exists(os.path.join(root_dir,
+                                                         'some_file')))
+        finally:
+            gclient_utils.rmtree(root_dir)
+
+    def testDeleteOrMoveNonRoot(self):
+        root_dir = tempfile.mkdtemp()
+        try:
+            relpath = 'some_dir'
+            checkout_path = os.path.join(root_dir, relpath)
+            os.makedirs(checkout_path)
+            with open(os.path.join(checkout_path, 'some_file'), 'w') as f:
+                f.write('foo')
+
+            wrapper = gclient_scm.SCMWrapper(
+                url='git://foo',
+                root_dir=root_dir,
+                relpath=relpath,
+                out_fh=StringIO(),
+            )
+            wrapper._DeleteOrMove(False)
+
+            bad_scm_dir = os.path.join(root_dir, '_bad_scm')
+            self.assertTrue(os.path.exists(bad_scm_dir))
+
+            subdirs = os.listdir(bad_scm_dir)
+            self.assertEqual(len(subdirs), 1)
+            dest_path = os.path.join(bad_scm_dir, subdirs[0])
+            self.assertTrue(subdirs[0].startswith('some_dir'))
+
+            self.assertTrue(
+                os.path.exists(os.path.join(dest_path, relpath, 'some_file')))
+            self.assertFalse(os.path.exists(checkout_path))
+        finally:
+            gclient_utils.rmtree(root_dir)
+
 
 class BaseGitWrapperTestCase(unittest.TestCase, test_case_utils.TestCaseUtils):
     """This class doesn't use pymox."""
