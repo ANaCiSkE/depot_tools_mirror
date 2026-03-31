@@ -2570,8 +2570,8 @@ def CheckChangedLUCIConfigs(input_api, output_api):
 
     # authentication
     try:
-        acc_tkn = auth.Authenticator(audience='https://%s' %
-                                     LUCI_CONFIG_HOST_NAME).get_id_token()
+        acc_tkn = auth.Authenticator().get_access_token()
+
     except auth.LoginRequiredError as e:
         return [
             output_api.PresubmitError('Error in authenticating user.',
