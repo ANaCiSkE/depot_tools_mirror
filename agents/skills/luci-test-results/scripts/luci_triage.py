@@ -103,7 +103,7 @@ def list_failures(build_id, limit=500):
     payload = {
         'invocations': [f'invocations/build-{build_id}'],
         'predicate': {
-            'status': 'UNEXPECTED'
+            'status': 'UNEXPECTED_MASK'
         },
         'pageSize': 1000
     }
