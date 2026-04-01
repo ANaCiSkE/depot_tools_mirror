@@ -138,14 +138,62 @@ def support_copy_on_write(src, dest):
     return True
 
 
-def try_btrfs_subvol_snapshot(src, dest):
+def btrfs_subvol_snapshot(src, dest):
+    """Creates a Btrfs snapshot of src at dest.
+    Fails hard with detailed diagnostics if it fails."""
     try:
         subprocess.check_call(['btrfs', 'subvol', 'snapshot', src, dest],
                               stderr=subprocess.STDOUT)
     except (subprocess.CalledProcessError, OSError):
+        print(f"Error: Failed to create Btrfs snapshot of '{src}'.")
+
+        # Diagnostics
+        readable = os.access(src, os.R_OK)
+        parent_dest = os.path.dirname(dest)
+        writable = os.access(parent_dest, os.W_OK)
+
+        if not readable:
+            print(
+                f"  [✗] Permission denied: Source repository '{src}' is not readable by you."
+            )
+            print(
+                "      Please ensure you have read permissions to the source subvolume."
+            )
+
+        if not writable:
+            print(
+                f"  [✗] Permission denied: Destination parent directory '{parent_dest}' is not writable by you."
+            )
+            print(
+                "      Please ensure you have write permissions to the destination parent directory."
+            )
+
+        if readable and writable:
+            print(
+                "  [?] Permissions appear OK. The failure might be due to other Btrfs restrictions."
+            )
+            print(
+                "      Consider checking if you have reached disk quota or if the filesystem is read-only."
+            )
+
         return False
     assert os.path.exists(dest)
     return True
+
+
+def is_btrfs_subvolume(path):
+    """Returns True if the path is a valid Btrfs subvolume (root)."""
+    try:
+        # Check if filesystem is btrfs
+        fstype = subprocess.check_output(
+            ['findmnt', '-no', 'FSTYPE', '--target', path],
+            stderr=subprocess.DEVNULL).decode().strip()
+        if fstype != 'btrfs':
+            return False
+        # In Btrfs, the root of a subvolume always has inode 256.
+        return os.stat(path).st_ino == 256
+    except (subprocess.CalledProcessError, OSError):
+        return False
 
 
 def real_git_dir(repo_path):
@@ -221,12 +269,12 @@ def main():
     args.repository = os.path.realpath(args.repository)
     args.new_workdir = os.path.realpath(args.new_workdir)
 
-    used_btrfs_subvol_snapshot = False
-    if try_btrfs_subvol_snapshot(args.repository, args.new_workdir):
+    if is_btrfs_subvolume(args.repository):
+        if not btrfs_subvol_snapshot(args.repository, args.new_workdir):
+            sys.exit(1)
         # If btrfs is being used, reflink support is always present, and there's
         # no benefit to not using it.
         args.copy_on_write = True
-        used_btrfs_subvol_snapshot = True
     else:
         os.makedirs(args.new_workdir)
 
@@ -315,7 +363,7 @@ def main():
     except Exception as e:
         print(f'Error: {e}')
         print(f'Cleaning up {args.new_workdir}')
-        if used_btrfs_subvol_snapshot:
+        if is_btrfs_subvolume(args.new_workdir):
             subprocess.check_call(
                 ['btrfs', 'subvol', 'delete', args.new_workdir]
             )
