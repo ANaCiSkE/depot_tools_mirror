@@ -140,10 +140,18 @@ _GCLIENT_DEPS_SCHEMA = _NodeDictSchema({
         }),
         # CIPD package.
         _NodeDictSchema({
-            'packages': [_NodeDictSchema({
-                'package': str,
-                'version': str,
-            })],
+            'packages': [
+                schema.Or(
+                    _NodeDictSchema({
+                        'package': str,
+                        'version': str
+                    }),
+                    _NodeDictSchema({
+                        'package': str,
+                        'version_file': str
+                    }),
+                ),
+            ],
             schema.Optional('condition'):
             str,
             schema.Optional('dep_type', default='cipd'):

@@ -2965,7 +2965,12 @@ class CipdDependency(Dependency):
     def __init__(self, parent, name, dep_value, cipd_root, custom_vars,
                  should_process, relative, condition):
         package = dep_value['package']
-        version = dep_value['version']
+        if dep_value.get('version_file'):
+            fp = os.path.join(parent.root.root_dir, parent.name,
+                              dep_value['version_file'])
+            version = gclient_utils.FileRead(fp).strip()
+        else:
+            version = dep_value['version']
         url = urllib.parse.urljoin(cipd_root.service_url,
                                    '%s@%s' % (package, version))
         super(CipdDependency, self).__init__(parent=parent,
