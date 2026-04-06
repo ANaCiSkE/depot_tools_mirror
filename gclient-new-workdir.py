@@ -40,8 +40,9 @@ def parse_options():
     parser.add_argument(
         '--use-git-worktree',
         action='store_true',
-        default=False,
-        help='''Use git worktree instead of using symlinks for .git folders.''',
+        default=True,
+        help=
+        '''Use git worktree instead of using symlinks for .git folders (default).''',
     )
     parser.add_argument(
         '--use-git-symlinks',
@@ -70,6 +71,13 @@ def parse_options():
         '''there is no limit. The default is 1 if copy-on-write is used, '''
         '''otherwise the default is -1.''')
     args = parser.parse_args()
+
+    if '--use-git-worktree' not in sys.argv and '--use-git-symlinks' not in sys.argv:
+        print(
+            'Warning: --use-git-worktree is now the default. If you experience\n'
+            'issues, you can use --use-git-symlinks and please file a bug:\n'
+            'https://issues.chromium.org/u/0/issues/new?component=1456102',
+            file=sys.stderr)
 
     if '--reflink' in sys.argv or '--no-reflink' in sys.argv:
         print(
