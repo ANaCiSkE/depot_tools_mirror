@@ -2118,8 +2118,13 @@ def CheckForCommitObjects(input_api, output_api):
             for f in affected_files
         ]
         # On Windows, the command line is limited to 8191 characters.
+        # Also, arguments containing special characters like '&' can cause
+        # issues on Windows when shell=True: http://crbug.com/498957658
         cmd_len = len(' '.join(cmd + ['--'] + files_to_check))
-        if (input_api.is_windows and cmd_len > _WIN_COMMAND_LINE_CHAR_LIMIT):
+        has_special_chars = any(
+            any(c in f for c in '&|<>^') for f in files_to_check)
+        if (input_api.is_windows and
+            (cmd_len > _WIN_COMMAND_LINE_CHAR_LIMIT or has_special_chars)):
             cmd.extend(['-r'])
         else:
             cmd.extend(['--'] + files_to_check)

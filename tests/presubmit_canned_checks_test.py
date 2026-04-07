@@ -976,6 +976,23 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn('--', ls_tree_cmd)
         self.assertIn('foo.txt', ls_tree_cmd)
 
+    def testWindowsSpecialCharacters(self):
+        # On Windows, if a file contains special characters like '&', we should
+        # fall back to a recursive ls-tree.
+        self.input_api.platform = 'win32'
+        self.input_api.files = [MockAffectedFile('foo&bar.txt', '')]
+        self.input_api.subprocess.check_output.return_value = b''
+
+        presubmit_canned_checks.CheckForCommitObjects(self.input_api,
+                                                      self.output_api)
+
+        # The first call is to `git show HEAD:DEPS`.
+        # The second call is to `git ls-tree`.
+        self.assertEqual(2, self.input_api.subprocess.check_output.call_count)
+        ls_tree_cmd = self.input_api.subprocess.check_output.call_args_list[1][
+            0][0]
+        self.assertIn('-r', ls_tree_cmd)
+
 
 if __name__ == '__main__':
     unittest.main()
