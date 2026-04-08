@@ -120,6 +120,11 @@ def _IsNumericConstant(node):
         and not isinstance(node.value, bool)
 
 # See https://github.com/keleshev/schema for docs how to configure schema.
+# NOTE: If you change this schema, you may need to update other sites that
+# implement their own DEPS-parsing. These include:
+# - http://shortn/_kyy6neydiv
+# - https://skia.googlesource.com/buildbot/+/main/go/depot_tools/deps_parser/
+# - https://chromium.googlesource.com/chromium/tools/build/+/main/recipes/recipe_modules/v8_auto_roller/
 _GCLIENT_DEPS_SCHEMA = _NodeDictSchema({
     schema.Optional(str):
     schema.Or(
