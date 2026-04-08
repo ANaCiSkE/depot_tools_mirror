@@ -247,8 +247,9 @@ def check_outdir(out_dir: str) -> None:
         sys.exit(1)
 
 
-def apply_telemetry_flags(subcmd_args: list[str], env: dict[str,
-                                                            str]) -> list[str]:
+def apply_telemetry_flags(subcmd_args: list[str],
+                          env: dict[str, str],
+                          is_ai_agent: bool = False) -> list[str]:
     user_system = _SYSTEM_DICT.get(sys.platform, sys.platform)
 
     user_provided_labels_present = False
@@ -266,6 +267,11 @@ def apply_telemetry_flags(subcmd_args: list[str], env: dict[str,
         result.append("tool=siso")
         result.append(f"host_os={user_system}")
         subcmd_args = subcmd_args + ["--metrics_labels", ",".join(result)]
+
+    namespace = "developer"
+    if is_ai_agent:
+        namespace += ":ai-agent"
+    subcmd_args = subcmd_args + [f"--namespace={namespace}"]
 
     telemetry_flags = [
         "enable_cloud_monitoring", "enable_cloud_profiler",
@@ -576,7 +582,8 @@ def main(args: list[str],
                         (telemetry_cfg.enabled(), subcmd == "ninja",
                          no_help_flag(args)))
                     if should_collect_logs:
-                        subcmd_args = apply_telemetry_flags(subcmd_args, env)
+                        subcmd_args = apply_telemetry_flags(
+                            subcmd_args, env, is_ai_agent)
                         env = _handle_collector(siso_path, subcmd_args, env)
 
                     new_args = pre_args + [subcmd] + subcmd_args
