@@ -45,6 +45,9 @@
 /metadata/**       recipes
 /metadata/tests/** -recipes
 
+# Skill validator script.
+/agents/skills/skill-validator/scripts/skill_validator.py recipes
+
 # Libraries for reuse between depot_tools and dependent repos
 /infra_lib                         recipes
 
