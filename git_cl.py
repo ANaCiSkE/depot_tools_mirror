@@ -2648,7 +2648,7 @@ class Changelist(object):
 
         data = self._GetChangeDetail(['CURRENT_REVISION'])
         patchset = data['revisions'][data['current_revision']]['_number']
-        if update:
+        if update and self.GetBranch():
             self.SetPatchset(patchset)
         return patchset
 
@@ -2693,7 +2693,8 @@ class Changelist(object):
             if revision_info.get('kind', '') not in \
                 ('NO_CHANGE', 'NO_CODE_CHANGE', 'TRIVIAL_REBASE'):
                 break
-        self.SetPatchset(patchset)
+        if self.GetBranch():
+            self.SetPatchset(patchset)
         return patchset
 
     def AddComment(self, message, publish=None):
