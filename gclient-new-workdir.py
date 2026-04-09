@@ -292,7 +292,8 @@ def main():
         new_gclient = os.path.join(args.new_workdir, '.gclient')
 
         if args.copy_on_write is None:
-            args.copy_on_write = support_copy_on_write(gclient, new_gclient)
+            args.copy_on_write = support_copy_on_write(
+                os.path.realpath(gclient), new_gclient)
             if args.copy_on_write:
                 print('Copy-on-write support is detected.')
 
@@ -322,9 +323,9 @@ def main():
                 current_depth = rel_path.count(os.sep) + 1
 
             # Check if there's a .git directory before modifying dirs.
-            has_git = '.git' in dirs
+            has_git = os.path.exists(os.path.join(root, '.git'))
             # Don't descend into the .git directory.
-            if has_git:
+            if '.git' in dirs:
                 dirs.remove('.git')
 
             # If we've reached the max depth, remove all directories from the
@@ -345,7 +346,12 @@ def main():
                 if not os.path.exists(workdir):
                     print('Copying: %s' % workdir)
                     copy_on_write(root, workdir)
-                shutil.rmtree(os.path.join(workdir, '.git'))
+                workdir_git = os.path.join(workdir, '.git')
+                if os.path.exists(workdir_git):
+                    if os.path.isdir(workdir_git):
+                        shutil.rmtree(workdir_git)
+                    else:
+                        os.remove(workdir_git)
 
             if args.use_git_worktree:
                 if args.copy_on_write:
