@@ -41,9 +41,10 @@ class TraceConfig:
 
     def __init__(self, config: configparser.ConfigParser) -> None:
         self._config = config
+        self.id_regenerated = False
 
         if not self.has_enabled() or self.enabled:
-            self.gen_id()
+            self.id_regenerated = self.gen_id()
 
     def update(self, enabled: bool, reason: Literal["AUTO", "USER",
                                                     "BOT_USER"]) -> None:
@@ -51,12 +52,14 @@ class TraceConfig:
         self._config[TRACE_SECTION_KEY][ENABLED_KEY] = str(enabled)
         self._config[TRACE_SECTION_KEY][ENABLED_REASON_KEY] = reason
 
-    def gen_id(self, regen=False) -> None:
-        """[Re]generate UUIDs."""
+    def gen_id(self, regen=False) -> bool:
+        """[Re]generate UUIDs. Returns true if UUID is regenerated"""
         if regen or self._uuid_stale():
             self._config[TRACE_SECTION_KEY][KEY_USER_UUID] = str(uuid.uuid4())
             self._config[TRACE_SECTION_KEY][KEY_USER_UUID_TIMESTAMP] = str(
                 int(time.time()))
+            return True
+        return False
 
     @property
     def batch(self) -> bool:
@@ -148,15 +151,16 @@ class Config:
         self._config = configparser.ConfigParser()
 
         self._config.read_dict(DEFAULT_CONFIG)
-        if not self._path.exists():
-            self.flush()
-        else:
+        path_exists = self._path.exists()
+        if path_exists:
             with self._path.open("r", encoding="utf-8") as configfile:
                 self._config.read_file(configfile)
 
         self._trace_config = TraceConfig(self._config)
         self._root_config = RootConfig(self._config)
 
+        if not path_exists or self._trace_config.id_regenerated:
+            self.flush()
 
     def flush(self) -> None:
         """Flushes the current config to config file."""

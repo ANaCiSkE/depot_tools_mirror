@@ -21,8 +21,11 @@ class ConfigTest(unittest.TestCase):
             cfg = config.Config(path)
 
             with open(path, 'r') as f:
-                self.assertEqual(f.read(),
-                                 "[root]\nnotice_countdown = 9\n\n[trace]\n\n")
+                content = f.read()
+                self.assertIn("[root]\nnotice_countdown = 9", content)
+                self.assertIn("[trace]", content)
+                self.assertIn("user_uuid =", content)
+                self.assertIn("user_uuid_generated =", content)
             self.assertFalse(cfg.trace_config.enabled)
             self.assertFalse(cfg.trace_config.has_enabled())
             self.assertEqual("AUTO", cfg.trace_config.enabled_reason)
