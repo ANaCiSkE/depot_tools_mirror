@@ -221,3 +221,19 @@ def CheckFreezeOnCommit(input_api, output_api):
 
 def CheckAyeAye(input_api, output_api):
     return input_api.canned_checks.CheckAyeAye(input_api, output_api)
+
+
+def CheckSkillFiles(input_api, output_api):
+    """Validates SKILL.md files have correct frontmatter and formatting."""
+    return input_api.canned_checks.CheckSkillFiles(input_api, output_api)
+
+
+def CheckSkillValidatorTestsOnCommit(input_api, output_api):
+    """Runs skill-validator tests on commit."""
+    tests = input_api.canned_checks.GetUnitTestsInDirectory(
+        input_api,
+        output_api,
+        input_api.os_path.join('agents', 'skills', 'skill-validator',
+                               'scripts'),
+        files_to_check=[r'.*test\.py$'])
+    return input_api.RunTests(tests)
