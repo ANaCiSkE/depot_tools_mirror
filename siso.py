@@ -552,6 +552,9 @@ def main(args: list[str],
             return 1
         global_flags, subcmd_flags = load_sisorc(
             os.path.join(base_path, 'build', 'config', 'siso', '.sisorc'))
+        should_print_flags = False
+        if global_flags:
+            should_print_flags = True
         siso_paths = [
             siso_override_path,
             os.path.join(base_path, 'third_party', 'siso', 'cipd',
@@ -573,7 +576,10 @@ def main(args: list[str],
 
                 if subcmd:
                     # Apply subcommand-specific flags from .sisorc
-                    subcmd_args = subcmd_flags.get(subcmd, []) + subcmd_args
+                    sub_flags = subcmd_flags.get(subcmd, [])
+                    if sub_flags:
+                        should_print_flags = True
+                    subcmd_args = sub_flags + subcmd_args
 
                     # fast_nop, fast_local, fast_last_failure, fast_exit are set
                     # to false when stdout is not a TTY (see
@@ -607,7 +613,7 @@ def main(args: list[str],
                 else:
                     new_args = pre_args
 
-                if args[1:] != new_args:
+                if should_print_flags:
                     print('depot_tools/siso.py: %s' % shlex.join(new_args),
                           file=sys.stderr)
                 check_outdir(out_dir)

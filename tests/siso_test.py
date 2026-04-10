@@ -702,11 +702,7 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
                 "--namespace=developer",
             ],
-            "depot_tools/siso.py: %s\n" % shlex.join([
-                "ninja", "-C", "out/Default", "--metrics_labels",
-                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
-                "--namespace=developer"
-            ]),
+            "",
             id="ninja_with_logs_no_project",
         ),
         pytest.param(
@@ -729,14 +725,7 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--enable_cloud_logging",
                 "--metrics_project=test-project",
             ],
-            "depot_tools/siso.py: %s\n" % shlex.join([
-                "ninja", "-C", "out/Default", "--project=test-project",
-                "--metrics_labels",
-                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
-                "--namespace=developer", "--enable_cloud_monitoring",
-                "--enable_cloud_profiler", "--enable_cloud_trace",
-                "--enable_cloud_logging", "--metrics_project=test-project"
-            ]),
+            "",
             id="ninja_with_logs_with_project_in_args",
         ),
         pytest.param(
@@ -758,13 +747,7 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--enable_cloud_logging",
                 "--metrics_project=test-project",
             ],
-            "depot_tools/siso.py: %s\n" % shlex.join([
-                "ninja", "-C", "out/Default", "--metrics_labels",
-                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
-                "--namespace=developer", "--enable_cloud_monitoring",
-                "--enable_cloud_profiler", "--enable_cloud_trace",
-                "--enable_cloud_logging", "--metrics_project=test-project"
-            ]),
+            "",
             id="ninja_with_logs_with_project_in_env",
         ),
         pytest.param(
