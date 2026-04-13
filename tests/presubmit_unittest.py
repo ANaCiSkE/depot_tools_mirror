@@ -2208,18 +2208,6 @@ class CannedChecksUnittest(PresubmitTestsBase):
                 x, y), 'DO NOTSUBMIT', None, 'DO NOT ' + 'SUBMIT', None,
             presubmit.OutputApi.PresubmitError)
 
-    def testCannedCheckCorpLinksInDescription(self):
-        self.DescriptionTest(
-            presubmit_canned_checks.CheckCorpLinksInDescription,
-            'chromium.googlesource.com', 'chromium.git.corp.google.com',
-            presubmit.OutputApi.PresubmitPromptWarning, False)
-
-    def testCannedCheckCorpLinksInFiles(self):
-        self.ContentTest(presubmit_canned_checks.CheckCorpLinksInFiles,
-                         'chromium.googlesource.com', None,
-                         'chromium.git.corp.google.com', None,
-                         presubmit.OutputApi.PresubmitPromptWarning)
-
     def testCannedCheckLargeScaleChange(self):
         input_api = self.MockInputApi(
             presubmit.Change('foo', 'foo1', self.fake_root_dir, None, 0, 0,

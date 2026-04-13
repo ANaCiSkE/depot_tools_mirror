@@ -69,7 +69,6 @@ OFF_UNLESS_MANUALLY_ENABLED_LINT_FILTERS = [
     '-whitespace/tab',
 ]
 
-_CORP_LINK_KEYWORD = '.corp.google'
 
 # Git Tree Mode for a "gitlink" (submodule).
 # See https://git-scm.com/docs/git-ls-tree#_output_format
@@ -141,17 +140,6 @@ def CheckDoNotSubmitInDescription(input_api, output_api):
         return [
             output_api.PresubmitError(
                 keyword + ' is present in the changelist description.')
-        ]
-
-    return []
-
-
-def CheckCorpLinksInDescription(input_api, output_api):
-    """Checks that the description doesn't contain corp links."""
-    if _CORP_LINK_KEYWORD in input_api.change.DescriptionText():
-        return [
-            output_api.PresubmitPromptWarning(
-                'Corp link is present in the changelist description.')
         ]
 
     return []
@@ -266,17 +254,6 @@ def CheckDoNotSubmitInFiles(input_api, output_api):
     text = '\n'.join('Found %s in %s' % (keyword, loc) for loc in errors)
     if text:
         return [output_api.PresubmitError(text)]
-    return []
-
-
-def CheckCorpLinksInFiles(input_api, output_api, source_file_filter=None):
-    """Checks that files do not contain a corp link."""
-    errors = _FindNewViolationsOfRule(
-        lambda _, line: _CORP_LINK_KEYWORD not in line, input_api,
-        source_file_filter)
-    text = '\n'.join('Found corp link in %s' % loc for loc in errors)
-    if text:
-        return [output_api.PresubmitPromptWarning(text)]
     return []
 
 
@@ -1823,10 +1800,6 @@ def PanProjectChecks(input_api,
                                              license_header,
                                              project_name,
                                              source_file_filter=sources))
-    snapshot("checking corp links in files")
-    results.extend(
-        input_api.canned_checks.CheckCorpLinksInFiles(
-            input_api, output_api, source_file_filter=sources))
     snapshot("checking large scale change")
     results.extend(
         input_api.canned_checks.CheckLargeScaleChange(input_api, output_api))
@@ -1844,9 +1817,6 @@ def PanProjectChecks(input_api,
                     input_api, output_api))
             results.extend(
                 input_api.canned_checks.CheckDoNotSubmitInDescription(
-                    input_api, output_api))
-            results.extend(
-                input_api.canned_checks.CheckCorpLinksInDescription(
                     input_api, output_api))
         snapshot("checking do not submit in files")
         results.extend(
