@@ -280,7 +280,7 @@ def main():
     parser.add_argument(
         "--edit_monitor_state",
         default="",
-        choices=["control", "enabled"],
+        choices=["control", "disabled_opt_out", "enabled"],
         help="State of the Edit Monitor.",
     )
     parser.add_argument(

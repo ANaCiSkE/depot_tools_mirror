@@ -18,12 +18,19 @@ class EditMonitorState(StrEnum):
 
     Attributes:
         ENABLED: The edit_monitor daemon is detected and actively running.
-        CONTROL: The edit_monitor daemon is NOT running (e.g. user is in
-                 the control group, opted out, or on an unsupported OS).
+        DISABLED_OPT_OUT: The edit_monitor daemon is NOT running because the
+            user explicitly opted out.
+        CONTROL: The edit_monitor daemon is NOT running for any other reason
+            (e.g. user is in the control group or on an unsupported OS).
     """
     ENABLED = 'enabled'
+    DISABLED_OPT_OUT = 'disabled_opt_out'
     CONTROL = 'control'
 
+
+# This should be kept in sync with the edit monitor management script in
+# src-internal.
+ENABLE_EDIT_MONITOR_ENV = 'ENABLE_EDIT_MONITOR'
 
 # Current version of metrics recording.
 # When we add new metrics, the version number will be increased, we display the
@@ -176,7 +183,8 @@ def get_edit_monitor_state():
     """Returns the state of the Edit Monitor.
 
     Returns:
-        "enabled" if the process is detected, otherwise "control" (even on error).
+        "enabled" if the process is detected, "disabled_opt_out" if not detected
+        and the user explicitly opted out, otherwise "control" (even on error).
     """
     if sys.platform.startswith('linux'):
         try:
@@ -190,6 +198,8 @@ def get_edit_monitor_state():
             )
             if exit_code == 0:
                 return EditMonitorState.ENABLED
+            if os.environ.get(ENABLE_EDIT_MONITOR_ENV, '').lower() == 'false':
+                return EditMonitorState.DISABLED_OPT_OUT
         except Exception as e:
             logging.warning('Failed to pgrep for edit_monitor: %s', e)
             return EditMonitorState.CONTROL

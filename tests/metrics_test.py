@@ -865,8 +865,9 @@ class MetricsUtilsTest(unittest.TestCase):
     def test_get_edit_monitor_state_linux(self, mock_call):
         """Tests that we can get the edit monitor state on Linux."""
         mock_call.return_value = 1
-        self.assertEqual(metrics_utils.EditMonitorState.CONTROL,
-                         metrics_utils.get_edit_monitor_state())
+        with mock.patch.dict(os.environ, {'ENABLE_EDIT_MONITOR': ''}):
+            self.assertEqual(metrics_utils.EditMonitorState.CONTROL,
+                             metrics_utils.get_edit_monitor_state())
         mock_call.assert_called_with(
             ['pgrep', '-f', 'edit_monitor.*--target_repo chrome'],
             stdout=metrics_utils.subprocess2.DEVNULL,
@@ -876,6 +877,11 @@ class MetricsUtilsTest(unittest.TestCase):
         mock_call.return_value = 0
         self.assertEqual(metrics_utils.EditMonitorState.ENABLED,
                          metrics_utils.get_edit_monitor_state())
+
+        mock_call.return_value = 1
+        with mock.patch.dict(os.environ, {'ENABLE_EDIT_MONITOR': 'false'}):
+            self.assertEqual(metrics_utils.EditMonitorState.DISABLED_OPT_OUT,
+                             metrics_utils.get_edit_monitor_state())
 
     @mock.patch('metrics_utils.sys.platform', 'darwin')
     @mock.patch('subprocess2.call')

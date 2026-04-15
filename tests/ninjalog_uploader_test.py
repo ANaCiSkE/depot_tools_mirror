@@ -271,6 +271,24 @@ class NinjalogUploaderTest(unittest.TestCase):
 
         self.assertEqual(metadata['edit_monitor_state'], '')
 
+    @unittest.mock.patch('ninjalog_uploader.GetGCEMetadata')
+    @unittest.mock.patch('ninjalog_uploader.ParseGNArgs')
+    def test_get_metadata_with_edit_monitor_disabled_opt_out(
+            self, mock_parse_gn_args, mock_get_gce_metadata):
+        mock_parse_gn_args.return_value = ({}, [])
+        mock_get_gce_metadata.return_value = {}
+
+        metadata = ninjalog_uploader.GetMetadata(
+            cmdline=['python3', 'ninja.py', 'chrome'],
+            ninjalog=os.path.join('out', 'Release', '.ninja_log'),
+            exit_code=0,
+            build_duration=123,
+            user='user@example.com',
+            edit_monitor_state='disabled_opt_out',
+        )
+
+        self.assertEqual(metadata['edit_monitor_state'], 'disabled_opt_out')
+
 
 if __name__ == '__main__':
     unittest.main()
