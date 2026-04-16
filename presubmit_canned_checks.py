@@ -2073,8 +2073,7 @@ def CheckForCommitObjects(input_api, output_api):
 
     # If the number of affected files is small, we can avoid scanning the entire
     # tree.
-    affected_files = list(input_api.AffectedFiles()) + list(
-        input_api.change.AffectedSubmodules())
+    affected_files = list(input_api.AffectedFiles())
 
     # We must scan the full tree if DEPS is modified to ensure that any change
     # in DEPS is reflected in the gitlinks.
@@ -2084,18 +2083,10 @@ def CheckForCommitObjects(input_api, output_api):
     if len(affected_files) < 1000 and not deps_modified:
         # We need to pass the paths relative to the repository root.
         repo_root = input_api.change.RepositoryRoot()
-
-        # Git uses forward slashes on all platforms.
         files_to_check = [
-            input_api.os_path.relpath(f.AbsoluteLocalPath(), repo_root).replace(
-                input_api.os_path.sep, '/') for f in affected_files
+            input_api.os_path.relpath(f.AbsoluteLocalPath(), repo_root)
+            for f in affected_files
         ]
-        if deps['git_dependencies'] == 'SYNC':
-            files_to_check.extend([
-                p.replace(input_api.os_path.sep, '/')
-                for p in input_api.change.AllLocalSubmodules()
-            ])
-
         # On Windows, the command line is limited to 8191 characters.
         # Also, arguments containing special characters like '&' can cause
         # issues on Windows when shell=True: http://crbug.com/498957658

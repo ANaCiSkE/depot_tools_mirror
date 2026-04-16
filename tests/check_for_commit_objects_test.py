@@ -101,13 +101,10 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertNotIn('other.txt', args)
 
     def testBatchedFoundCommit(self):
-        # 1 submodule, found a commit object (gitlink)
-        self.input_api.files = []
-
-        # Mock AffectedSubmodules to return the submodule
-        submodule_file = MockFile(os.path.join('/tmp/repo', 'submodule'), [])
-        self.input_api.change.AffectedSubmodules = mock.Mock(
-            return_value=[submodule_file])
+        # 1 file, found a commit object (gitlink)
+        self.input_api.files = [
+            MockFile(os.path.join('/tmp/repo', 'submodule'), [])
+        ]
 
         # Mock output: 160000 commit <hash>\tsubmodule
         # NOTE: The loop in CheckForCommitObjects looks for _GIT_MODE_SUBMODULE (b'160000')
@@ -118,31 +115,6 @@ class CheckForCommitObjectsTest(unittest.TestCase):
             self.input_api, self.output_api)
         self.assertEqual(len(results), 1)
         self.assertIn('submodule', results[0].message)
-
-    def testBatchedExecutionWithSubmodule(self):
-        # 1 file + 1 submodule, should run batched git ls-tree with both
-        self.input_api.files = [
-            MockFile(os.path.join('/tmp/repo', 'a.txt'), []),
-        ]
-
-        # Mock AffectedSubmodules to return the submodule
-        submodule_file = MockFile(os.path.join('/tmp/repo', 'third_party/perl'),
-                                  [])
-        self.input_api.change.AffectedSubmodules = mock.Mock(
-            return_value=[submodule_file])
-
-        # Mock check_output
-        self.input_api.subprocess.check_output = mock.Mock(return_value=b'')
-
-        presubmit_canned_checks.CheckForCommitObjects(self.input_api,
-                                                      self.output_api)
-
-        # Verify check_output was called with both files
-        args = self.input_api.subprocess.check_output.call_args[0][0]
-        self.assertIn('ls-tree', args)
-        self.assertIn('a.txt', args)
-        self.assertIn('third_party/perl', args)
-        self.assertIn('--full-tree', args)
 
 
 if __name__ == '__main__':
