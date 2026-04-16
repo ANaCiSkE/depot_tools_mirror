@@ -4714,6 +4714,8 @@ def main(argv):
     # get the user to edit something.
     os.environ["GIT_PAGER"] = "cat"
     os.environ["GIT_EDITOR"] = "false"
+    if not sys.stdout.isatty():
+        os.environ["GIT_TERMINAL_PROMPT"] = "0"
 
     if not can_run_gclient_and_helpers():
         return 2
