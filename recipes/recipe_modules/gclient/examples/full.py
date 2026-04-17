@@ -58,6 +58,7 @@ TEST_CONFIGS = [
     'recipes_py',
     'recipes_py_bare',
     'tint',
+    'webpagereplay',
     'webports',
     'with_branch_heads',
     'with_tags',

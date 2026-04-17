@@ -346,6 +346,14 @@ def catapult(c):
   soln.url = 'https://chromium.googlesource.com/catapult'
   c.got_revision_mapping['catapult'] = 'got_revision'
 
+
+@config_ctx()
+def webpagereplay(c):
+  soln = c.solutions.add()
+  soln.name = 'webpagereplay'
+  soln.url = 'https://chromium.googlesource.com/webpagereplay'
+  c.got_revision_mapping['webpagereplay'] = 'got_revision'
+
 @config_ctx(includes=['infra_internal'])
 def infradata_master_manager(c):
   soln = c.solutions.add()
