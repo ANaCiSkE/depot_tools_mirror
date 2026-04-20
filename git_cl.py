@@ -1035,7 +1035,8 @@ class Settings(object):
     def GetIsGerrit(self):
         """Return True if gerrit.host is set."""
         if self.is_gerrit is None:
-            self.is_gerrit = bool(self._GetConfig('gerrit.host', False))
+            val = self._GetConfig('gerrit.host')
+            self.is_gerrit = bool(val) and val.lower() != 'false'
         return self.is_gerrit
 
     def GetGerritSkipEnsureAuthenticated(self):

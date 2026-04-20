@@ -451,6 +451,31 @@ class TestGitClBasic(unittest.TestCase):
                 },
             })
 
+    def test_get_is_gerrit(self):
+        """Test Settings.GetIsGerrit with various gerrit.host values."""
+        # Test empty value returns False
+        settings = git_cl.Settings()
+        with mock.patch.object(settings, '_GetConfig', return_value=''):
+            self.assertFalse(settings.GetIsGerrit())
+
+        # Test 'false' (case-insensitive) returns False
+        for val in ['false', 'False', 'FALSE']:
+            settings = git_cl.Settings()
+            with mock.patch.object(settings, '_GetConfig', return_value=val):
+                self.assertFalse(settings.GetIsGerrit())
+
+        # Test valid hostname returns True
+        settings = git_cl.Settings()
+        with mock.patch.object(settings,
+                               '_GetConfig',
+                               return_value='chromium-review.googlesource.com'):
+            self.assertTrue(settings.GetIsGerrit())
+
+        # Test 'true' string returns True
+        settings = git_cl.Settings()
+        with mock.patch.object(settings, '_GetConfig', return_value='true'):
+            self.assertTrue(settings.GetIsGerrit())
+
 
 class TestParseIssueURL(unittest.TestCase):
     def _test(self, arg, issue=None, patchset=None, hostname=None, fail=False):
