@@ -2835,6 +2835,41 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual('hi\n\t there\n\nman', ChangelistMock.desc)
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_diff_with_files(self):
+        mock.patch('git_common.current_branch', return_value='main').start()
+
+        scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
+        scm.GIT.SetConfig('', 'branch.main.last-upload-hash', 'deadbeaf')
+
+        self.calls = [
+            ((['git', 'diff', 'deadbeaf', 'file1'], ), ''),
+        ]
+        self.assertEqual(0, git_cl.main(['diff', 'file1']))
+
+        self.calls = [
+            ((['git', 'diff', 'deadbeaf', '--', 'file1'], ), ''),
+        ]
+        self.assertEqual(0, git_cl.main(['diff', '--', 'file1']))
+
+        with mock.patch('git_cl.OptionParser.error',
+                        side_effect=ParserErrorMock):
+            with self.assertRaises(ParserErrorMock):
+                git_cl.main(['diff', 'a.txt', '--', 'b.txt'])
+
+        self.calls = [
+            ((['git', 'diff', 'deadbeaf', '--', 'a.txt', 'b.txt'], ), ''),
+        ]
+        self.assertEqual(0, git_cl.main(['diff', '--', 'a.txt', 'b.txt']))
+
+        self.calls = [
+            ((['git', 'diff', '--stat', 'deadbeaf', '--', 'a.txt',
+               'b.txt'], ), ''),
+        ]
+        self.assertEqual(
+            0, git_cl.main(['diff', '--stat', '--', 'a.txt', 'b.txt']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     def test_archive(self):
         self.calls = [
