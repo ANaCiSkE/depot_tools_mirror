@@ -21,7 +21,7 @@ class JjWrapper(gclient_scm.GitWrapper):
                     continue
                 path = pathlib.Path(self.checkout_path, line[len('path = '):])
                 # Not every submodule will exist, because many are conditional.
-                if path.is_dir():
+                if path.is_dir() and (path / '.git').exists():
                     yield path
 
     def GetSubmoduleStateFromIndex(self):
