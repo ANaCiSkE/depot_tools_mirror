@@ -3467,6 +3467,17 @@ class TestGitCl(unittest.TestCase):
                           'line': 42,
                           'message': 'I removed this because it is bad',
                       },
+                      {
+                          'id': 'comment_id_3',
+                          'author': {
+                              'email': u'owner@example.com'
+                          },
+                          'updated': u'2017-03-16 20:00:41.000000000',
+                          'patch_set': 2,
+                          'side': 'PARENT',
+                          'line': 42,
+                          'message': 'And another thing',
+                      },
                   ]
               }),
         ] * 2 + [(('write_json', 'output.json', [{
@@ -3480,6 +3491,12 @@ class TestGitCl(unittest.TestCase):
                     'patchset': 'Base',
                     'unresolved': False,
                     'content': 'I removed this because it is bad'
+                }, {
+                    'path': 'codereview.settings',
+                    'line': 42,
+                    'patchset': 'Base',
+                    'unresolved': False,
+                    'content': 'And another thing'
                 }]
             },
             'sender': 'owner@example.com',
@@ -3509,7 +3526,10 @@ class TestGitCl(unittest.TestCase):
                 message=(u'PTAL\n' + u'\n' + u'codereview.settings\n' +
                          u'  Base, Line 42: https://crrev.com/c/1/2/' +
                          u'codereview.settings#b42 (resolved)\n' +
-                         u'  I removed this because it is bad\n'),
+                         u'  I removed this because it is bad\n\n' +
+                         u'  Base, Line 42: https://crrev.com/c/1/2/' +
+                         u'codereview.settings#b42 (resolved)\n' +
+                         u'  And another thing\n'),
                 message_json={
                     'message':
                     'PTAL',
@@ -3519,6 +3539,12 @@ class TestGitCl(unittest.TestCase):
                         'patchset': 'Base',
                         'unresolved': False,
                         'content': 'I removed this because it is bad'
+                    }, {
+                        'path': 'codereview.settings',
+                        'line': 42,
+                        'patchset': 'Base',
+                        'unresolved': False,
+                        'content': 'And another thing'
                     }]
                 },
                 date=datetime.datetime(2017, 3, 16, 20, 0, 41, 0),

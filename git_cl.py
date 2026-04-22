@@ -2754,8 +2754,8 @@ class Changelist(object):
                        (url_prefix, comment.patch_set,
                         comment.path, 'b' if comment.side == 'PARENT' else '',
                         str(line) if line else ''))
-                comments[key][comment.path][patchset][line] = (unresolved, url,
-                                                               comment.message)
+                comments[key][comment.path][patchset].setdefault(
+                    line, []).append((unresolved, url, comment.message))
 
         summaries = []
         for msg in messages:
@@ -2792,28 +2792,29 @@ class Changelist(object):
             if readable:
                 message += '\n%s' % path
             for patchset, lines in sorted(patchsets.items()):
-                for line, (unresolved, url, content) in sorted(lines.items()):
-                    resolved_str = 'unresolved' if unresolved else 'resolved'
-                    if line:
-                        line_str = 'Line %d' % line
-                        path_str = '%s:%d:' % (path, line)
-                    else:
-                        line_str = 'File comment'
-                        path_str = '%s:0:' % path
-                    if readable:
-                        message += '\n  %s, %s: %s (%s)' % (patchset, line_str,
-                                                            url, resolved_str)
-                        message += '\n  %s\n' % content
-                    else:
-                        message += '\n%s (%s)' % (path_str, resolved_str)
-                        message += '\n%s\n' % content
-                    message_json['comments'].append({
-                        'path': path,
-                        'line': line,
-                        'patchset': patchset,
-                        'unresolved': unresolved,
-                        'content': content,
-                    })
+                for line, comment_list in sorted(lines.items()):
+                    for unresolved, url, content in comment_list:
+                        resolved_str = 'unresolved' if unresolved else 'resolved'
+                        if line:
+                            line_str = 'Line %d' % line
+                            path_str = '%s:%d:' % (path, line)
+                        else:
+                            line_str = 'File comment'
+                            path_str = '%s:0:' % path
+                        if readable:
+                            message += '\n  %s, %s: %s (%s)' % (
+                                patchset, line_str, url, resolved_str)
+                            message += '\n  %s\n' % content
+                        else:
+                            message += '\n%s (%s)' % (path_str, resolved_str)
+                            message += '\n%s\n' % content
+                        message_json['comments'].append({
+                            'path': path,
+                            'line': line,
+                            'patchset': patchset,
+                            'unresolved': unresolved,
+                            'content': content,
+                        })
 
         return _CommentSummary(
             date=date,
