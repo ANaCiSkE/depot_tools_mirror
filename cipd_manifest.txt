@@ -61,7 +61,7 @@ infra/tools/luci/luci-auth-ssh-helper/${platform} git_revision:0ff6e38043daec0a3
 infra/tools/bb/${platform} git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
 
 # LUCI ResultDB CLI
-infra/tools/rdb/${platform} git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
+infra/tools/rdb/${platform} git_revision:5290cedd7d78b5911eafea14b480e3facad3173b
 
 # dirmd, a tool to work with DIR_METADATA files
 infra/tools/dirmd/${platform} git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
