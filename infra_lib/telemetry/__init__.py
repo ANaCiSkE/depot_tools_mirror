@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 from typing import Optional
+import os
 import socket
 import sys
 
@@ -66,6 +67,8 @@ def is_google_host() -> bool:
 def initialize(service_name,
                notice=DEFAULT_BANNER,
                cfg_file=config.DEFAULT_CONFIG_FILE):
+    if 'SWARMING_BOT_ID' in os.environ:
+        return
 
     cfg = config.Config(cfg_file)
     if cfg.trace_config.disabled():
