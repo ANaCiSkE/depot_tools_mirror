@@ -453,6 +453,24 @@ def main(args: list[str],
     # To prevent issues with shared state, always work with a copy.
     env = (os.environ if env is None else env).copy()
 
+    args = list(args)
+    use_virtual_paths = "--virtual-build-path" in args
+    if use_virtual_paths:
+        args.remove("--virtual-build-path")
+
+    if use_virtual_paths and sys.platform != "linux":
+        print(
+            "Warning: --virtual-build-path is only supported on Linux. Ignoring flag.",
+            file=sys.stderr)
+        use_virtual_paths = False
+
+    if not {"-h", "--help", "-help"}.isdisjoint(args):
+        print("Siso wrapper options:", file=sys.stderr)
+        print(
+            "  --virtual-build-path: Virtualize paths to /tmp/siso_virtual_build_path to share the local build cache state across workspaces (Linux only). Override path with SISO_VIRTUAL_BUILD_PATH.",
+            file=sys.stderr)
+        print("", file=sys.stderr)
+
     _fix_system_limits()
 
     def _ignore(signum, frame):
@@ -501,6 +519,23 @@ def main(args: list[str],
 
     # Get gclient root + src.
     primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
+
+    if use_virtual_paths and sys.platform == "linux" and primary_solution_path:
+        if not env.get("SISO_PY_IS_ISOLATED"):
+            virtual_path = env.get("SISO_VIRTUAL_BUILD_PATH",
+                                   "/tmp/siso_virtual_build_path")
+            print(
+                f"depot_tools/siso.py: Virtualizing paths from {primary_solution_path} to {virtual_path}. All file paths in log output will show the virtual path.",
+                file=sys.stderr)
+
+            os.makedirs(virtual_path, exist_ok=True)
+
+            bash_cmd = f"mount --bind {shlex.quote(primary_solution_path)} {shlex.quote(virtual_path)} && cd {shlex.quote(virtual_path)} && SISO_PY_IS_ISOLATED=1 python3 {shlex.quote(sys.argv[0])} {shlex.join(args[1:])}"
+            unshare_cmd = [
+                "unshare", "--mount", "--map-root-user", "bash", "-c", bash_cmd
+            ]
+
+            return runner(unshare_cmd, env=env)
     gclient_root_path = gclient_paths.FindGclientRoot(out_dir)
     gclient_src_root_path = None
     if gclient_root_path:
