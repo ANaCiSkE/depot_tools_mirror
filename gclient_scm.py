@@ -881,6 +881,9 @@ class GitWrapper(SCMWrapper):
                        self.relpath)
             return self._Capture(['rev-parse', '--verify', 'HEAD'])
 
+        if mirror:
+            self._UpdateMirrorIfNotContains(mirror, options, rev_type, revision)
+
         # Special case for rev_type = hash. If we use submodules, we can check
         # information already.
         if rev_type == 'hash':
@@ -888,14 +891,13 @@ class GitWrapper(SCMWrapper):
                 if verbose:
                     self.Print('Using submodule information to skip check')
                 if options.reset or options.force:
+                    self._EnsureValidHeadObjectOrCheckout(
+                        revision, options, url)
                     self._Scrub('HEAD', options)
 
                 return revision
 
         self._maybe_break_locks(options)
-
-        if mirror:
-            self._UpdateMirrorIfNotContains(mirror, options, rev_type, revision)
 
         # See if the url has changed (the unittests use git://foo for the url,
         # let that through).
@@ -1573,8 +1575,9 @@ class GitWrapper(SCMWrapper):
         try:
             return self._Capture(['rev-list', '-n', '1', 'HEAD'])
         except subprocess2.CalledProcessError as e:
-            if (b'fatal: bad object HEAD' in e.stderr and self.cache_dir
-                    and self.cache_dir in url):
+            if ((b'fatal: bad object HEAD' in e.stderr
+                 or b"fatal: Could not parse object 'HEAD'" in e.stderr)
+                    and self.cache_dir and self.cache_dir in url):
                 self.Print(
                     ('Likely due to DEPS change with git cache_dir, '
                      'the current commit points to no longer existing object.\n'

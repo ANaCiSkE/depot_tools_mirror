@@ -760,6 +760,52 @@ class ManagedGitWrapperTestCaseMock(unittest.TestCase):
                           '1', options)
 
     @mock.patch('gclient_scm.GitWrapper._Clone')
+    def testEnsureValidHeadObjectOrCheckout_CouldNotParseHEAD(self, mockClone):
+        options = self.Options()
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir,
+                                             self.relpath)
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+        url = '/tmp/cache/foo'
+
+        mock_capture = mock.Mock(side_effect=subprocess2.CalledProcessError(
+            returncode=128,
+            cmd=['rev-list'],
+            cwd=None,
+            stdout=None,
+            stderr=
+            b"error: unable to normalize alternate object path...\nfatal: Could not parse object 'HEAD'."
+        ))
+        git_wrapper._Capture = mock_capture
+
+        git_wrapper._EnsureValidHeadObjectOrCheckout('revision', options, url)
+
+        git_wrapper._DeleteOrMove.assert_called_with(options.force)
+        mockClone.assert_called_with('revision', url, options)
+
+    @mock.patch('gclient_scm.GitWrapper._Clone')
+    def testEnsureValidHeadObjectOrCheckout_BadObjectHEAD(self, mockClone):
+        options = self.Options()
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir,
+                                             self.relpath)
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+        url = '/tmp/cache/foo'
+
+        mock_capture = mock.Mock(side_effect=subprocess2.CalledProcessError(
+            returncode=128,
+            cmd=['rev-list'],
+            cwd=None,
+            stdout=None,
+            stderr=b"fatal: bad object HEAD\n"))
+        git_wrapper._Capture = mock_capture
+
+        git_wrapper._EnsureValidHeadObjectOrCheckout('revision', options, url)
+
+        git_wrapper._DeleteOrMove.assert_called_with(options.force)
+        mockClone.assert_called_with('revision', url, options)
+
+    @mock.patch('gclient_scm.GitWrapper._Clone')
     @mock.patch('os.path.isdir')
     @mock.patch('os.path.exists')
     @mock.patch('git_common.run')
