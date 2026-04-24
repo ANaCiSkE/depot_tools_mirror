@@ -53,6 +53,12 @@ def FindGnTool():
         print('gn.py: Unable to find gn in your $PATH', file=sys.stderr)
         print('Hint: `which -a gn` should output two entries', file=sys.stderr)
         return None
+    if os.environ.get('CHROMIUM_BUILDTOOLS_PATH'):
+        print('Using $CHROMIUM_BUILDTOOLS_PATH to find gn. ' +
+              'CHROMIUM_BUILDTOOLS_PATH is highly unsupported ' +
+              'and may break gn.',
+              file=sys.stderr)
+
     # TODO(b/328065301): Once chromium/src CL has landed to migrate
     # buildtools/<platform>/gn to buildtools/<platform>/gn/gn, only return
     # gn/gn path.
