@@ -41,6 +41,11 @@ scripts/luci_triage.py find-cl-builds \
   --cl <CL_NUMBER> \
   [--patchset <PATCHSET>]
 ```
+
+> [!NOTE] If --patchset is omitted, the script defaults to the latest patchset.
+> If you expect failures but get no results, try specifying an earlier patchset
+> where the trybots were actually run.
+
 ## 3. Get Build Details
 
 Get status, summary markdown, and output properties of a build:
