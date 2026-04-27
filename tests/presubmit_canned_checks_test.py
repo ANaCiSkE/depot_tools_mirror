@@ -943,7 +943,7 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         # recursive ls-tree.
         self.input_api.platform = 'win32'
         self.input_api.files = [
-            MockAffectedFile('a' * 100, '') for i in range(100)
+            MockAffectedFile('a' * 100, '') for i in range(350)
         ]
         self.input_api.subprocess.check_output.return_value = b''
 
@@ -977,8 +977,8 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn('foo.txt', ls_tree_cmd)
 
     def testWindowsSpecialCharacters(self):
-        # On Windows, if a file contains special characters like '&', we should
-        # fall back to a recursive ls-tree.
+        # On Windows, if a file contains special characters like '&', we don't
+        # need to fall back to a recursive ls-tree when using shell=False.
         self.input_api.platform = 'win32'
         self.input_api.files = [MockAffectedFile('foo&bar.txt', '')]
         self.input_api.subprocess.check_output.return_value = b''
@@ -991,7 +991,8 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertEqual(2, self.input_api.subprocess.check_output.call_count)
         ls_tree_cmd = self.input_api.subprocess.check_output.call_args_list[1][
             0][0]
-        self.assertIn('-r', ls_tree_cmd)
+        self.assertNotIn('-r', ls_tree_cmd)
+        self.assertIn('foo&bar.txt', ls_tree_cmd)
 
 
 if __name__ == '__main__':

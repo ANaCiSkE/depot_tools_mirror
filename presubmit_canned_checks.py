@@ -74,10 +74,6 @@ OFF_UNLESS_MANUALLY_ENABLED_LINT_FILTERS = [
 # See https://git-scm.com/docs/git-ls-tree#_output_format
 _GIT_MODE_SUBMODULE = b'160000'
 
-# Windows command line character limit. See
-# https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/command-line-string-limitation
-_WIN_COMMAND_LINE_CHAR_LIMIT = 8191
-
 
 ### Description checks
 
@@ -2073,36 +2069,43 @@ def CheckForCommitObjects(input_api, output_api):
 
     # If the number of affected files is small, we can avoid scanning the entire
     # tree.
-    affected_files = list(input_api.AffectedFiles())
+    affected_files = list(input_api.AffectedFiles()) + list(
+        input_api.change.AffectedSubmodules())
 
     # We must scan the full tree if DEPS is modified to ensure that any change
     # in DEPS is reflected in the gitlinks.
     deps_modified = any(f.LocalPath() == 'DEPS' for f in affected_files)
 
-    cmd = ['git', 'ls-tree', '-z', '--full-tree', 'HEAD']
+    import git_common
+    cmd = [git_common.GIT_EXE, 'ls-tree', '-z', '--full-tree', 'HEAD']
     if len(affected_files) < 1000 and not deps_modified:
         # We need to pass the paths relative to the repository root.
         repo_root = input_api.change.RepositoryRoot()
+
+        # Git uses forward slashes on all platforms.
         files_to_check = [
-            input_api.os_path.relpath(f.AbsoluteLocalPath(), repo_root)
-            for f in affected_files
+            input_api.os_path.relpath(f.AbsoluteLocalPath(), repo_root).replace(
+                input_api.os_path.sep, '/') for f in affected_files
         ]
-        # On Windows, the command line is limited to 8191 characters.
-        # Also, arguments containing special characters like '&' can cause
-        # issues on Windows when shell=True: http://crbug.com/498957658
+        if deps['git_dependencies'] == 'SYNC':
+            files_to_check.extend([
+                p.replace(input_api.os_path.sep, '/')
+                for p in input_api.change.AllLocalSubmodules()
+            ])
+
+        # On Windows, the command line is limited to 8191 characters when
+        # shell=True. But if we use shell=False, the limit is 32767 characters.
         cmd_len = len(' '.join(cmd + ['--'] + files_to_check))
-        has_special_chars = any(
-            any(c in f for c in '&|<>^') for f in files_to_check)
-        if (input_api.is_windows and
-            (cmd_len > _WIN_COMMAND_LINE_CHAR_LIMIT or has_special_chars)):
+        if input_api.is_windows and cmd_len > 32_000:
             cmd.extend(['-r'])
         else:
             cmd.extend(['--'] + files_to_check)
     else:
         cmd.extend(['-r'])
 
+    # Use shell=False for Windows to allow longer command lines (32k vs 8k).
     tree_data = input_api.subprocess.check_output(
-        cmd, cwd=input_api.PresubmitLocalPath())
+        cmd, cwd=input_api.PresubmitLocalPath(), shell=False)
 
     if _GIT_MODE_SUBMODULE not in tree_data:
         return []
