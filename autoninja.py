@@ -64,7 +64,7 @@ _ALL_META_CHARS = _UNSAFE_FOR_CMD.union(set('"'))
 _HELP_MESSAGE = """\
 autoninja:
   -o/--offline  temporary disable remote execution
-  --virtual-build-path  virtualize paths to /tmp/siso_virtual_build_path to share the local build cache state across workspaces (Linux only)
+  --virtual-build-path  virtualize paths to /tmp/siso_virtual_build_path to share the local build cache state across workspaces (Linux only). Can also be applied by setting SISO_USE_VIRTUAL_BUILD_PATH=1
 """
 
 

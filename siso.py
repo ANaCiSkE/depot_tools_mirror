@@ -457,6 +457,9 @@ def main(args: list[str],
     use_virtual_paths = "--virtual-build-path" in args
     if use_virtual_paths:
         args.remove("--virtual-build-path")
+    else:
+        use_virtual_paths = os.environ.get('SISO_USE_VIRTUAL_BUILD_PATH',
+                                           '0') == '1'
 
     if use_virtual_paths and sys.platform != "linux":
         print(
