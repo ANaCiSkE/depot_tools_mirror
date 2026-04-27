@@ -120,7 +120,7 @@ class TestResultSink(unittest.TestCase):
     def test_report_failure_reason_truncated(self):
         session = mock.MagicMock()
         sink = rdb_wrapper.ResultSink(session, 'http://host', 'test_id_prefix/')
-        sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123, 'X' * 1025)
+        sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123, 'X' * 2000)
         trunc_text = rdb_wrapper._FAILURE_REASON_TRUNCATE_TEXT
         limit = rdb_wrapper._FAILURE_REASON_LENGTH_LIMIT
         expected_truncated_error = 'X' * (limit - len(trunc_text)) + trunc_text

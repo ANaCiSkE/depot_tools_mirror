@@ -53,8 +53,9 @@ class ResultSink(object):
         }
         if failure_reason:
             if len(failure_reason) > _FAILURE_REASON_LENGTH_LIMIT:
-                failure_reason = failure_reason[:-len(
-                    _FAILURE_REASON_TRUNCATE_TEXT) - 1]
+                failure_reason = failure_reason[:_FAILURE_REASON_LENGTH_LIMIT -
+                                                len(_FAILURE_REASON_TRUNCATE_TEXT
+                                                    )]
                 failure_reason += _FAILURE_REASON_TRUNCATE_TEXT
             tr['failureReason'] = {'primaryErrorMessage': failure_reason}
         self._session.post(self._url, json={'testResults': [tr]})
