@@ -10,13 +10,16 @@ import gclient_scm
 
 
 def prefer_git_wrapper(func):
-    """Dynamically delegates to GitWrapper if a .git directory exists."""
+    """Dynamically delegates to GitWrapper unless a .jj directory exists,
+    without a corresponding .git directory, as in a standalone JJ workspace."""
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        if not hasattr(self, 'is_git_repo'):
+        # pylint: disable=protected-access
+        if not hasattr(self, '_prefer_git'):
             git_path = pathlib.Path(self.checkout_path, '.git')
-            self.is_git_repo = git_path.exists()
-        if self.is_git_repo:
+            jj_path = pathlib.Path(self.checkout_path, '.jj')
+            self._prefer_git = git_path.exists() or not jj_path.exists()
+        if self._prefer_git:
             super_method = getattr(super(JjWrapper, self), func.__name__)
             return super_method(*args, **kwargs)
         return func(self, *args, **kwargs)
