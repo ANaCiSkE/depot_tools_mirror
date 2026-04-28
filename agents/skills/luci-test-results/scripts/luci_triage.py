@@ -153,7 +153,7 @@ def list_failures(build_id, limit=500):
     return tasks
 
 
-def fetch_log_snippet(res_name):
+def fetch_log_snippet(res_name, raw=False):
     """Fetches a filtered snippet of the failure log."""
     payload = {'parent': res_name}
     result = run_prpc('results.api.luci.app',
@@ -174,10 +174,16 @@ def fetch_log_snippet(res_name):
     except Exception as e:
         return f"Error fetching log: {e}"
 
+    if raw:
+        return output
+
     # Filter for interesting lines
     lines = output.splitlines()
     # Prioritize certain errors
-    patterns = [r"AssertionError", r"FATAL", r"Exception", r"FAILED", r"FAIL"]
+    patterns = [
+        r"AssertionError", r"FATAL", r"Exception", r"FAILED", r"FAIL",
+        r"Leaking"
+    ]
     combined_pattern = "|".join(patterns)
 
     interesting_indices = [
@@ -240,6 +246,9 @@ def main():
     # fetch-log
     p = subparsers.add_parser('fetch-log')
     p.add_argument('--res', required=True)
+    p.add_argument('--raw',
+                   action='store_true',
+                   help='Return full log without filtering')
 
     args = parser.parse_args()
 
@@ -256,7 +265,7 @@ def main():
     elif args.command == 'list-failures':
         print(json.dumps(list_failures(args.build_id, args.limit), indent=2))
     elif args.command == 'fetch-log':
-        print(fetch_log_snippet(args.res))
+        print(fetch_log_snippet(args.res, args.raw))
 
 
 if __name__ == '__main__':
