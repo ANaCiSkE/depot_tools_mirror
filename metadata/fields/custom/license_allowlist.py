@@ -79,6 +79,7 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "BSD-2-Clause-FreeBSD",
     "BSD-3-Clause",
     "BSD-3-Clause-Attribution",
+    "BSD-3-Clause-flex",
     "BSD-3-Clause-Open-MPI",
     "BSD-4-Clause",
     "BSD-4-Clause-UC",
@@ -101,7 +102,9 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "ISC",
     "JSON",
     "Libpng",
+    "libpng-2.0",
     "libtiff",
+    "Martin-Birgmeier",
     "Minpack",
     "MIT",
     "MIT-Khronos-old",
@@ -134,6 +137,7 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     "Android-SDK",
     "LZMA",
     "Public Domain",
+    "Public-Domain-ftglue",
     "Public-Domain-Gutenberg",
     "public-domain-md5",
     "Public-Domain-Ross-Williams",
@@ -176,6 +180,7 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     "pffft",
     "PngSuite",
     "Punycode",
+    "Scala",
     "SSLeay",
     "takuya-ooura",
     "unicode_org",
@@ -221,6 +226,7 @@ _WITH_PERMISSION_ONLY = frozenset([
     # go/keep-sorted end
     # by_exception_only.
     # go/keep-sorted start case=no
+    "Alliance-for-Open-Media-Patent",
     "Commercial",
     "MicrosoftEnterpriseWindowsDriverKit",
     "Opus-Patent-BSD-3-Clause",
