@@ -95,7 +95,7 @@ def find_cl_builds(cl_number, patchset=None, host=None):
     } for b in result['builds'] if b['status'] not in ('SUCCESS', 'STARTED')]
 
 
-def list_failures(build_id, limit=500):
+def list_failures(build_id, limit=None):
     """Lists failing and flaky test variants for a build, grouped by task."""
     if build_id.startswith('b'):
         build_id = build_id[1:]
@@ -118,7 +118,8 @@ def list_failures(build_id, limit=500):
 
         test_variants.extend(result.get('testVariants', []))
 
-        if 'nextPageToken' not in result or len(test_variants) >= limit:
+        if 'nextPageToken' not in result or (limit is not None
+                                             and len(test_variants) >= limit):
             break
         payload['pageToken'] = result['nextPageToken']
 
@@ -241,7 +242,7 @@ def main():
     # list-failures
     p = subparsers.add_parser('list-failures')
     p.add_argument('--build-id', required=True)
-    p.add_argument('--limit', type=int, default=500)
+    p.add_argument('--limit', type=int, default=None)
 
     # fetch-log
     p = subparsers.add_parser('fetch-log')
