@@ -2910,6 +2910,35 @@ the current line as well!
                            presubmit.OutputApi.PresubmitPromptWarning,
                            new_file=True)
 
+    def testCheckLicenseNewFileWarnWrongYearNoGerrit(self):
+        # Check that we warn on uploading new files with wrong year when Gerrit is missing.
+        text = self._GetLicenseText(2006)
+        license_text = None
+
+        change = presubmit.Change(
+            'author',
+            'this is description',
+            '/path/root',
+            None,
+            12345,
+            0,
+            None,
+        )
+        input_api = self.MockInputApi(change, False)
+        affected_file = mock.MagicMock(presubmit.GitAffectedFile)
+        affected_file.Action.return_value = 'A'
+        affected_file.LocalPath.return_value = 'bleh'
+        input_api.AffectedSourceFiles.return_value = [affected_file]
+        input_api.ReadFile.return_value = text
+
+        result = presubmit_canned_checks.CheckLicense(input_api,
+                                                      presubmit.OutputApi,
+                                                      license_text,
+                                                      source_file_filter=42)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].__class__,
+                         presubmit.OutputApi.PresubmitPromptWarning)
+
     def testCheckLicenseNewFileErrorCommit(self):
         # Check that we error on committing new files with wrong year. Test with
         # first allowed year.

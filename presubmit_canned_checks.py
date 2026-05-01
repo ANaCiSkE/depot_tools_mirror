@@ -833,7 +833,8 @@ def CheckLicense(input_api,
                 # sure the year is correct.
                 # skip the new year check in January to give some slag
                 # where submitting year N-1 is allowed.
-                if issue := input_api.change.issue:
+                issue = input_api.change.issue
+                if issue and input_api.gerrit:
                     info = input_api.gerrit.GetChangeInfo(issue)
                     created_time = datetime.datetime.fromisoformat(info["created"] + 'Z')
                     cl_creation_year = int(created_time.strftime('%Y'))
