@@ -43,7 +43,8 @@ import subprocess2 as subprocess
 # Shortcut.
 presubmit_canned_checks = presubmit.presubmit_canned_checks
 
-RUNNING_PY_CHECKS_TEXT = ('Running presubmit upload checks ...\n')
+RUNNING_PY_CHECKS_TEXT = (
+    'Running presubmit upload checks on branch mychange ...\n')
 
 # Access to a protected member XXX of a client class
 # pylint: disable=protected-access
@@ -691,6 +692,76 @@ class PresubmitUnittest(PresubmitTestsBase):
         self.assertEqual(sys.stdout.getvalue().count('!!'), 0)
         self.assertEqual(sys.stdout.getvalue().count('??'), 0)
         self.assertEqual(sys.stdout.getvalue().count(RUNNING_PY_CHECKS_TEXT), 1)
+
+    @mock.patch('scm.GIT.GetBranch', return_value='fallback-branch')
+    def testDoPresubmitChecksUsesProvidedBranchName(self, mock_get_branch):
+        """Verifies that DoPresubmitChecks uses the branch name provided."""
+        haspresubmit_path = os.path.join(self.fake_root_dir, 'haspresubmit',
+                                         'PRESUBMIT.py')
+        root_path = os.path.join(self.fake_root_dir, 'PRESUBMIT.py')
+
+        os.path.isfile.side_effect = lambda f: f in [
+            root_path, haspresubmit_path
+        ]
+        os.listdir.return_value = ['PRESUBMIT.py']
+
+        gclient_utils.FileRead.return_value = self.presubmit_text
+
+        # Makes a change with an explicitly provided branch name (e.g., from
+        # stacked branch).
+        change = self.ExampleChange(extra_lines=['STORY=http://tracker/123'])
+        # ExampleChange defaults to 'mychange', so we override it here.
+        change._name = 'explicit-branch'
+
+        self.assertEqual(
+            0,
+            presubmit.DoPresubmitChecks(change=change,
+                                        committing=False,
+                                        verbose=True,
+                                        default_presubmit=None,
+                                        may_prompt=False,
+                                        gerrit_obj=None,
+                                        json_output=None))
+        self.assertEqual(sys.stdout.getvalue().count('!!'), 0)
+        self.assertEqual(sys.stdout.getvalue().count('??'), 0)
+        count_upload_check_logs = sys.stdout.getvalue().count(
+            'Running presubmit upload checks on branch explicit-branch ...\n')
+        self.assertEqual(count_upload_check_logs, 1)
+        mock_get_branch.assert_not_called()
+
+    @mock.patch('scm.GIT.GetBranch', return_value='fallback-branch')
+    def testDoPresubmitChecksFallsBackToGitBranch(self, mock_get_branch):
+        """Verifies that DoPresubmitChecks falls back to git branch."""
+        haspresubmit_path = os.path.join(self.fake_root_dir, 'haspresubmit',
+                                         'PRESUBMIT.py')
+        root_path = os.path.join(self.fake_root_dir, 'PRESUBMIT.py')
+
+        os.path.isfile.side_effect = lambda f: f in [
+            root_path, haspresubmit_path
+        ]
+        os.listdir.return_value = ['PRESUBMIT.py']
+
+        gclient_utils.FileRead.return_value = self.presubmit_text
+
+        # Makes a change without a branch name.
+        change = self.ExampleChange(extra_lines=['STORY=http://tracker/123'])
+        change._name = presubmit._NO_BRANCH_NAME
+
+        self.assertEqual(
+            0,
+            presubmit.DoPresubmitChecks(change=change,
+                                        committing=False,
+                                        verbose=True,
+                                        default_presubmit=None,
+                                        may_prompt=False,
+                                        gerrit_obj=None,
+                                        json_output=None))
+        self.assertEqual(sys.stdout.getvalue().count('!!'), 0)
+        self.assertEqual(sys.stdout.getvalue().count('??'), 0)
+        count_upload_check_logs = sys.stdout.getvalue().count(
+            'Running presubmit upload checks on branch fallback-branch ...\n')
+        self.assertEqual(count_upload_check_logs, 1)
+        mock_get_branch.assert_called_once_with(change.RepositoryRoot())
 
     def testDoPresubmitChecksJsonOutput(self):
         fake_error = 'Missing LGTM'

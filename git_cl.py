@@ -1874,6 +1874,10 @@ class Changelist(object):
         if patchset:
             args.extend(['--patchset', str(patchset)])
 
+        branch = self.GetBranch()
+        if branch:
+            args.extend(['--name', branch])
+
         return args
 
     def RunHook(self,

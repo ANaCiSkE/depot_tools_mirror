@@ -65,6 +65,9 @@ _ASKED_FOR_FEEDBACK = False
 # are coming from.
 _SHOW_CALLSTACKS = False
 
+# This is the default branch name.
+_NO_BRANCH_NAME = 'no name'
+
 
 def time_time():
     # Use this so that it can be mocked in tests without interfering with python
@@ -2103,14 +2106,17 @@ def DoPresubmitChecks(change,
             PRESUBMIT files will be run in parallel.
         no_diffs: if true, implies that --files or --all was specified so some
             checks can be skipped, and some errors will be messages.
-    Return:
+    Returns:
         1 if presubmit checks failed or 0 otherwise.
     """
     with setup_environ({'PYTHONDONTWRITEBYTECODE': '1'}):
         running_msg = 'Running presubmit '
         running_msg += 'commit ' if committing else 'upload '
         running_msg += 'checks '
-        if branch := scm.GIT.GetBranch(change.RepositoryRoot()):
+        branch = change.Name()
+        if not branch or branch == _NO_BRANCH_NAME:
+            branch = scm.GIT.GetBranch(change.RepositoryRoot())
+        if branch:
             running_msg += f'on branch {branch} '
         running_msg += '...\n'
         sys.stdout.write(running_msg)
@@ -2505,7 +2511,7 @@ def main(argv=None):
                         action='count',
                         default=0,
                         help='Use 2 times for more debug info.')
-    parser.add_argument('--name', default='no name')
+    parser.add_argument('--name', default=_NO_BRANCH_NAME)
     parser.add_argument('--author')
     desc = parser.add_mutually_exclusive_group()
     desc.add_argument('--description',
