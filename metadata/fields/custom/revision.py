@@ -51,7 +51,7 @@ class RevisionField(field_types.SingleLineTextField):
 
         return value
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Validates the revision string.
 
         Checks:

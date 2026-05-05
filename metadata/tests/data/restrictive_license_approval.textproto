@@ -1,0 +1,8 @@
+license_approval {
+  license_path: "LICENSE"
+  id: "Testing-Restrictive-License"
+}
+license_approval {
+  license_path: "LICENSE"
+  id: "LicenseRef-GUST-Font-License"
+}

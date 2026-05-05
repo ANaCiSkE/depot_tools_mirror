@@ -21,7 +21,7 @@ import metadata.validation_result as vr
 import metadata.fields.custom.cpe_prefix as cpe_prefix_util
 import metadata.fields.custom.mitigated
 import metadata.fields.custom.update_mechanism
-
+import metadata.fields.custom.license
 
 class FieldValidationTest(unittest.TestCase):
     def _run_field_validation(self,
@@ -327,6 +327,24 @@ class FieldValidationTest(unittest.TestCase):
                 "Static.HardFork",
             ],
         )
+
+
+    def test_load_restrictive_license_approval_proto(self):
+        path = os.path.join(_THIS_DIR, "data", "restrictive_license_approval.textproto")
+        result = metadata.fields.custom.license.load_restrictive_license_approval_textproto(path)
+        self.assertIn("testing-restrictive-license", result)
+
+    def test_license_validation_with_rla(self):
+        test_license = "LicenseRef-GUST-Font-License"
+
+        field = metadata.fields.custom.license.LicenseField()
+        # Validate WITHOUT the rla textproto: should return a ValidationWarning.
+        res_without = field.validate(test_license, source_file_dir=_THIS_DIR)
+        self.assertIsInstance(res_without, vr.ValidationWarning)
+
+        # Validate WITH the rla textproto: should return None (approved / valid).
+        res_with = field.validate(test_license, source_file_dir=os.path.join(_THIS_DIR, "data"))
+        self.assertIsNone(res_with)
 
 
 if __name__ == "__main__":

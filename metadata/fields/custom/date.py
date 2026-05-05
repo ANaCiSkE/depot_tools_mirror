@@ -125,7 +125,7 @@ class DateField(field_types.SingleLineTextField):
     def __init__(self):
         super().__init__(name="Date")
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value is a YYYY-MM-DD date."""
         value = value.strip()
         if not value:

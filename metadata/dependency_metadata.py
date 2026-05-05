@@ -212,7 +212,7 @@ class DependencyMetadata:
         # Validate values for all present fields.
         for field, value in self._metadata.items():
             source_field = sources.get(field) or field
-            field_result = source_field.validate(value)
+            field_result = source_field.validate(value, source_file_dir=source_file_dir)
             if field_result:
                 field_result.set_tag(tag="field", value=source_field.get_name())
                 field_result.set_lines(

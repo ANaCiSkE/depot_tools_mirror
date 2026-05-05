@@ -61,7 +61,7 @@ class MitigatedField(field_types.SingleLineTextField):
     def __init__(self):
         super().__init__(name="Mitigated")
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks if the value contains valid CVE IDs."""
         if util.is_empty(value):
             return None

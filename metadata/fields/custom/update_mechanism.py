@@ -78,7 +78,7 @@ class UpdateMechanismField(field_types.SingleLineTextField):
     def __init__(self):
         super().__init__(name="Update Mechanism")
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """
         Checks if the value is a valid Update Mechanism entry, including the
         logic for when a bug link is required or disallowed.

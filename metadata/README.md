@@ -16,3 +16,9 @@ root directory of `depot_tools`:
 ```
 vpython3 --vpython-spec=.vpython3 metadata/scan.py ~/my/path/to/chromium/src
 ```
+
+## Protobuf generation
+If you make any changes to `metadata/restrictive_license_approval.proto`, regenerate the Python bindings from the root directory of `depot_tools` by running:
+```
+protoc --proto_path=. --python_out=. metadata/restrictive_license_approval.proto
+```

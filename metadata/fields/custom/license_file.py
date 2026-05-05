@@ -31,7 +31,7 @@ class LicenseFileField(field_types.SingleLineTextField):
     def __init__(self):
         super().__init__(name="License File")
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of non-empty paths with no
         backward directory navigation (i.e. no "../").
 

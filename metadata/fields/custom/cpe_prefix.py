@@ -86,7 +86,7 @@ class CPEPrefixField(field_types.SingleLineTextField):
         return util.is_unknown(value) or is_adequate_cpe_urn(
             value) or util.matches(_PATTERN_CPE_FORMATTED_STRING, value)
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value is either 'unknown', or conforms to
         either the CPE 2.3 or 2.2 format.
         """

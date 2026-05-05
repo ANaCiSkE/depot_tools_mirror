@@ -82,7 +82,7 @@ class URLField(field_types.MetadataField):
         """Returns if `raw_value` indicates this repository is internal."""
         return util.matches(_PATTERN_URL_INTERNAL, value.strip())
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value has acceptable URL values only.
 
         Note: this field supports multiple values.

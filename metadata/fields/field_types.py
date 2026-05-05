@@ -65,7 +65,7 @@ class MetadataField:
         """
         return self._structured
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value is acceptable for the field.
 
         Raises: NotImplementedError if called. This method must be
@@ -86,7 +86,7 @@ class MetadataField:
 class FreeformTextField(MetadataField):
     """Field where the value is freeform text."""
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value has at least one non-whitespace
         character.
         """
@@ -119,7 +119,7 @@ class YesNoField(SingleLineTextField):
     def __init__(self, name: str):
         super().__init__(name=name)
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value is either yes or no."""
         if util.matches(_PATTERN_YES_OR_NO, value):
             return None

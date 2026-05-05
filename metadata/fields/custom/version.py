@@ -32,7 +32,7 @@ class VersionField(field_types.SingleLineTextField):
     def __init__(self):
         super().__init__(name="Version")
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value is acceptable - there must be at least
         one non-whitespace character, and "N/A" is preferred over "0" if
         the version is unknown.
