@@ -15,6 +15,7 @@ import os
 import queue
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -84,6 +85,13 @@ class SCMMock(object):
 
     def revinfo(self, _, _a, _b):
         return 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+
+class MockHookForGrouping(object):
+
+    def __init__(self, name, independent):
+        self.name = name
+        self.independent = independent
 
 
 class GclientTest(trial_dir.TestCase):
@@ -322,6 +330,88 @@ class GclientTest(trial_dir.TestCase):
 
         self.assertEqual([h.action for h in self._get_hooks()],
                          [tuple(x['action']) for x in hooks])
+
+    def testIndependentHooksParsing(self):
+        hooks = [
+            {
+                'pattern': '.',
+                'action': ['cmd1'],
+                'independent': True
+            },
+            {
+                'pattern': '.',
+                'action': ['cmd2']
+            },
+        ]
+
+        write(
+            '.gclient', 'solutions = [{\n'
+            '  "name": "top",\n'
+            '  "url": "svn://example.com/top"\n'
+            '}]')
+        write(os.path.join('top', 'DEPS'), 'hooks =  %s' % repr(hooks))
+        write(os.path.join('top', 'fake.txt'), "bogus content")
+
+        parsed_hooks = self._get_hooks()
+        self.assertEqual(len(parsed_hooks), 2)
+        self.assertTrue(parsed_hooks[0].independent)
+        self.assertFalse(parsed_hooks[1].independent)
+
+    def testCreateHookWorkItemsSequential(self):
+        h0 = MockHookForGrouping('h0', independent=False)
+        h1 = MockHookForGrouping('h1', independent=False)
+        h2 = MockHookForGrouping('h2', independent=False)
+        work_items = gclient._CreateHookWorkItems([h0, h1, h2])
+        self.assertEqual(work_items[0].requirements, [])
+        self.assertEqual(work_items[1].requirements, ["h0_0"])
+        self.assertEqual(work_items[2].requirements, ["h1_1"])
+
+    def testCreateHookWorkItemsSeqIndep(self):
+        h0 = MockHookForGrouping('h0', independent=False)
+        h1 = MockHookForGrouping('h1', independent=True)
+        work_items = gclient._CreateHookWorkItems([h0, h1])
+        self.assertEqual(work_items[0].requirements, [])
+        self.assertEqual(work_items[1].requirements, ["h0_0"])
+
+    def testCreateHookWorkItemsIndepSeq(self):
+        h0 = MockHookForGrouping('h0', independent=True)
+        h1 = MockHookForGrouping('h1', independent=False)
+        work_items = gclient._CreateHookWorkItems([h0, h1])
+        self.assertEqual(work_items[0].requirements, [])
+        self.assertEqual(work_items[1].requirements, ["h0_0"])
+
+    def testCreateHookWorkItemsIsolatedIndep(self):
+        h0 = MockHookForGrouping('h0', independent=True)
+        h1 = MockHookForGrouping('h1', independent=True)
+        h2 = MockHookForGrouping('h2', independent=True)
+        work_items = gclient._CreateHookWorkItems([h0, h1, h2])
+        self.assertEqual(work_items[0].requirements, [])
+        self.assertEqual(work_items[1].requirements, [])
+        self.assertEqual(work_items[2].requirements, [])
+
+    def testCreateHookWorkItemsMixed(self):
+        h0 = MockHookForGrouping('h0', independent=True)
+        h1 = MockHookForGrouping('h1', independent=True)
+        h2 = MockHookForGrouping('h2', independent=False)
+        h3 = MockHookForGrouping('h3', independent=True)
+        h4 = MockHookForGrouping('h4', independent=True)
+        work_items = gclient._CreateHookWorkItems([h0, h1, h2, h3, h4])
+        self.assertEqual(work_items[0].requirements, [])
+        self.assertEqual(work_items[1].requirements, [])
+        self.assertEqual(work_items[2].requirements, ["h0_0", "h1_1"])
+        self.assertEqual(work_items[3].requirements, ["h2_2"])
+        self.assertEqual(work_items[4].requirements, ["h2_2"])
+
+    def testCreateHookWorkItemsPrunedRedundant(self):
+        h0 = MockHookForGrouping('h0', independent=False)
+        h1 = MockHookForGrouping('h1', independent=True)
+        h2 = MockHookForGrouping('h2', independent=True)
+        h3 = MockHookForGrouping('h3', independent=False)
+        work_items = gclient._CreateHookWorkItems([h0, h1, h2, h3])
+        self.assertEqual(work_items[0].requirements, [])
+        self.assertEqual(work_items[1].requirements, ["h0_0"])
+        self.assertEqual(work_items[2].requirements, ["h0_0"])
+        self.assertEqual(work_items[3].requirements, ["h1_1", "h2_2"])
 
     def testCustomHooks(self):
         extra_hooks = [{
@@ -1780,6 +1870,218 @@ class MergeVarsTest(unittest.TestCase):
         l = {'foo': 'bar'}
         merge_vars(l, {'baz': True})
         self.assertEqual(l, {'foo': 'bar', 'baz': True})
+
+
+class GclientHookExecutionTest(GclientTest):
+
+    def setUp(self):
+        super(GclientHookExecutionTest, self).setUp()
+
+        # Setup minimal gclient config to avoid errors.
+        write('.gclient',
+              'solutions = [{"name": "top", "url": "svn://example.com/top"}]')
+        write(os.path.join('top', 'DEPS'), 'hooks = []')
+        write(os.path.join('top', 'fake.txt'), "bogus content")
+
+        parser = gclient.OptionParser()
+        self.options, _ = parser.parse_args([])
+        self.options.force = True
+        self.options.jobs = 2
+        self.start_counter = self.Counter()
+        self.end_counter = self.Counter()
+
+    class Counter:
+
+        def __init__(self):
+            self.value = 0
+            self.lock = threading.Lock()
+
+        def increment(self):
+            with self.lock:
+                val = self.value
+                self.value += 1
+                return val
+
+        def reset(self):
+            with self.lock:
+                self.value = 0
+
+    class MockHook:
+
+        def __init__(self,
+                     name,
+                     independent,
+                     start_counter,
+                     end_counter,
+                     results,
+                     fail=False):
+            self.name = name
+            self.independent = independent
+            self.start_counter = start_counter
+            self.end_counter = end_counter
+            self.shared_results = results
+            self.fail = fail
+
+        def run(self):
+            start_ts = self.start_counter.increment()
+            self.shared_results[self.name] = (start_ts, None)
+            if self.fail:
+                raise Exception(f"Hook {self.name} failed")
+            end_ts = self.end_counter.increment()
+            self.shared_results[self.name] = (start_ts, end_ts)
+
+    def _run_and_verify_hooks(self, hooks_spec, expected_result, jobs):
+        """hooks_spec: list of (name, independent) tuples.
+        expected_result: list of tuples where the first element is the start
+            index in hooks_spec and the rest are the expected hook names.
+        jobs: number of parallel jobs to simulate."""
+        self.start_counter.reset()
+        self.end_counter.reset()
+        results = {}
+
+        hooks = []
+        for name, independent in hooks_spec:
+            hooks.append(
+                self.MockHook(name, independent, self.start_counter,
+                              self.end_counter, results))
+
+        self.options.jobs = jobs
+        client = gclient.GClient.LoadCurrentConfig(self.options)
+
+        with mock.patch.object(client, 'GetHooks', return_value=hooks):
+            client.RunHooksRecursively(self.options, None)
+
+        last_group_max_start = -1
+        for item in expected_result:
+            expected_start_idx, *raw_expected_names = item
+            expected_names = set(raw_expected_names)
+            self.assertEqual(len(expected_names), len(raw_expected_names),
+                             "Duplicate hook names not allowed.")
+            expected_end_idx = expected_start_idx + len(expected_names) - 1
+            self.assertGreater(expected_start_idx, last_group_max_start)
+            # Filter results for just the current group expectations.
+            group_results = {name: results[name] for name in expected_names}
+            # Check that all expected group names are present
+            self.assertEqual(expected_names, group_results.keys(),
+                             "Group %s not found" % expected_names)
+            # Check general group indices.
+            min_index = min(g[0] for g in group_results.values())
+            max_index = max(g[1] for g in group_results.values())
+            self.assertEqual(min_index, expected_start_idx)
+            self.assertEqual(max_index - min_index + 1, len(expected_names))
+            self.assertEqual(max_index, expected_end_idx)
+
+    def testIndependentHooksExecution(self):
+        hooks_spec = [
+            ('h0', False),
+            ('h1', True),
+            ('h2', True),
+            ('h3', False),
+            ('h4', False),
+        ]
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h0"), (1, "h1", "h2"), (3, "h3"), (4, "h4")],
+            jobs=2,
+        )
+
+    def testAllIndependent(self):
+        hooks_spec = [
+            ('h1', True),
+            ('h2', True),
+            ('h3', True),
+        ]
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1"), (1, "h2"), (2, "h3")],
+            jobs=1,
+        )
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1", "h2"), (2, "h3")],
+            jobs=2,
+        )
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1", "h2", "h3")],
+            jobs=3,
+        )
+
+    def testAllSequential(self):
+        hooks_spec = [
+            ('h1', False),
+            ('h2', False),
+            ('h3', False),
+        ]
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1"), (1, "h2"), (2, "h3")],
+            jobs=1,
+        )
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1"), (1, "h2"), (2, "h3")],
+            jobs=2,
+        )
+
+    def testMultipleParallelGroups(self):
+        hooks_spec = [
+            ('h1', True),
+            ('h2', True),
+            ('s1', False),
+            ('h3', True),
+            ('h4', True),
+        ]
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1"), (1, "h2"), (2, "s1"), (3, "h3"), (4, "h4")],
+            jobs=1,
+        )
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1", "h2"), (2, "s1"), (3, "h3", "h4")],
+            jobs=2,
+        )
+        self._run_and_verify_hooks(
+            hooks_spec,
+            [(0, "h1", "h2"), (2, "s1"), (3, "h3", "h4")],
+            jobs=3,
+        )
+
+    def testEmptyHooks(self):
+        self._run_and_verify_hooks([], [], jobs=1)
+        self._run_and_verify_hooks([], [], jobs=2)
+
+    def testHookFailureStopsFollowingGroups(self):
+        self.start_counter.reset()
+        self.end_counter.reset()
+        results = {}
+
+        h1 = self.MockHook('h1',
+                           True,
+                           self.start_counter,
+                           self.end_counter,
+                           results,
+                           fail=True)
+        h2 = self.MockHook('h2', True, self.start_counter, self.end_counter,
+                           results)
+        h3 = self.MockHook('h3', False, self.start_counter, self.end_counter,
+                           results)
+
+        self.options.jobs = 2
+
+        client = gclient.GClient.LoadCurrentConfig(self.options)
+
+        with mock.patch.object(client, 'GetHooks', return_value=[h1, h2, h3]):
+            with self.assertRaises(Exception) as cm:
+                client.RunHooksRecursively(self.options, None)
+            self.assertIn("Hook h1 failed", str(cm.exception))
+
+        # h1 must have started
+        self.assertIn('h1', results)
+
+        # h3 must not run, since it's always in a later group.
+        self.assertNotIn('h3', results)
 
 
 if __name__ == '__main__':
