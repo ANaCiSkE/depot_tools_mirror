@@ -2759,7 +2759,8 @@ class Changelist(object):
                         comment.path, 'b' if comment.side == 'PARENT' else '',
                         str(line) if line else ''))
                 comments[key][comment.path][patchset].setdefault(
-                    line, []).append((unresolved, url, comment.message))
+                    line, []).append(
+                        (unresolved, url, comment.message, comment.id))
 
         summaries = []
         for msg in messages:
@@ -2797,7 +2798,7 @@ class Changelist(object):
                 message += '\n%s' % path
             for patchset, lines in sorted(patchsets.items()):
                 for line, comment_list in sorted(lines.items()):
-                    for unresolved, url, content in comment_list:
+                    for unresolved, url, content, comment_id in comment_list:
                         resolved_str = 'unresolved' if unresolved else 'resolved'
                         if line:
                             line_str = 'Line %d' % line
@@ -2818,6 +2819,7 @@ class Changelist(object):
                             'patchset': patchset,
                             'unresolved': unresolved,
                             'content': content,
+                            'id': comment_id,
                         })
 
         return _CommentSummary(
@@ -5044,6 +5046,9 @@ def CMDcomments(parser, args):
     parser.add_option('-j',
                       '--json-file',
                       help='File to write JSON summary to, or "-" for stdout')
+    parser.add_option('--reply-to',
+                      dest='reply_to',
+                      help='UUID of the comment to respond to')
     options, args = parser.parse_args(args)
 
     issue = None
@@ -5059,6 +5064,47 @@ def CMDcomments(parser, args):
         sys.stderr.write(
             'There is no code review associated with this branch.\n')
         return 1
+
+    if options.reply_to:
+        if not options.comment:
+            DieWithError(
+                '--add-comment is required when --reply-to is specified.')
+
+        # Fetch all comments to find the parent comment.
+        file_comments = gerrit_util.GetChangeComments(
+            cl.GetGerritHost(), cl._GerritChangeIdentifier())
+        parent_comment = None
+        for path, comments in file_comments.items():
+            for c in comments:
+                if c.get('id') == options.reply_to:
+                    parent_comment = c
+                    parent_comment['path'] = path
+                    break
+            if parent_comment:
+                break
+
+        if not parent_comment:
+            DieWithError('Could not find comment with UUID %s to reply to.' %
+                         options.reply_to)
+
+        body = {
+            'in_reply_to': options.reply_to,
+            'message': options.comment,
+            'path': parent_comment['path'],
+        }
+        if 'line' in parent_comment:
+            body['line'] = parent_comment['line']
+        if 'range' in parent_comment:
+            body['range'] = parent_comment['range']
+        if 'side' in parent_comment:
+            body['side'] = parent_comment['side']
+
+        revision = parent_comment.get('patch_set', 'current')
+        gerrit_util.CreateDraft(cl.GetGerritHost(),
+                                cl._GerritChangeIdentifier(),
+                                revision=revision,
+                                body=body)
+        return 0
 
     if options.comment:
         cl.AddComment(options.comment, options.publish)

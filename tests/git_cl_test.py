@@ -675,6 +675,9 @@ class TestGitCl(unittest.TestCase):
                    (self._mocked_call('SetReview', h, i, msg, labels, notify,
                                       ready, automatic_attention_set_update,
                                       project))).start()
+        mock.patch('git_cl.gerrit_util.CreateDraft',
+                   lambda h, i, revision='current', body=None: self.
+                   _mocked_call('CreateDraft', h, i, revision, body)).start()
         mock.patch('git_cl.gerrit_util.LuciContextAuthenticator.is_applicable',
                    return_value=False).start()
         mock.patch('git_cl.gerrit_util.GceAuthenticator.is_applicable',
@@ -3373,6 +3376,39 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(0, git_cl.main(['comment', '-i', '10', '-a', 'msg']))
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_git_cl_comments_reply_gerrit(self):
+        git_new_branch.create_new_branch(None)  # hits mock from scm_mock.GIT.
+        scm.GIT.SetConfig('', 'remote.origin.url',
+                          'https://chromium.googlesource.com/infra/infra')
+        self.calls = [
+            (('GetChangeComments', 'chromium-review.googlesource.com',
+              'infra%2Finfra~10'), {
+                  'some/file.py': [
+                      {
+                          'id': 'uuid-123',
+                          'line': 42,
+                          'message': 'some comment',
+                          'patch_set': 2,
+                      },
+                  ],
+              }),
+            (('CreateDraft', 'chromium-review.googlesource.com',
+              'infra%2Finfra~10', 2, {
+                  'in_reply_to': 'uuid-123',
+                  'message': 'reply msg',
+                  'path': 'some/file.py',
+                  'line': 42
+              }), None),
+        ]
+        self.assertEqual(
+            0,
+            git_cl.main([
+                'comments', '-i', '10', '--reply-to', 'uuid-123', '-a',
+                'reply msg'
+            ]))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     @mock.patch('git_cl.Changelist.GetBranch', return_value='foo')
     def test_git_cl_comments_fetch_gerrit(self, *_mocks):
@@ -3490,13 +3526,15 @@ class TestGitCl(unittest.TestCase):
                     'line': 42,
                     'patchset': 'Base',
                     'unresolved': False,
-                    'content': 'I removed this because it is bad'
+                    'content': 'I removed this because it is bad',
+                    'id': 'comment_id_2'
                 }, {
                     'path': 'codereview.settings',
                     'line': 42,
                     'patchset': 'Base',
                     'unresolved': False,
-                    'content': 'And another thing'
+                    'content': 'And another thing',
+                    'id': 'comment_id_3'
                 }]
             },
             'sender': 'owner@example.com',
@@ -3513,7 +3551,8 @@ class TestGitCl(unittest.TestCase):
                     'line': 0,
                     'patchset': 'PS2',
                     'unresolved': False,
-                    'content': 'Please include a bug link'
+                    'content': 'Please include a bug link',
+                    'id': 'comment_id_1'
                 }]
             },
             'sender': 'reviewer@example.com',
@@ -3538,13 +3577,15 @@ class TestGitCl(unittest.TestCase):
                         'line': 42,
                         'patchset': 'Base',
                         'unresolved': False,
-                        'content': 'I removed this because it is bad'
+                        'content': 'I removed this because it is bad',
+                        'id': 'comment_id_2'
                     }, {
                         'path': 'codereview.settings',
                         'line': 42,
                         'patchset': 'Base',
                         'unresolved': False,
-                        'content': 'And another thing'
+                        'content': 'And another thing',
+                        'id': 'comment_id_3'
                     }]
                 },
                 date=datetime.datetime(2017, 3, 16, 20, 0, 41, 0),
@@ -3566,7 +3607,8 @@ class TestGitCl(unittest.TestCase):
                         'line': 0,
                         'patchset': 'PS2',
                         'unresolved': False,
-                        'content': 'Please include a bug link'
+                        'content': 'Please include a bug link',
+                        'id': 'comment_id_1'
                     }]
                 },
                 date=datetime.datetime(2017, 3, 17, 5, 19, 37, 500000),

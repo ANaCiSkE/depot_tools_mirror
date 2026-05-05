@@ -1592,6 +1592,16 @@ def GetChangeComments(host, change):
     return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
+def CreateDraft(host, change, revision='current', body=None):
+    """Creates a draft comment on a revision.
+
+    https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#create-draft
+    """
+    path = f'changes/{change}/revisions/{revision}/drafts'
+    conn = CreateHttpConn(host, path, reqtype='PUT', body=body)
+    return ReadHttpJsonResponse(conn)
+
+
 def GetRelatedChanges(host, change, revision='current'):
     """Gets the related changes for a given change and revision."""
     path = 'changes/%s/revisions/%s/related' % (change, revision)
