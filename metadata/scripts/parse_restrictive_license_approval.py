@@ -40,12 +40,16 @@ def main():
         print(f"Error parsing proto: {e}", file=sys.stderr)
         sys.exit(2)
 
-    ids = []
+    approvals = []
     for approval in proto_msg.license_approval:
-        if approval.id:
-            ids.append(approval.id)
+        # Approval requires a License ID and bug.
+        if approval.id and approval.bug:
+            approvals.append({
+                "id": approval.id,
+                "bug": approval.bug,
+            })
 
-    print(json.dumps(ids))
+    print(json.dumps(approvals))
 
 if __name__ == '__main__':
     main()

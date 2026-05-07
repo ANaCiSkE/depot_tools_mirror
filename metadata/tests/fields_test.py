@@ -22,6 +22,7 @@ import metadata.fields.custom.cpe_prefix as cpe_prefix_util
 import metadata.fields.custom.mitigated
 import metadata.fields.custom.update_mechanism
 import metadata.fields.custom.license
+import metadata.fields.custom.license_allowlist
 
 class FieldValidationTest(unittest.TestCase):
     def _run_field_validation(self,
@@ -331,7 +332,8 @@ class FieldValidationTest(unittest.TestCase):
 
     def test_load_restrictive_license_approval_proto(self):
         path = os.path.join(_THIS_DIR, "data", "restrictive_license_approval.textproto")
-        result = metadata.fields.custom.license.load_restrictive_license_approval_textproto(path)
+        result = metadata.fields.custom.license_allowlist.load_restrictive_license_approval_textproto(
+            path)
         self.assertIn("testing-restrictive-license", result)
 
     def test_license_validation_with_rla(self):
@@ -345,6 +347,62 @@ class FieldValidationTest(unittest.TestCase):
         # Validate WITH the rla textproto: should return None (approved / valid).
         res_with = field.validate(test_license, source_file_dir=os.path.join(_THIS_DIR, "data"))
         self.assertIsNone(res_with)
+
+    def test_get_license_validation_status(self):
+        get_status = metadata.fields.custom.license_allowlist.get_license_validation_status
+        data_dir = os.path.join(_THIS_DIR, "data")
+
+        # 1. Globally allowed
+        self.assertEqual(get_status("MIT"), "ALLOWED")
+        self.assertEqual(get_status("Apache-2.0"), "ALLOWED")
+        self.assertEqual(get_status("MIT, Apache-2.0"), "ALLOWED")
+
+        # 2. Restricted but approved
+        self.assertEqual(
+            get_status("LicenseRef-GUST-Font-License",
+                       source_file_dir=data_dir),
+            "APPROVED[(GUST-Font-License, b/987654321)]")
+        self.assertEqual(
+            get_status("MIT, LicenseRef-GUST-Font-License",
+                       source_file_dir=data_dir),
+            "APPROVED[(GUST-Font-License, b/987654321)]")
+
+        # 3. Restricted (GPL-2.0) is globally allowed
+        self.assertEqual(get_status("GPL-2.0"), "ALLOWED")
+        self.assertEqual(get_status("GPL-2.0", source_file_dir=data_dir),
+                         "ALLOWED")
+        self.assertEqual(get_status("MIT, GPL-2.0", source_file_dir=data_dir),
+                         "ALLOWED")
+        self.assertEqual(
+            get_status("LicenseRef-GUST-Font-License, GPL-2.0",
+                       source_file_dir=data_dir),
+            "APPROVED[(GUST-Font-License, b/987654321)]")
+
+        # 3b. Unknown and NOT approved
+        self.assertEqual(get_status("My-Custom-License"),
+                         "UNKNOWN[My-Custom-License]")
+        self.assertEqual(
+            get_status("My-Custom-License", source_file_dir=data_dir),
+            "UNKNOWN[My-Custom-License]")
+        self.assertEqual(
+            get_status("MIT, My-Custom-License", source_file_dir=data_dir),
+            "UNKNOWN[My-Custom-License]")
+        self.assertEqual(
+            get_status("LicenseRef-GUST-Font-License, My-Custom-License",
+                       source_file_dir=data_dir),
+            "UNKNOWN[My-Custom-License], APPROVED[(GUST-Font-License, b/987654321)]"
+        )
+
+        # 4. Empty or None
+        self.assertEqual(get_status(""), "UNKNOWN")
+        self.assertEqual(get_status(None), "UNKNOWN")
+
+        # 5. Reciprocal licenses (only allowed in open source)
+        self.assertEqual(get_status("CDDL-1.0"), "ALLOWED")
+        self.assertEqual(get_status("CDDL-1.0", is_open_source_project=True),
+                         "ALLOWED")
+        self.assertEqual(get_status("CDDL-1.0", is_open_source_project=False),
+                         "UNKNOWN[CDDL-1.0]")
 
 
 if __name__ == "__main__":

@@ -29,26 +29,6 @@ import subprocess
 
 RESTRICTED_APPROVAL_FILENAME = "restrictive_license_approval.textproto"
 
-def load_restrictive_license_approval_textproto(path: str) -> set[str]:
-    """Loads a restrictive_license_approval.textproto file and returns all license IDs."""
-    covered = set()
-    script_path = os.path.join(_ROOT_DIR, "metadata", "scripts", "parse_restrictive_license_approval.py")
-    try:
-        result = subprocess.run(
-            ["vpython3", script_path, path],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        license_ids = json.loads(result.stdout)
-        for license_id in license_ids:
-            covered.add(license_id.lower())
-            covered.add(allowlist_util.normalize_value(license_id).lower())
-    except subprocess.CalledProcessError as e:
-        logging.warning("Failed to parse restrictive_license_approval.textproto at %s: %s\n%s", path, e, e.stderr)
-    except json.JSONDecodeError as e:
-        logging.warning("Failed to parse JSON output from parse_restrictive_license_approval.py: %s", e)
-    return covered
 
 class LicenseField(field_types.SingleLineTextField):
     """Custom field for the package's license type(s).
@@ -112,7 +92,10 @@ class LicenseField(field_types.SingleLineTextField):
             if source_file_dir:
                 restricted_approval_filepath = os.path.join(source_file_dir, RESTRICTED_APPROVAL_FILENAME)
                 if os.path.isfile(restricted_approval_filepath):
-                    covered.update(load_restrictive_license_approval_textproto(restricted_approval_filepath))
+                    covered.update(
+                        allowlist_util.
+                        load_restrictive_license_approval_textproto(
+                            restricted_approval_filepath))
 
             missing = [lic for lic in not_allowlisted if lic.lower() not in covered]
             if missing:

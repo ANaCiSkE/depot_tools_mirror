@@ -48,7 +48,21 @@
 # 5. Note:
 #   * Remove 'LicenseRef-' prefix from license classifier outputs.
 #   * Case does not matter.
-from typing import List, Tuple
+import json
+import logging
+import os
+import subprocess
+from typing import Optional
+
+_THIS_DIR = os.path.abspath(os.path.dirname(__file__))
+# The repo's root directory.
+_ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
+
+RESTRICTED_APPROVAL_FILENAME = "restrictive_license_approval.textproto"
+
+STATUS_ALLOWED = "ALLOWED"
+STATUS_APPROVED = "APPROVED"
+STATUS_UNKNOWN = "UNKNOWN"
 
 _ALLOWED_SPDX_LICENSES = frozenset([
     # unencumbered.
@@ -264,7 +278,7 @@ def normalize_value(value: str) -> str:
     """
     # Do not convert to lower case here, as we want to preserve the original
     # casing for warning messages.
-    return value.removeprefix("LicenseRef-").strip()
+    return value.strip().removeprefix("LicenseRef-")
 
 
 def _license_in_list(value: str, allow_list: frozenset[str]) -> bool:
@@ -310,3 +324,98 @@ def is_license_allowed(value: str,
     if is_open_source_project and is_open_source_license(value):
         return True
     return False
+
+
+def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
+    """Loads a restrictive_license_approval.textproto file and returns a mapping of license IDs to bug IDs."""
+    covered = {}
+    script_path = os.path.join(_ROOT_DIR, "metadata", "scripts",
+                               "parse_restrictive_license_approval.py")
+    stdout = subprocess.check_output(["vpython3", script_path,
+                                      path]).decode("utf-8")
+    approvals = json.loads(stdout)
+    for approval in approvals:
+        license_id = approval.get("id")
+        bug = approval.get("bug")
+        # Ignore entries that don't have both an id and bug.
+        if not license_id or not bug:
+            continue
+        covered[license_id.lower()] = bug
+        covered[normalize_value(license_id).lower()] = bug
+    return covered
+
+
+def get_license_validation_status(license_value: str,
+                                  source_file_dir: Optional[str] = None,
+                                  is_open_source_project: bool = True) -> str:
+    """Evaluates the validation status of a license value to provide context
+    in Milestone License Reviews. This is called from licenses.py in chromium.
+
+    Returns 'ALLOWED' if all licenses are allowed, or a combination of:
+    - 'UNKNOWN[list, of, licenseIDs, ...]'
+    - 'APPROVED[(restricted-license, b/approval_bug_number), ...]'
+
+    Args:
+      license_value: The license field value (e.g., "MIT, GPL-2.0").
+      source_file_dir: Directory containing the local approval textproto.
+      is_open_source_project: Whether the project is open source (reciprocal
+        licenses are disallowed in non-open-source projects).
+    """
+    if not license_value:
+        return STATUS_UNKNOWN
+
+    licenses = [normalize_value(val) for val in license_value.split(",")]
+
+    # Map normalized_lic_id -> bug_id.
+    approvals = None
+    unknown_licenses = []
+    approved_licenses = []
+
+    for license in licenses:
+        # Check if globally allowed.
+        if is_license_allowed(license, is_open_source_project):
+            continue
+        # Source dir is required to check restrictive_license_approval.textproto.
+        if not source_file_dir:
+            unknown_licenses.append(license)
+            continue
+
+        # Look for a restrictive license approval if it's not in the allowlist.
+        if approvals is None:
+            approvals = {}
+            restricted_approval_filepath = os.path.join(
+                source_file_dir, RESTRICTED_APPROVAL_FILENAME)
+            if os.path.isfile(restricted_approval_filepath):
+                approvals = load_restrictive_license_approval_textproto(
+                    restricted_approval_filepath)
+
+        lic_norm = normalize_value(license).lower()
+
+        # Check if approved.
+        bug = None
+        is_approved = False
+        if lic_norm in approvals:
+            bug = approvals[lic_norm]
+            is_approved = True
+
+        if is_approved:
+            approved_licenses.append((license, bug))
+        else:
+            unknown_licenses.append(license)
+
+    # Construct status string.
+    if not unknown_licenses and not approved_licenses:
+        return STATUS_ALLOWED
+
+    parts = []
+    if unknown_licenses:
+        parts.append(f"{STATUS_UNKNOWN}[{', '.join(unknown_licenses)}]")
+
+    if approved_licenses:
+        approval_strings = []
+        for lic, bug in approved_licenses:
+            bug_str = f"b/{bug}" if bug else "N/A"
+            approval_strings.append(f"({lic}, {bug_str})")
+        parts.append(f"{STATUS_APPROVED}[{', '.join(approval_strings)}]")
+
+    return ", ".join(parts)
