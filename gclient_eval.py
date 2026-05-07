@@ -215,12 +215,6 @@ _GCLIENT_HOOKS_SCHEMA = [
         # if the condition evaluates to True.
         schema.Optional('condition'):
         str,
-
-        # Whether the hook could be run together / in parallel with immediately
-        # preceding or succeeding independent hooks. Without this option,
-        # each hook is run sequentially.
-        schema.Optional('independent'):
-        bool,
     })
 ]
 

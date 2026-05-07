@@ -44,8 +44,6 @@
 #                will be extended by the list of matching files.
 #     "name"     An optional string specifying the group to which a hook belongs
 #                for overriding and organizing.
-#     "independent" An optional boolean specifying if the hook can be executed
-#                in parallel with other independent hooks.
 #
 #   Example:
 #     hooks = [
@@ -163,65 +161,6 @@ def ToGNString(value):
     raise GNException("Unsupported type when printing to GN.")
 
 
-class HookWorkItem(gclient_utils.WorkItem):
-    """WorkItem wrapper for running a Hook."""
-
-    def __init__(self, hook, name, requirements):
-        super(HookWorkItem, self).__init__(name)
-        self.hook = hook
-        self.requirements = list(requirements)
-
-    def run(self, work_queue):
-        self.hook.run()
-
-
-def _CreateHookWorkItems(hooks):
-    """Converts a list of hooks into a list of HookWorkItems with requirements.
-
-    Abstractly this splits the hook list in groups of either single sequential
-    or multiple independent hooks.
-
-    Each hook in a group has all the hooks from the previous group as
-    requirement.
-
-          S1      (sequential)
-       /  |  \
-      I2  I3  I4  (independent hooks)
-       \  |  /
-          S5      (sequential)
-    """
-    work_items = []
-    sequential_requirements = []
-    independent_requirements = []
-
-    for idx, hook in enumerate(hooks):
-        name = f"{hook.name or 'hook'}_{idx}"
-        if hook.independent:
-            requirements = list(sequential_requirements)
-            independent_requirements.append(name)
-        else:
-            if independent_requirements:
-                requirements = list(independent_requirements)
-            else:
-                requirements = list(sequential_requirements)
-            # Reset independent group after a sequential hook.
-            sequential_requirements = [name]
-            independent_requirements = []
-        work_items.append(HookWorkItem(hook, name, requirements))
-    return work_items
-
-
-def _ExecuteHooks(hooks, jobs, progress=None):
-    """Executes a list of hooks using ExecutionQueue."""
-    work_items = _CreateHookWorkItems(hooks)
-    work_queue = gclient_utils.ExecutionQueue(jobs,
-                                              progress,
-                                              ignore_requirements=False)
-    for item in work_items:
-        work_queue.enqueue(item)
-    work_queue.flush()
-
-
 class Hook(object):
     """Descriptor of command ran before/after sync or on demand."""
     def __init__(self,
@@ -232,8 +171,7 @@ class Hook(object):
                  condition=None,
                  variables=None,
                  verbose=False,
-                 cwd_base=None,
-                 independent=False):
+                 cwd_base=None):
         """Constructor.
 
     Arguments:
@@ -243,8 +181,6 @@ class Hook(object):
       cwd (str): working directory to use
       condition (str): condition when to run the hook
       variables (dict): variables for evaluating the condition
-      independent (bool): whether the hook can be run in parallel with the
-                       previous or next independent hook.
     """
         self._action = gclient_utils.freeze(action)
         self._pattern = pattern
@@ -254,7 +190,6 @@ class Hook(object):
         self._variables = variables
         self._verbose = verbose
         self._cwd_base = cwd_base
-        self._independent = independent
 
     @staticmethod
     def from_dict(d,
@@ -274,16 +209,11 @@ class Hook(object):
             variables=variables,
             # Always print the header if not printing to a TTY.
             verbose=verbose or not setup_color.IS_TTY,
-            cwd_base=cwd_base,
-            independent=d.get('independent', False))
+            cwd_base=cwd_base)
 
     @property
     def action(self):
         return self._action
-
-    @property
-    def independent(self):
-        return self._independent
 
     @property
     def pattern(self):
@@ -1523,10 +1453,10 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         self._processed = True
 
     def GetHooks(self, options):
-        """Gathers all hooks and returns them in a flat list.
+        """Evaluates all hooks, and return them in a flat list.
 
-        RunOnDeps() must have been called before to load the DEPS.
-        """
+    RunOnDeps() must have been called before to load the DEPS.
+    """
         result = []
         if not self.should_process or not self.should_recurse:
             # Don't run the hook when it is above recursion_limit.
@@ -1546,11 +1476,14 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         assert self.hooks_ran == False
         self._hooks_ran = True
         hooks = self.GetHooks(options)
-        if not hooks:
+        if progress:
+            progress._total = len(hooks)
+        for hook in hooks:
             if progress:
-                progress.end()
-            return
-        _ExecuteHooks(hooks, options.jobs, progress)
+                progress.update(extra=hook.name or '')
+            hook.run()
+        if progress:
+            progress.end()
 
     def RunPreDepsHooks(self):
         assert self.processed
@@ -1560,11 +1493,8 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         for s in self.dependencies:
             assert not s.processed
         self._pre_deps_hooks_ran = True
-
-        hooks = self.pre_deps_hooks
-        if not hooks:
-            return
-        _ExecuteHooks(hooks, self._get_option('jobs', 1))
+        for hook in self.pre_deps_hooks:
+            hook.run()
 
     def GetCipdRoot(self):
         if self.root is self:
