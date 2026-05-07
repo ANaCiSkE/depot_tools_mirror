@@ -128,6 +128,11 @@ def _GetBuildtoolsPathInternal(cwd, override):
     if os.path.exists(buildtools_path):
         return buildtools_path
 
+    # also check for src/buildtools in the gclient root
+    src_buildtools_path = os.path.join(gclient_root, 'src', 'buildtools')
+    if os.path.exists(src_buildtools_path):
+        return src_buildtools_path
+
     return None
 
 

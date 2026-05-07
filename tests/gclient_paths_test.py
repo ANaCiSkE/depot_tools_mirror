@@ -179,10 +179,23 @@ class GetBuildtoolsPathTest(TestBase):
                          gclient_paths.GetBuildtoolsPath())
 
     def testBuildtoolsInGclientRoot(self):
-        self.make_file_tree({'.gclient': '', 'buildtools': ''})
+        self.make_file_tree({
+            '.gclient': 'solutions = [{"name": "src/foo"}]',
+            'buildtools': '',
+        })
         self.cwd = os.path.join(self.root, 'src', 'foo')
 
         self.assertEqual(os.path.join(self.root, 'buildtools'),
+                         gclient_paths.GetBuildtoolsPath())
+
+    def testSrcBuildtoolsInGclientRoot(self):
+        self.make_file_tree({
+            '.gclient': 'solutions = [{"name": "src/foo"}]',
+            os.path.join('src', 'buildtools'): '',
+        })
+        self.cwd = os.path.join(self.root, 'src', 'foo')
+
+        self.assertEqual(os.path.join(self.root, 'src', 'buildtools'),
                          gclient_paths.GetBuildtoolsPath())
 
     def testNoBuildtools(self):
