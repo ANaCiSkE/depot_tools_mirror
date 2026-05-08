@@ -1772,15 +1772,15 @@ def test_ai_agent_env_prepends_flags(
         assert "--namespace=developer:ai-agent" in subcmd_args
         assert "Detected AI agent env" in stdout
         if exit_code == 0:
-            assert "Success" in stdout
+            assert "finished successfully" in stdout
         else:
-            assert "Success" not in stdout
+            assert "finished with an error" in stdout
     else:
         assert "--quiet" not in args
         assert "--batch=false" not in args
         assert "--namespace=developer:ai-agent" not in subcmd_args
         assert "Detected AI agent env" not in stdout
-        assert "Success" not in stdout
+        assert "finished" not in stdout
 
 
 # Stanza to have pytest be executed.

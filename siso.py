@@ -658,8 +658,13 @@ def main(args: list[str],
                 ret = runner([siso_path] + new_args, env=env)
                 # --quiet suppresses siso's own success output which
                 # can confuse AI agents into thinking the build failed.
-                if is_ai_agent and subcmd == "ninja" and ret == 0:
-                    print('Success')
+                if is_ai_agent and subcmd == "ninja":
+                    # Agents seem to also sometimes not notice when the build
+                    # finishes. Try to help them.
+                    if ret == 0:
+                        print('The build has finished successfully.')
+                    else:
+                        print('The build has finished with an error.')
                 return ret
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
