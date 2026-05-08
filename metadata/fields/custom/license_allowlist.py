@@ -63,6 +63,7 @@ RESTRICTED_APPROVAL_FILENAME = "restrictive_license_approval.textproto"
 STATUS_ALLOWED = "ALLOWED"
 STATUS_APPROVED = "APPROVED"
 STATUS_UNKNOWN = "UNKNOWN"
+STATUS_RECIPROCAL_NOT_ALLOWED = "RECIPROCAL_NOT_ALLOWED"
 
 _ALLOWED_SPDX_LICENSES = frozenset([
     # unencumbered.
@@ -345,14 +346,16 @@ def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
     return covered
 
 
-def get_license_validation_status(license_value: str,
-                                  source_file_dir: Optional[str] = None,
-                                  is_open_source_project: bool = True) -> str:
-    """Evaluates the validation status of a license value to provide context
-    in Milestone License Reviews. This is called from licenses.py in chromium.
+def get_license_validation_status(
+        license_value: str,
+        source_file_dir: Optional[str] = None,
+        is_open_source_project: bool = True,
+        android_compatible: Optional[str] = None) -> str:
+    """Evaluates the validation status of a license value.
 
     Returns 'ALLOWED' if all licenses are allowed, or a combination of:
     - 'UNKNOWN[list, of, licenseIDs, ...]'
+    - 'RECIPROCAL_NOT_ALLOWED[list, of, licenseIDs, ...]'
     - 'APPROVED[(restricted-license, b/approval_bug_number), ...]'
 
     Args:
@@ -360,6 +363,7 @@ def get_license_validation_status(license_value: str,
       source_file_dir: Directory containing the local approval textproto.
       is_open_source_project: Whether the project is open source (reciprocal
         licenses are disallowed in non-open-source projects).
+      android_compatible: Optional string value of 'License Android Compatible' field.
     """
     if not license_value:
         return STATUS_UNKNOWN
@@ -370,11 +374,23 @@ def get_license_validation_status(license_value: str,
     approvals = None
     unknown_licenses = []
     approved_licenses = []
+    reciprocal_not_allowed_licenses = []
 
     for license in licenses:
         # Check if globally allowed.
         if is_license_allowed(license, is_open_source_project):
             continue
+
+        # Reciprocal in internal requires 'Android Compatible = yes'.
+        # This indicates alternative arrangements have been made to meet the
+        # reciprocal obligations of the license.
+        is_reciprocal = is_open_source_license(license)
+        if is_reciprocal:
+            if (not android_compatible
+                    or android_compatible.lower().strip() != "yes"):
+                reciprocal_not_allowed_licenses.append(license)
+            continue
+
         # Source dir is required to check restrictive_license_approval.textproto.
         if not source_file_dir:
             unknown_licenses.append(license)
@@ -404,12 +420,17 @@ def get_license_validation_status(license_value: str,
             unknown_licenses.append(license)
 
     # Construct status string.
-    if not unknown_licenses and not approved_licenses:
+    if not unknown_licenses and not approved_licenses and not reciprocal_not_allowed_licenses:
         return STATUS_ALLOWED
 
     parts = []
     if unknown_licenses:
         parts.append(f"{STATUS_UNKNOWN}[{', '.join(unknown_licenses)}]")
+
+    if reciprocal_not_allowed_licenses:
+        parts.append(
+            f"{STATUS_RECIPROCAL_NOT_ALLOWED}[{', '.join(reciprocal_not_allowed_licenses)}]"
+        )
 
     if approved_licenses:
         approval_strings = []
