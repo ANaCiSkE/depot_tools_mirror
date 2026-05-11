@@ -328,9 +328,11 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.assertIn('  branch_K', output)
 
     def testRebaseUpdateSkipWorktrees(self):
-        self.repo.git('checkout', 'branch_K')
+        self.repo.git('checkout', 'branch_L')
+        self.repo.run(self.nb.main,
+                      ['--upstream-current', 'empty_branch_in_worktree'])
 
-        # Mock git.run to return a worktree list that includes branch_L in a different worktree
+        # Mock git.run to return a worktree list that includes branch_L and empty_branch_in_worktree in different worktrees
         original_run = self.gc.run
         repo_root = self.repo.git('rev-parse', '--show-toplevel').stdout.strip()
 
@@ -343,6 +345,10 @@ branch refs/heads/branch_K
 worktree /path/to/other/worktree
 HEAD deaffeed
 branch refs/heads/branch_L
+
+worktree /path/to/another/worktree
+HEAD feedface
+branch refs/heads/empty_branch_in_worktree
 """
             return original_run(*args, **kwargs)
 
@@ -354,6 +360,9 @@ branch refs/heads/branch_L
             'Skipping branch checked out in another worktree branch_L', output)
         self.assertNotIn(
             'Skipping branch checked out in another worktree branch_K', output)
+        self.assertIn(
+            'Skipping deletion of branch checked out in another worktree empty_branch_in_worktree',
+            output)
 
     def testTrackTag(self):
         self.origin.git('tag', 'tag-to-track', self.origin['M'])
