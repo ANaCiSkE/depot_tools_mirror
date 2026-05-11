@@ -221,6 +221,7 @@ _OPEN_SOURCE_SPDX_LICENSES = frozenset([
     "CDDL-1.1",
     "CPL-1.0",
     "EPL-1.0",
+    "EPL-2.0",
     "MPL-1.1",
     "MPL-2.0",
     # go/keep-sorted end
