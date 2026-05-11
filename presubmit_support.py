@@ -2188,14 +2188,20 @@ def DoPresubmitChecks(change,
         else:
             # Print the different message types in a consistent order. ERRORS go
             # last so that they will be most visible in the local-presubmit output.
+            counts = {}
             for name in ['Messages', 'Warnings', 'ERRORS']:
-                if name in messages:
-                    items = messages[name]
+                items = messages.get(name, [])
+                counts[name] = len(items)
+                if items:
                     sys.stdout.write('** Presubmit %s: %d **\n' %
-                                     (name, len(items)))
+                                     (name, counts[name]))
                     for item in items:
                         item.handle()
                         sys.stdout.write('\n')
+            sys.stdout.write(
+                '** %d Presubmit Messages, %d Presubmit Warnings, '
+                '%d Presubmit ERRORS **\n\n' %
+                (counts['Messages'], counts['Warnings'], counts['ERRORS']))
             if json_output:
                 gclient_utils.FileWrite(json_output, presubmit_results_json)
 
