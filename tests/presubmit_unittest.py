@@ -6,6 +6,7 @@
 
 # pylint: disable=no-member,E1103
 
+import fnmatch
 import functools
 import io
 import itertools
@@ -2286,17 +2287,36 @@ class CannedChecksUnittest(PresubmitTestsBase):
         affected_files = []
         for i in range(100):
             affected_file = mock.MagicMock(presubmit.GitAffectedFile)
-            affected_file.LocalPath.return_value = f'foo{i}.cc'
+            affected_file.UnixLocalPath.return_value = f'foo{i}.cc'
             affected_files.append(affected_file)
-        input_api.AffectedFiles = lambda **_: affected_files
 
-        # Don't warn if less than or equal to 100 files.
+        def affected_files_mock(file_filter=None, **_):
+            if file_filter:
+                return [f for f in affected_files if file_filter(f)]
+            return affected_files
+
+        input_api.AffectedFiles = affected_files_mock
+        input_api.fnmatch = fnmatch
+
+        # Don't warn if less than or equal to 100 non-excluded files.
         results = presubmit_canned_checks.CheckLargeScaleChange(
             input_api, presubmit.OutputApi)
         self.assertEqual(len(results), 0)
 
-        # Warn if greater than 100 files.
-        affected_files.append('bar.cc')
+        # Adding files within the excluded directory shouldn't trigger the warn
+        # limit.
+        excluded_file = mock.MagicMock(presubmit.GitAffectedFile)
+        excluded_file.UnixLocalPath.return_value = 'infra/config/generated/foo'
+        affected_files.append(excluded_file)
+
+        results = presubmit_canned_checks.CheckLargeScaleChange(
+            input_api, presubmit.OutputApi)
+        self.assertEqual(len(results), 0)
+
+        # Warn if greater than 100 non-excluded files.
+        new_affected_file = mock.MagicMock(presubmit.GitAffectedFile)
+        new_affected_file.UnixLocalPath.return_value = 'bar.cc'
+        affected_files.append(new_affected_file)
 
         results = presubmit_canned_checks.CheckLargeScaleChange(
             input_api, presubmit.OutputApi)

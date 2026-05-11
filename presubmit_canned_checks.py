@@ -255,7 +255,17 @@ def CheckDoNotSubmitInFiles(input_api, output_api):
 
 def CheckLargeScaleChange(input_api, output_api):
     """Checks if the change should go through the LSC process."""
-    size = len(input_api.AffectedFiles())
+    exclusion_globs = [
+        'infra/config/generated/*',
+    ]
+
+    def file_filter(affected_file):
+        local_path = affected_file.UnixLocalPath()
+        return not any(
+            input_api.fnmatch.fnmatch(local_path, glob)
+            for glob in exclusion_globs)
+
+    size = len(input_api.AffectedFiles(file_filter=file_filter))
     if size <= 100:
         return []
     return [
