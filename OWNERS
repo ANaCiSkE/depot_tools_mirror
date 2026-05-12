@@ -1,9 +1,8 @@
 set noparent
 
-estaab@google.com #{LAST_RESORT_SUGGESTION}
-bryner@google.com
 gavinmak@google.com
 yiwzhang@google.com
+bryner@google.com
 
 # Allow teams to self-manage who belongs to them.
 per-file BUILD_OWNERS=file://BUILD_OWNERS
