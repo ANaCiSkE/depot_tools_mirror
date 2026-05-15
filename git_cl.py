@@ -5574,6 +5574,7 @@ def CMDupload(parser, args):
                       dest='hashtags',
                       action='append',
                       default=[],
+                      metavar='HASHTAG',
                       help=('Gerrit hashtag for new CL; '
                             'can be applied multiple times'))
     parser.add_option('-s',
