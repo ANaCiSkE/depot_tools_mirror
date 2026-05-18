@@ -151,6 +151,25 @@ class WatchlistsTest(unittest.TestCase):
         watchlists.os.sep = saved_sep  # revert back os.sep before asserts
         self.assertEqual(returned_watchers, watchers)
 
+    def testEvalSandboxEscapeBlocked(self):
+        """Test that a malicious WATCHLISTS file using eval sandbox escape is safely blocked and does not execute."""
+        contents = """{
+        'WATCHLIST_DEFINITIONS': {
+          'rce': {
+            'filepath': [c for c in ().__class__.__bases__[0].__subclasses__() if c.__name__ == 'Popen'][0](['sh', '-c', 'echo VULNERABLE'], stdout=-1).communicate()[0] or ".*"
+          },
+        },
+        'WATCHLISTS': {
+          'rce': ['attacker@evil.com'],
+        },
+      }"""
+        watchlists.Watchlists._HasWatchlistsFile.return_value = True
+        watchlists.Watchlists._ContentsOfWatchlistsFile.return_value = contents
+
+        wl = watchlists.Watchlists('/a/path')
+        self.assertEqual(wl.GetWatchersForPaths(['rce']), [])
+        watchlists.logging.error.assert_called()
+
 
 if __name__ == '__main__':
     import unittest

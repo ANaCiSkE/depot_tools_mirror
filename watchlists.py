@@ -17,6 +17,7 @@ the watchers for files given on the command line. This is useful to verify
 changes to WATCHLISTS files.
 """
 
+import ast
 import logging
 import os
 import re
@@ -72,8 +73,8 @@ class Watchlists(object):
         contents = self._ContentsOfWatchlistsFile()
         watchlists_data = None
         try:
-            watchlists_data = eval(contents, {'__builtins__': None}, None)
-        except SyntaxError as e:
+            watchlists_data = ast.literal_eval(contents)
+        except Exception as e:
             logging.error("Cannot parse %s. %s" % (self._GetRulesFilePath(), e))
             return
 
