@@ -332,6 +332,99 @@ class InclusiveLanguageCheckTest(unittest.TestCase):
         self.assertTrue(os.path.normpath('dir2/2.py') in errors[0].message)
 
 
+class CheckLongLinesTest(unittest.TestCase):
+
+    def testCheckJavaLongLines(self):
+        test_cases = [
+            {
+                'name':
+                'Valid Java text blocks (no errors expected)',
+                'files': [
+                    ('some/java/file/TestBlock.java', [
+                        'class TestBlock {',
+                        '  String s = """',
+                        '    this is a very long line that should be ignored because it is inside a text block and we want to allow it as per the style guide.',
+                        '    """;',
+                        '}',
+                    ]),
+                    ('some/java/file/TestComment.java', [
+                        'class TestComment {',
+                        '  // Comment with """',
+                        '  String s = """',
+                        '    this is a very long line that should be ignored because it is inside a text block and we want to allow it as per the style guide.',
+                        '    """;',
+                        '}',
+                    ]),
+                    ('some/java/file/TestEscaped.java', [
+                        'class TestEscaped {',
+                        '  String s = """',
+                        '    line 1',
+                        '    escaped \\""" here',
+                        '    line 3 that is also long but inside block and should be ignored',
+                        '    """;',
+                        '}',
+                    ]),
+                    ('some/java/file/TestLongClosingContent.java', [
+                        'class TestLongClosingContent {',
+                        '  String s = """',
+                        '    content',
+                        '    this is a very long line that ends the text block """;',
+                        '}',
+                    ]),
+                    ('some/java/file/TestLongClosingCode.java', [
+                        'class TestLongClosingCode {',
+                        '  String s = """',
+                        '    content',
+                        '    """; // this line is long but should NOT be flagged because it is the closing line of a text block.',
+                        '}',
+                    ]),
+                ],
+                'expected_errors':
+                0,
+            },
+            {
+                'name':
+                'Invalid Java lines (errors expected)',
+                'files': [
+                    ('some/java/file/TestNormal.java', [
+                        'class TestNormal {',
+                        '  String s = "this is a very long line that should NOT be ignored because it is in a normal string literal.";',
+                        '}',
+                    ]),
+                    ('some/java/file/TestNormalQuotes.java', [
+                        'class TestNormalQuotes {',
+                        '  String s = "normal string with \\"\\"\\" inside";',
+                        '  String t = "normal string that is very long and should be flagged because it is not a text block.";',
+                        '}',
+                    ]),
+                ],
+                'expected_errors':
+                1,
+                'expected_items': ['TestNormal.java', 'TestNormalQuotes.java'],
+            },
+        ]
+
+        for case in test_cases:
+            with self.subTest(case_name=case['name']):
+                input_api = MockInputApi()
+                input_api.files = [
+                    MockFile(os.path.normpath(path), lines)
+                    for path, lines in case['files']
+                ]
+                errors = presubmit_canned_checks.CheckLongLines(input_api,
+                                                                MockOutputApi(),
+                                                                maxlen=80)
+                expected_errors = case.get('expected_errors', 0)
+                self.assertEqual(expected_errors, len(errors))
+                if expected_errors > 0:
+                    all_items = getattr(errors[0], 'items', [])
+                    expected_items = case.get('expected_items', [])
+                    self.assertEqual(len(expected_items), len(all_items))
+                    for item in expected_items:
+                        self.assertTrue(
+                            any(item in str(actual) for actual in all_items))
+
+
 
 class DescriptionChecksTest(unittest.TestCase):
     def testCheckDescriptionUsesColonInsteadOfEquals(self):
