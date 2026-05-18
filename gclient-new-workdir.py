@@ -357,6 +357,25 @@ def main():
                 if args.copy_on_write:
                     adopt_git_worktree(root, workdir)
                 else:
+                    # Parent checkouts can pre-populate nested submodule
+                    # directories. It is safe to remove these empty or
+                    # placeholder submodule directories since we are about to
+                    # check them out as separate worktrees.
+                    real_workdir = os.path.realpath(workdir)
+                    if real_workdir != args.new_workdir and os.path.exists(
+                            real_workdir):
+                        # Ensure workdir is strictly inside the new workspace
+                        # and is not the root itself
+                        if os.path.commonpath([args.new_workdir, real_workdir
+                                               ]) != args.new_workdir:
+                            raise ValueError(
+                                f'Target workdir {real_workdir} is not inside '
+                                f'the new workspace {args.new_workdir}.')
+
+                        # Only delete the directory if it contains a .git
+                        # file/directory.
+                        if os.path.exists(os.path.join(real_workdir, '.git')):
+                            shutil.rmtree(real_workdir)
                     create_git_worktree(root, workdir)
             else:
                 link_git_repo(root,
