@@ -3460,7 +3460,7 @@ class Changelist(object):
                                                  options.push_options)
 
         if options.squash:
-            regex = re.compile(r'remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s.*')
+            regex = re.compile(r'remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s?.*')
             change_numbers = [
                 m.group(1) for m in map(regex.match, push_stdout.splitlines())
                 if m
@@ -5941,10 +5941,15 @@ def UploadAllSquashed(options: optparse.Values,
                                            options.push_options)
 
     # Post push updates
-    regex = re.compile(r'remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s.*')
+    regex = re.compile(r'remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s?.*')
     change_numbers = [
         m.group(1) for m in map(regex.match, push_stdout.splitlines()) if m
     ]
+
+    if len(change_numbers) != len(uploads_by_cl):
+        DieWithError('Created|Updated %d issues on Gerrit, but %d expected.\n'
+                     'Full git push output:\n%s' %
+                     (len(change_numbers), len(uploads_by_cl), push_stdout))
 
     for i, (cl, new_upload) in enumerate(uploads_by_cl):
         cl.PostUploadUpdates(options, new_upload, change_numbers[i])

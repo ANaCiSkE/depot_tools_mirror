@@ -1499,6 +1499,166 @@ class TestGitCl(unittest.TestCase):
                 return_value='chromium-review.googlesource.com')
     @mock.patch('git_cl.Changelist.GetRemoteBranch',
                 return_value=('origin', 'refs/remotes/origin/main'))
+    @mock.patch(
+        'git_cl.Changelist.GetCommonAncestorWithUpstream',
+        side_effect=['current-upstream-ancestor', 'next-upstream-ancestor'])
+    @mock.patch('git_cl.Changelist.PostUploadUpdates')
+    @mock.patch('git_cl.Changelist._RunGitPushWithTraces')
+    @mock.patch('git_cl._UploadAllPrecheck')
+    @mock.patch('git_cl.Changelist.PrepareSquashedCommit')
+    def test_upload_all_squashed_no_space(self, mockSquashedCommit,
+                                          mockUploadAllPrecheck, mockRunGitPush,
+                                          mockPostUploadUpdates, *_mocks):
+        # Set up
+        cls = [
+            git_cl.Changelist(branchref='refs/heads/current-branch',
+                              issue='12345'),
+            git_cl.Changelist(branchref='refs/heads/upstream-branch')
+        ]
+        mockUploadAllPrecheck.return_value = (cls, False)
+
+        reviewers = []
+        ccs = []
+
+        current_commit_to_push = 'commit-to-push'
+        current_new_last_upload = 'new-last-upload'
+        change_desc = git_cl.ChangeDescription(
+            'Initial description\nChange-Id:ec15e81197380')
+        prev_patchset = 2
+        new_upload_current = git_cl._NewUpload(reviewers, ccs,
+                                               current_commit_to_push,
+                                               current_new_last_upload,
+                                               'next-upstream-ancestor',
+                                               change_desc, prev_patchset)
+
+        upstream_desc = git_cl.ChangeDescription('kwak')
+        upstream_parent = 'origin-commit'
+        upstream_new_last_upload = 'upstrea-last-upload'
+        upstream_commit_to_push = 'upstream_push_commit'
+        new_upload_upstream = git_cl._NewUpload(reviewers, ccs,
+                                                upstream_commit_to_push,
+                                                upstream_new_last_upload,
+                                                upstream_parent, upstream_desc,
+                                                prev_patchset)
+        mockSquashedCommit.side_effect = [
+            new_upload_upstream, new_upload_current
+        ]
+
+        options = optparse.Values()
+        options.send_mail = options.private = False
+        options.squash = True
+        options.title = None
+        options.message = 'Initial upload'
+        options.topic = 'main-topic'
+        options.enable_auto_submit = False
+        options.enable_owners_override = False
+        options.set_bot_commit = False
+        options.cq_dry_run = False
+        options.use_commit_queue = False
+        options.hashtags = ['cow']
+        options.target_branch = None
+        options.push_options = ['uploadvalidator~skip']
+        orig_args = []
+
+        # NOTICE: No space after the issue numbers
+        mockRunGitPush.return_value = (
+            'remote:   https://chromium-review.'
+            'googlesource.com/c/chromium/depot_tools/+/1233'
+            '\n'
+            'remote:   https://chromium-review.'
+            'googlesource.com/c/chromium/depot_tools/+/1234')
+
+        # Call
+        git_cl.UploadAllSquashed(options, orig_args)
+
+        # Asserts
+        self.assertEqual(mockPostUploadUpdates.mock_calls, [
+            mock.call(options, new_upload_upstream, '1233'),
+            mock.call(options, new_upload_current, '1234')
+        ])
+
+    @mock.patch('sys.stderr', io.StringIO())
+    @mock.patch('git_cl.Changelist.GetGerritHost',
+                return_value='chromium-review.googlesource.com')
+    @mock.patch('git_cl.Changelist.GetRemoteBranch',
+                return_value=('origin', 'refs/remotes/origin/main'))
+    @mock.patch(
+        'git_cl.Changelist.GetCommonAncestorWithUpstream',
+        side_effect=['current-upstream-ancestor', 'next-upstream-ancestor'])
+    @mock.patch('git_cl.Changelist.PostUploadUpdates')
+    @mock.patch('git_cl.Changelist._RunGitPushWithTraces')
+    @mock.patch('git_cl._UploadAllPrecheck')
+    @mock.patch('git_cl.Changelist.PrepareSquashedCommit')
+    def test_upload_all_squashed_count_mismatch(self, mockSquashedCommit,
+                                                mockUploadAllPrecheck,
+                                                mockRunGitPush,
+                                                mockPostUploadUpdates, *_mocks):
+        # Set up
+        cls = [
+            git_cl.Changelist(branchref='refs/heads/current-branch',
+                              issue='12345'),
+            git_cl.Changelist(branchref='refs/heads/upstream-branch')
+        ]
+        mockUploadAllPrecheck.return_value = (cls, False)
+
+        reviewers = []
+        ccs = []
+
+        current_commit_to_push = 'commit-to-push'
+        current_new_last_upload = 'new-last-upload'
+        change_desc = git_cl.ChangeDescription(
+            'Initial description\nChange-Id:ec15e81197380')
+        prev_patchset = 2
+        new_upload_current = git_cl._NewUpload(reviewers, ccs,
+                                               current_commit_to_push,
+                                               current_new_last_upload,
+                                               'next-upstream-ancestor',
+                                               change_desc, prev_patchset)
+
+        upstream_desc = git_cl.ChangeDescription('kwak')
+        upstream_parent = 'origin-commit'
+        upstream_new_last_upload = 'upstrea-last-upload'
+        upstream_commit_to_push = 'upstream_push_commit'
+        new_upload_upstream = git_cl._NewUpload(reviewers, ccs,
+                                                upstream_commit_to_push,
+                                                upstream_new_last_upload,
+                                                upstream_parent, upstream_desc,
+                                                prev_patchset)
+        mockSquashedCommit.side_effect = [
+            new_upload_upstream, new_upload_current
+        ]
+
+        options = optparse.Values()
+        options.send_mail = options.private = False
+        options.squash = True
+        options.title = None
+        options.message = 'Initial upload'
+        options.topic = 'main-topic'
+        options.enable_auto_submit = False
+        options.enable_owners_override = False
+        options.set_bot_commit = False
+        options.cq_dry_run = False
+        options.use_commit_queue = False
+        options.hashtags = ['cow']
+        options.target_branch = None
+        options.push_options = ['uploadvalidator~skip']
+        orig_args = []
+
+        # Only one issue returned, but two expected
+        mockRunGitPush.return_value = (
+            'remote:   https://chromium-review.'
+            'googlesource.com/c/chromium/depot_tools/+/1233')
+
+        # Call
+        with self.assertRaises(SystemExitMock):
+            git_cl.UploadAllSquashed(options, orig_args)
+        self.assertIn('Created|Updated 1 issues on Gerrit, but 2 expected.',
+                      sys.stderr.getvalue())
+
+    @mock.patch('git_cl.Changelist.GetGerritHost',
+                return_value='chromium-review.googlesource.com')
+    @mock.patch('git_cl.Changelist.GetRemoteBranch',
+                return_value=('origin', 'refs/remotes/origin/main'))
     @mock.patch('git_cl.Changelist.GetCommonAncestorWithUpstream',
                 return_value='current-upstream-ancestor')
     @mock.patch('git_cl.Changelist._UpdateWithExternalChanges')
