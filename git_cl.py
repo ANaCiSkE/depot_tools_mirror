@@ -3462,14 +3462,17 @@ class Changelist(object):
         if options.squash:
             regex = re.compile(r'remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s?.*')
             change_numbers = [
-                m.group(1) for m in map(regex.match, push_stdout.splitlines())
+                m.group(1) for m in map(regex.search, push_stdout.splitlines())
                 if m
             ]
             if len(change_numbers) != 1:
                 DieWithError((
                     'Created|Updated %d issues on Gerrit, but only 1 expected.\n'
-                    'Change-Id: %s') % (len(change_numbers), change_id),
-                             change_desc)
+                    'Change-Id: %s\n'
+                    'Detected change numbers: %s\n'
+                    'Full git push output:\n%s') %
+                             (len(change_numbers), change_id, change_numbers,
+                              push_stdout), change_desc)
             self.SetIssue(change_numbers[0])
             self.SetPatchset(latest_ps + 1)
             self._GitSetBranchConfigValue(GERRIT_SQUASH_HASH_CONFIG_KEY,
@@ -5936,6 +5939,7 @@ def UploadAllSquashed(options: optparse.Values,
         'description':
         new_upload.change_desc.description,
     }
+    logging.debug('pushing to %s', refspec)
     push_stdout = cl._RunGitPushWithTraces(refspec, refspec_opts,
                                            git_push_metadata,
                                            options.push_options)
@@ -5943,13 +5947,15 @@ def UploadAllSquashed(options: optparse.Values,
     # Post push updates
     regex = re.compile(r'remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s?.*')
     change_numbers = [
-        m.group(1) for m in map(regex.match, push_stdout.splitlines()) if m
+        m.group(1) for m in map(regex.search, push_stdout.splitlines()) if m
     ]
 
     if len(change_numbers) != len(uploads_by_cl):
         DieWithError('Created|Updated %d issues on Gerrit, but %d expected.\n'
+                     'Detected change numbers: %s\n'
                      'Full git push output:\n%s' %
-                     (len(change_numbers), len(uploads_by_cl), push_stdout))
+                     (len(change_numbers), len(uploads_by_cl), change_numbers,
+                      push_stdout))
 
     for i, (cl, new_upload) in enumerate(uploads_by_cl):
         cl.PostUploadUpdates(options, new_upload, change_numbers[i])

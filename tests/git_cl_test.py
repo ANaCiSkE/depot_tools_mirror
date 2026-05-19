@@ -1560,12 +1560,12 @@ class TestGitCl(unittest.TestCase):
         options.push_options = ['uploadvalidator~skip']
         orig_args = []
 
-        # NOTICE: No space after the issue numbers
+        # NOTICE: No space after the issue numbers and ANSI escape sequences
         mockRunGitPush.return_value = (
-            'remote:   https://chromium-review.'
+            '\x1b[Kremote:   https://chromium-review.'
             'googlesource.com/c/chromium/depot_tools/+/1233'
             '\n'
-            'remote:   https://chromium-review.'
+            '\x1b[Kremote:   https://chromium-review.'
             'googlesource.com/c/chromium/depot_tools/+/1234')
 
         # Call
@@ -1644,15 +1644,17 @@ class TestGitCl(unittest.TestCase):
         options.push_options = ['uploadvalidator~skip']
         orig_args = []
 
-        # Only one issue returned, but two expected
+        # Only one issue returned, but two expected, and it has ANSI sequences
         mockRunGitPush.return_value = (
-            'remote:   https://chromium-review.'
+            '\x1b[Kremote:   https://chromium-review.'
             'googlesource.com/c/chromium/depot_tools/+/1233')
 
         # Call
         with self.assertRaises(SystemExitMock):
             git_cl.UploadAllSquashed(options, orig_args)
         self.assertIn('Created|Updated 1 issues on Gerrit, but 2 expected.',
+                      sys.stderr.getvalue())
+        self.assertIn("Detected change numbers: ['1233']",
                       sys.stderr.getvalue())
 
     @mock.patch('git_cl.Changelist.GetGerritHost',
