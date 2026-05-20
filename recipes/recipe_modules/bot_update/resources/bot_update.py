@@ -412,11 +412,17 @@ def gclient_sync(with_branch_heads,
                  gerrit_reset,
                  gerrit_rebase_patch_ref,
                  download_topics=False,
-                 experiments=None):
+                 experiments=None,
+                 no_history=False,
+                 shallow=False):
   args = [
       'sync', '--verbose', '--reset', '--force', '--upstream', '--nohooks',
       '--noprehooks', '--delete_unversioned_trees'
   ]
+  if no_history:
+    args.append('--no-history')
+  elif shallow:
+    args.append('--shallow')
   if with_branch_heads:
     args += ['--with_branch_heads']
   if with_tags:
@@ -661,17 +667,20 @@ def _set_git_config(fn):
   return wrapper
 
 
-def git_checkouts(solutions, revisions, refs, no_fetch_tags, git_cache_dir,
-                  cleanup_dir, enforce_fetch, clean_ignored):
+def git_checkouts(solutions, revisions, refs, no_fetch_tags, no_history,
+                  shallow, git_cache_dir, cleanup_dir, enforce_fetch,
+                  clean_ignored):
   build_dir = os.getcwd()
   for sln in solutions:
     sln_dir = path.join(build_dir, sln['name'])
-    _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
-                  cleanup_dir, enforce_fetch, clean_ignored)
+    _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, no_history,
+                  shallow, git_cache_dir, cleanup_dir, enforce_fetch,
+                  clean_ignored)
 
 
-def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
-                  cleanup_dir, enforce_fetch, clean_ignored):
+def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, no_history,
+                  shallow, git_cache_dir, cleanup_dir, enforce_fetch,
+                  clean_ignored):
   name = sln['name']
   url = sln['url']
 
@@ -682,6 +691,10 @@ def _git_checkout(sln, sln_dir, revisions, refs, no_fetch_tags, git_cache_dir,
                    '--reset-fetch-config'])
   if no_fetch_tags:
     populate_cmd.extend(['--no-fetch-tags'])
+  if no_history:
+    populate_cmd.extend(['--depth', '1'])
+  elif shallow:
+    populate_cmd.append('--shallow')
   if pin:
     populate_cmd.extend(['--commit', pin])
   for ref in refs:
@@ -822,6 +835,8 @@ def ensure_checkout(solutions,
                     patch_refs,
                     gerrit_rebase_patch_ref,
                     no_fetch_tags,
+                    no_history,
+                    shallow,
                     refs,
                     git_cache_dir,
                     cleanup_dir,
@@ -835,8 +850,8 @@ def ensure_checkout(solutions,
   # invoking DEPS.
   print('Fetching Git checkout')
 
-  git_checkouts(solutions, revisions, refs, no_fetch_tags, git_cache_dir,
-                cleanup_dir, enforce_fetch, clean_ignored)
+  git_checkouts(solutions, revisions, refs, no_fetch_tags, no_history, shallow,
+                git_cache_dir, cleanup_dir, enforce_fetch, clean_ignored)
 
   # Ensure our build/ directory is set up with the correct .gclient file.
   gclient_configure(solutions, target_os, target_os_only, target_cpu,
@@ -858,7 +873,7 @@ def ensure_checkout(solutions,
   # src, which contains the branch-head refspecs, is DEPSed in.
   gclient_sync(BRANCH_HEADS_REFSPEC in refs, TAGS_REFSPEC in refs, gc_revisions,
                patch_refs, gerrit_reset, gerrit_rebase_patch_ref,
-               download_topics, experiments)
+               download_topics, experiments, no_history, shallow)
 
 
   # Now that gclient_sync has finished, we should revert any .DEPS.git so that
@@ -952,6 +967,14 @@ def parse_args():
   parse.add_option('--clean-ignored',
                    action='store_true',
                    help='Also clean ignored files from the checkout.')
+
+  parse.add_option('--no-history',
+                   action='store_true',
+                   help='GIT ONLY - Reduces the size/time of the checkout at '
+                   'the cost of no history.')
+  parse.add_option('--shallow',
+                   action='store_true',
+                   help='GIT ONLY - Do a shallow clone into the cache dir.')
 
   parse.add_option('--clobber', action='store_true',
                    help='Delete checkout first, always')
@@ -1099,6 +1122,8 @@ def checkout(options, git_slns, specs, revisions, step_text):
 
           # Control how the fetch step will occur.
           no_fetch_tags=options.no_fetch_tags,
+          no_history=options.no_history,
+          shallow=options.shallow,
           enforce_fetch=options.enforce_fetch,
 
           # Finally, extra configurations cleanup dir location.

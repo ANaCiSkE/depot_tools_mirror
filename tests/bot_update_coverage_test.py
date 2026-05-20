@@ -143,6 +143,8 @@ class BotUpdateUnittests(unittest.TestCase):
         'patch_refs': [],
         'gerrit_rebase_patch_ref': None,
         'no_fetch_tags': False,
+        'no_history': False,
+        'shallow': False,
         'refs': [],
         'git_cache_dir': '',
         'cleanup_dir': None,
