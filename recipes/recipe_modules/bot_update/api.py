@@ -235,7 +235,7 @@ class _EnabledTurboCiCheckHandler(_TurboCICheckHandler):
             # new python helpers.
             realm='$from_container',
             kind='CHECK_KIND_SOURCE',
-            options=[self._source_check_options],
+            realm_options=[('$from_container', self._source_check_options)],
             state='CHECK_STATE_PLANNED',
         ),
     )
@@ -276,7 +276,10 @@ class _EnabledTurboCiCheckHandler(_TurboCICheckHandler):
             # TODO(crbug.com/513249469#comment2): Remove realm after move to
             # new python helpers.
             realm='$from_container',
-            results=[gob_source_check_results, bot_update_check_results],
+            realm_results=[
+                ('$from_container', gob_source_check_results),
+                ('$from_container', bot_update_check_results),
+            ],
             state='CHECK_STATE_FINAL',
         ))
 
