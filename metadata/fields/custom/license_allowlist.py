@@ -244,6 +244,7 @@ _WITH_PERMISSION_ONLY = frozenset([
     # go/keep-sorted start case=no
     "Alliance-for-Open-Media-Patent",
     "Commercial",
+    "Microsoft-DirectX",
     "MicrosoftEnterpriseWindowsDriverKit",
     "Opus-Patent-BSD-3-Clause",
     "Play-Core-SDK-TOS",
