@@ -607,7 +607,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     JS_EXCEPTIONS = ("GEN('#include", 'import ',
                      '// ' + LINT_THEN_CHANGE_EXCEPTION)
     TS_FILE_EXTS = ('ts', )
-    TS_EXCEPTIONS = ('import ', 'export {', 'export type {'
+    TS_EXCEPTIONS = ('import ', 'export {', 'export type {',
                      '// ' + LINT_THEN_CHANGE_EXCEPTION)
     OBJC_FILE_EXTS = ('h', 'm', 'mm')
     OBJC_EXCEPTIONS = ('#define', '#endif', '#if', '#import', '#include',
