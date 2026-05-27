@@ -2955,7 +2955,11 @@ class Changelist(object):
                 break
         return 0
 
-    def CMDPatchWithParsedIssue(self, parsed_issue_arg, nocommit, force):
+    def CMDPatchWithParsedIssue(self,
+                                parsed_issue_arg,
+                                nocommit,
+                                force,
+                                reauthor=False):
         assert parsed_issue_arg.valid
 
         self.issue = parsed_issue_arg.issue
@@ -2997,7 +3001,24 @@ class Changelist(object):
         # Set issue immediately in case the cherry-pick fails, which happens
         # when resolving conflicts.
         if self.GetBranch():
-            self.SetIssue(parsed_issue_arg.issue)
+            if reauthor:
+                reset_suffixes = [
+                    LAST_UPLOAD_HASH_CONFIG_KEY,
+                    ISSUE_CONFIG_KEY,
+                    PATCHSET_CONFIG_KEY,
+                    CODEREVIEW_SERVER_CONFIG_KEY,
+                    GERRIT_SQUASH_HASH_CONFIG_KEY,
+                ]
+                for prop in reset_suffixes:
+                    try:
+                        self._GitSetBranchConfigValue(prop, None)
+                    except subprocess2.CalledProcessError:
+                        pass
+                self.lookedup_issue = True
+                self.issue = None
+                self.patchset = None
+            else:
+                self.SetIssue(parsed_issue_arg.issue)
 
         if force:
             RunGit(['reset', '--hard', 'FETCH_HEAD'])
@@ -3007,18 +3028,40 @@ class Changelist(object):
             RunGit(['cherry-pick', '--no-commit', 'FETCH_HEAD'])
             print('Patch applied to index.')
         else:
-            RunGit(['cherry-pick', 'FETCH_HEAD'])
-            print('Committed patch for change %i patchset %i locally.' %
-                  (parsed_issue_arg.issue, patchset))
-            print(
-                'Note: this created a local commit on top of parent commit '
-                'that is different from the one in Gerrit. If the patched CL '
-                'is not yours and you cannot upload new patches to it, you '
-                'will not be able to upload stacked changes created on top of '
-                'this branch.\n'
-                'If you want to do that, use "git cl patch --force" instead.')
+            try:
+                RunGit(['cherry-pick', 'FETCH_HEAD'])
+                if reauthor:
+                    msg = RunGit(['log', '-1', '--format=%B']).strip()
+                    clean_msg = git_footers.remove_footer(msg, 'Change-Id')
+                    RunGit([
+                        'commit', '--amend', '--reset-author', '-m', clean_msg
+                    ])
+                    print(
+                        'Committed patch locally under your authorship with a new Change-Id.'
+                    )
+                else:
+                    print('Committed patch for change %i patchset %i locally.' %
+                          (parsed_issue_arg.issue, patchset))
+                    print(
+                        'Note: this created a local commit on top of parent commit '
+                        'that is different from the one in Gerrit. If the patched CL '
+                        'is not yours and you cannot upload new patches to it, you '
+                        'will not be able to upload stacked changes created on top of '
+                        'this branch.\n'
+                        'If you want to do that, use "git cl patch --force" instead.'
+                    )
+            except subprocess2.CalledProcessError as e:
+                if reauthor:
+                    print(
+                        '\nConflict while patching. Please resolve the conflicts and run '
+                        '"git cherry-pick --continue".\n'
+                        'Once done, run:\n'
+                        '  git commit --amend --reset-author\n'
+                        'and remove any "Change-Id:" footer inside the commit message.'
+                    )
+                raise e
 
-        if self.GetBranch():
+        if self.GetBranch() and not reauthor:
             self.SetPatchset(patchset)
             if not nocommit:
                 fetched_hash = scm.GIT.ResolveCommit(settings.GetRoot(),
@@ -3027,7 +3070,7 @@ class Changelist(object):
                                               fetched_hash)
                 self._GitSetBranchConfigValue(GERRIT_SQUASH_HASH_CONFIG_KEY,
                                               fetched_hash)
-        else:
+        elif not self.GetBranch():
             print(
                 'WARNING: You are in detached HEAD state.\n'
                 'The patch has been applied to your checkout, but you will not be '
@@ -4871,7 +4914,10 @@ def _create_commit_message(orig_message, bug=None):
     new_message = (f'Cherry pick "{subj_line}"\n\n'
                    "Original change's description:\n")
     for line in orig_message_lines:
-        new_message += f'> {line}\n'
+        if line:
+            new_message += f'> {line}\n'
+        else:
+            new_message += '>\n'
     new_message += '\n'
     if bug:
         new_message += f'Bug: {bug}\n'
@@ -6324,6 +6370,13 @@ def CMDpatch(parser, args):
                       action='store_true',
                       dest='nocommit',
                       help='don\'t commit after patch applies.')
+    parser.add_option(
+        '--reauthor',
+        action='store_true',
+        dest='reauthor',
+        help='Apply the patch under your own authorship, '
+        'removing the original Change-Id footer so you can upload it as a '
+        'new CL.')
 
     group = optparse.OptionGroup(
         parser,
@@ -6345,6 +6398,14 @@ def CMDpatch(parser, args):
     parser.add_option_group(group)
 
     (options, args) = parser.parse_args(args)
+
+    if options.reauthor:
+        if options.nocommit:
+            parser.error('--reauthor cannot be used with --no-commit.')
+        if options.force:
+            parser.error('--reauthor cannot be used with --force.')
+        if options.reapply:
+            parser.error('--reauthor cannot be used with --reapply.')
 
     if options.reapply:
         if options.newbranch:
@@ -6394,8 +6455,10 @@ def CMDpatch(parser, args):
     if not args[0].isdigit():
         print('canonical issue/change URL: %s\n' % cl.GetIssueURL())
 
-    return cl.CMDPatchWithParsedIssue(target_issue_arg, options.nocommit,
-                                      options.force)
+    return cl.CMDPatchWithParsedIssue(target_issue_arg,
+                                      options.nocommit,
+                                      options.force,
+                                      reauthor=options.reauthor)
 
 
 def GetTreeStatus(url=None):

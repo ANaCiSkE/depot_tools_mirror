@@ -2523,7 +2523,28 @@ class TestGitCl(unittest.TestCase):
         self.assertIssueAndPatchset()
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
-                    'not supported in non-git environment')
+                     'not supported in non-git environment')
+    def test_patch_gerrit_reauthor(self):
+        self._patch_common()
+        self.calls += [
+            (([
+                'git', 'fetch', 'https://chromium.googlesource.com/my/repo',
+                'refs/changes/56/123456/7'
+            ], ), ''),
+            ((['git', 'cherry-pick', 'FETCH_HEAD'], ), ''),
+            ((['git', 'log', '-1',
+               '--format=%B'], ), 'Auto-generated spans\n\nChange-Id: I2345\n'),
+            (([
+                'git', 'commit', '--amend', '--reset-author', '-m',
+                'Auto-generated spans\n'
+            ], ), ''),
+        ]
+        self.assertEqual(git_cl.main(['patch', '--reauthor', '123456']), 0)
+        self.assertIsNone(scm.GIT.GetBranchConfig('', 'main', 'gerritissue'))
+        self.assertIsNone(scm.GIT.GetBranchConfig('', 'main', 'gerritpatchset'))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
     def test_patch_gerrit_new_branch(self):
         self._patch_common()
         self.calls += [
@@ -6136,9 +6157,9 @@ Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
 
 Original change's description:
 > Foo the bar
-> 
+>
 > This change foo's the bar.
-> 
+>
 > Bug: 123456
 > Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
 
@@ -6160,9 +6181,9 @@ Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
 
 Original change's description:
 > Foo the bar
-> 
+>
 > This change foo's the bar.
-> 
+>
 > Bug: 123456
 > Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
 
