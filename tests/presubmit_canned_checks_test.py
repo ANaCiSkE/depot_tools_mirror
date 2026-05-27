@@ -1088,5 +1088,66 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn('foo&bar.txt', ls_tree_cmd)
 
 
+class CheckPatchFormattedTest(unittest.TestCase):
+
+    def setUp(self):
+        self.input_api = MockInputApi()
+        self.input_api.change.RepositoryRoot = lambda: ROOT_DIR
+        self.input_api.presubmit_local_path = os.path.join(ROOT_DIR, 'subdir')
+
+        # Mock CreateTemporaryFile to accumulate writes into a string
+        self.mock_temp_file = mock.MagicMock()
+        self.mock_temp_file.__enter__.return_value = self.mock_temp_file
+        self.mock_temp_file.name = 'mock_temp_file'
+        self.mock_temp_file.write_content = ''
+
+        def mock_write(content):
+            self.mock_temp_file.write_content += content.decode('utf-8')
+
+        self.mock_temp_file.write.side_effect = mock_write
+        self.input_api.CreateTemporaryFile = mock.Mock(
+            return_value=self.mock_temp_file)
+
+        # Mock git_cl.RunGitWithCode
+        self.patcher = mock.patch('git_cl.RunGitWithCode')
+        self.mock_run_git = self.patcher.start()
+        self.mock_run_git.return_value = (0, '')
+
+    def tearDown(self):
+        self.patcher.stop()
+
+    def testCheckPatchFormatted_WithFileFilter(self):
+        file1 = MockAffectedFile('file1.cc', ['int main() {}'])
+        file2 = MockAffectedFile('file2.py', ['def main(): pass'])
+        self.input_api.files = [file1, file2]
+
+        # Filter to only include python files
+        file_filter = lambda f: f.LocalPath().endswith('.py')
+
+        presubmit_canned_checks.CheckPatchFormatted(self.input_api,
+                                                    MockOutputApi(),
+                                                    file_filter=file_filter)
+
+        diff_content = self.mock_temp_file.write_content
+
+        # Verify that only file2.py's diff is in the diff file
+        self.assertIn('file2.py', diff_content)
+        self.assertNotIn('file1.cc', diff_content)
+
+    def testCheckPatchFormatted_WithoutFileFilter(self):
+        file1 = MockAffectedFile('file1.cc', ['int main() {}'])
+        file2 = MockAffectedFile('file2.py', ['def main(): pass'])
+        self.input_api.files = [file1, file2]
+
+        presubmit_canned_checks.CheckPatchFormatted(self.input_api,
+                                                    MockOutputApi())
+
+        diff_content = self.mock_temp_file.write_content
+
+        # Verify that both files are in the diff file
+        self.assertIn('file1.cc', diff_content)
+        self.assertIn('file2.py', diff_content)
+
+
 if __name__ == '__main__':
     unittest.main()

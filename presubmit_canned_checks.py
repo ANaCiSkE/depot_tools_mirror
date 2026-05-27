@@ -1891,10 +1891,12 @@ def CheckPatchFormatted(input_api,
                         check_clang_format=True,
                         check_js=False,
                         check_python=None,
-                        result_factory=None):
+                        result_factory=None,
+                        file_filter=None):
     result_factory = result_factory or output_api.PresubmitPromptWarning
     import git_cl
-    affected_files = input_api.AffectedFiles(include_deletes=False)
+    affected_files = input_api.AffectedFiles(include_deletes=False,
+                                             file_filter=file_filter)
     with input_api.CreateTemporaryFile() as diff_file:
         for f in affected_files:
             diff_file.write(f.GenerateScmDiff().encode('utf-8'))

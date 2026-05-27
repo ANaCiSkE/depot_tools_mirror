@@ -289,3 +289,6 @@ class MockChange(object):
 
     def AllLocalSubmodules(self):
         return set()
+
+    def UpstreamBranch(self):
+        return None
