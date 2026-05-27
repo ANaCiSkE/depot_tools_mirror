@@ -101,6 +101,8 @@ class FakeFile():
         self.contents = ''
 
     def write(self, buf):
+        if isinstance(buf, bytes):
+            buf = buf.decode('utf-8')
         self.contents += buf
 
     def read(self):
@@ -283,7 +285,74 @@ class BotUpdateUnittests(unittest.TestCase):
         setattr(os, 'remove', old_os_remove)
         self.assertTrue(os.path.join(path, lockfile) in removed)
 
+    def testGitSyncCorruptionWipesCache(self):
+        call_count = [0]
+        def mock_sync_stateful(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise bot_update.GclientSyncFailed('gclient sync failed', 1, 'error: bad object abcde123')
+            return ''
+
+        self.call.expectations = []
+        self.call.expect((sys.executable, '-u', bot_update.GCLIENT_PATH,
+                          'sync')).returns(mock_sync_stateful)
+        self.call.expect((sys.executable, '-u', bot_update.GCLIENT_PATH,
+                          'sync')).returns(mock_sync_stateful)
+
+        class Options(object):
+            def __init__(self):
+                self.git_cache_dir = '/fake/git/cache/dir'
+                self.cleanup_dir = '/fake/cleanup/dir'
+                self.experiments = ''
+                self.patch_root = None
+                self.patch_refs = []
+                self.gerrit_no_rebase_patch_ref = False
+                self.download_topics = False
+                self.no_fetch_tags = False
+                self.no_history = False
+                self.shallow = False
+                self.enforce_fetch = False
+                self.refs = []
+                self.clean_ignored = False
+                self.gerrit_no_reset = False
+                self.output_json = '/fake/output.json'
+                self.revision_mapping = {}
+                self.clobber = False
+
+        options = Options()
+        git_slns = self.params['solutions']
+        specs = {}
+        revisions = {'somename': 'HEAD'}
+        step_text = 'some step text'
+
+        removed = []
+        old_exists = os.path.exists
+        setattr(os.path, 'exists', lambda path: True if path == '/fake/git/cache/dir' else old_exists(path))
+        self.addCleanup(setattr, os.path, 'exists', old_exists)
+
+        old_makedirs = os.makedirs
+        setattr(os, 'makedirs', lambda path, exist_ok=False: None)
+        self.addCleanup(setattr, os, 'makedirs', old_makedirs)
+
+        old_remove = getattr(bot_update, 'remove')
+        setattr(bot_update, 'remove', lambda path, clean_dir: removed.append((path, clean_dir)))
+        self.addCleanup(setattr, bot_update, 'remove', old_remove)
+
+        old_create_manifest = getattr(bot_update, 'create_manifest')
+        setattr(bot_update, 'create_manifest', lambda: {})
+        self.addCleanup(setattr, bot_update, 'create_manifest', old_create_manifest)
+
+        old_disk_usage = getattr(bot_update, 'disk_usage')
+        setattr(bot_update, 'disk_usage', lambda: (10, 100, 10))
+        self.addCleanup(setattr, bot_update, 'disk_usage', old_disk_usage)
+
+        bot_update.checkout(options, git_slns, specs, revisions, step_text)
+
+        self.assertEqual(call_count[0], 2)
+        self.assertEqual(removed, [('/fake/git/cache/dir', '/fake/cleanup/dir')])
+
     def testParsesRevisions(self):
+
         revisions = [
             'f671d3baeb64d9dba628ad582e867cf1aebc0207',
             'src@deadbeef',
