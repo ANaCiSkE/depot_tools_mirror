@@ -397,6 +397,19 @@ class TestGitClBasic(unittest.TestCase):
             'Cq-Do-Not-Cancel-Tryjobs: true',
         ])
 
+    @mock.patch('sys.stdout', io.StringIO())
+    def test_ensure_change_id(self):
+        d = git_cl.ChangeDescription('Simple.\n\nChange-Id: Iold_change_id')
+        d.ensure_change_id('Inew_change_id')
+        self.assertEqual(d.description.splitlines(), [
+            'Simple.',
+            '',
+            'Change-Id: Inew_change_id',
+        ])
+        self.assertIn(
+            'WARNING: Change-Id has been set to Inew_change_id. Use `git cl issue 0` if you want to set a new one.',
+            sys.stdout.getvalue())
+
     def test_get_bug_line_values(self):
         f = lambda p, bugs: list(git_cl._get_bug_line_values(p, bugs))
         self.assertEqual(f('', ''), [])

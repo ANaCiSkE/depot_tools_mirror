@@ -1270,7 +1270,7 @@ class ChangeDescription(object):
                                                         'Change-Id')
                 print(
                     'WARNING: Change-Id has been set to %s. Use `git cl issue 0` '
-                    'if you want to set a new one.')
+                    'if you want to set a new one.' % change_id)
             # Add the expected Change-Id footer.
             description = git_footers.add_footer_change_id(
                 description, change_id)
