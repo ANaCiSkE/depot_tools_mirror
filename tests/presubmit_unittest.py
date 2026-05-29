@@ -2696,6 +2696,16 @@ class CannedChecksUnittest(PresubmitTestsBase):
         self.ContentTest(check, 'A ' * 100, 'foo.rs', 'A ' * 100, 'bar.txt',
                          presubmit.OutputApi.PresubmitPromptWarning)
 
+    def testCannedCheckMojomLongLines(self):
+        check = lambda x, y, _: presubmit_canned_checks.CheckLongLines(x, y, 80)
+        # Mojom files should pass with long LINT.ThenChange lines.
+        self.ContentTest(
+            check,
+            '// LINT.ThenChange(//chrome/browser/actor/tab_observation_strategy.h:ScreenshotPolicy)',
+            'foo.mojom',
+            'this is a very long line with many small words that exceeds eighty characters in total',
+            'foo.mojom', presubmit.OutputApi.PresubmitPromptWarning)
+
     def testCannedCheckSpecialJavaLongLines(self):
         check = lambda x, y, _: presubmit_canned_checks.CheckLongLines(x, y, 80)
         self.ContentTest(check, 'import ' + 'A ' * 150, 'foo.java',

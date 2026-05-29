@@ -624,6 +624,9 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     STAR_FILE_EXTS = ('star', )
     STAR_EXCEPTIONS = ('', )
 
+    MOJOM_FILE_EXTS = ('mojom', )
+    MOJOM_EXCEPTIONS = ('// ' + LINT_THEN_CHANGE_EXCEPTION, )
+
     LANGUAGE_EXCEPTIONS = [
         (CPP_FILE_EXTS, CPP_EXCEPTIONS),
         (HTML_FILE_EXTS, HTML_EXCEPTIONS),
@@ -634,6 +637,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         (PY_FILE_EXTS, PY_EXCEPTIONS),
         (STAR_FILE_EXTS, STAR_EXCEPTIONS),
         (RUST_FILE_EXTS, RUST_EXCEPTIONS),
+        (MOJOM_FILE_EXTS, MOJOM_EXCEPTIONS),
     ]
 
     def no_long_lines(file_extension, line):
