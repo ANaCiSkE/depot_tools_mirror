@@ -7857,6 +7857,15 @@ def main(argv):
             'and retry or visit go/isgaeup.\n%s') % (e.code, str(e)))
     except GitPushError as e:
         DieWithError(str(e))
+    except subprocess2.CalledProcessError as e:
+        stderr = e.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode('utf-8', 'ignore')
+        if stderr and 'not a git repository' in stderr:
+            DieWithError(
+                'fatal: not a git repository (or any of the parent directories): .git'
+            )
+        raise
     return 0
 
 

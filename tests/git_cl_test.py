@@ -203,6 +203,22 @@ class TestGitClBasic(unittest.TestCase):
         self.assertEqual(sys.stdout.getvalue(), '')
         sys.exit.assert_called_once_with(1)
 
+    @mock.patch('git_cl.subcommand.CommandDispatcher.execute')
+    def test_main_outside_git_repo(self, mock_execute):
+        mock_execute.side_effect = subprocess2.CalledProcessError(
+            128, ['git', 'rev-parse', '--show-cdup'], '.', b'',
+            b'fatal: not a git repository (or any of the parent directories): .git'
+        )
+
+        with self.assertRaises(SystemExitMock):
+            git_cl.main(['issue'])
+
+        self.assertEqual(
+            sys.stderr.getvalue(),
+            'fatal: not a git repository (or any of the parent directories): .git\n'
+        )
+        sys.exit.assert_called_once_with(1)
+
     def test_fetch_description(self):
         cl = git_cl.Changelist(issue=1, codereview_host='host')
         cl.description = 'x'
