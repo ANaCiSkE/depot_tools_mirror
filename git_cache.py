@@ -560,6 +560,8 @@ class Mirror(object):
                 wipe_cache()
                 bootstrap_cache(force=True)
 
+            self.DeleteTmpPackFiles(self.mirror_path)
+
     def update_bootstrap(self, prune=False, gc_aggressive=False):
         # NOTE: There have been cases where repos were being recursively
         # uploaded to google storage. E.g.
@@ -572,6 +574,8 @@ class Mirror(object):
         if os.path.exists(recursed_dir):
             self.print('Deleting unexpected directory: %s' % recursed_dir)
             gclient_utils.rmtree(recursed_dir)
+
+        self.DeleteTmpPackFiles(self.mirror_path)
 
         # The folder is <git number>
         try:
@@ -636,6 +640,8 @@ class Mirror(object):
             # it might be worth trying if the repos grow much larger and the
             # packs don't seem to be getting compressed enough.
         self.RunGit(gc_args)
+
+        self.DeleteTmpPackFiles(self.mirror_path)
 
         self.print('running "gsutil -m rsync -r -d %s %s"' %
                    (self.mirror_path, dest_prefix))

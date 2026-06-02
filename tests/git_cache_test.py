@@ -128,6 +128,39 @@ class GitCacheTest(unittest.TestCase):
 
         mirror.populate()
 
+    def testPopulateDeletesTmpPackFiles(self):
+        self.git(['init', '-q'])
+        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
+            f.write('touched\n')
+        self.git(['add', 'foo'])
+        self.git([
+            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
+            'commit', '-m', 'foo'
+        ])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        # Create tmp pack files.
+        pack_dir = os.path.join(mirror.mirror_path, 'objects', 'pack')
+        os.makedirs(pack_dir, exist_ok=True)
+        tmp_pack_path = os.path.join(pack_dir, 'tmp_pack_abc')
+        tmp_idx_path = os.path.join(pack_dir, '.tmp-1234-pack-def.idx')
+        with open(tmp_pack_path, 'w') as f:
+            f.write('content')
+        with open(tmp_idx_path, 'w') as f:
+            f.write('idx content')
+
+        self.assertTrue(os.path.exists(tmp_pack_path))
+        self.assertTrue(os.path.exists(tmp_idx_path))
+
+        mirror.populate()
+
+        # The temporary files should be deleted.
+        self.assertFalse(os.path.exists(tmp_pack_path))
+        self.assertFalse(os.path.exists(tmp_idx_path))
+
+
     @mock.patch('sys.stdout', StringIO())
     def testPruneRequired(self):
         self.git(['init', '-q'])
