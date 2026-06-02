@@ -4907,12 +4907,22 @@ def CMDissue(parser, args):
     return 0
 
 
-def _create_commit_message(orig_message, bug=None):
-    """Returns a commit message for the cherry picked CL."""
+def _create_commit_message(orig_message, bug=None, milestone=None):
+    """Returns a commit message for the cherry picked CL.
+
+    Args:
+        orig_message (str): The original commit message.
+        bug (str): Bug number to include in the message.
+        milestone (int): The milestone number to use in the commit message.
+    """
     orig_message_lines = orig_message.splitlines()
     subj_line = orig_message_lines[0]
-    new_message = (f'Cherry pick "{subj_line}"\n\n'
-                   "Original change's description:\n")
+    if milestone:
+        new_message = (f'[{milestone}] {subj_line}\n\n'
+                       "Original change's description:\n")
+    else:
+        new_message = (f'Cherry pick "{subj_line}"\n\n'
+                       "Original change's description:\n")
     for line in orig_message_lines:
         if line:
             new_message += f'> {line}\n'
@@ -4950,7 +4960,19 @@ def CMDcherry_pick(parser, args):
                       default=False,
                       help='If true, the cherry-pick will be created even if '
                       'there are conflicts.')
+    parser.add_option('--cq-dry-run',
+                      action='store_true',
+                      help='Trigger a CQ dry run on the cherry-picked CLs.')
+    parser.add_option('--milestone',
+                      type='int',
+                      help='The milestone number to use in the commit message.')
+    parser.add_option('--rubber-stamper',
+                      action='store_true',
+                      help='Auto-add rubber-stamper as a reviewer.')
     options, args = parser.parse_args(args)
+
+    if options.milestone is not None and options.milestone <= 0:
+        parser.error('Milestone must be a positive integer.')
 
     host = None
     if options.host:
@@ -5016,7 +5038,9 @@ def CMDcherry_pick(parser, args):
     parent_commit_hash = None
 
     for change_id, orig_message in change_ids_to_message.items():
-        message = _create_commit_message(orig_message, options.bug)
+        message = _create_commit_message(orig_message,
+                                         options.bug,
+                                         milestone=options.milestone)
         orig_subj_line = orig_message.splitlines()[0]
         original_commit_hash = change_ids_to_commit[change_id]
 
@@ -5072,7 +5096,23 @@ def CMDcherry_pick(parser, args):
         new_change_num = new_change_info['_number']
         new_change_url = gerrit_util.GetChangePageUrl(host, new_change_num)
         print(f'Created cherry pick of "{orig_subj_line}": {new_change_url}')
-        if new_change_info.get('contains_git_conflicts'):
+        has_conflicts = new_change_info.get('contains_git_conflicts')
+        if not has_conflicts:
+            # It's only useful to add the rubber stamper bot as a reviewer and
+            # start a dry run if there are no merge conflicts because the bot
+            # will only stamp a clean cherry pick and any files with merge
+            # conflicts are virtually guaranteed to cause the dry run to fail.
+            if options.rubber_stamper:
+                gerrit_util.AddReviewers(
+                    host,
+                    new_change_num,
+                    reviewers=['rubber-stamper@appspot.gserviceaccount.com'])
+
+            if options.cq_dry_run:
+                gerrit_util.SetReview(host,
+                                      new_change_num,
+                                      labels={'Commit-Queue': 1})
+        else:
             print(f'Warning: Change {new_change_url} contains merge conflicts')
             if not options.allow_conflicts:
                 gclient_utils.AskForData(

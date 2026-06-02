@@ -6362,6 +6362,116 @@ Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
             base=None,
             allow_conflicts=False)
 
+    @mock.patch('gerrit_util.QueryChanges')
+    @mock.patch('gerrit_util.CherryPick')
+    @mock.patch('gerrit_util.AddReviewers')
+    @mock.patch('gerrit_util.SetReview')
+    @mock.patch('gerrit_util.GetChangePageUrl', return_value='url')
+    def testCherryPick_CQDryRun(self, _mockGetUrl, mockSetReview,
+                                mockAddReviewers, mockCherryPick,
+                                mockQueryChanges):
+        mockQueryChanges.return_value = [{
+            'id': 'change_id',
+            'current_revision': 'abc',
+            'revisions': {
+                'abc': {
+                    'commit': {
+                        'message': 'msg'
+                    }
+                }
+            }
+        }]
+        mockCherryPick.return_value = {'_number': 123}
+
+        self.assertEqual(
+            0,
+            git_cl.main(
+                ['cherry-pick', '--branch', 'main', 'abc', '--cq-dry-run']))
+
+        expected_message = 'Cherry pick "msg"\n\nOriginal change\'s description:\n> msg\n\n'
+        mockCherryPick.assert_called_once_with(
+            'chromium-review.googlesource.com',
+            'change_id',
+            'main',
+            message=expected_message,
+            base=None,
+            allow_conflicts=False)
+        mockAddReviewers.assert_not_called()
+        mockSetReview.assert_called_once_with(
+            'chromium-review.googlesource.com', 123, labels={'Commit-Queue': 1})
+
+    @mock.patch('gerrit_util.QueryChanges')
+    @mock.patch('gerrit_util.CherryPick')
+    @mock.patch('gerrit_util.AddReviewers')
+    @mock.patch('gerrit_util.GetChangePageUrl', return_value='url')
+    def testCherryPick_WithMilestone(self, _mockGetUrl, mockAddReviewers,
+                                     mockCherryPick, mockQueryChanges):
+        mockQueryChanges.return_value = [{
+            'id': 'change_id',
+            'current_revision': 'abc',
+            'revisions': {
+                'abc': {
+                    'commit': {
+                        'message': 'msg'
+                    }
+                }
+            }
+        }]
+        mockCherryPick.return_value = {'_number': 123}
+
+        self.assertEqual(
+            0,
+            git_cl.main([
+                'cherry-pick', '--branch', 'main', 'abc', '--milestone', '123'
+            ]))
+
+        expected_message = '[123] msg\n\nOriginal change\'s description:\n> msg\n\n'
+        mockCherryPick.assert_called_once_with(
+            'chromium-review.googlesource.com',
+            'change_id',
+            'main',
+            message=expected_message,
+            base=None,
+            allow_conflicts=False)
+        mockAddReviewers.assert_not_called()
+
+    @mock.patch('gerrit_util.QueryChanges')
+    @mock.patch('gerrit_util.CherryPick')
+    @mock.patch('gerrit_util.AddReviewers')
+    @mock.patch('gerrit_util.GetChangePageUrl', return_value='url')
+    def testCherryPick_WithRubberStamper(self, _mockGetUrl, mockAddReviewers,
+                                         mockCherryPick, mockQueryChanges):
+        mockQueryChanges.return_value = [{
+            'id': 'change_id',
+            'current_revision': 'abc',
+            'revisions': {
+                'abc': {
+                    'commit': {
+                        'message': 'msg'
+                    }
+                }
+            }
+        }]
+        mockCherryPick.return_value = {'_number': 123}
+
+        self.assertEqual(
+            0,
+            git_cl.main(
+                ['cherry-pick', '--branch', 'main', 'abc', '--rubber-stamper']))
+
+        expected_message = 'Cherry pick "msg"\n\nOriginal change\'s description:\n> msg\n\n'
+        mockCherryPick.assert_called_once_with(
+            'chromium-review.googlesource.com',
+            'change_id',
+            'main',
+            message=expected_message,
+            base=None,
+            allow_conflicts=False)
+        mockAddReviewers.assert_called_once_with(
+            'chromium-review.googlesource.com',
+            123,
+            reviewers=['rubber-stamper@appspot.gserviceaccount.com'])
+
 
 @unittest.skipIf(gclient_utils.IsEnvCog(),
                  'not supported in non-git environment')
