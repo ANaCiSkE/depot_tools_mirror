@@ -607,10 +607,11 @@ def main(args: list[str],
                 # Sisorc global flags are actually pre-subcommand flags.
                 pre_args = global_flags + pre_args
 
-                is_ai_agent = any(
-                    env.get(v)
-                    for v in ('GEMINI_CLI', 'CLAUDECODE', 'ANTIGRAVITY_AGENT',
-                              'CODEX_SANDBOX', 'CURSOR_AGENT', 'AI_AGENT'))
+                detected_env_vars = [
+                    v for v in ('GEMINI_CLI', 'CLAUDECODE', 'ANTIGRAVITY_AGENT',
+                                'CODEX_SANDBOX', 'CURSOR_AGENT', 'AI_AGENT')
+                    if env.get(v)
+                ]
 
                 if subcmd:
                     # Apply subcommand-specific flags from .sisorc
@@ -625,11 +626,11 @@ def main(args: list[str],
                     # slower. --batch=false re-enables all four flags so non-TTY
                     # AI agents get the same performance as interactive
                     # terminals. --quiet reduces context pollution.
-                    if subcmd == "ninja" and is_ai_agent:
+                    if subcmd == "ninja" and detected_env_vars:
                         # Verbose printing the logic here to reduce
                         # hallucinations on slow/failed builds.
                         print(
-                            'Detected AI agent env. Prepending'
+                            f"Detected AI agent env ({', '.join(detected_env_vars)}). Prepending"
                             ' --quiet --batch=false --heartbeat_period=30s'
                             ' to improve latency and reduce context pollution.'
                             ' User-supplied flags take precedence.')
@@ -644,7 +645,8 @@ def main(args: list[str],
                     if should_collect_logs:
                         supports_namespace = _supports_namespace(siso_path)
                         subcmd_args = apply_telemetry_flags(
-                            subcmd_args, env, is_ai_agent, supports_namespace)
+                            subcmd_args, env, bool(detected_env_vars),
+                            supports_namespace)
                         env = _handle_collector(siso_path, subcmd_args, env)
 
                     new_args = pre_args + [subcmd] + subcmd_args
@@ -658,7 +660,7 @@ def main(args: list[str],
                 ret = runner([siso_path] + new_args, env=env)
                 # --quiet suppresses siso's own success output which
                 # can confuse AI agents into thinking the build failed.
-                if is_ai_agent and subcmd == "ninja":
+                if detected_env_vars and subcmd == "ninja":
                     # Agents seem to also sometimes not notice when the build
                     # finishes. Try to help them.
                     if ret == 0:

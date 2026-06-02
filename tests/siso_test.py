@@ -1770,7 +1770,7 @@ def test_ai_agent_env_prepends_flags(
         assert "--quiet" in subcmd_args
         assert "--batch=false" in subcmd_args
         assert "--namespace=developer:ai-agent" in subcmd_args
-        assert "Detected AI agent env" in stdout
+        assert f"Detected AI agent env ({env_var})" in stdout
         if exit_code == 0:
             assert "finished successfully" in stdout
         else:
@@ -1781,6 +1781,31 @@ def test_ai_agent_env_prepends_flags(
         assert "--namespace=developer:ai-agent" not in subcmd_args
         assert "Detected AI agent env" not in stdout
         assert "finished" not in stdout
+
+
+def test_ai_agent_env_multiple_vars(
+    siso_project_setup: None,
+    tmp_path: Path,
+    mocker: Any,
+) -> None:
+    _get_sisoenv_path(tmp_path).write_text("")
+    siso_bin_path = _get_siso_bin_path(tmp_path)
+    mock_stdout = mocker.patch("sys.stdout", new_callable=io.StringIO)
+    runner = mocker.Mock(return_value=0)
+    cfg = create_telemetry_cfg(tmp_path, mocker, enabled=True)
+    env = {
+        "SISO_PATH": str(siso_bin_path),
+        "GEMINI_CLI": "1",
+        "AI_AGENT": "1",
+    }
+
+    siso.main(["siso.py", "ninja", "-C", "out/Default"],
+              telemetry_cfg=cfg,
+              env=env,
+              runner=runner)
+
+    stdout = mock_stdout.getvalue()
+    assert "Detected AI agent env (GEMINI_CLI, AI_AGENT)" in stdout
 
 
 # Stanza to have pytest be executed.
