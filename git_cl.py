@@ -5043,10 +5043,30 @@ def CMDcherry_pick(parser, args):
                 base=parent_commit_hash,
                 allow_conflicts=options.allow_conflicts)
         except gerrit_util.GerritError as e:
-            print(f'Failed to create cherry pick "{orig_subj_line}": {e}. '
-                  'Please resolve any merge conflicts.')
-            print_any_remaining_commits()
-            return 1
+            # If the response code indicates a conflict (409 Conflict) and the
+            # --allow-conflicts option has not already been specified, then try
+            # again with `allow_conflicts` forced to True.
+            if e.http_status == 409 and not options.allow_conflicts:
+                prompt = 'Would you like to upload this change with conflicts? (y/N) '
+                if gclient_utils.AskForData(prompt).lower() in ('y', 'yes'):
+                    new_change_info = gerrit_util.CherryPick(
+                        host,
+                        change_id,
+                        options.branch,
+                        message=message,
+                        base=parent_commit_hash,
+                        allow_conflicts=True)
+                else:
+                    print(
+                        f'Failed to create cherry pick "{orig_subj_line}": {e}. '
+                        'Please resolve any merge conflicts.')
+                    print_any_remaining_commits()
+                    return 1
+            else:
+                print(f'Failed to create cherry pick "{orig_subj_line}": {e}. '
+                      'Please resolve any merge conflicts.')
+                print_any_remaining_commits()
+                return 1
 
         change_ids_to_commit.pop(change_id)
         new_change_num = new_change_info['_number']
@@ -5054,6 +5074,10 @@ def CMDcherry_pick(parser, args):
         print(f'Created cherry pick of "{orig_subj_line}": {new_change_url}')
         if new_change_info.get('contains_git_conflicts'):
             print(f'Warning: Change {new_change_url} contains merge conflicts')
+            if not options.allow_conflicts:
+                gclient_utils.AskForData(
+                    'Press enter to continue uploading the remaining changes '
+                    'in the chain.')
         parent_change_num = new_change_num
 
     return 0

@@ -6266,6 +6266,7 @@ Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
                                         mockQueryChanges):
         mockQueryChanges.return_value = [{
             'id': 'change_id',
+            'current_revision': 'abc',
             'revisions': {
                 'abc': {
                     'commit': {
@@ -6278,6 +6279,79 @@ Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
 
         self.assertEqual(
             0, git_cl.main(['cherry-pick', '--branch', 'main', 'abc']))
+
+        expected_message = 'Cherry pick "msg"\n\nOriginal change\'s description:\n> msg\n\n'
+        mockCherryPick.assert_called_once_with(
+            'chromium-review.googlesource.com',
+            'change_id',
+            'main',
+            message=expected_message,
+            base=None,
+            allow_conflicts=False)
+
+    @mock.patch('gclient_utils.AskForData')
+    @mock.patch('gerrit_util.QueryChanges')
+    @mock.patch('gerrit_util.CherryPick')
+    @mock.patch('gerrit_util.GetChangePageUrl', return_value='url')
+    def testCherryPick_ConflictPromptYes(self, _mockGetUrl, mockCherryPick,
+                                         mockQueryChanges, mockAskForData):
+        mockQueryChanges.return_value = [{
+            'id': 'change_id',
+            'revisions': {
+                'abc': {
+                    'commit': {
+                        'message': 'msg'
+                    }
+                }
+            }
+        }]
+        mockCherryPick.side_effect = [
+            gerrit_util.GerritError(409, 'Conflict'), {
+                '_number': 123
+            }
+        ]
+        mockAskForData.return_value = 'y'
+
+        self.assertEqual(
+            0, git_cl.main(['cherry-pick', '--branch', 'main', 'abc']))
+
+        expected_message = 'Cherry pick "msg"\n\nOriginal change\'s description:\n> msg\n\n'
+        mockCherryPick.assert_has_calls([
+            mock.call('chromium-review.googlesource.com',
+                      'change_id',
+                      'main',
+                      message=expected_message,
+                      base=None,
+                      allow_conflicts=False),
+            mock.call('chromium-review.googlesource.com',
+                      'change_id',
+                      'main',
+                      message=expected_message,
+                      base=None,
+                      allow_conflicts=True)
+        ])
+
+    @mock.patch('gclient_utils.AskForData')
+    @mock.patch('gerrit_util.QueryChanges')
+    @mock.patch('gerrit_util.CherryPick')
+    @mock.patch('gerrit_util.GetChangePageUrl', return_value='url')
+    def testCherryPick_ConflictPromptNo(self, _mockGetUrl, mockCherryPick,
+                                        mockQueryChanges, mockAskForData):
+        mockQueryChanges.return_value = [{
+            'id': 'change_id',
+            'revisions': {
+                'abc': {
+                    'commit': {
+                        'message': 'msg'
+                    }
+                }
+            }
+        }]
+        mockCherryPick.side_effect = gerrit_util.GerritError(409, 'Conflict')
+        mockAskForData.return_value = 'n'
+
+        self.assertEqual(
+            1, git_cl.main(['cherry-pick', '--branch', 'main', 'abc']))
 
         expected_message = 'Cherry pick "msg"\n\nOriginal change\'s description:\n> msg\n\n'
         mockCherryPick.assert_called_once_with(
