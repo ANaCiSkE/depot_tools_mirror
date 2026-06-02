@@ -16,11 +16,19 @@
 # >
 # wheel: <
 #   name: "infra/python/wheels/mdit-py-plugins-py3"
-#   version: "version:0.5.0"
+#   version: "version:0.6.1"
 # >
 # wheel: <
 #   name: "infra/python/wheels/mdformat_frontmatter-py3"
 #   version: "version:2.0.10"
+# >
+# wheel: <
+#   name: "infra/python/wheels/mdformat_tables-py3"
+#   version: "version:1.0.0"
+# >
+# wheel: <
+#   name: "infra/python/wheels/wcwidth-py2_py3"
+#   version: "version:0.7.0"
 # >
 # wheel: <
 #   name: "infra/python/wheels/ruamel_yaml-py3"
@@ -129,7 +137,7 @@ def process_stdin(args: argparse.Namespace) -> int:
                                       'wrap': int(_WRAP_WIDTH),
                                       'number': True
                                   },
-                                  extensions={'frontmatter'})
+                                  extensions={'frontmatter', 'tables'})
     except Exception as e:
         sys.stderr.write(f'Error formatting: {e}\n')
         return 1
@@ -170,7 +178,7 @@ def process_files(args: argparse.Namespace) -> int:
                                           'wrap': int(_WRAP_WIDTH),
                                           'number': True
                                       },
-                                      extensions={'frontmatter'})
+                                      extensions={'frontmatter', 'tables'})
         except Exception as e:
             print(f'Error formatting {path}: {e}', file=sys.stderr)
             return_value = 1
