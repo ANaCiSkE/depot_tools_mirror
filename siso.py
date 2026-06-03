@@ -10,6 +10,7 @@ binary when run inside a gclient source tree, so users can just type
 import argparse
 import getpass
 import json
+import functools
 import http.client
 import os
 import sys
@@ -307,6 +308,12 @@ def apply_telemetry_flags(subcmd_args: list[str],
                 found = True
                 break
         if not found:
+            # Bypassing trace collection on physical local gWindows workstations to
+            # prevent major build stall (e.g. slowing build time from ~13m to ~38m)
+            # due to direct, in-process trace exports.
+            if (flag == "enable_cloud_trace" and sys.platform == "win32"
+                    and not _is_gce()):
+                continue
             flags_to_add.append(f"--{flag}")
 
     # This is a temporary measure as on new siso versions metrics_project
@@ -439,6 +446,17 @@ def _fix_system_limits() -> None:
 def _is_google_corp_machine() -> bool:
     """This assumes that corp machine has gcert binary in known location."""
     return shutil.which("gcert") is not None
+
+
+@functools.cache
+def _is_gce() -> bool:
+    try:
+        conn = http.client.HTTPConnection("metadata.google.internal", timeout=1)
+        conn.request("GET", "/")
+        resp = conn.getresponse()
+        return resp.getheader("metadata-flavor") == "Google"
+    except Exception:
+        return False
 
 
 def main(args: list[str],

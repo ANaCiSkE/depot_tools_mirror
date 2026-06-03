@@ -34,6 +34,13 @@ def clear_gclient_paths_caches():
     gclient_paths._GetGClientSolutions.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def default_siso_mocks(mocker):
+    # Mock GCE/Cloudtop by default to prevent general tests from disabling trace
+    # on Windows. Explicitly overridden to False in physical gWindows tests.
+    mocker.patch("siso._is_gce", return_value=True)
+
+
 def _get_siso_config_dir(tmp_path: Path) -> Path:
     return tmp_path / "src" / "build" / "config" / "siso"
 
@@ -1781,6 +1788,51 @@ def test_ai_agent_env_prepends_flags(
         assert "--namespace=developer:ai-agent" not in subcmd_args
         assert "Detected AI agent env" not in stdout
         assert "finished" not in stdout
+
+def test_apply_telemetry_flags_physical_gwindows(mocker: Any) -> None:
+    mocker.patch("sys.platform", "win32")
+    mocker.patch("siso._is_gce", return_value=False)
+
+    subcmd_args = ["-C", "out/Default"]
+    env = {"SISO_PROJECT": "test-project"}
+    got = siso.apply_telemetry_flags(subcmd_args, env)
+
+    assert "--enable_cloud_trace" not in got
+    # Other telemetry flags should still be enabled
+    assert "--enable_cloud_logging" in got
+    assert "--enable_cloud_monitoring" in got
+    assert "--enable_cloud_profiler" in got
+
+
+def test_apply_telemetry_flags_gwindows_cloudtop(mocker: Any) -> None:
+    mocker.patch("sys.platform", "win32")
+    mocker.patch("siso._is_gce", return_value=True)
+
+    subcmd_args = ["-C", "out/Default"]
+    env = {"SISO_PROJECT": "test-project"}
+    got = siso.apply_telemetry_flags(subcmd_args, env)
+
+    # Telemetry should be fully enabled (so positive flags are added)
+    assert "--enable_cloud_trace" in got
+    assert "--enable_cloud_logging" in got
+    assert "--enable_cloud_monitoring" in got
+    assert "--enable_cloud_profiler" in got
+
+
+
+def test_apply_telemetry_flags_user_override_trace(mocker: Any) -> None:
+    mocker.patch("sys.platform", "win32")
+    mocker.patch("siso._is_gce", return_value=False)
+
+    # User explicitly enables trace
+    subcmd_args = ["-C", "out/Default", "--enable_cloud_trace"]
+    env = {"SISO_PROJECT": "test-project"}
+    got = siso.apply_telemetry_flags(subcmd_args, env)
+
+    assert "--enable_cloud_trace" in got
+    assert "--enable_cloud_logging" in got
+    assert "--enable_cloud_monitoring" in got
+    assert "--enable_cloud_profiler" in got
 
 
 def test_ai_agent_env_multiple_vars(
