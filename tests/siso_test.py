@@ -1635,7 +1635,44 @@ def test_main_fallback_to_siso_path(siso_project_setup: None, tmp_path: Path,
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Only for Windows")
-def test_main_windows_arg_splitting(mocker: Any) -> None:
+@pytest.mark.parametrize(
+    "input_args, expected_cmd",
+    [
+        pytest.param(
+            ["siso.py", "ninja -C out/Default"],
+            ["C:\\siso.exe", "ninja", "-C", "out/Default"],
+            id="standard_args",
+        ),
+        pytest.param(
+            ["siso.py", 'ninja -C out/Default"'],
+            ["C:\\siso.exe", "ninja", "-C", "out/Default"],
+            id="trailing_quote_on_last_arg",
+        ),
+        pytest.param(
+            ["siso.py", 'ninja --flag="value" -C out/Default'],
+            ["C:\\siso.exe", "ninja", '--flag="value"', "-C", "out/Default"],
+            id="quotes_preserved_in_middle_arg",
+        ),
+        pytest.param(
+            ["siso.py", 'ninja --flag="value" -C out/Default"'],
+            ["C:\\siso.exe", "ninja", '--flag="value"', "-C", "out/Default"],
+            id="quotes_preserved_in_middle_and_stripped_from_last",
+        ),
+        pytest.param(
+            ["siso.py", 'ninja -C out/Default --flag="value"'],
+            ["C:\\siso.exe", "ninja", "-C", "out/Default", '--flag="value"'],
+            id="quote_escaped_flag_at_the_end_preserved",
+        ),
+        pytest.param(
+            ["siso.py", 'ninja -C out/Default --flag="value\""'],
+            ["C:\\siso.exe", "ninja", "-C", "out/Default", '--flag="value"'],
+            id="quote_escaped_flag_with_trailing_backslash_stripped",
+        ),
+    ],
+)
+def test_main_windows_arg_splitting(input_args: List[str],
+                                    expected_cmd: List[str],
+                                    mocker: Any) -> None:
     mocker.patch("siso.signal.signal")
 
     # Mock internals to bypass file checks
@@ -1644,18 +1681,14 @@ def test_main_windows_arg_splitting(mocker: Any) -> None:
     runner = mocker.Mock(return_value=0)
     env = {"SISO_PATH": "C:\\siso.exe"}
 
-    # Pass a single string argument simulating siso.bat behavior
-    # "siso.py" is args[0], "ninja -C out/Default" is args[1]
-    args = ["siso.py", "ninja -C out/Default"]
-
     # As the env is incomplete on windows send a mocked false telemetry.
     telemetry_cfg = mocker.Mock()
     telemetry_cfg.enabled.return_value = False
-    siso.main(args, env=env, runner=runner, telemetry_cfg=telemetry_cfg)
+    siso.main(input_args, env=env, runner=runner, telemetry_cfg=telemetry_cfg)
 
-    # Verify args were split
+    # Verify args were split and stripped correctly
     cmd = runner.call_args[0][0]
-    assert cmd == ["C:\\siso.exe", "ninja", "-C", "out/Default"]
+    assert cmd == expected_cmd
 
 
 def test_main_e2e(siso_project_setup: None, tmp_path: Path,

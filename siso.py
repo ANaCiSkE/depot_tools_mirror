@@ -510,11 +510,16 @@ def main(args: list[str],
     # On Windows the siso.bat script passes along the arguments enclosed in
     # double quotes. This prevents multiple levels of parsing of the special '^'
     # characters needed when compiling a single file.  When this case is
-    # detected, we need to split the argument. This means that arguments
-    # containing actual spaces are not supported by siso.bat, but that is not a
-    # real limitation.
+    # detected, we need to split the argument. Because Windows argument parsing
+    # treats a trailing backslash before a double quote as an escape character
+    # (\"), a path like .\out\Default\ can end up parsed with a trailing quote
+    # (.\out\Default"). To prevent this, we strip the trailing double quote
+    # from the last split argument. This also means that arguments containing actual
+    # spaces are not supported by siso.bat, but that is not a real limitation.
     if sys.platform == "win32" and len(args) == 2:
         args = args[:1] + args[1].split()
+        if args and args[-1].endswith('"') and args[-1].count('"') % 2 == 1:
+            args[-1] = args[-1][:-1]
 
     # macOS's python sets CPATH, LIBRARY_PATH, SDKROOT implicitly.
     # https://openradar.appspot.com/radar?id=5608755232243712
