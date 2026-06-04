@@ -5071,21 +5071,24 @@ def CMDcherry_pick(parser, args):
             # --allow-conflicts option has not already been specified, then try
             # again with `allow_conflicts` forced to True.
             if e.http_status == 409 and not options.allow_conflicts:
-                prompt = 'Would you like to upload this change with conflicts? (y/N) '
-                if gclient_utils.AskForData(prompt).lower() in ('y', 'yes'):
-                    new_change_info = gerrit_util.CherryPick(
-                        host,
-                        change_id,
-                        options.branch,
-                        message=message,
-                        base=parent_commit_hash,
-                        allow_conflicts=True)
-                else:
-                    print(
-                        f'Failed to create cherry pick "{orig_subj_line}": {e}. '
-                        'Please resolve any merge conflicts.')
-                    print_any_remaining_commits()
-                    return 1
+                while True:
+                    prompt = 'Would you like to upload this change with conflicts? (y/n) '
+                    answer = gclient_utils.AskForData(prompt).strip().lower()
+                    if answer in ('y', 'yes'):
+                        new_change_info = gerrit_util.CherryPick(
+                            host,
+                            change_id,
+                            options.branch,
+                            message=message,
+                            base=parent_commit_hash,
+                            allow_conflicts=True)
+                        break
+                    if answer in ('n', 'no'):
+                        print(
+                            f'Failed to create cherry pick "{orig_subj_line}": {e}. '
+                            'Please resolve any merge conflicts.')
+                        print_any_remaining_commits()
+                        return 1
             else:
                 print(f'Failed to create cherry pick "{orig_subj_line}": {e}. '
                       'Please resolve any merge conflicts.')
