@@ -100,8 +100,9 @@ class LicenseField(field_types.SingleLineTextField):
             missing = [lic for lic in not_allowlisted if lic.lower() not in covered]
             if missing:
                 return vr.ValidationWarning(
-                    reason="License not in the allowlist."
-                    " Follow the steps at https://source.chromium.org/chromium/chromium/tools/depot_tools/+/main:metadata/fields/custom/license_allowlist.py.",
+                    reason="License not in the allowlist. "
+                    "See Adding to Third Party: "
+                    "https://chromium.googlesource.com/chromium/src/+/main/docs/adding_to_third_party.md#license-classifications",
                     additional=[
                         "Licenses not allowlisted: "
                         f"{util.quoted(missing)}.",

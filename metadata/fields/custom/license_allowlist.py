@@ -26,10 +26,9 @@
 #   1.1 'unencumbered', 'permissive', or 'notice' are allowed ✅.
 #   1.2 'reciprocal' are allowed, but only in open source projects e.g. Chromium.
 #       See OPEN_SOURCE_SPDX_LICENSES below.
-#   1.3 >='restricted' are handled on a case-by-case basis and require individual approval
-#       from opensource-licensing@google.com and chromium-third-party@google.com. Be sure to include
-#       the license and relevant details in the email. It can be helpful to
-#       identify existing dependencies that have already been approved.
+#   1.3 >='restricted' are handled on a case-by-case basis and require individual approval.
+#       See https://chromium.googlesource.com/chromium/src/+/main/docs/adding_to_third_party.md#license-classifications
+#       for instructions on how to obtain approval.
 #
 # 2. Check spdx.org/licenses to see if the license has an SPDX identifier.
 #   2.1 If it does: Use this value instead of the license classifier output,
@@ -41,9 +40,9 @@
 #   e.g. '# notice', and then sorted alphabetically asscending.
 #
 # 4. If you are uncertain whether a given third-party library can be included in
-#   Chromium, please email opensource-licensing@google.com with the library's
-#   license documentation, and explain where and how the component is going to
-#   be used.
+#   Chromium, please see
+#   https://chromium.googlesource.com/chromium/src/+/main/docs/adding_to_third_party.md#license-classifications
+#   for guidelines.
 #
 # 5. Note:
 #   * Remove 'LicenseRef-' prefix from license classifier outputs.
