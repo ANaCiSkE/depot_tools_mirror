@@ -3044,7 +3044,7 @@ def CheckAyeAye(input_api, output_api):
         return text
 
     alint_path = '/google/bin/releases/alint/alint'
-    command = [alint_path, '--', '-t=9s']
+    command = [alint_path, '--', '-t=30s']
     if not _os.path.exists(alint_path):
         return []
 
