@@ -85,6 +85,14 @@ class GClientEvalTest(unittest.TestCase):
         self.assertIn('bar was used as a variable, but was not declared',
                       str(cm.exception))
 
+    def test_format_attribute_traversal(self):
+        with self.assertRaises(ValueError) as cm:
+            gclient_eval._gclient_eval('"{bar.__class__}"',
+                                       vars_dict={'bar': 'foo'})
+        self.assertIn(
+            'Attribute and item access are not allowed: bar.__class__',
+            str(cm.exception))
+
     def test_plus(self):
         self.assertEqual('foo', gclient_eval._gclient_eval('"f" + "o" + "o"'))
 

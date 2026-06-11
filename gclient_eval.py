@@ -6,6 +6,7 @@ import ast
 import collections
 from io import StringIO
 import logging
+import string
 import sys
 import tokenize
 
@@ -20,6 +21,27 @@ from third_party import schema
 DEPS = 'DEPS'
 SYNC = 'SYNC'
 SUBMODULES = 'SUBMODULES'
+
+
+class _SafeFormatter(string.Formatter):
+
+    def get_field(self, field_name, args, kwargs):
+        if '.' in field_name or '[' in field_name:
+            raise ValueError('Attribute and item access are not allowed: %s' %
+                             field_name)
+        return super().get_field(field_name, args, kwargs)
+
+_SAFE_FORMATTER = _SafeFormatter()
+
+def _ExpandVars(value, vars_dict):
+    """Expands {name} placeholders in |value| using |vars_dict|.
+
+    Unlike str.format(), this only permits simple top-level key substitution
+    and rejects attribute access (`{x.attr}`) and item access (`{x[key]}`),
+    which would otherwise allow a malicious DEPS file to traverse into Python
+    internals (e.g. __globals__) and read process state such as os.environ.
+    """
+    return _SAFE_FORMATTER.format(value, **vars_dict)
 
 
 class ConstantString(object):
@@ -351,7 +373,7 @@ def _gclient_eval(node_or_string, filename='<unknown>', vars_dict=None):
             if vars_dict is None:
                 return node.value
             try:
-                return node.value.format(**vars_dict)
+                return _ExpandVars(node.value, vars_dict)
             except KeyError as e:
                 raise KeyError(
                     '%s was used as a variable, but was not declared in the vars dict '
@@ -511,7 +533,7 @@ def _StandardizeDeps(deps_dict, vars_dict):
     """
     new_deps_dict = {}
     for dep_name, dep_info in deps_dict.items():
-        dep_name = dep_name.format(**vars_dict)
+        dep_name = _ExpandVars(dep_name, vars_dict)
         if not isinstance(dep_info, collections.abc.Mapping):
             dep_info = {'url': dep_info}
         dep_info.setdefault('dep_type', 'git')
