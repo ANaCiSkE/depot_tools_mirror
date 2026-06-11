@@ -55,3 +55,7 @@ per-file cit*=file://LUCI_OWNERS
 per-file led*=file://LUCI_OWNERS
 per-file luci*=file://LUCI_OWNERS
 per-file vpython*=file://LUCI_OWNERS
+
+# CoW Workspaces
+per-file setup_btrfs_loop.sh=kiehl@google.com
+per-file setup_btrfs_loop.sh=nbilling@google.com
