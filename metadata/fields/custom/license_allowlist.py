@@ -89,6 +89,8 @@ _ALLOWED_SPDX_LICENSES = frozenset([
     "Artistic-1.0-Perl",
     "Artistic-2.0",
     "Beerware",
+    "Bitstream-Charter",
+    "Bitstream-Vera",
     "BSD-2-Clause",
     "BSD-2-Clause-FreeBSD",
     "BSD-3-Clause",
