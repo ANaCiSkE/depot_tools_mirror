@@ -241,19 +241,6 @@ _WITH_PERMISSION_ONLY = frozenset([
     "LGPL-3.0",
     "NPL-1.1",
     # go/keep-sorted end
-    # by_exception_only.
-    # go/keep-sorted start case=no
-    "Alliance-for-Open-Media-Patent",
-    "Commercial",
-    "Microsoft-DirectX",
-    "MicrosoftEnterpriseWindowsDriverKit",
-    "Opus-Patent-BSD-3-Clause",
-    "Play-Core-SDK-TOS",
-    "Unity-Companion-License-1.3",
-    "UnRAR",
-    # go/keep-sorted end
-    # Patent files are special, and must be handled on a case by case basis.
-    "Patent",
 ])
 
 # These are references to files that are not licenses, but are allowed to be
