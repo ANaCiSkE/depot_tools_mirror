@@ -369,7 +369,9 @@ class ValidateReciprocalLicenseTest(unittest.TestCase):
 
         license_errors = []
         for result in results:
-            if not result.is_fatal() and "License has a license not in the allowlist" in result.get_reason():
+            is_fatal = result.is_fatal()
+            reason = result.get_reason()
+            if not is_fatal and "License not in the allowlist" in reason:
                 license_errors.append(result)
 
         self.assertEqual(len(license_errors), 1, "Should create an error when a reciprocal license is used in a non-open source project")
@@ -384,8 +386,7 @@ class ValidateReciprocalLicenseTest(unittest.TestCase):
 
         license_errors = []
         for result in results:
-            if "License has a license not in the allowlist" in result.get_reason(
-            ):
+            if "License not in the allowlist" in result.get_reason():
                 license_errors.append(result)
 
         self.assertEqual(len(license_errors), 0, "Should not create an error when a reciprocal license is used in an open source project")

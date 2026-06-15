@@ -63,12 +63,17 @@ class LicenseField(field_types.SingleLineTextField):
             allowlist_util.is_license_allowed(license, is_open_source_project)
             for license in self._extract_licenses(license_field_value))
 
-    def validate(self, value: str, source_file_dir: Optional[str] = None) -> Optional[vr.ValidationResult]:
+    def validate(self,
+                 value: str,
+                 source_file_dir: Optional[str] = None,
+                 is_open_source_project: bool = False,
+                 **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of recognized license types.
 
         Note: this field supports multiple values.
         """
         not_allowlisted = []
+        reciprocal_not_allowed = []
         for license in self._extract_licenses(value):
             if util.is_empty(license):
                 return vr.ValidationError(
@@ -83,9 +88,19 @@ class LicenseField(field_types.SingleLineTextField):
                         "When given a choice of licenses, choose the most "
                         "permissive one, do not list all options."
                     ])
-            if not allowlist_util.is_a_known_license(license):
-                # Preserve the original casing for the warning message.
-                not_allowlisted.append(license)
+            if not allowlist_util.is_license_allowed(
+                    license, is_open_source_project=is_open_source_project):
+                if not is_open_source_project and allowlist_util.is_open_source_license(
+                        license):
+                    reciprocal_not_allowed.append(license)
+                else:
+                    not_allowlisted.append(license)
+
+        warnings = []
+        if reciprocal_not_allowed:
+            warnings.append(
+                f"The following license{'s are' if len(reciprocal_not_allowed) > 1 else ' is'} only allowed in open source projects: "
+                f"{util.quoted(reciprocal_not_allowed)}.")
 
         if not_allowlisted:
             covered = set()
@@ -99,14 +114,15 @@ class LicenseField(field_types.SingleLineTextField):
 
             missing = [lic for lic in not_allowlisted if lic.lower() not in covered]
             if missing:
-                return vr.ValidationWarning(
-                    reason="License not in the allowlist. "
-                    "See Adding to Third Party: "
-                    "https://chromium.googlesource.com/chromium/src/+/main/docs/adding_to_third_party.md#license-classifications",
-                    additional=[
-                        "Licenses not allowlisted: "
-                        f"{util.quoted(missing)}.",
-                    ])
+                warnings.append(
+                    f"Licenses not allowlisted: {util.quoted(missing)}.")
+
+        if warnings:
+            return vr.ValidationWarning(
+                reason="License not in the allowlist. "
+                "See Adding to Third Party: "
+                "https://chromium.googlesource.com/chromium/src/+/main/docs/adding_to_third_party.md#license-classifications",
+                additional=warnings)
 
         return None
 

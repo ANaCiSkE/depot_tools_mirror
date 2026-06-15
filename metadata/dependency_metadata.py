@@ -197,7 +197,9 @@ class DependencyMetadata:
                 # before overwriting it with the alias field value.
                 if main_field in self._metadata:
                     main_value = self._metadata.get(main_field)
-                    field_result = main_field.validate(main_value)
+                    field_result = main_field.validate(
+                        main_value,
+                        is_open_source_project=is_open_source_project)
                     if field_result:
                         field_result.set_tag(tag="field",
                                              value=main_field.get_name())
@@ -212,7 +214,11 @@ class DependencyMetadata:
         # Validate values for all present fields.
         for field, value in self._metadata.items():
             source_field = sources.get(field) or field
-            field_result = source_field.validate(value, source_file_dir=source_file_dir)
+            field_result = source_field.validate(
+                value,
+                source_file_dir=source_file_dir,
+                is_open_source_project=is_open_source_project,
+            )
             if field_result:
                 field_result.set_tag(tag="field", value=source_field.get_name())
                 field_result.set_lines(
@@ -272,26 +278,6 @@ class DependencyMetadata:
                 result.set_lines(
                     self.get_field_line_numbers(known_fields.LICENSE_FILE))
                 results.append(result)
-
-
-        if not is_open_source_project:
-            license_value = self._metadata.get(known_fields.LICENSE)
-            if license_value is not None:
-                not_allowed_licenses = known_fields.LICENSE.filter_open_source_project_only_licenses(
-                    license_value)
-                if len(not_allowed_licenses) > 0:
-                    license_result = vr.ValidationWarning(
-                        reason=f"License has a license not in the allowlist."
-                        " (see https://source.chromium.org/chromium/chromium/tools/depot_tools/+/main:metadata/fields/custom/license_allowlist.py).",
-                        additional=[
-                            f"The following license{'s  are' if len(not_allowed_licenses) > 1 else ' is'} only allowed in open source projects: "
-                            f"{util.quoted(not_allowed_licenses)}.",
-                    ])
-
-                    license_result.set_tag(tag="field", value=known_fields.LICENSE.get_name())
-                    license_result.set_lines(
-                        self.get_field_line_numbers(known_fields.LICENSE))
-                    results.append(license_result)
 
         # Match values reported in the 'Mitigated:' field with the supplementry
         # fields e.g. 'CVE-2024-12345: description'.
