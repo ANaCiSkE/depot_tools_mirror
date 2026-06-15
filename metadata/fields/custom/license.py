@@ -53,24 +53,20 @@ class LicenseField(field_types.SingleLineTextField):
             for atomic_value in value.split(self.VALUE_DELIMITER)
         ]
 
-    def all_licenses_allowed(self,
-                             license_field_value: str,
-                             is_open_source_project: bool,
-                             is_shipped: Optional[bool] = None) -> bool:
+    def all_licenses_allowed(self, license_field_value: str,
+                             is_open_source_project: bool) -> bool:
         """Returns whether all licenses in the field are allowlisted.
 
         Assumes a non-empty license_field_value.
         """
         return all(
-            allowlist_util.is_license_allowed(license, is_open_source_project,
-                                              is_shipped)
+            allowlist_util.is_license_allowed(license, is_open_source_project)
             for license in self._extract_licenses(license_field_value))
 
     def validate(self,
                  value: str,
                  source_file_dir: Optional[str] = None,
                  is_open_source_project: bool = False,
-                 is_shipped: Optional[bool] = False,
                  **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of recognized license types.
 
@@ -93,9 +89,7 @@ class LicenseField(field_types.SingleLineTextField):
                         "permissive one, do not list all options."
                     ])
             if not allowlist_util.is_license_allowed(
-                    license,
-                    is_open_source_project=is_open_source_project,
-                    is_shipped=is_shipped):
+                    license, is_open_source_project=is_open_source_project):
                 if not is_open_source_project and allowlist_util.is_open_source_license(
                         license):
                     reciprocal_not_allowed.append(license)

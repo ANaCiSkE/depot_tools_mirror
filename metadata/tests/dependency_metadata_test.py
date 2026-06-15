@@ -476,7 +476,7 @@ class DependencyValidationTest(unittest.TestCase):
         """Test that a single allowlisted license returns True."""
         lic = known_fields.LICENSE
         self.assertTrue(lic.all_licenses_allowed("MIT", False))
-        self.assertTrue(lic.all_licenses_allowed("MIT, LGPL-2.0", False))
+        self.assertTrue(lic.all_licenses_allowed("MIT, GPL-2.0", False))
         self.assertTrue(lic.all_licenses_allowed("MIT, Apache-2.0", False))
         self.assertFalse(lic.all_licenses_allowed("InvalidLicense", False))
         self.assertFalse(lic.all_licenses_allowed("MIT, InvalidLicense", False))
@@ -486,19 +486,11 @@ class DependencyValidationTest(unittest.TestCase):
         self.assertTrue(lic.all_licenses_allowed("MPL-2.0", True))
         self.assertFalse(lic.all_licenses_allowed("MPL-2.0", False))
 
-        # Restricted licenses (except allowed-not-shipped) are treated the same as
-        # other license types, until the exception and enforcement is resourced.
-        self.assertTrue(lic.all_licenses_allowed("LGPL-2.0", False))
-        self.assertTrue(lic.all_licenses_allowed("LGPL-2.0", True))
-        self.assertFalse(lic.all_licenses_allowed("MPL-2.0, LGPL-2.0", False))
-
-        # Allowed-not-shipped licenses (e.g. GPL) are allowed only when NOT shipped.
-        self.assertTrue(
-            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=False))
-        self.assertFalse(
-            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=True))
-        self.assertFalse(
-            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=None))
+        # Restricted licenses are treated the same as other license types, until
+        # the exception and enforcement is resourced.
+        self.assertTrue(lic.all_licenses_allowed("GPL-2.0", False))
+        self.assertTrue(lic.all_licenses_allowed("GPL-2.0", True))
+        self.assertFalse(lic.all_licenses_allowed("MPL-2.0, GPL-2.0", False))
 
 
     def test_only_open_source_licenses(self):

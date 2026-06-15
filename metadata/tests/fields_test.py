@@ -380,29 +380,16 @@ class FieldValidationTest(unittest.TestCase):
                        source_file_dir=data_dir),
             "APPROVED[(GUST-Font-License, b/987654321)]")
 
-        # 3. Allowed-not-shipped (GPL-2.0)
-        self.assertEqual(get_status("GPL-2.0", is_shipped=False), "ALLOWED")
-        self.assertEqual(get_status("GPL-2.0", is_shipped=True),
-                         "NOT_ALLOWED_SHIPPED[GPL-2.0]")
+        # 3. Restricted (GPL-2.0) is globally allowed
         self.assertEqual(get_status("GPL-2.0"), "ALLOWED")
-        self.assertEqual(
-            get_status("GPL-2.0", source_file_dir=data_dir, is_shipped=False),
-            "ALLOWED")
-        self.assertEqual(
-            get_status("MIT, GPL-2.0",
-                       source_file_dir=data_dir,
-                       is_shipped=False), "ALLOWED")
+        self.assertEqual(get_status("GPL-2.0", source_file_dir=data_dir),
+                         "ALLOWED")
+        self.assertEqual(get_status("MIT, GPL-2.0", source_file_dir=data_dir),
+                         "ALLOWED")
         self.assertEqual(
             get_status("LicenseRef-GUST-Font-License, GPL-2.0",
-                       source_file_dir=data_dir,
-                       is_shipped=False),
+                       source_file_dir=data_dir),
             "APPROVED[(GUST-Font-License, b/987654321)]")
-        self.assertEqual(
-            get_status("LicenseRef-GUST-Font-License, GPL-2.0",
-                       source_file_dir=data_dir,
-                       is_shipped=True),
-            "NOT_ALLOWED_SHIPPED[GPL-2.0], APPROVED[(GUST-Font-License, b/987654321)]"
-        )
 
         # 3b. Unknown and NOT approved
         self.assertEqual(get_status("My-Custom-License"),
