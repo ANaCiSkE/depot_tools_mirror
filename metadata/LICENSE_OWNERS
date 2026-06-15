@@ -9,4 +9,4 @@ thakis@chromium.org
 chromium-third-party@google.com
 
 # TODO(b/379223095) Remove security team once transition to spdx allow list is complete.
-file:SECURITY_TEAM_OWNERS
+file://SECURITY_TEAM_OWNERS
