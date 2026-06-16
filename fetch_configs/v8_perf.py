@@ -19,7 +19,6 @@ class V8Perf(config_util.Config):
             'name': 'v8-perf',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

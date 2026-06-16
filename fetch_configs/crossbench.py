@@ -19,7 +19,6 @@ class Crossbench(config_util.Config):
             'name': 'crossbench',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

@@ -37,8 +37,9 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             self.skipTest('git fake repos not available')
 
     def testGitmodules_relative(self):
-        self.gclient(['config', self.git_base + 'repo_19', '--name', 'dir'],
-                     cwd=self.git_base + 'repo_19')
+        self.gclient(
+            ['config', self.git_base + 'repo_19', '--name', 'dir', '--managed'],
+            cwd=self.git_base + 'repo_19')
         self.gclient(['sync'], cwd=self.git_base + 'repo_19')
         self.gclient(['gitmodules'],
                      cwd=self.git_base + os.path.join('repo_19', 'dir'))
@@ -55,8 +56,9 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             ], contents)
 
     def testGitmodules_not_relative(self):
-        self.gclient(['config', self.git_base + 'repo_20', '--name', 'foo'],
-                     cwd=self.git_base + 'repo_20')
+        self.gclient(
+            ['config', self.git_base + 'repo_20', '--name', 'foo', '--managed'],
+            cwd=self.git_base + 'repo_20')
         self.gclient(['sync'], cwd=self.git_base + 'repo_20')
         self.gclient(['gitmodules'],
                      cwd=self.git_base + os.path.join('repo_20', 'foo'))
@@ -73,8 +75,9 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             ], contents)
 
     def testGitmodules_migration_no_git_suffix(self):
-        self.gclient(['config', self.git_base + 'repo_21', '--name', 'foo'],
-                     cwd=self.git_base + 'repo_21')
+        self.gclient(
+            ['config', self.git_base + 'repo_21', '--name', 'foo', '--managed'],
+            cwd=self.git_base + 'repo_21')
         # We are not running gclient sync since dependencies don't exist
         self.gclient(['gitmodules'], cwd=self.git_base + 'repo_21')
 
@@ -100,8 +103,9 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             ], contents)
 
     def testGitmodules_migration_recursdeps(self):
-        self.gclient(['config', self.git_base + 'repo_24', '--name', 'foo'],
-                     cwd=self.git_base + 'repo_24')
+        self.gclient(
+            ['config', self.git_base + 'repo_24', '--name', 'foo', '--managed'],
+            cwd=self.git_base + 'repo_24')
         # We are not running gclient sync since dependencies don't exist
         self.gclient(['gitmodules'], cwd=self.git_base + 'repo_24')
 
@@ -132,7 +136,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             self.gclient(['gitmodules'], cwd=self.root_dir)
 
     def testSync(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         # Test unversioned checkout.
         self.parseGclient(['sync', '--deps', 'mac', '--jobs', '1'],
                           ['running', 'running', 'running'])
@@ -190,7 +195,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testSyncJsonOutput(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         output_json = os.path.join(self.root_dir, 'output.json')
         self.gclient(['sync', '--deps', 'mac', '--output-json', output_json])
         with open(output_json) as f:
@@ -233,7 +239,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
 
     def testSyncIgnoredSolutionName(self):
         """TODO(maruel): This will become an error soon."""
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.parseGclient(
             [
                 'sync', '--deps', 'mac', '--jobs', '1', '--revision',
@@ -251,7 +258,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
     def testSyncNoSolutionName(self):
         # When no solution name is provided, gclient uses the first solution
         # listed.
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.parseGclient([
             'sync', '--deps', 'mac', '--jobs', '1', '--revision',
             self.githash('repo_1', 1)
@@ -271,7 +279,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testSyncJobs(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         # Test unversioned checkout.
         self.parseGclient(['sync', '--deps', 'mac', '--jobs', '8'],
                           ['running', 'running', 'running'],
@@ -332,14 +341,16 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testSyncFetch(self):
-        self.gclient(['config', self.git_base + 'repo_13', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_13', '--name', 'src', '--managed'])
         self.gclient([
             'sync', '-v', '-v', '-v', '--revision',
             self.githash('repo_13', 2)
         ])
 
     def testSyncFetchUpdate(self):
-        self.gclient(['config', self.git_base + 'repo_13', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_13', '--name', 'src', '--managed'])
 
         # Sync to an earlier revision first, one that doesn't refer to
         # non-standard refs.
@@ -355,7 +366,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ])
 
     def testSyncDirect(self):
-        self.gclient(['config', self.git_base + 'repo_12', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_12', '--name', 'src', '--managed'])
         self.gclient(
             ['sync', '-v', '-v', '-v', '--revision', 'refs/changes/1212'])
 
@@ -378,7 +390,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testSyncUrl(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient([
             'sync', '-v', '-v', '-v', '--revision',
             'src/repo2@%s' % self.githash('repo_2', 1), '--revision',
@@ -394,7 +407,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testSyncPatchRef(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient([
             'sync',
             '-v',
@@ -420,7 +434,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             self.gitrevparse(os.path.join(self.root_dir, 'src/repo2')))
 
     def testSyncPatchRefNoHooks(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient([
             'sync',
             '-v',
@@ -446,7 +461,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
 
     def testInstallHooks_no_existing_hook(self):
         repo = os.path.join(self.git_base, 'repo_18')
-        self.gclient(['config', repo, '--name', 'src'], cwd=repo)
+        self.gclient(['config', repo, '--name', 'src', '--managed'], cwd=repo)
         self.gclient(['sync'], cwd=repo)
         self.gclient(['installhooks'], cwd=repo)
 
@@ -462,7 +477,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
 
     def testInstallHooks_existing_hook(self):
         repo = os.path.join(self.git_base, 'repo_19')
-        self.gclient(['config', repo, '--name', 'src'], cwd=repo)
+        self.gclient(['config', repo, '--name', 'src', '--managed'], cwd=repo)
         self.gclient(['sync'], cwd=repo)
 
         # Create an existing pre-commit hook.
@@ -480,7 +495,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             self.assertEqual(hook_contents, contents)
 
     def testRunHooks(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         tree = self.mangle_git_tree(('repo_1@2', 'src'),
                                     ('repo_2@1', 'src/repo2'),
@@ -504,14 +520,16 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testRunHooksCondition(self):
-        self.gclient(['config', self.git_base + 'repo_7', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_7', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         tree = self.mangle_git_tree(('repo_7@1', 'src'))
         tree['src/should_run'] = 'should_run'
         self.assertTree(tree)
 
     def testPreDepsHooks(self):
-        self.gclient(['config', self.git_base + 'repo_5', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_5', '--name', 'src', '--managed'])
         expectation = [
             ('running', self.root_dir),  # git clone
             ('running', self.root_dir),  # pre-deps hook
@@ -564,7 +582,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testPreDepsHooksError(self):
-        self.gclient(['config', self.git_base + 'repo_5', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_5', '--name', 'src', '--managed'])
         expectated_stdout = [
             ('running', self.root_dir),  # git clone
             ('running', self.root_dir),  # pre-deps hook
@@ -584,7 +603,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.checkBlock(stdout, expectated_stdout)
 
     def testRevInfo(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         results = self.gclient(['revinfo', '--deps', 'mac'])
         out = ('src: %(base)srepo_1\n'
@@ -596,7 +616,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoActual(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         results = self.gclient(['revinfo', '--deps', 'mac', '--actual'])
         out = ('src: %(base)srepo_1@%(hash1)s\n'
@@ -610,7 +631,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoFilterPath(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         results = self.gclient(['revinfo', '--deps', 'mac', '--filter', 'src'])
         out = ('src: %(base)srepo_1\n' % {
@@ -619,7 +641,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoFilterURL(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         results = self.gclient([
             'revinfo', '--deps', 'mac', '--filter',
@@ -632,7 +655,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoFilterURLOrPath(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         results = self.gclient([
             'revinfo', '--deps', 'mac', '--filter', 'src', '--filter',
@@ -646,7 +670,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoJsonOutput(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         self.gclient(['sync', '--deps', 'mac'])
         output_json = os.path.join(self.root_dir, 'output.json')
         self.gclient(['revinfo', '--deps', 'mac', '--output-json', output_json])
@@ -682,7 +707,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
 
         out = [{
             'solution_url': self.git_base + 'repo_1',
-            'managed': True,
+            'managed': False,
             'name': 'src',
             'deps_file': 'DEPS',
             'custom_deps': {
@@ -697,7 +722,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         self.assertEqual(out, output_json)
 
     def testSetDep(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         fake_deps = os.path.join(self.git_base, 'repo_1', 'DEPS')
         with open(fake_deps, 'w') as f:
             f.write('\n'.join([
@@ -736,7 +762,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ], contents)
 
     def testSetDep_Submodules(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         with open(os.path.join(self.git_base, '.gclient'), 'w') as f:
             f.write('')
 
@@ -800,7 +827,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ], contents)
 
     def testSetDep_Submodules_relative(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         fake_deps = os.path.join(self.git_base, 'repo_1', 'DEPS')
         gitmodules = os.path.join(self.git_base, 'repo_1', '.gitmodules')
         with open(fake_deps, 'w') as f:
@@ -842,8 +870,9 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ], contents)
 
     def testSetDep_BuiltinVariables(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'],
-                     cwd=self.git_base)
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'],
+            cwd=self.git_base)
 
         fake_deps = os.path.join(self.root_dir, 'DEPS')
         with open(fake_deps, 'w') as f:
@@ -922,7 +951,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ], results[0].splitlines())
 
     def testGetDep_Submodule(self):
-        self.gclient(['config', self.git_base + 'repo_20', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_20', '--name', 'src', '--managed'])
         subprocess2.call([
             'git', 'update-index', '--add', '--cacheinfo',
             '160000,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,bar'
@@ -940,7 +970,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ], results[0].splitlines())
 
     def testGetDep_BuiltinVariables(self):
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
         fake_deps = os.path.join(self.root_dir, 'DEPS.fake')
         with open(fake_deps, 'w') as f:
             f.write('\n'.join([
@@ -1194,7 +1225,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         output_deps = os.path.join(self.root_dir, 'DEPS.flattened')
         self.assertFalse(os.path.exists(output_deps))
 
-        self.gclient(['config', self.git_base + 'repo_6', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_6', '--name', 'src', '--managed'])
         self.gclient(['sync', '--process-all-deps'])
         self.gclient([
             'flatten', '-v', '-v', '-v', '--output-deps', output_deps,
@@ -1408,7 +1440,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         output_deps_files = os.path.join(self.root_dir, 'DEPS.files')
         self.assertFalse(os.path.exists(output_deps_files))
 
-        self.gclient(['config', self.git_base + 'repo_10', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_10', '--name', 'src', '--managed'])
         self.gclient(['sync', '--process-all-deps'])
         self.gclient([
             'flatten', '-v', '-v', '-v', '--output-deps', output_deps,
@@ -1527,7 +1560,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         output_deps = os.path.join(self.root_dir, 'DEPS.flattened')
         self.assertFalse(os.path.exists(output_deps))
 
-        self.gclient(['config', self.git_base + 'repo_14', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_14', '--name', 'src', '--managed'])
         self.gclient(['sync'])
         self.gclient(
             ['flatten', '-v', '-v', '-v', '--output-deps', output_deps])
@@ -1585,7 +1619,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         ], deps_contents.splitlines())
 
     def testRelativeGNArgsFile(self):
-        self.gclient(['config', self.git_base + 'repo_17', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_17', '--name', 'src', '--managed'])
         self.gclient([
             'sync',
         ])

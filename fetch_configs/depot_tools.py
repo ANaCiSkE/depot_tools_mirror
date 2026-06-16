@@ -18,7 +18,6 @@ class DepotTools(config_util.Config):
             'name': 'depot_tools',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
         }
         spec = {
             'solutions': [solution],

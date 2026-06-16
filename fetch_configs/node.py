@@ -22,7 +22,6 @@ class Node(config_util.Config):
                     'name': 'node',
                     'url': url,
                     'deps_file': 'DEPS',
-                    'managed': False,
                     'custom_deps': {},
                     'custom_vars': {
                         'build_upstream_node': True,

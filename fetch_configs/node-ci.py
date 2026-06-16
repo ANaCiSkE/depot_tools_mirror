@@ -21,7 +21,6 @@ class NodeCI(config_util.Config):
                     'name': 'node-ci',
                     'url': url,
                     'deps_file': 'DEPS',
-                    'managed': False,
                     'custom_deps': {},
                 }],
             },

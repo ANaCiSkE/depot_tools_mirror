@@ -105,7 +105,6 @@ class TestUtilityFunctions(unittest.TestCase):
             'gclient_git_spec': {
                 'solutions': [{
                     'url': url,
-                    'managed': False,
                     'name': 'depot_tools',
                     'deps_file': 'DEPS',
                 }],

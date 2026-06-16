@@ -18,7 +18,6 @@ class Chromium(config_util.Config):
         solution = {
             'name': 'src',
             'url': url,
-            'managed': False,
             'custom_deps': {},
             'custom_vars': {},
         }

@@ -19,7 +19,6 @@ class Catapult(config_util.Config):
             'name': 'catapult',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

@@ -17,7 +17,6 @@ class Chromium(config_util.Config):
         solution = {
             'name': 'gyp',
             'url': url,
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

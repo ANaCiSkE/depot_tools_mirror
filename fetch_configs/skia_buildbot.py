@@ -17,7 +17,6 @@ class SkiaBuildbot(config_util.Config):
             'name': 'buildbot',
             'url': 'https://skia.googlesource.com/buildbot.git',
             'deps_file': 'DEPS',
-            'managed': False,
         }
         spec = {'solutions': [solution]}
         return {

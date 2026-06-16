@@ -18,7 +18,6 @@ class Gn(config_util.Config):
             'name': 'gn',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
         }
         spec = {
             'solutions': [solution],

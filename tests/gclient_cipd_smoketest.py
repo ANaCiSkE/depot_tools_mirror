@@ -29,7 +29,8 @@ class GClientSmokeCipd(gclient_smoketest_base.GClientSmokeBase):
                             os.pathsep + self.env['PATH'])
 
     def testSyncCipd(self):
-        self.gclient(['config', self.git_base + 'repo_14', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_14', '--name', 'src', '--managed'])
         self.gclient(['sync'])
 
         tree = self.mangle_git_tree(('repo_14@1', 'src'))
@@ -64,7 +65,8 @@ class GClientSmokeCipd(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testConvertGitToCipd(self):
-        self.gclient(['config', self.git_base + 'repo_13', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_13', '--name', 'src', '--managed'])
 
         # repo_13@1 has src/repo12 as a git dependency.
         self.gclient([
@@ -100,7 +102,8 @@ class GClientSmokeCipd(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testConvertCipdToGit(self):
-        self.gclient(['config', self.git_base + 'repo_13', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_13', '--name', 'src', '--managed'])
 
         # repo_13@3 has src/repo12 as a cipd dependency.
         self.gclient([
@@ -150,7 +153,8 @@ class GClientSmokeCipd(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testRevInfo(self):
-        self.gclient(['config', self.git_base + 'repo_18', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_18', '--name', 'src', '--managed'])
         self.gclient(['sync'])
         results = self.gclient(['revinfo'])
         out = ('src: %(base)srepo_18\n'
@@ -171,7 +175,8 @@ class GClientSmokeCipd(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoActual(self):
-        self.gclient(['config', self.git_base + 'repo_18', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_18', '--name', 'src', '--managed'])
         self.gclient(['sync'])
         results = self.gclient(['revinfo', '--actual'])
         out = (

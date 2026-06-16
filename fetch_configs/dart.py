@@ -18,7 +18,6 @@ class Dart(config_util.Config):
             'name': 'sdk',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

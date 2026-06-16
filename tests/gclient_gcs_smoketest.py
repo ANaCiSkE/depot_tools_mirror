@@ -30,7 +30,8 @@ class GClientSmokeGcs(gclient_smoketest_base.GClientSmokeBase):
                             os.pathsep + self.env['PATH'])
 
     def testSyncGcs(self):
-        self.gclient(['config', self.git_base + 'repo_22', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_22', '--name', 'src', '--managed'])
         self.gclient(['sync'])
 
         tree = self.mangle_git_tree(('repo_22@1', 'src'))
@@ -47,7 +48,8 @@ class GClientSmokeGcs(gclient_smoketest_base.GClientSmokeBase):
         self.assertTree(tree)
 
     def testRevInfo(self):
-        self.gclient(['config', self.git_base + 'repo_22', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_22', '--name', 'src', '--managed'])
         self.gclient(['sync'])
         results = self.gclient(['revinfo'])
         out = ('src: %(base)srepo_22\n'
@@ -63,7 +65,8 @@ class GClientSmokeGcs(gclient_smoketest_base.GClientSmokeBase):
         self.check((out, '', 0), results)
 
     def testRevInfoActual(self):
-        self.gclient(['config', self.git_base + 'repo_22', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_22', '--name', 'src', '--managed'])
         self.gclient(['sync'])
         results = self.gclient(['revinfo', '--actual'])
         out = ('src: %(base)srepo_22@%(hash1)s\n'

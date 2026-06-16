@@ -232,6 +232,19 @@ class GclientTest(trial_dir.TestCase):
 
         return client.GetHooks(options)
 
+    def testManagedDefault(self):
+        # A solution that omits 'managed' should default to unmanaged.
+        parser = gclient.OptionParser()
+        options, _ = parser.parse_args([])
+        write(
+            '.gclient', 'solutions = [\n'
+            '  { "name": "foo", "url": "https://example.com/foo" },\n'
+            '  { "name": "bar", "url": "https://example.com/bar", "managed": True },\n'
+            ']')
+        obj = gclient.GClient.LoadCurrentConfig(options)
+        self.assertFalse(obj.dependencies[0].managed)
+        self.assertTrue(obj.dependencies[1].managed)
+
     def testAutofix(self):
         # Invalid urls causes pain when specifying requirements. Make sure it's
         # auto-fixed.

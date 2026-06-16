@@ -19,7 +19,6 @@ class ANGLE(config_util.Config):
             'name': '.',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_vars': {},
         }
         spec = {'solutions': [solution]}

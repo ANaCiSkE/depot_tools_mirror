@@ -17,7 +17,6 @@ class PdfiumConfig(config_util.Config):
         solution = {
             'name': 'pdfium',
             'url': url,
-            'managed': False,
             'custom_vars': {},
         }
         if props.get('checkout_configuration'):

@@ -19,7 +19,6 @@ class WebWorkload(config_util.Config):
             'name': 'web-workload',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

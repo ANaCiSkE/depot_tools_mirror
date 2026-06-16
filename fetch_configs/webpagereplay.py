@@ -19,7 +19,6 @@ class WebPageReplay(config_util.Config):
             'name': 'webpagereplay',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

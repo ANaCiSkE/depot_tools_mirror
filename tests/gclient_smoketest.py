@@ -63,7 +63,7 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                     'name': 'src',
                     'url': self.git_base + 'src',
                     'deps_file': 'DEPS',
-                    'managed': True,
+                    'managed': False,
                     'custom_deps': {},
                     'custom_vars': {},
                 }],
@@ -78,7 +78,7 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                     'name': 'src',
                     'url': self.git_base + 'repo_1',
                     'deps_file': 'DEPS',
-                    'managed': True,
+                    'managed': False,
                     'custom_deps': {},
                     'custom_vars': {},
                 }],
@@ -95,7 +95,7 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                     'name': 'foo',
                     'url': 'https://example.com/foo',
                     'deps_file': 'DEPS',
-                    'managed': True,
+                    'managed': False,
                     'custom_deps': {},
                     'custom_vars': {},
                 }],
@@ -109,7 +109,7 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                     'name': 'foo',
                     'url': 'https://example.com/foo',
                     'deps_file': 'blah',
-                    'managed': True,
+                    'managed': False,
                     'custom_deps': {},
                     'custom_vars': {},
                 }]
@@ -124,13 +124,37 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                     'name': 'src',
                     'url': self.git_base + 'src',
                     'deps_file': 'DEPS',
-                    'managed': True,
+                    'managed': False,
                     'custom_deps': {},
                     'custom_vars': {
                         'bool_var': True,
                         'str_var': 'abc',
                     },
                 }]
+            })
+
+        test(
+            ['config', self.git_base + 'src/', '--managed'], {
+                'solutions': [{
+                    'name': 'src',
+                    'url': self.git_base + 'src',
+                    'deps_file': 'DEPS',
+                    'managed': True,
+                    'custom_deps': {},
+                    'custom_vars': {},
+                }],
+            })
+
+        test(
+            ['config', self.git_base + 'src/', '--unmanaged'], {
+                'solutions': [{
+                    'name': 'src',
+                    'url': self.git_base + 'src',
+                    'deps_file': 'DEPS',
+                    'managed': False,
+                    'custom_deps': {},
+                    'custom_vars': {},
+                }],
             })
 
         test(['config', '--spec', 'bah = ["blah blah"]'],

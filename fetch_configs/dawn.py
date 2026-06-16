@@ -19,7 +19,6 @@ class Dawn(config_util.Config):
             'name': 'dawn',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

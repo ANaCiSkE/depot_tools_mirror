@@ -18,7 +18,6 @@ class Naclports(config_util.Config):
             'name': 'src',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

@@ -19,7 +19,6 @@ class CrashpadConfig(config_util.Config):
                     'name': 'crashpad',
                     'url':
                     'https://chromium.googlesource.com/crashpad/crashpad.git',
-                    'managed': False,
                 },
             ],
         }

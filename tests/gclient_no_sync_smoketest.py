@@ -234,7 +234,8 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
 
     def testNoSync_DEPSDiff(self):
         """We do not skip syncs if there are DEPS changes."""
-        self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+        self.gclient(
+            ['config', self.git_base + 'repo_1', '--name', 'src', '--managed'])
 
         output_json = os.path.join(self.root_dir, 'output.json')
 

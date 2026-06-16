@@ -19,7 +19,6 @@ class NaCl(config_util.Config):
             'name': 'native_client',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

@@ -315,7 +315,7 @@ class DependencySettings(object):
         # 'managed' determines whether or not this dependency is synced/updated
         # by gclient after gclient checks it out initially.  The difference
         # between 'managed' and 'should_process' is that the user specifies
-        # 'managed' via the --unmanaged command-line flag or a .gclient config,
+        # 'managed' via the --managed command-line flag or a .gclient config,
         # where 'should_process' is dynamically set by gclient if it goes over
         # its recursion limit and controls gclient's behavior so it does not
         # misbehave.
@@ -1940,7 +1940,7 @@ it or fix the checkout.
                         # Update URL with scheme in protocol_override
                         url=GitDependency.updateProtocol(
                             s['url'], s.get('protocol_override', None)),
-                        managed=s.get('managed', True),
+                        managed=s.get('managed', False),
                         custom_deps=s.get('custom_deps', {}),
                         custom_vars=s.get('custom_vars', {}),
                         custom_hooks=s.get('custom_hooks', []),
@@ -2011,7 +2011,7 @@ it or fix the checkout.
                          solution_name,
                          deps_file,
                          solution_url,
-                         managed=True,
+                         managed=False,
                          cache_dir=UNSET_CACHE_DIR,
                          custom_vars=None):
         text = self.DEFAULT_CLIENT_FILE_TEXT
@@ -3721,13 +3721,15 @@ def CMDconfig(parser, args):
         default='DEPS',
         help='overrides the default name for the DEPS file for the '
         'main solutions and all sub-dependencies')
-    parser.add_option('--unmanaged',
+    parser.add_option('--managed',
                       action='store_true',
                       default=False,
-                      help='overrides the default behavior to make it possible '
-                      'to have the main solution untouched by gclient '
-                      '(gclient will check out unmanaged dependencies but '
-                      'will never sync them)')
+                      help='sync the main solution on every gclient sync.')
+    parser.add_option('--unmanaged',
+                      action='store_false',
+                      dest='managed',
+                      help='leave the main solution untouched after the '
+                      'initial checkout. This is the default.')
     parser.add_option('--cache-dir',
                       default=UNSET_CACHE_DIR,
                       help='Cache all git repos into this dir and do shared '
@@ -3783,7 +3785,7 @@ def CMDconfig(parser, args):
         client.SetDefaultConfig(name,
                                 deps_file,
                                 base_url,
-                                managed=not options.unmanaged,
+                                managed=options.managed,
                                 cache_dir=options.cache_dir,
                                 custom_vars=custom_vars)
     client.SaveConfig()

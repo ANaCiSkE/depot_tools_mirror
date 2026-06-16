@@ -17,7 +17,6 @@ class Website(config_util.Config):
         solution = {
             'name': 'website',
             'url': url,
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

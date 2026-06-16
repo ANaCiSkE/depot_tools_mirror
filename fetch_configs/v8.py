@@ -18,7 +18,6 @@ class V8(config_util.Config):
             'name': 'v8',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

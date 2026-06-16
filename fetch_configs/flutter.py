@@ -16,7 +16,6 @@ class Flutter(config_util.Config):
         solution = {
             'custom_deps': {},
             'deps_file': 'DEPS',
-            'managed': False,
             'name': 'src/flutter',
             'safesync_url': '',
             'url': 'https://github.com/flutter/engine.git',

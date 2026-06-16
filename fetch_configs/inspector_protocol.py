@@ -16,7 +16,6 @@ class InspectorProtocol(config_util.Config):
         solution = {
             'name': 'src',
             'url': url,
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

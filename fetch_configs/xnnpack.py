@@ -18,7 +18,6 @@ class XNNPACK(config_util.Config):
             'name': 'XNNPACK',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

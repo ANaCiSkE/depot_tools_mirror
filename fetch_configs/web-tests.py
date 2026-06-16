@@ -19,7 +19,6 @@ class WebTests(config_util.Config):
             'name': 'web-tests',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {

@@ -19,7 +19,6 @@ class Ipcz(config_util.Config):
             'name': 'ipcz',
             'url': url,
             'deps_file': 'DEPS',
-            'managed': False,
             'custom_deps': {},
         }
         spec = {
