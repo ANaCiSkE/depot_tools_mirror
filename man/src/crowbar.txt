@@ -1,0 +1,96 @@
+crowbar(1)
+==========
+
+NAME
+----
+crowbar -
+include::_crowbar_desc.helper.txt[]
+
+SYNOPSIS
+--------
+[verse]
+'crowbar' [--working-dir <dir>] <command> [<options>] [<arguments>]
+
+DESCRIPTION
+-----------
+`crowbar` is a CLI tool for building packages defined by `crowbar.txtpb` files.
+It is built on top of LUCI's `cipkg` to leverage its reproducibility and caching
+mechanisms.
+
+By default, `crowbar` operates within the Git repository containing the current
+working directory.
+
+GLOBAL OPTIONS
+--------------
+--working-dir <dir>::
+  Overrides current working directory to <dir>.
+
+COMMANDS
+--------
+
+build::
+  `crowbar build` [--overwrite] <package>...
++
+Builds the specified packages.
++
+The `package` Argument:::
+* Paths starting with `.` are resolved from the working directory.
+* Paths not starting with `.` are resolved from Git repository's root.
+* Each path must point to a directory that contains a `crowbar.txtpb` file.
++
+Options:::
+  --overwrite;;
+    Write the build result to the local Git checkout.
+
+fmt::
+  `crowbar fmt`
++
+Formats all `crowbar.txtpb` files found under the current working directory.
+
+CROWBAR.TXTPB CONFIGURATION
+---------------------------
+Each package typically contains:
+
+1. "upstream" description, which typically are HTTP URLs (e.g. zip files or tarballs) or Git commit references.
+2. "Input" describing steps to transform upstream into code or build artifacts. Typical actions include "unpack" and "patch".
+3. "Output" describing where the result should be stored (e.g. inside the Git checkout for vendoring code, or to be published to CIPD).
+
+Example of a typical third-party dependency distributed as a ZIP archive that does not require local patches:
+
+----
+upstream {
+  artifacts {
+    name: "foo-1.0.zip"
+    http: {
+      url: "https://example.com/foo-1.0.zip"
+      digest: "sha256:abcdef..."
+    }
+  }
+}
+stages {
+  input {
+    unpack { default {} }
+  }
+  output {
+    update { git {} }
+  }
+}
+----
+
+COMMON USAGE
+------------
+To build a package in a local directory and update the checkout with the result:
+
+    crowbar build ./path/to/package --overwrite
+
+SEE ALSO
+--------
+Package definition (crowbar.txtpb)::
+  https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tools/crowbar/pkg/proto/crowbar.proto
+
+cipkg documentation::
+  https://chromium.googlesource.com/infra/luci/luci-go/+/HEAD/cipkg/
+
+include::_footer.txt[]
+
+// vim: ft=asciidoc:

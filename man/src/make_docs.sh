@@ -71,6 +71,7 @@ i
 MAN1_TXT += depot_tools_gerrit_auth.txt
 MAN1_TXT += depot_tools_tutorial.txt
 MAN1_TXT += depot_tools.txt
+MAN1_TXT += crowbar.txt
 .
 wq
 EOF
@@ -80,7 +81,7 @@ EOF
     shopt -s extglob
     echo H
     echo 35
-    for x in "$(echo !\(git-*|_*\).txt)"
+    for x in "$(echo !\(git-*|crowbar|_*\).txt)"
     do
       echo i
       echo MAN7_TXT += $x
@@ -196,7 +197,7 @@ do
       HTML_TARGETS+=("${x%%.txt}.html")
       if [[ ! "$NOMAN" ]]
       then
-        if [[ ${x:0:3} == git ]]
+        if [[ ${x:0:3} == git || $x == crowbar.txt ]]
         then
           MAN1_TARGETS+=("${x%%.txt}.1")
         else

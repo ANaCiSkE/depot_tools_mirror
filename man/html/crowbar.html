@@ -5,7 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
 <meta name="generator" content="AsciiDoc 10.2.1" />
-<title>depot_tools(7)</title>
+<title>crowbar(1)</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
 
@@ -742,185 +742,197 @@ asciidoc.install();
 <body class="manpage">
 <div id="header">
 <h1>
-depot_tools(7) Manual Page
+crowbar(1) Manual Page
 </h1>
 <h2>NAME</h2>
 <div class="sectionbody">
-<p>depot_tools -
-   A collection of tools for dealing with Chromium development.
+<p>crowbar -
+   Build and manage third-party software
 </p>
 </div>
 </div>
 <div id="content">
 <div class="sect1">
-<h2 id="_description">DESCRIPTION</h2>
+<h2 id="_synopsis">SYNOPSIS</h2>
 <div class="sectionbody">
-<div class="paragraph"><p>The Chromium depot_tools suite contains many tools to assist/augment the
-Chromium development environment. The tools may be downloaded by checking
-out the <a href="https://chromium.googlesource.com/chromium/tools/depot_tools.git">git repository</a>.</p></div>
-<div class="paragraph"><p>There are two primary categories of tools. Some of these tools are <em>essential</em>
-to the development flow, in the sense that you cannot successfully develop
-Chromium without them.</p></div>
-<div class="paragraph"><p>Other tools are merely <em>helper</em> tools. Not required, but they can substantially
-ease the development workflow.</p></div>
-<div class="paragraph"><p>A listing of both categories of tools follows.</p></div>
+<div class="verseblock">
+<pre class="content"><em>crowbar</em> [--working-dir &lt;dir&gt;] &lt;command&gt; [&lt;options&gt;] [&lt;arguments&gt;]</pre>
+<div class="attribution">
+</div></div>
 </div>
 </div>
 <div class="sect1">
-<h2 id="_helper_tools">HELPER TOOLS</h2>
+<h2 id="_description">DESCRIPTION</h2>
 <div class="sectionbody">
-<div class="paragraph"><p>A tutorial for these tools can be found at <a href="depot_tools_tutorial.html">depot_tools_tutorial(7)</a>.</p></div>
+<div class="paragraph"><p><code>crowbar</code> is a CLI tool for building packages defined by <code>crowbar.txtpb</code> files.
+It is built on top of LUCI&#8217;s <code>cipkg</code> to leverage its reproducibility and caching
+mechanisms.</p></div>
+<div class="paragraph"><p>By default, <code>crowbar</code> operates within the Git repository containing the current
+working directory.</p></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_global_options">GLOBAL OPTIONS</h2>
+<div class="sectionbody">
 <div class="dlist"><dl>
 <dt class="hdlist1">
-<a href="crowbar.html">crowbar(1)</a>
+--working-dir &lt;dir&gt;
 </dt>
 <dd>
 <p>
-Build and manage third-party software
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-cl.html">git-cl(1)</a>
-</dt>
-<dd>
-<p>
-Interact with code reviews on Gerrit and Rietveld
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-footers.html">git-footers(1)</a>
-</dt>
-<dd>
-<p>
-Extract meta-information expressed as footers in a commit message.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-freeze.html">git-freeze(1)</a>
-</dt>
-<dd>
-<p>
-Freeze all changes on a branch (indexed and unindexed).
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-hyper-blame.html">git-hyper-blame(1)</a>
-</dt>
-<dd>
-<p>
-Like git blame, but with the ability to ignore or bypass certain commits.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-map-branches.html">git-map-branches(1)</a>
-</dt>
-<dd>
-<p>
-Helper script to display all local git branches with ‘upstream’ hierarchy in
-colorized terminal format.
+  Overrides current working directory to &lt;dir&gt;.
 </p>
 </dd>
 </dl></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_commands">COMMANDS</h2>
+<div class="sectionbody">
 <div class="dlist"><dl>
 <dt class="hdlist1">
-<a href="git-map.html">git-map(1)</a>
+build
 </dt>
 <dd>
 <p>
-Display history of all branches in a colorized terminal format.
+  <code>crowbar build</code> [--overwrite] &lt;package&gt;&#8230;
+</p>
+<div class="paragraph"><p>Builds the specified packages.</p></div>
+<div class="dlist"><dl>
+<dt class="hdlist1">
+The <code>package</code> Argument
+</dt>
+<dd>
+<div class="ulist"><ul>
+<li>
+<p>
+Paths starting with <code>.</code> are resolved from the working directory.
+</p>
+</li>
+<li>
+<p>
+Paths not starting with <code>.</code> are resolved from Git repository&#8217;s root.
+</p>
+</li>
+<li>
+<p>
+Each path must point to a directory that contains a <code>crowbar.txtpb</code> file.
+</p>
+</li>
+</ul></div>
+</dd>
+<dt class="hdlist1">
+Options
+</dt>
+<dd>
+<div class="dlist"><dl>
+<dt class="hdlist1">
+--overwrite
+</dt>
+<dd>
+<p>
+    Write the build result to the local Git checkout.
 </p>
 </dd>
 </dl></div>
+</dd>
+</dl></div>
+</dd>
+<dt class="hdlist1">
+fmt
+</dt>
+<dd>
+<p>
+  <code>crowbar fmt</code>
+</p>
+<div class="paragraph"><p>Formats all <code>crowbar.txtpb</code> files found under the current working directory.</p></div>
+</dd>
+</dl></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_crowbar_txtpb_configuration">CROWBAR.TXTPB CONFIGURATION</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>Each package typically contains:</p></div>
+<div class="olist arabic"><ol class="arabic">
+<li>
+<p>
+"upstream" description, which typically are HTTP URLs (e.g. zip files or tarballs) or Git commit references.
+</p>
+</li>
+<li>
+<p>
+"Input" describing steps to transform upstream into code or build artifacts. Typical actions include "unpack" and "patch".
+</p>
+</li>
+<li>
+<p>
+"Output" describing where the result should be stored (e.g. inside the Git checkout for vendoring code, or to be published to CIPD).
+</p>
+</li>
+</ol></div>
+<div class="paragraph"><p>Example of a typical third-party dependency distributed as a ZIP archive that does not require local patches:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code>upstream {
+  artifacts {
+    name: "foo-1.0.zip"
+    http: {
+      url: "https://example.com/foo-1.0.zip"
+      digest: "sha256:abcdef..."
+    }
+  }
+}
+stages {
+  input {
+    unpack { default {} }
+  }
+  output {
+    update { git {} }
+  }
+}</code></pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_common_usage">COMMON USAGE</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>To build a package in a local directory and update the checkout with the result:</p></div>
+<div class="literalblock">
+<div class="content">
+<pre><code>crowbar build ./path/to/package --overwrite</code></pre>
+</div></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_see_also">SEE ALSO</h2>
+<div class="sectionbody">
 <div class="dlist"><dl>
 <dt class="hdlist1">
-<a href="git-mark-merge-base.html">git-mark-merge-base(1)</a>
+Package definition (crowbar.txtpb)
 </dt>
 <dd>
 <p>
-Manually interact with depot_tools' merge-base markers.
+  <a href="https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tools/crowbar/pkg/proto/crowbar.proto">https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tools/crowbar/pkg/proto/crowbar.proto</a>
 </p>
 </dd>
 <dt class="hdlist1">
-<a href="git-nav-downstream.html">git-nav-downstream(1)</a>
+cipkg documentation
 </dt>
 <dd>
 <p>
-Checkout a downstream branch of the currently checked out branch.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-nav-upstream.html">git-nav-upstream(1)</a>
-</dt>
-<dd>
-<p>
-Checkout the upstream branch of the currently checked out branch.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-new-branch.html">git-new-branch(1)</a>
-</dt>
-<dd>
-<p>
-Create and switch to a new branch with correct tracking information.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-rebase-update.html">git-rebase-update(1)</a>
-</dt>
-<dd>
-<p>
-Updates all branches to have the latest changes from their upstreams.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-rename-branch.html">git-rename-branch(1)</a>
-</dt>
-<dd>
-<p>
-Rename a branch and correctly preserve all downstream relationships.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-reparent-branch.html">git-reparent-branch(1)</a>
-</dt>
-<dd>
-<p>
-Alter the parentage (upstream) for the current branch.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-retry.html">git-retry(1)</a>
-</dt>
-<dd>
-<p>
-Bootstrap function to retry a git command.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-squash-branch.html">git-squash-branch(1)</a>
-</dt>
-<dd>
-<p>
-Takes all commits in a single branch and replaces them with a single commit.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-thaw.html">git-thaw(1)</a>
-</dt>
-<dd>
-<p>
-Un-freeze all changes on a frozen branch.
-</p>
-</dd>
-<dt class="hdlist1">
-<a href="git-upstream-diff.html">git-upstream-diff(1)</a>
-</dt>
-<dd>
-<p>
-Print a diff of the current branch, compared to its upstream.
+  <a href="https://chromium.googlesource.com/infra/luci/luci-go/+/HEAD/cipkg/">https://chromium.googlesource.com/infra/luci/luci-go/+/HEAD/cipkg/</a>
 </p>
 </dd>
 </dl></div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_chromium_depot_tools">CHROMIUM DEPOT_TOOLS</h2>
+<div class="sectionbody">
+<div class="paragraph"><p>Part of the chromium <a href="depot_tools.html">depot_tools(7)</a> suite. These tools are meant to
+assist with the development of chromium and related projects. Download the tools
+by checking out the <a href="https://chromium.googlesource.com/chromium/tools/depot_tools.git">git repository</a>.</p></div>
 </div>
 </div>
 </div>

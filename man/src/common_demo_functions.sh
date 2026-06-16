@@ -35,7 +35,7 @@ praw() {
 
 # print a visible command (but don't run it)
 pcommand() {
-  praw "$(python3 -c 'import sys, pipes; print(" ".join(map(pipes.quote, sys.argv[1:])))' "$@")"
+  praw "$(python3 -c 'import sys, shlex; print(" ".join(map(shlex.quote, sys.argv[1:])))' "$@")"
 }
 
 # run a visible command

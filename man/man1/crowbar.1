@@ -1,0 +1,216 @@
+'\" t
+.\"     Title: crowbar
+.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 06/15/2026
+.\"    Manual: Chromium depot_tools Manual
+.\"    Source: depot_tools b26951427
+.\"  Language: English
+.\"
+.TH "CROWBAR" "1" "06/15/2026" "depot_tools b26951427" "Chromium depot_tools Manual"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+crowbar \- Build and manage third\-party software
+.SH "SYNOPSIS"
+.sp
+.nf
+\fIcrowbar\fR [\-\-working\-dir <dir>] <command> [<options>] [<arguments>]
+.fi
+.sp
+.SH "DESCRIPTION"
+.sp
+\fBcrowbar\fR is a CLI tool for building packages defined by \fBcrowbar\&.txtpb\fR files\&. It is built on top of LUCI\(cqs \fBcipkg\fR to leverage its reproducibility and caching mechanisms\&.
+.sp
+By default, \fBcrowbar\fR operates within the Git repository containing the current working directory\&.
+.SH "GLOBAL OPTIONS"
+.PP
+\-\-working\-dir <dir>
+.RS 4
+Overrides current working directory to <dir>\&.
+.RE
+.SH "COMMANDS"
+.PP
+build
+.RS 4
+\fBcrowbar build\fR
+[\-\-overwrite] <package>\&...
+.sp
+Builds the specified packages\&.
+.PP
+The \fBpackage\fR Argument
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+Paths starting with
+\fB\&.\fR
+are resolved from the working directory\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+Paths not starting with
+\fB\&.\fR
+are resolved from Git repository\(cqs root\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+Each path must point to a directory that contains a
+\fBcrowbar\&.txtpb\fR
+file\&.
+.RE
+.RE
+.PP
+Options
+.RS 4
+.PP
+\-\-overwrite
+.RS 4
+Write the build result to the local Git checkout\&.
+.RE
+.RE
+.RE
+.PP
+fmt
+.RS 4
+\fBcrowbar fmt\fR
+.sp
+Formats all
+\fBcrowbar\&.txtpb\fR
+files found under the current working directory\&.
+.RE
+.SH "CROWBAR\&.TXTPB CONFIGURATION"
+.sp
+Each package typically contains:
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 1.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  1." 4.2
+.\}
+"upstream" description, which typically are HTTP URLs (e\&.g\&. zip files or tarballs) or Git commit references\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 2.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  2." 4.2
+.\}
+"Input" describing steps to transform upstream into code or build artifacts\&. Typical actions include "unpack" and "patch"\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04' 3.\h'+01'\c
+.\}
+.el \{\
+.sp -1
+.IP "  3." 4.2
+.\}
+"Output" describing where the result should be stored (e\&.g\&. inside the Git checkout for vendoring code, or to be published to CIPD)\&.
+.RE
+.sp
+Example of a typical third\-party dependency distributed as a ZIP archive that does not require local patches:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+upstream {
+  artifacts {
+    name: "foo\-1\&.0\&.zip"
+    http: {
+      url: "https://example\&.com/foo\-1\&.0\&.zip"
+      digest: "sha256:abcdef\&.\&.\&."
+    }
+  }
+}
+stages {
+  input {
+    unpack { default {} }
+  }
+  output {
+    update { git {} }
+  }
+}
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+.SH "COMMON USAGE"
+.sp
+To build a package in a local directory and update the checkout with the result:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+crowbar build \&./path/to/package \-\-overwrite
+.fi
+.if n \{\
+.RE
+.\}
+.SH "SEE ALSO"
+.PP
+Package definition (crowbar\&.txtpb)
+.RS 4
+\m[blue]\fBhttps://chromium\&.googlesource\&.com/infra/infra/+/HEAD/go/src/infra/tools/crowbar/pkg/proto/crowbar\&.proto\fR\m[]
+.RE
+.PP
+cipkg documentation
+.RS 4
+\m[blue]\fBhttps://chromium\&.googlesource\&.com/infra/luci/luci\-go/+/HEAD/cipkg/\fR\m[]
+.RE
+.SH "CHROMIUM DEPOT_TOOLS"
+.sp
+Part of the chromium \fBdepot_tools\fR(7) suite\&. These tools are meant to assist with the development of chromium and related projects\&. Download the tools by checking out the \m[blue]\fBgit repository\fR\m[]\&\s-2\u[1]\d\s+2\&.
+.SH "NOTES"
+.IP " 1." 4
+git repository
+.RS 4
+\%https://chromium.googlesource.com/chromium/tools/depot_tools.git
+.RE
