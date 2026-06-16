@@ -948,6 +948,7 @@ class Settings(object):
     def __init__(self):
         self.cc = None
         self.root = None
+        self.git_dir = None
         self.tree_status_url = None
         self.viewvc_url = None
         self.updated = False
@@ -984,6 +985,11 @@ class Settings(object):
             self.root = os.path.realpath(os.path.abspath(
                 self.GetRelativeRoot()))
         return self.root
+
+    def GetGitDir(self):
+        if self.git_dir is None:
+            self.git_dir = scm.GIT.GetCommonGitDir('.')
+        return self.git_dir
 
     def GetTreeStatusUrl(self, error_ok=False):
         if not self.tree_status_url:
@@ -3110,7 +3116,7 @@ class Changelist(object):
     def _GerritCommitMsgHookCheck(offer_removal):
         # type: (bool) -> None
         """Checks for the gerrit's commit-msg hook and removes it if necessary."""
-        hook = os.path.join(settings.GetRoot(), '.git', 'hooks', 'commit-msg')
+        hook = os.path.join(settings.GetGitDir(), 'hooks', 'commit-msg')
         if not os.path.exists(hook):
             return
         # Crude attempt to distinguish Gerrit Codereview hook from a potentially
@@ -3918,7 +3924,7 @@ def DownloadGerritHook(force):
         force: True to update hooks. False to install hooks if not present.
     """
     src = 'https://gerrit-review.googlesource.com/tools/hooks/commit-msg'
-    dst = os.path.join(settings.GetRoot(), '.git', 'hooks', 'commit-msg')
+    dst = os.path.join(settings.GetGitDir(), 'hooks', 'commit-msg')
     if not os.access(dst, os.X_OK):
         if os.path.exists(dst):
             if not force:

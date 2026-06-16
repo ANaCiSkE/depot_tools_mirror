@@ -715,6 +715,7 @@ class TestGitCl(unittest.TestCase):
                    lambda *a: self._mocked_call('ValidAccounts', *a)).start()
         mock.patch('sys.exit', side_effect=SystemExitMock).start()
         mock.patch('git_cl.Settings.GetRoot', return_value='').start()
+        mock.patch('git_cl.Settings.GetGitDir', return_value='.git').start()
         scm_mock.GIT(self)
         mock.patch('scm.GIT.ResolveCommit', return_value='hash').start()
         mock.patch('scm.GIT.IsValidRevision', return_value=True).start()

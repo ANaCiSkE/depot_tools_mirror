@@ -1099,6 +1099,17 @@ class GIT(object):
         return os.path.abspath(os.path.join(cwd, root))
 
     @staticmethod
+    def GetCommonGitDir(cwd) -> str:
+        """Returns the shared .git directory of a git worktree as an absolute path.
+
+        This should be used instead of `GetCheckoutRoot()/.git` to avoid issues
+        with worktrees that do not have their own .git directory.
+        """
+        git_dir = GIT.Capture(['rev-parse', '--git-common-dir'], cwd=cwd)
+        assert isinstance(git_dir, str)
+        return os.path.abspath(os.path.join(cwd, git_dir))
+
+    @staticmethod
     def IsInsideWorkTree(cwd):
         try:
             return GIT.Capture(['rev-parse', '--is-inside-work-tree'], cwd=cwd)
