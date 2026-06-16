@@ -556,7 +556,7 @@ def main(args: list[str],
 
             os.makedirs(virtual_path, exist_ok=True)
 
-            bash_cmd = f"mount --bind {shlex.quote(primary_solution_path)} {shlex.quote(virtual_path)} && cd {shlex.quote(virtual_path)} && SISO_PY_IS_ISOLATED=1 python3 {shlex.quote(sys.argv[0])} {shlex.join(args[1:])}"
+            bash_cmd = f"mount --rbind {shlex.quote(primary_solution_path)} {shlex.quote(virtual_path)} && cd {shlex.quote(virtual_path)} && SISO_PY_IS_ISOLATED=1 python3 {shlex.quote(sys.argv[0])} {shlex.join(args[1:])}"
             unshare_cmd = [
                 "unshare", "--mount", "--map-root-user", "bash", "-c", bash_cmd
             ]
