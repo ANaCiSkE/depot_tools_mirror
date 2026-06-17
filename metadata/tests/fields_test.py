@@ -252,6 +252,8 @@ class FieldValidationTest(unittest.TestCase):
             error_values=[
                 "",
                 "\n",
+                "rpc://project/project",
+                "rpc://project.googlesource.com/project",
                 "ghttps://www.example.com/e",
                 "https://www.example.com/ f",
                 "This is an unrecognized message for the URL",

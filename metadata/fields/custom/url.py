@@ -27,12 +27,12 @@ _PATTERN_URL_CANONICAL_REPO = re.compile(
 _PATTERN_URL_INTERNAL = re.compile(
     r"^(Google )?internal\.?$", re.IGNORECASE)
 
-_SUPPORTED_SCHEMES = {
+_SUPPORTED_SCHEMES = [
     'http',
     'https',
     'git',
     'ftp',
-}
+]
 
 # URLs can't contain whitespaces. Treat them as delimiters so we can handle cases where URL field contains one URL per line (without comma delimiter).
 _PATTERN_URL_DELIMITER = re.compile("{}|{}".format(
@@ -54,20 +54,18 @@ def _url_is_canonical(url: str) -> bool:
     return url == _url_canonicalize(url)
 
 
-def _url_is_valid(url: str) -> bool:
-    """Checks whether the given `url` is acceptable:
-       * url is can be parsed without an error.
-       * url uses a supported scheme / protocol.
-    """
+def validate_url(url: str) -> Optional[str]:
+    """Return why the given `url` is not acceptable, else None."""
     try:
         u = urlparse(url)
     except:
-        return False
+        return f"URL '{url}' is malformed."
 
     if u.scheme not in _SUPPORTED_SCHEMES:
-        return False
+        return (f"URL '{url}' has an invalid scheme '{u.scheme}'. "
+                f"Supported schemes: {_SUPPORTED_SCHEMES}.")
 
-    return True
+    return None
 
 class URLField(field_types.MetadataField):
     """Custom field for the package URL(s)."""
@@ -94,17 +92,14 @@ class URLField(field_types.MetadataField):
         if not urls:
             return vr.ValidationError(reason=f"{self._name} must be provided.")
 
-        invalid_values = list(filterfalse(_url_is_valid, urls))
+        error_messages = []
+        for url in urls:
+            if error := validate_url(url):
+                error_messages.append(error)
 
-        if invalid_values:
-            return vr.ValidationError(
-                reason=f"{self._name} is invalid.",
-                additional=[
-                    "URLs must use a protocol scheme in "
-                    "[http, https, ftp, git].",
-                    f"Separate URLs using a '{self.VALUE_DELIMITER}'.",
-                    f"Invalid values: {util.quoted(invalid_values)}.",
-                ])
+        if error_messages:
+            return vr.ValidationError(reason=f"{self._name} is invalid.",
+                                      additional=sorted(error_messages))
 
         non_canon_values = list(filterfalse(_url_is_canonical, urls))
         if non_canon_values:
@@ -128,4 +123,4 @@ class URLField(field_types.MetadataField):
 
         # Filter out invalid URLs, and canonicalize the URLs.
         return list(
-            map(_url_canonicalize, filter(_url_is_valid, _split_urls(value))))
+            map(_url_canonicalize, filterfalse(validate_url, _split_urls(value))))
