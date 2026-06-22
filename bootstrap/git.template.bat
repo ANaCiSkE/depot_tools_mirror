@@ -6,5 +6,5 @@ if not defined EDITOR set EDITOR=notepad
 :: Without this set, the SSO helper may throw an error when resolving
 :: the `git` command (see https://pkg.go.dev/os/exec for more details).
 set "NoDefaultCurrentDirectoryInExePath=1"
-set "PATH=${GIT_BIN_ABSDIR}\cmd;%~dp0;%PATH%"
-"${GIT_BIN_ABSDIR}\${GIT_PROGRAM}" %*
+set "PATH=${GIT_PATH_PREPEND};%~dp0;%PATH%"
+"${GIT_PROGRAM}" %*

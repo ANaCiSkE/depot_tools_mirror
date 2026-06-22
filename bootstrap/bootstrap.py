@@ -25,14 +25,16 @@ DEVNULL = open(os.devnull, 'w')
 IS_WIN = sys.platform.startswith('win')
 BAT_EXT = '.bat' if IS_WIN else ''
 
-# Top-level stubs to generate that fall through to executables within the Git
-# directory.
-WIN_GIT_STUBS = {
-    'git.bat': 'cmd\\git.exe',
-    'gitk.bat': 'cmd\\gitk.exe',
-    'ssh.bat': 'usr\\bin\\ssh.exe',
-    'ssh-keygen.bat': 'usr\\bin\\ssh-keygen.exe',
-}
+# Top-level stub filenames that may be generated. Each stub wraps an executable
+# from the discovered Git installation; the absolute exe path for each stub is
+# resolved per-installation by `search_win_git_directory`.
+WIN_GIT_STUB_NAMES = ('git.bat', 'gitk.bat', 'ssh.bat', 'ssh-keygen.bat')
+
+# Subdirectories under an MSYS2 root that may contain a native git.exe at
+# "<subsystem>\bin\git.exe". Only the modern UCRT and Clang environments are
+# supported; mingw64/mingw32 (MSVCRT-based) and usr (MSYS POSIX emulation) are
+# intentionally excluded.
+_MSYS2_SUBSYSTEMS = ('ucrt64', 'clang64', 'clangarm64')
 
 # The global git config which should be applied by |git_postprocess|.
 GIT_GLOBAL_CONFIG = {
@@ -48,12 +50,16 @@ class Template(
         collections.namedtuple('Template', (
             'PYTHON3_BIN_RELDIR',
             'PYTHON3_BIN_RELDIR_UNIX',
-            'GIT_BIN_ABSDIR',
             'GIT_PROGRAM',
+            'GIT_PATH_PREPEND',
+            'GIT_BASH_EXE',
+            'GIT_BASH_LAUNCHER',
         ))):
     @classmethod
     def empty(cls):
-        return cls(**{k: None for k in cls._fields})
+        # Use empty strings (not None) so any field referenced by a template
+        # but left unset substitutes cleanly instead of becoming "None".
+        return cls(**{k: '' for k in cls._fields})
 
     def maybe_install(self, name, dst_path):
         """Installs template |name| to |dst_path| if it has changed.
@@ -277,31 +283,115 @@ def _traverse_to_git_root(abspath):
     return None
 
 
-def search_win_git_directory():
-    """Searches for a git directory outside of depot_tools.
+# Describes a discovered Git installation that the depot_tools stubs should
+# wrap. `path_prepend` is prepended to PATH when running the wrapped git.
+# `stubs` maps each stub filename to the absolute path of the executable it
+# should invoke; stubs are only generated for executables that actually exist.
+GitInstallation = collections.namedtuple(
+    'GitInstallation', ('path_prepend', 'stubs', 'bash_exe', 'bash_launcher'))
 
-    As depot_tools will soon stop bundling Git for Windows, this function logs
-    a warning if git has not yet been directly installed.
+
+def _build_stubs(*candidates):
+    """Builds an ordered stub_name -> abs_path map, skipping missing files."""
+    stubs = {}
+    for stub_name, abs_path in candidates:
+        if abs_path and os.path.isfile(abs_path):
+            stubs[stub_name] = abs_path
+    return stubs
+
+
+def _detect_git_for_windows(git_root):
+    """Builds a GitInstallation for a Git for Windows install at `git_root`."""
+    stubs = _build_stubs(
+        ('git.bat', os.path.join(git_root, 'cmd', 'git.exe')),
+        ('gitk.bat', os.path.join(git_root, 'cmd', 'gitk.exe')),
+        ('ssh.bat', os.path.join(git_root, 'usr', 'bin', 'ssh.exe')),
+        ('ssh-keygen.bat', os.path.join(git_root, 'usr', 'bin',
+                                        'ssh-keygen.exe')),
+    )
+    bash_exe = os.path.join(git_root, 'bin', 'bash.exe')
+    bash_launcher = os.path.join(git_root, 'git-bash.exe')
+    return GitInstallation(
+        path_prepend=os.path.join(git_root, 'cmd'),
+        stubs=stubs,
+        bash_exe=bash_exe if os.path.isfile(bash_exe) else '',
+        bash_launcher=bash_launcher if os.path.isfile(bash_launcher) else '',
+    )
+
+
+def _detect_msys2(git_exe_dir):
+    """Returns a GitInstallation if `git_exe_dir` is an MSYS2 subsystem bin.
+
+    Recognized layout: `<root>\\<subsystem>\\bin\\git.exe`, where `<subsystem>`
+    is one of the modern environments in `_MSYS2_SUBSYSTEMS`. MSYS2's POSIX
+    bash always lives at `<root>\\usr\\bin\\bash.exe` regardless of the
+    subsystem, and is used to confirm the layout.
     """
-    # Look for the git command in PATH outside of depot_tools.
+    if os.path.basename(git_exe_dir).lower() != 'bin':
+        return None
+    subsystem_dir = os.path.dirname(git_exe_dir)
+    if os.path.basename(subsystem_dir).lower() not in _MSYS2_SUBSYSTEMS:
+        return None
+    root = os.path.dirname(subsystem_dir)
+    msys2_bash = os.path.join(root, 'usr', 'bin', 'bash.exe')
+    if not os.path.isfile(msys2_bash):
+        return None
+
+    # ssh lives in the MSYS2 POSIX layer (usr\bin), not under the subsystem.
+    stubs = _build_stubs(
+        ('git.bat', os.path.join(git_exe_dir, 'git.exe')),
+        ('gitk.bat', os.path.join(git_exe_dir, 'gitk.exe')),
+        ('ssh.bat', os.path.join(root, 'usr', 'bin', 'ssh.exe')),
+        ('ssh-keygen.bat', os.path.join(root, 'usr', 'bin', 'ssh-keygen.exe')),
+    )
+
+    # Prefer the matching subsystem's own GUI launcher if present
+    # (e.g. ucrt64.exe), otherwise fall back to msys2_shell.cmd.
+    subsystem_name = os.path.basename(subsystem_dir).lower()
+    for candidate in (os.path.join(root, subsystem_name + '.exe'),
+                      os.path.join(root, 'msys2_shell.cmd')):
+        if os.path.isfile(candidate):
+            bash_launcher = candidate
+            break
+    else:
+        bash_launcher = ''
+
+    return GitInstallation(
+        path_prepend=git_exe_dir,
+        stubs=stubs,
+        bash_exe=msys2_bash,
+        bash_launcher=bash_launcher,
+    )
+
+
+def search_win_git_directory():
+    """Searches for a git installation outside of depot_tools.
+
+    Recognizes both Git for Windows and MSYS2 (UCRT64 / Clang64 / ClangARM64).
+    Returns the first matching `GitInstallation`, or None if none is found.
+    """
     for p in os.environ.get('PATH', '').split(os.pathsep):
         if _within_depot_tools(p):
             continue
-
         for cmd in ('git.exe', 'git.bat'):
-            if os.path.isfile(os.path.join(p, cmd)):
-                git_root = _traverse_to_git_root(p)
-                if git_root:
-                    return git_root
+            if not os.path.isfile(os.path.join(p, cmd)):
+                continue
+            git_root = _traverse_to_git_root(p)
+            if git_root:
+                return _detect_git_for_windows(git_root)
+            install = _detect_msys2(p)
+            if install:
+                return install
 
-    # Log deprecation warning.
     logging.warning(
-        'depot_tools will stop bundling Git for Windows on 2025-01-27.\n'
-        'To prepare for this change, please install Git directly. See\n'
+        'Git was not found in PATH. To use depot_tools, please install Git\n'
+        'directly. See\n'
         'https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md#Install-git\n'
         '\n'
-        'Having issues and not ready for depot_tools to stop bundling\n'
-        'Git for Windows? File a bug at:\n'
+        'depot_tools also recognizes the modern MSYS2 environments\n'
+        '(ucrt64, clang64, clangarm64).\n'
+        '\n'
+        'For other issues, file a bug at:\n'
         'https://issues.chromium.org/issues/new?component=1456702&template=2045785\n'
     )
     return None
@@ -453,12 +543,25 @@ def _win_git_bootstrap_config():
             [git_bat_path, 'config', '--unset', '--global', postprocess_key])
 
 
-def git_postprocess(template):
-    # Create Git templates and configure its base layout.
-    for stub_name, relpath in WIN_GIT_STUBS.items():
-        stub_template = template._replace(GIT_PROGRAM=relpath)
+def git_postprocess(template, install):
+    # Generate a stub for each discovered executable.
+    for stub_name, abs_path in install.stubs.items():
+        stub_template = template._replace(GIT_PROGRAM=abs_path)
         stub_template.maybe_install('git.template.bat',
                                     os.path.join(ROOT_DIR, stub_name))
+
+    # Remove any stale stubs from a previous installation (for example, an old
+    # gitk.bat if the user switched to an MSYS2 install without gitk).
+    for stub_name in WIN_GIT_STUB_NAMES:
+        if stub_name in install.stubs:
+            continue
+        stub_path = os.path.join(ROOT_DIR, stub_name)
+        if os.path.isfile(stub_path):
+            try:
+                os.remove(stub_path)
+            except OSError as e:
+                logging.warning('Failed to remove stale stub %r: %s', stub_path,
+                                e)
 
     # Bootstrap the git global config.
     _win_git_bootstrap_config()
@@ -486,14 +589,23 @@ def main(argv):
 
     if IS_WIN:
         # Search for a Git installation.
-        git_dir = search_win_git_directory()
-        if not git_dir:
+        install = search_win_git_directory()
+        if not install:
             logging.error('Failed to bootstrap depot_tools.\n'
                           'Git was not found in PATH. Have you installed it?')
             return 1
+        if 'git.bat' not in install.stubs:
+            logging.error('Failed to bootstrap depot_tools.\n'
+                          'Found a Git installation but could not locate '
+                          'git.exe within it.')
+            return 1
 
-        template = template._replace(GIT_BIN_ABSDIR=git_dir)
-        git_postprocess(template)
+        template = template._replace(
+            GIT_PATH_PREPEND=install.path_prepend,
+            GIT_BASH_EXE=install.bash_exe,
+            GIT_BASH_LAUNCHER=install.bash_launcher,
+        )
+        git_postprocess(template, install)
         templates = [
             ('git-bash.template.sh', 'git-bash', ROOT_DIR),
             ('python3.bat', 'python3.bat', ROOT_DIR),
