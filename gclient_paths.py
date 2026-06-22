@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 
+import gclient_eval
 import gclient_utils
 import subprocess2
 
@@ -53,11 +54,7 @@ def FindGclientRoot(from_dir, filename='.gclient'):
         return path
 
     entries_content = gclient_utils.FileRead(entries_filename)
-    scope = {}
-    try:
-        exec(entries_content, scope)
-    except (SyntaxError, Exception) as e:
-        gclient_utils.SyntaxErrorToError(filename, e)
+    scope = gclient_eval.ParseLocalConfig(entries_content, entries_filename)
 
     all_directories = set(
         os.path.relpath(os.path.realpath(os.path.join(path, *k.split('/'))),
@@ -173,8 +170,8 @@ def GetExeSuffix():
 def _GetGClientSolutions(gclient_root_dir_path):
     gclient_config_file = os.path.join(gclient_root_dir_path, '.gclient')
     gclient_config_contents = gclient_utils.FileRead(gclient_config_file)
-    env = {}
-    exec(gclient_config_contents, env)
+    env = gclient_eval.ParseLocalConfig(gclient_config_contents,
+                                        gclient_config_file)
     return env.get('solutions', [])
 
 

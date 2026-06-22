@@ -26,6 +26,7 @@ import threading
 import time
 import urllib.parse
 
+import gclient_eval
 import subprocess2
 
 # Git wrapper retries on a transient error, and some callees do retries too,
@@ -827,9 +828,7 @@ def GetGClientRootAndEntries(path=None):
         print("Can't find %s" % config_file)
         return None
     config_path = os.path.join(root, config_file)
-    env = {}
-    with open(config_path) as config:
-        exec(config.read(), env)
+    env = gclient_eval.ParseLocalConfig(FileRead(config_path), config_path)
     config_dir = os.path.dirname(config_path)
     return config_dir, env['entries']
 

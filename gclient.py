@@ -1890,12 +1890,8 @@ it or fix the checkout.
 
     def SetConfig(self, content):
         assert not self.dependencies
-        config_dict = {}
         self.config_content = content
-        try:
-            exec(content, config_dict)
-        except SyntaxError as e:
-            gclient_utils.SyntaxErrorToError('.gclient', e)
+        config_dict = gclient_eval.ParseLocalConfig(content, '.gclient')
 
         # Append any target OS that is not already being enforced to the tuple.
         target_os = config_dict.get('target_os', [])
@@ -2052,14 +2048,11 @@ it or fix the checkout.
             A sequence of solution names, which will be empty if there is the
             entries file hasn't been created yet.
         """
-        scope = {}
         filename = os.path.join(self.root_dir, self._options.entries_filename)
         if not os.path.exists(filename):
             return {}
-        try:
-            exec(gclient_utils.FileRead(filename), scope)
-        except SyntaxError as e:
-            gclient_utils.SyntaxErrorToError(filename, e)
+        scope = gclient_eval.ParseLocalConfig(gclient_utils.FileRead(filename),
+                                              filename)
         return scope.get('entries', {})
 
     def _ExtractFileJsonContents(self, default_filename):

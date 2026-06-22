@@ -634,6 +634,76 @@ def Parse(content, filename, vars_override=None, builtin_vars=None):
     return result
 
 
+def _to_plain_types(val):
+    if isinstance(val, collections.abc.MutableMapping):
+        return {k: _to_plain_types(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_to_plain_types(v) for v in val]
+    if isinstance(val, tuple):
+        return tuple(_to_plain_types(v) for v in val)
+    return val
+
+
+def ParseLocalConfig(content, filename='<unknown>'):
+    """Safely parses a local configuration file (like .gclient or
+    .gclient_entries) containing only assignments of literals, lists,
+    dicts, and basic operations.
+    """
+    try:
+        node_or_string = ast.parse(content, filename=filename, mode='exec')
+    except SyntaxError as e:
+        gclient_utils.SyntaxErrorToError(filename, e)
+
+    if not isinstance(node_or_string, ast.Module):
+        raise gclient_utils.Error(
+            'unexpected AST node: %s %s (file %r, line %s)' %
+            (node_or_string, ast.dump(node_or_string), filename,
+             getattr(node_or_string, 'lineno', '<unknown>')))
+
+    statements = {}
+    for statement in node_or_string.body:
+        if isinstance(statement, ast.Expr) and isinstance(
+                statement.value,
+                ast.Constant) and isinstance(statement.value.value, str):
+            continue
+
+        if not isinstance(statement, ast.Assign):
+            raise gclient_utils.Error(
+                'unexpected AST node: %s %s (file %r, line %s)' %
+                (statement, ast.dump(statement), filename,
+                 getattr(statement, 'lineno', '<unknown>')))
+
+        if len(statement.targets) != 1:
+            raise gclient_utils.Error(
+                'invalid assignment: use exactly one target (file %r, line %s)'
+                % (filename, getattr(statement, 'lineno', '<unknown>')))
+
+        target = statement.targets[0]
+        if not isinstance(target, ast.Name):
+            raise gclient_utils.Error(
+                'invalid assignment: target should be a name (file %r, line %s)'
+                % (filename, getattr(statement, 'lineno', '<unknown>')))
+        if target.id in statements:
+            raise gclient_utils.Error(
+                'invalid assignment: overrides var %r (file %r, line %s)' %
+                (target.id, filename, getattr(statement, 'lineno',
+                                              '<unknown>')))
+
+        statements[target.id] = statement.value
+
+    # Evaluate the variables safely.
+    result = {}
+    for name, node in statements.items():
+        try:
+            result[name] = _to_plain_types(_gclient_eval(node, filename))
+        except Exception as e:
+            raise gclient_utils.Error(
+                'Error evaluating local config %s: %s (file %r, line %s)' %
+                (name, e, filename, getattr(node, 'lineno', '<unknown>')))
+    return result
+
+
+
 def EvaluateCondition(condition, variables, referenced_variables=None):
     """Safely evaluates a boolean condition. Returns the result."""
     if not referenced_variables:

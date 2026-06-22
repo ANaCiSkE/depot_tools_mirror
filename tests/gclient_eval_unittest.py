@@ -253,6 +253,118 @@ class ExecTest(unittest.TestCase):
         self.assertIn('duplicate key in dictionary: a_dep', str(cm.exception))
 
 
+class ParseLocalConfigTest(unittest.TestCase):
+
+    def test_parse_gclient(self):
+        content = file_join([
+            'solutions = [',
+            '  {',
+            '    "name": "src",',
+            '    "url": "https://chromium.googlesource.com/chromium/src.git",',
+            '    "deps_file": "DEPS",',
+            '    "managed": False,',
+            '    "custom_deps": {},',
+            '    "custom_vars": {},',
+            '  },',
+            ']',
+            'target_os = ["android"]',
+            'target_os_only = True',
+            'cache_dir = "git_cache"',
+        ])
+        result = gclient_eval.ParseLocalConfig(content, '.gclient')
+        self.assertEqual(
+            {
+                'solutions': [
+                    {
+                        'name': 'src',
+                        'url':
+                        'https://chromium.googlesource.com/chromium/src.git',
+                        'deps_file': 'DEPS',
+                        'managed': False,
+                        'custom_deps': {},
+                        'custom_vars': {},
+                    },
+                ],
+                'target_os': ['android'],
+                'target_os_only':
+                True,
+                'cache_dir':
+                'git_cache',
+            }, result)
+
+    def test_parse_gclient_entries(self):
+        content = file_join([
+            'entries = {',
+            '  "src": "https://chromium.googlesource.com/chromium/src.git",',
+            '  "src/third_party/angle": "https://chromium.googlesource.com/angle/angle.git",',
+            '}',
+        ])
+        result = gclient_eval.ParseLocalConfig(content, '.gclient_entries')
+        self.assertEqual(
+            {
+                'entries': {
+                    'src':
+                    'https://chromium.googlesource.com/chromium/src.git',
+                    'src/third_party/angle':
+                    'https://chromium.googlesource.com/angle/angle.git',
+                },
+            }, result)
+
+    def test_unsafe_code(self):
+        content = file_join([
+            'import os',
+            'solutions = []',
+        ])
+        with self.assertRaises(gclient_utils.Error) as cm:
+            gclient_eval.ParseLocalConfig(content, '.gclient')
+        self.assertIn('unexpected AST node', str(cm.exception))
+
+    def test_unsafe_code_exec(self):
+        content = file_join([
+            'import os',
+            'os.system("echo PWNED")',
+            'solutions = []',
+        ])
+        with self.assertRaises(gclient_utils.Error) as cm:
+            gclient_eval.ParseLocalConfig(content, '.gclient')
+        self.assertIn('unexpected AST node', str(cm.exception))
+
+    def test_unsafe_call(self):
+        content = file_join([
+            'solutions = [',
+            '  {',
+            '    "name": eval("src"),',
+            '  }',
+            ']',
+        ])
+        with self.assertRaises(gclient_utils.Error) as cm:
+            gclient_eval.ParseLocalConfig(content, '.gclient')
+        self.assertIn('Error evaluating local config solutions',
+                      str(cm.exception))
+
+    def test_syntax_error(self):
+        content = file_join([
+            'solutions = [',
+            '  {',
+            '    "name": "src"',
+            '  }',
+            ']',
+            'target_os = ',
+        ])
+        with self.assertRaises(gclient_utils.Error) as cm:
+            gclient_eval.ParseLocalConfig(content, '.gclient')
+        self.assertIn('syntax error', str(cm.exception).lower())
+
+    def test_override(self):
+        content = file_join([
+            'solutions = []',
+            'solutions = []',
+        ])
+        with self.assertRaises(gclient_utils.Error) as cm:
+            gclient_eval.ParseLocalConfig(content, '.gclient')
+        self.assertIn('overrides var', str(cm.exception))
+
+
 class UpdateConditionTest(unittest.TestCase):
     def test_both_present(self):
         info = {'condition': 'foo'}
