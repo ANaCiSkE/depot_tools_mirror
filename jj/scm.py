@@ -7,11 +7,13 @@ import pathlib
 import subprocess
 
 import gclient_scm
+import gclient_utils
 
 
 def prefer_git_wrapper(func):
     """Dynamically delegates to GitWrapper unless a .jj directory exists,
     without a corresponding .git directory, as in a standalone JJ workspace."""
+
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         # pylint: disable=protected-access
@@ -23,6 +25,7 @@ def prefer_git_wrapper(func):
             super_method = getattr(super(JjWrapper, self), func.__name__)
             return super_method(*args, **kwargs)
         return func(self, *args, **kwargs)
+
     return wrapper
 
 
@@ -31,6 +34,7 @@ class JjWrapper(gclient_scm.GitWrapper):
 
     The repo does not yet need to be using jj, and does not even need to exist.
     """
+
     @prefer_git_wrapper
     def _GetSubmodulePaths(self):
         gitmodules_path = pathlib.Path(self.checkout_path, '.gitmodules')
@@ -41,7 +45,8 @@ class JjWrapper(gclient_scm.GitWrapper):
                     continue
                 path = pathlib.Path(self.checkout_path, line[len('path = '):])
                 # Not every submodule will exist, because many are conditional.
-                if path.is_dir() and (path / '.git').exists():
+                if path.is_dir() and ((path / '.git').exists() or
+                                      (path / '.jj').exists()):
                     yield path
 
     @prefer_git_wrapper
@@ -51,13 +56,25 @@ class JjWrapper(gclient_scm.GitWrapper):
         # read the submodules from the .gitmodules file.
         state = {}
         for submodule_path in self._GetSubmodulePaths():
-            # TODO: Convert the submodule to jj and use jj log instead.
-            state[str(submodule_path)] = subprocess.run(
-                ['git', 'rev-parse', 'HEAD'],
-                check=True,
-                cwd=submodule_path,
-                stdout=subprocess.PIPE,
-            ).stdout.decode('utf-8').strip()
+            if (submodule_path / '.git').exists():
+                state[str(submodule_path)] = (subprocess.run(
+                    ['git', 'rev-parse', 'HEAD'],
+                    cwd=submodule_path,
+                    capture_output=True,
+                    check=True,
+                ).stdout.decode('utf-8').strip())
+            elif (submodule_path / '.jj').exists():
+                state[str(submodule_path)] = (subprocess.run(
+                    ['jj', 'log', '-r', '@-', '-T', 'commit_id'],
+                    cwd=submodule_path,
+                    capture_output=True,
+                    check=True,
+                ).stdout.decode('utf-8').strip())
+            else:
+                raise RuntimeError(
+                    f'Could not determine submodule repo type: {submodule_path}'
+                )
+
         return state
 
     @prefer_git_wrapper
@@ -94,7 +111,11 @@ class JjWrapper(gclient_scm.GitWrapper):
 
     @prefer_git_wrapper
     def revinfo(self, options, args, file_list):
-        pass
+        return subprocess.run(['jj', 'log', '-r', '@-', '-T', 'commit_id'],
+                    cwd=self.checkout_path,
+                    capture_output=True,
+                    check=True,
+                ).stdout.decode('utf-8').strip()
 
     @prefer_git_wrapper
     def status(self, options, args, file_list):
@@ -102,4 +123,32 @@ class JjWrapper(gclient_scm.GitWrapper):
 
     @prefer_git_wrapper
     def update(self, options, args, file_list):
-        pass
+        url, deps_revision = gclient_utils.SplitUrlRevision(self.url)
+        revision = deps_revision
+        if options.revision:
+            revision = str(options.revision)
+        if not revision:
+            revision = 'main@origin'
+        if revision == 'unmanaged':
+            return
+
+        # Fetch if the revision is missing locally
+        check_res = subprocess.run(
+            ['jj', 'log', '-r', revision, '-G', '-T', ''],
+            cwd=self.checkout_path,
+            capture_output=True,
+        )
+        if check_res.returncode != 0:
+            subprocess.run(
+                ['jj', 'git', 'fetch'],
+                cwd=self.checkout_path,
+                capture_output=True,
+                check=True,
+            )
+
+        subprocess.run(
+            ['jj', 'new', revision],
+            cwd=self.checkout_path,
+            capture_output=True,
+            check=True,
+        )
