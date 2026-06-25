@@ -46,6 +46,7 @@ class TestUtilityFunctions(unittest.TestCase):
             argparse.Namespace(dry_run=False,
                                nohooks=False,
                                nohistory=False,
+                               git_cache=False,
                                force=False,
                                config='foo',
                                protocol_override=None,
@@ -54,13 +55,14 @@ class TestUtilityFunctions(unittest.TestCase):
 
         response = fetch.handle_args([
             'filename', '-n', '--dry-run', '--nohooks', '--no-history',
-            '--force', '--protocol-override', 'sso', 'foo', '--some-param=1',
-            '--bar=2'
+            '--git-cache', '--force', '--protocol-override', 'sso', 'foo',
+            '--some-param=1', '--bar=2'
         ])
         self.assertEqual(
             argparse.Namespace(dry_run=True,
                                nohooks=True,
                                nohistory=True,
+                               git_cache=True,
                                force=True,
                                config='foo',
                                protocol_override='sso',
@@ -76,6 +78,7 @@ class TestUtilityFunctions(unittest.TestCase):
             argparse.Namespace(dry_run=True,
                                nohooks=True,
                                nohistory=True,
+                               git_cache=False,
                                force=True,
                                config='foo',
                                protocol_override='sso',
@@ -271,6 +274,45 @@ class TestGclientGitCheckout(unittest.TestCase):
         args = self.run_gclient.call_args_list[0][0]
         self.assertEqual('config', args[0])
         self.assertIn('foo', args[2])
+
+
+class TestRunGitCache(unittest.TestCase):
+    """Tests for the --git-cache cache_dir injection in fetch.run()."""
+
+    def setUp(self):
+        mock.patch('sys.stdout', StringIO()).start()
+        mock.patch('gclient_utils.IsEnvCog', return_value=False).start()
+        mock.patch('utils.depot_tools_cache_dir',
+                   return_value='/cache_root/depot_tools').start()
+        self.factory = mock.patch('fetch.CheckoutFactory').start()
+        self.factory.return_value.exists.return_value = False
+        self.addCleanup(mock.patch.stopall)
+
+    def _run(self, git_cache):
+        spec = {'type': 'gclient_git', 'gclient_git_spec': {'solutions': []}}
+        opts = argparse.Namespace(git_cache=git_cache,
+                                  protocol_override=None,
+                                  force=False)
+        fetch.run(opts, spec, 'root')
+        # The (possibly mutated) checkout spec handed to CheckoutFactory.
+        return self.factory.call_args[0][2]
+
+    @mock.patch.dict(os.environ, {}, clear=False)
+    def test_git_cache_uses_default_dir(self):
+        os.environ.pop('GIT_CACHE_PATH', None)
+        spec = self._run(git_cache=True)
+        self.assertEqual(os.path.join('/cache_root/depot_tools', 'git_cache'),
+                         spec['cache_dir'])
+
+    @mock.patch.dict(os.environ, {'GIT_CACHE_PATH': '/custom/cache'},
+                     clear=False)
+    def test_git_cache_respects_env(self):
+        spec = self._run(git_cache=True)
+        self.assertEqual('/custom/cache', spec['cache_dir'])
+
+    def test_no_flag_leaves_cache_dir_unset(self):
+        spec = self._run(git_cache=False)
+        self.assertNotIn('cache_dir', spec)
 
 
 if __name__ == '__main__':

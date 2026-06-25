@@ -27,6 +27,7 @@ import sys
 import caffeinate
 import gclient_utils
 import git_common
+import utils
 
 from distutils import spawn
 
@@ -206,6 +207,13 @@ def handle_args(argv):
         default=False,
         help='Perform shallow clones, don\'t fetch the full git history.')
     parser.add_argument(
+        '--git-cache',
+        action='store_true',
+        default=False,
+        help='Speed up the initial checkout by using a shared git cache that '
+        'is bootstrapped from a prebuilt snapshot. The cache directory is '
+        'chosen automatically unless $GIT_CACHE_PATH is set.')
+    parser.add_argument(
         '--force',
         action='store_true',
         default=False,
@@ -288,6 +296,11 @@ def run(options, spec, root):
     assert 'type' in spec
     checkout_type = spec['type']
     checkout_spec = spec['%s_spec' % checkout_type]
+
+    if options.git_cache and 'cache_dir' not in checkout_spec:
+        checkout_spec['cache_dir'] = (
+            os.environ.get('GIT_CACHE_PATH')
+            or os.path.join(utils.depot_tools_cache_dir(), 'git_cache'))
 
     # Update solutions with protocol_override field
     if options.protocol_override is not None:
