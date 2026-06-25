@@ -107,6 +107,23 @@ scripts/luci_triage.py check-test \
   and automatically wraps your regex with `.*` for partial matching. It fetches
   all results (expected and unexpected) for matching tests.
 
+## 7. Get Test History
+
+Query LUCI Analysis for the historical verdicts of a specific test variant:
+
+```bash
+scripts/luci_triage.py test-history \
+  --project <PROJECT> \
+  --test-id "<TEST_ID>" \
+  [--limit <LIMIT>] \
+  [--builder <BUILDER>] \
+  [--bucket <BUCKET>] \
+  [--device-os <DEVICE_OS>] \
+  [--device-type <DEVICE_TYPE>] \
+  [--os <OS>] \
+  [--test-suite <TEST_SUITE>]
+```
+
 ## Implementation Notes
 
 1. **Task-Based Triage:** A shard crash often manifests as

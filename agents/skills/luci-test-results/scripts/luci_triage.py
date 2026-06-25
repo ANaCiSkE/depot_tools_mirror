@@ -263,6 +263,43 @@ def check_test(build_id, test_regex):
     return matching_tests
 
 
+def test_history(project,
+                 test_id,
+                 limit=None,
+                 builder=None,
+                 bucket=None,
+                 device_os=None,
+                 device_type=None,
+                 os=None,
+                 test_suite=None):
+    """Queries LUCI Analysis for the test history of a specific test variant."""
+    variant_def = {}
+    if builder: variant_def['builder'] = builder
+    if bucket: variant_def['bucket'] = bucket
+    if device_os: variant_def['device_os'] = device_os
+    if device_type: variant_def['device_type'] = device_type
+    if os: variant_def['os'] = os
+    if test_suite: variant_def['test_suite'] = test_suite
+
+    predicate = {}
+    if variant_def:
+        predicate['variantPredicate'] = {'contains': {'def': variant_def}}
+
+    payload = {
+        'project': project,
+        'testId': test_id,
+        'predicate': predicate,
+    }
+    if limit:
+        payload['pageSize'] = int(limit)
+
+    result = run_prpc('analysis.api.luci.app',
+                      'luci.analysis.v1.TestHistory.Query', payload)
+    if not result or 'verdicts' not in result:
+        return []
+    return result['verdicts']
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser()
@@ -305,6 +342,18 @@ def main():
     p.add_argument('--build-id', required=True)
     p.add_argument('--test-regex', required=True)
 
+    # test-history
+    p = subparsers.add_parser('test-history')
+    p.add_argument('--project', default='chromium')
+    p.add_argument('--test-id', required=True)
+    p.add_argument('--limit', type=int, default=10)
+    p.add_argument('--builder')
+    p.add_argument('--bucket')
+    p.add_argument('--device-os')
+    p.add_argument('--device-type')
+    p.add_argument('--os')
+    p.add_argument('--test-suite')
+
     args = parser.parse_args()
 
     if args.command == 'resolve-build-id':
@@ -324,6 +373,17 @@ def main():
         print(fetch_log_snippet(args.res, args.raw))
     elif args.command == 'check-test':
         print(json.dumps(check_test(args.build_id, args.test_regex), indent=2))
+    elif args.command == 'test-history':
+        verdicts = test_history(args.project,
+                                args.test_id,
+                                args.limit,
+                                builder=args.builder,
+                                bucket=args.bucket,
+                                device_os=args.device_os,
+                                device_type=args.device_type,
+                                os=args.os,
+                                test_suite=args.test_suite)
+        print(json.dumps(verdicts, indent=2))
 
 
 if __name__ == '__main__':
