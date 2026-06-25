@@ -417,5 +417,59 @@ class ValidateRestrictedLicenseTest(unittest.TestCase):
             len(license_errors), 0,
             "Should not create an error when a restricted license is used")
 
+    def test_gpl_license_not_shipped_allowed(self):
+        # Test content with a GPL license and Shipped: no.
+        content = """Name: Test GPL no shipped
+Short Name: test-gpl-no-shipped
+URL: https://example.com
+Version: 1.0
+Date: 2020-12-03
+License: GPL-2.0
+License File: LICENSE
+Security Critical: yes
+Shipped: no
+Description:
+Test GPL no shipped.
+"""
+        results = metadata.validate.validate_content(
+            content=content,
+            source_file_dir=_SOURCE_FILE_DIR,
+            repo_root_dir=_THIS_DIR,
+            is_open_source_project=False)
+        license_warnings = [
+            r for r in results if not r.is_fatal()
+            and "License not in the allowlist" in r.get_reason()
+        ]
+        self.assertEqual(
+            len(license_warnings), 0,
+            "Should not create a warning when GPL is used and not shipped")
+
+    def test_gpl_license_shipped_warns(self):
+        # Test content with a GPL license and Shipped: yes.
+        content = """Name: Test GPL shipped
+Short Name: test-gpl-shipped
+URL: https://example.com
+Version: 1.0
+Date: 2020-12-03
+License: GPL-2.0
+License File: LICENSE
+Security Critical: yes
+Shipped: yes
+Description:
+Test GPL shipped.
+"""
+        results = metadata.validate.validate_content(
+            content=content,
+            source_file_dir=_SOURCE_FILE_DIR,
+            repo_root_dir=_THIS_DIR,
+            is_open_source_project=False)
+        license_warnings = [
+            r for r in results if not r.is_fatal()
+            and "License not in the allowlist" in r.get_reason()
+        ]
+        self.assertEqual(
+            len(license_warnings), 1,
+            "Should create a warning when GPL is used and shipped")
+
 if __name__ == "__main__":
     unittest.main()

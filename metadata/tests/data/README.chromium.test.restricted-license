@@ -7,7 +7,7 @@ Unknown Field: Should be extracted into a field, because the preceding URL
                line, even if the field name isn't well known to us.
 Version: 1.0.12
 Date: 2020-12-03
-License: GPL-2.0
+License: LGPL-2.0
 License File: LICENSE
 Security Critical: yes
 Shipped: yes

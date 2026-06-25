@@ -63,6 +63,7 @@ STATUS_ALLOWED = "ALLOWED"
 STATUS_APPROVED = "APPROVED"
 STATUS_UNKNOWN = "UNKNOWN"
 STATUS_RECIPROCAL_NOT_ALLOWED = "RECIPROCAL_NOT_ALLOWED"
+STATUS_NOT_ALLOWED_SHIPPED = "NOT_ALLOWED_SHIPPED"
 
 _ALLOWED_SPDX_LICENSES = frozenset([
     # unencumbered.
@@ -228,14 +229,15 @@ _OPEN_SOURCE_SPDX_LICENSES = frozenset([
     # go/keep-sorted end
 ])
 
-# TODO(b/388620886): Implement warning when changing to or from these licenses
-# (but not every time the README.chromium file is modified).
+_ONLY_ALLOWED_NOT_SHIPPED = frozenset([
+    "GPL-2.0",
+    "GPL-3.0",
+])
+
 _WITH_PERMISSION_ONLY = frozenset([
     # restricted.
     # go/keep-sorted start case=no
     "CC-BY-SA-3.0",
-    "GPL-2.0",
-    "GPL-3.0",
     "LGPL-2.0",
     "LGPL-2.1",
     "LGPL-3.0",
@@ -260,7 +262,7 @@ _ALLOWED_LICENSES = (_ALLOWED_SPDX_LICENSES
                      | _EXTENDED_LICENSE_CLASSIFIERS
                      | _ALLOWED_REFERENCES)
 _ALLOWED_OPEN_SOURCE_LICENSES = _ALLOWED_LICENSES | _OPEN_SOURCE_SPDX_LICENSES
-_ALL_LICENSES = _ALLOWED_OPEN_SOURCE_LICENSES | _WITH_PERMISSION_ONLY
+_ALL_LICENSES = _ALLOWED_OPEN_SOURCE_LICENSES | _WITH_PERMISSION_ONLY | _ONLY_ALLOWED_NOT_SHIPPED
 
 
 # TODO(https://crbug.com/452151523): Remove this after migrating downstream
@@ -309,11 +311,20 @@ def is_with_permission_only(value: str) -> bool:
     return _license_in_list(value, _WITH_PERMISSION_ONLY)
 
 
+def is_only_allowed_not_shipped(value: str) -> bool:
+    return _license_in_list(value, _ONLY_ALLOWED_NOT_SHIPPED)
+
+
 def is_license_allowed(value: str,
-                       is_open_source_project: bool = False) -> bool:
+                       is_open_source_project: bool = False,
+                       is_shipped: Optional[bool] = False) -> bool:
     """Returns whether the value is in the allowlist for license
     types.
     """
+    # These licenses are only allowed if NOT shipped.
+    if is_only_allowed_not_shipped(value):
+        return is_shipped is False
+
     # Restricted licenses are not enforced by presubmits, see b/388620886 😢.
     if is_with_permission_only(value):
         return True
@@ -343,11 +354,11 @@ def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
     return covered
 
 
-def get_license_validation_status(
-        license_value: str,
-        source_file_dir: Optional[str] = None,
-        is_open_source_project: bool = True,
-        android_compatible: Optional[str] = None) -> str:
+def get_license_validation_status(license_value: str,
+                                  source_file_dir: Optional[str] = None,
+                                  is_open_source_project: bool = True,
+                                  android_compatible: Optional[str] = None,
+                                  is_shipped: Optional[bool] = False) -> str:
     """Evaluates the validation status of a license value.
 
     Returns 'ALLOWED' if all licenses are allowed, or a combination of:
@@ -361,6 +372,7 @@ def get_license_validation_status(
       is_open_source_project: Whether the project is open source (reciprocal
         licenses are disallowed in non-open-source projects).
       android_compatible: Optional string value of 'License Android Compatible' field.
+      is_shipped: Optional string value of 'Shipped' field.
     """
     if not license_value:
         return STATUS_UNKNOWN
@@ -372,10 +384,11 @@ def get_license_validation_status(
     unknown_licenses = []
     approved_licenses = []
     reciprocal_not_allowed_licenses = []
+    not_allowed_shipped_licenses = []
 
     for license in licenses:
         # Check if globally allowed.
-        if is_license_allowed(license, is_open_source_project):
+        if is_license_allowed(license, is_open_source_project, is_shipped):
             continue
 
         # Reciprocal in internal requires 'Android Compatible = yes'.
@@ -390,7 +403,10 @@ def get_license_validation_status(
 
         # Source dir is required to check restrictive_license_approval.textproto.
         if not source_file_dir:
-            unknown_licenses.append(license)
+            if is_only_allowed_not_shipped(license):
+                not_allowed_shipped_licenses.append(license)
+            else:
+                unknown_licenses.append(license)
             continue
 
         # Look for a restrictive license approval if it's not in the allowlist.
@@ -414,10 +430,15 @@ def get_license_validation_status(
         if is_approved:
             approved_licenses.append((license, bug))
         else:
-            unknown_licenses.append(license)
+            if is_only_allowed_not_shipped(license):
+                not_allowed_shipped_licenses.append(license)
+            else:
+                unknown_licenses.append(license)
 
     # Construct status string.
-    if not unknown_licenses and not approved_licenses and not reciprocal_not_allowed_licenses:
+    if (not unknown_licenses and not approved_licenses
+            and not reciprocal_not_allowed_licenses
+            and not not_allowed_shipped_licenses):
         return STATUS_ALLOWED
 
     parts = []
@@ -427,6 +448,11 @@ def get_license_validation_status(
     if reciprocal_not_allowed_licenses:
         parts.append(
             f"{STATUS_RECIPROCAL_NOT_ALLOWED}[{', '.join(reciprocal_not_allowed_licenses)}]"
+        )
+
+    if not_allowed_shipped_licenses:
+        parts.append(
+            f"{STATUS_NOT_ALLOWED_SHIPPED}[{', '.join(not_allowed_shipped_licenses)}]"
         )
 
     if approved_licenses:
