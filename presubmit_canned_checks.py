@@ -1256,6 +1256,7 @@ def GetUnitTestsRecursively(input_api,
                             directory,
                             files_to_check,
                             files_to_skip,
+                            env=None,
                             run_on_python2=False,
                             run_on_python3=True,
                             skip_shebang_check=True):
@@ -1290,7 +1291,7 @@ def GetUnitTestsRecursively(input_api,
                 % (found, files_to_check, files_to_skip, directory))
         ]
 
-    return GetUnitTests(input_api, output_api, tests)
+    return GetUnitTests(input_api, output_api, tests, env)
 
 
 def GetPythonUnitTests(input_api, output_api, unit_tests, python3=False):
