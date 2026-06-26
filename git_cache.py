@@ -28,11 +28,27 @@ GC_AUTOPACKLIMIT = 50
 GIT_CACHE_CORRUPT_MESSAGE = 'WARNING: The Git cache is corrupt.'
 INIT_SENTIENT_FILE = ".mirror_init"
 
-# gsutil creates many processes and threads. Creating too many gsutil cp
-# processes may result in running out of resources, and may perform worse due to
-# contextr switching. This limits how many concurrent gsutil cp processes
-# git_cache runs.
-GSUTIL_CP_SEMAPHORE = threading.Semaphore(2)
+def _bootstrap_concurrency():
+    """Max concurrent gsutil snapshot downloads.
+
+    Every dependency snapshot but the root repo's is small, so the per-call
+    gsutil spawn + network round-trip dominates and concurrent downloads are
+    cheap on bandwidth. The cap therefore tracks the sync's own parallelism
+    (gclient's default job count) instead of throttling below it; a lower cap
+    just leaves most snapshots queued behind the latency of a few. Override with
+    $GIT_CACHE_BOOTSTRAP_CONCURRENCY (gsutil spawns many threads, so a lower
+    value can ease resource pressure on very large fetches).
+    """
+    env = os.environ.get('GIT_CACHE_BOOTSTRAP_CONCURRENCY')
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    return max(8, gclient_utils.NumLocalCpus())
+
+
+GSUTIL_CP_SEMAPHORE = threading.Semaphore(_bootstrap_concurrency())
 
 try:
     # pylint: disable=undefined-variable

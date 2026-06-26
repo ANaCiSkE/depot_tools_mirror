@@ -18,6 +18,7 @@ DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
 from testing_support import coverage_utils
+import gclient_utils
 import git_cache
 
 
@@ -345,6 +346,30 @@ class GitCacheDirTest(unittest.TestCase):
                     os.environ.pop(name, None)
                 else:
                     os.environ[name] = val
+
+
+class BootstrapConcurrencyTest(unittest.TestCase):
+    def test_default_tracks_sync_parallelism(self):
+        with mock.patch.dict('os.environ', clear=False):
+            os.environ.pop('GIT_CACHE_BOOTSTRAP_CONCURRENCY', None)
+            self.assertEqual(git_cache._bootstrap_concurrency(),
+                             max(8, gclient_utils.NumLocalCpus()))
+
+    def test_override(self):
+        with mock.patch.dict('os.environ',
+                             {'GIT_CACHE_BOOTSTRAP_CONCURRENCY': '32'}):
+            self.assertEqual(git_cache._bootstrap_concurrency(), 32)
+
+    def test_clamped_to_at_least_one(self):
+        with mock.patch.dict('os.environ',
+                             {'GIT_CACHE_BOOTSTRAP_CONCURRENCY': '0'}):
+            self.assertEqual(git_cache._bootstrap_concurrency(), 1)
+
+    def test_garbage_falls_back_to_default(self):
+        with mock.patch.dict('os.environ',
+                             {'GIT_CACHE_BOOTSTRAP_CONCURRENCY': 'lots'}):
+            self.assertEqual(git_cache._bootstrap_concurrency(),
+                             max(8, gclient_utils.NumLocalCpus()))
 
 
 class MirrorTest(unittest.TestCase):
