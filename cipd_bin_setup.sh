@@ -21,12 +21,33 @@ function cipd_bin_setup {
         ROOT=$(<"${CIPD_ROOT_OVERRIDE_FILE}")
     fi
 
-    (
-    source "$MYPATH/cipd" ensure \
-        -log-level warning \
-        -ensure-file "$ENSURE" \
-        -root "$ROOT"
-    )
+    local CACHED_ENSURE="$ROOT/.cipd_manifest.txt"
+    local CACHED_VERSIONS="$ROOT/.cipd_manifest.versions"
+    local CACHED_CLIENT="$ROOT/.cipd_client_version"
+
+    # CIPD ensure is slow (hundreds of milliseconds). We cache the result by
+    # storing copies of the input files and comparing them on subsequent runs.
+    # We use `cmp` (content-based) instead of `mtime` comparison to avoid
+    # false-positive cache misses on CI bots where git checkouts reset mtimes.
+    if [ ! -f "$CACHED_ENSURE" ] || \
+       ! cmp -s "$ENSURE" "$CACHED_ENSURE" || \
+       ! cmp -s "$MYPATH/cipd_manifest.versions" "$CACHED_VERSIONS" || \
+       ! cmp -s "$MYPATH/cipd_client_version" "$CACHED_CLIENT"; then
+
+        rm -f "$CACHED_ENSURE"
+
+        (
+        source "$MYPATH/cipd" ensure \
+            -log-level warning \
+            -ensure-file "$ENSURE" \
+            -root "$ROOT"
+        )
+        if [ $? -eq 0 ]; then
+            cp "$ENSURE" "$CACHED_ENSURE" && \
+            cp "$MYPATH/cipd_manifest.versions" "$CACHED_VERSIONS" && \
+            cp "$MYPATH/cipd_client_version" "$CACHED_CLIENT"
+        fi
+    fi
 
     echo $ROOT
 }
