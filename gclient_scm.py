@@ -788,9 +788,16 @@ class GitWrapper(SCMWrapper):
             revision = deps_revision
             managed = False
         if not revision:
-            # If a dependency is not pinned, track the default remote branch.
-            revision = scm.GIT.GetRemoteHeadRef(self.checkout_path, self.url,
-                                                self.remote)
+            # Track the default remote branch. Prefer the git cache bootstrap
+            # snapshot's HEAD (cheap) over a full `git ls-remote`, falling back
+            # to the network when there is no snapshot.
+            mirror = self._GetMirror(url, options)
+            branch = mirror.get_bootstrap_default_branch() if mirror else None
+            if branch:
+                revision = 'refs/remotes/%s/%s' % (self.remote, branch)
+            else:
+                revision = scm.GIT.GetRemoteHeadRef(self.checkout_path,
+                                                    self.url, self.remote)
         if revision.startswith('origin/'):
             revision = 'refs/remotes/' + revision
 

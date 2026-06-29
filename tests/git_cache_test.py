@@ -372,6 +372,53 @@ class BootstrapConcurrencyTest(unittest.TestCase):
                              max(8, gclient_utils.NumLocalCpus()))
 
 
+class GetBootstrapDefaultBranchTest(unittest.TestCase):
+    def setUp(self):
+        self.cache_dir = tempfile.mkdtemp(prefix='gc_defbranch_')
+        self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
+        git_cache.Mirror.SetCachePath(self.cache_dir)
+
+    def _patched(self, ls_lines, head='ref: refs/heads/main\n', ls_code=0):
+        class _FakeGsutil:
+            def __init__(self, *a, **k):
+                pass
+
+            def check_call(self, *args):
+                if args[0] == 'ls':
+                    return (ls_code, '\n'.join(ls_lines), '')
+                if args[0] == 'cat':
+                    return (0, head, '')
+                return (1, '', '')
+
+        return mock.patch.object(git_cache, 'Gsutil', _FakeGsutil)
+
+    def test_reads_default_branch_from_snapshot_head(self):
+        m = git_cache.Mirror('https://chromium.googlesource.com/foo/bar')
+        gp = m._gs_path
+        with self._patched(['%s/42/' % gp, '%s/42.ready' % gp]):
+            self.assertEqual(m.get_bootstrap_default_branch(), 'main')
+
+    def test_respects_non_main_default(self):
+        m = git_cache.Mirror('https://chromium.googlesource.com/foo/bar')
+        gp = m._gs_path
+        with self._patched(['%s/7/' % gp, '%s/7.ready' % gp],
+                           head='ref: refs/heads/master\n'):
+            self.assertEqual(m.get_bootstrap_default_branch(), 'master')
+
+    def test_bucket_without_snapshot_returns_none(self):
+        # Supported host, but no snapshot uploaded for this repo yet.
+        m = git_cache.Mirror('https://chromium.googlesource.com/foo/bar')
+        with self._patched([]):
+            self.assertIsNone(m.get_bootstrap_default_branch())
+
+    def test_unsupported_host_returns_none(self):
+        # Host has no bootstrap bucket at all.
+        with mock.patch.dict('os.environ', clear=False):
+            os.environ.pop('OVERRIDE_BOOTSTRAP_BUCKET', None)
+            m = git_cache.Mirror('https://unknown.example.com/foo/bar')
+            self.assertIsNone(m.get_bootstrap_default_branch())
+
+
 class MirrorTest(unittest.TestCase):
     def test_same_cache_for_authenticated_and_unauthenticated_urls(self):
         # GoB can fetch a repo via two different URLs; if the url contains '/a/'

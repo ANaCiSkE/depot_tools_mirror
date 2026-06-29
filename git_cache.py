@@ -279,6 +279,29 @@ class Mirror(object):
                 value_regex
             ])
 
+    def get_bootstrap_default_branch(self):
+        """Return the default branch (e.g. 'main') from the latest bootstrap
+        snapshot's HEAD, or None if unavailable.
+        """
+        if not self.bootstrap_bucket:
+            return None
+        try:
+            gsutil = Gsutil(self.gsutil_exe, boto_path=None)
+            code, ls_out, _ = gsutil.check_call('ls', self._gs_path)
+            if code:
+                return None
+            latest = self._GetMostRecentCacheDirectory(
+                set(ls_out.strip().splitlines()))
+            if not latest:
+                return None
+            code, head, _ = gsutil.check_call('cat', latest + '/HEAD')
+            if code:
+                return None
+            m = re.match(r'ref:\s*refs/heads/(\S+)', head.strip())
+            return m.group(1) if m else None
+        except Exception:
+            return None
+
     def bootstrap_repo(self, directory):
         """Bootstrap the repo from Google Storage if possible.
 
