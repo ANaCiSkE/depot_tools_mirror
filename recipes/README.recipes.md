@@ -47,6 +47,7 @@
   * [tryserver:tests/gerrit_change_target_ref](#recipes-tryserver_tests_gerrit_change_target_ref)
   * [tryserver:tests/get_change_description](#recipes-tryserver_tests_get_change_description)
   * [tryserver:tests/get_files_affected_by_patch](#recipes-tryserver_tests_get_files_affected_by_patch)
+  * [tryserver:tests/get_files_affected_by_patch_with_submodules](#recipes-tryserver_tests_get_files_affected_by_patch_with_submodules)
   * [tryserver:tests/get_footers](#recipes-tryserver_tests_get_footers)
   * [tryserver:tests/require_is_tryserver](#recipes-tryserver_tests_require_is_tryserver)
   * [windows_sdk:examples/full](#recipes-windows_sdk_examples_full)
@@ -919,76 +920,76 @@ Args:
 [DEPS](/recipes/recipe_modules/tryserver/__init__.py#6): [gerrit](#recipe_modules-gerrit), [git](#recipe_modules-git), [git\_cl](#recipe_modules-git_cl), [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/led][recipe_engine/recipe_modules/led], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step]
 
 
-#### **class [TryserverApi](/recipes/recipe_modules/tryserver/api.py#27)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
+#### **class [TryserverApi](/recipes/recipe_modules/tryserver/api.py#49)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
 
-&emsp; **@property**<br>&mdash; **def [constants](/recipes/recipe_modules/tryserver/api.py#51)(self):**
+&emsp; **@property**<br>&mdash; **def [constants](/recipes/recipe_modules/tryserver/api.py#73)(self):**
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change](/recipes/recipe_modules/tryserver/api.py#56)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change](/recipes/recipe_modules/tryserver/api.py#78)(self):**
 
 Returns current gerrit change, if there is exactly one.
 
 Returns a self.m.buildbucket.common_pb2.GerritChange or None.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_fetch\_ref](/recipes/recipe_modules/tryserver/api.py#158)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_fetch\_ref](/recipes/recipe_modules/tryserver/api.py#180)(self):**
 
 Returns gerrit patch ref, e.g. "refs/heads/45/12345/6, or None.
 
 Populated iff gerrit_change is populated.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_number](/recipes/recipe_modules/tryserver/api.py#176)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_number](/recipes/recipe_modules/tryserver/api.py#198)(self):**
 
 Returns gerrit change patchset, e.g. 12345 for a patch ref of
 "refs/heads/45/12345/6".
 
 Populated iff gerrit_change is populated. Returns None if not populated.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_owner](/recipes/recipe_modules/tryserver/api.py#88)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_owner](/recipes/recipe_modules/tryserver/api.py#110)(self):**
 
 Returns owner of the current Gerrit CL.
 
 Populated iff gerrit_change is populated.
 Is a dictionary with keys like "name".
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_repo\_host](/recipes/recipe_modules/tryserver/api.py#72)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_repo\_host](/recipes/recipe_modules/tryserver/api.py#94)(self):**
 
 Returns the host of the gitiles repo of the current Gerrit CL.
 
 Populated iff gerrit_change is populated.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_repo\_project](/recipes/recipe_modules/tryserver/api.py#80)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_repo\_project](/recipes/recipe_modules/tryserver/api.py#102)(self):**
 
 Returns the project of the gitiles repo of the current Gerrit CL.
 
 Populated iff gerrit_change is populated.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_repo\_url](/recipes/recipe_modules/tryserver/api.py#64)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_repo\_url](/recipes/recipe_modules/tryserver/api.py#86)(self):**
 
 Returns canonical URL of the gitiles repo of the current Gerrit CL.
 
 Populated iff gerrit_change is populated.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_review\_url](/recipes/recipe_modules/tryserver/api.py#98)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_review\_url](/recipes/recipe_modules/tryserver/api.py#120)(self):**
 
 Returns the review URL for the active patchset.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_change\_target\_ref](/recipes/recipe_modules/tryserver/api.py#167)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_change\_target\_ref](/recipes/recipe_modules/tryserver/api.py#189)(self):**
 
 Returns gerrit change destination ref, e.g. "refs/heads/main".
 
 Populated iff gerrit_change is populated.
 
-&emsp; **@property**<br>&mdash; **def [gerrit\_patchset\_number](/recipes/recipe_modules/tryserver/api.py#188)(self):**
+&emsp; **@property**<br>&mdash; **def [gerrit\_patchset\_number](/recipes/recipe_modules/tryserver/api.py#210)(self):**
 
 Returns gerrit change patchset, e.g. 6 for a patch ref of
 "refs/heads/45/12345/6".
 
 Populated iff gerrit_change is populated Returns None if not populated..
 
-&mdash; **def [get\_change\_description](/recipes/recipe_modules/tryserver/api.py#390)(self):**
+&mdash; **def [get\_change\_description](/recipes/recipe_modules/tryserver/api.py#632)(self):**
 
 Gets the CL description.
 
-&mdash; **def [get\_files\_affected\_by\_patch](/recipes/recipe_modules/tryserver/api.py#234)(self, patch_root, report_files_via_property=None, \*\*kwargs):**
+&mdash; **def [get\_files\_affected\_by\_patch](/recipes/recipe_modules/tryserver/api.py#256)(self, patch_root, report_files_via_property=None, \*\*kwargs):**
 
 Returns list of paths to files affected by the patch.
 
@@ -1000,45 +1001,52 @@ Args:
 
 Returned paths will be relative to to api.path['root'].
 
-&mdash; **def [get\_footer](/recipes/recipe_modules/tryserver/api.py#382)(self, tag, patch_text=None):**
+&mdash; **def [get\_files\_affected\_by\_patch\_with\_submodules](/recipes/recipe_modules/tryserver/api.py#297)(self, patch_root, report_files_via_property=None, \*\*kwargs):**
+
+Returns a SubmodulePathsResult containing affected files and submodule metadata.
+
+This is an extended version of get_files_affected_by_patch that also detects
+and expands submodule diffs.
+
+&mdash; **def [get\_footer](/recipes/recipe_modules/tryserver/api.py#624)(self, tag, patch_text=None):**
 
 Gets a specific tag from a CL description
 
-&mdash; **def [get\_footers](/recipes/recipe_modules/tryserver/api.py#336)(self, patch_text=None):**
+&mdash; **def [get\_footers](/recipes/recipe_modules/tryserver/api.py#578)(self, patch_text=None):**
 
 Retrieves footers from the patch description.
 
 footers are machine readable tags embedded in commit messages. See
 git-footers documentation for more information.
 
-&mdash; **def [initialize](/recipes/recipe_modules/tryserver/api.py#42)(self):**
+&mdash; **def [initialize](/recipes/recipe_modules/tryserver/api.py#64)(self):**
 
-&emsp; **@property**<br>&mdash; **def [is\_gerrit\_issue](/recipes/recipe_modules/tryserver/api.py#205)(self):**
+&emsp; **@property**<br>&mdash; **def [is\_gerrit\_issue](/recipes/recipe_modules/tryserver/api.py#227)(self):**
 
 Returns true iff the properties exist to match a Gerrit issue.
 
-&emsp; **@property**<br>&mdash; **def [is\_patch\_in\_git](/recipes/recipe_modules/tryserver/api.py#215)(self):**
+&emsp; **@property**<br>&mdash; **def [is\_patch\_in\_git](/recipes/recipe_modules/tryserver/api.py#237)(self):**
 
-&emsp; **@property**<br>&mdash; **def [is\_tryserver](/recipes/recipe_modules/tryserver/api.py#200)(self):**
+&emsp; **@property**<br>&mdash; **def [is\_tryserver](/recipes/recipe_modules/tryserver/api.py#222)(self):**
 
 Returns true iff we have a change to check out.
 
-&mdash; **def [normalize\_footer\_name](/recipes/recipe_modules/tryserver/api.py#387)(self, footer):**
+&mdash; **def [normalize\_footer\_name](/recipes/recipe_modules/tryserver/api.py#629)(self, footer):**
 
-&mdash; **def [require\_is\_tryserver](/recipes/recipe_modules/tryserver/api.py#221)(self):**
+&mdash; **def [require\_is\_tryserver](/recipes/recipe_modules/tryserver/api.py#243)(self):**
 
-&mdash; **def [set\_change](/recipes/recipe_modules/tryserver/api.py#395)(self, change):**
+&mdash; **def [set\_change](/recipes/recipe_modules/tryserver/api.py#637)(self, change):**
 
 Set the gerrit change for this module.
 
 Args:
   * change: a self.m.buildbucket.common_pb2.GerritChange.
 
-&mdash; **def [set\_compile\_failure\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#299)(self):**
+&mdash; **def [set\_compile\_failure\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#541)(self):**
 
 Mark the tryjob result as a compile failure.
 
-&mdash; **def [set\_invalid\_test\_results\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#311)(self):**
+&mdash; **def [set\_invalid\_test\_results\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#553)(self):**
 
 Mark the tryjob result as having invalid test results.
 
@@ -1046,39 +1054,39 @@ This means we run some tests, but the results were not valid
 (e.g. no list of specific test cases that failed, or too many
 tests failing, etc).
 
-&mdash; **def [set\_patch\_failure\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#295)(self):**
+&mdash; **def [set\_patch\_failure\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#537)(self):**
 
 Mark the tryjob result as failure to apply the patch.
 
-&mdash; **def [set\_subproject\_tag](/recipes/recipe_modules/tryserver/api.py#273)(self, subproject_tag):**
+&mdash; **def [set\_subproject\_tag](/recipes/recipe_modules/tryserver/api.py#515)(self, subproject_tag):**
 
 Adds a subproject tag to the build.
 
 This can be used to distinguish between builds that execute different steps
 depending on what was patched, e.g. blink vs. pure chromium patches.
 
-&mdash; **def [set\_test\_expired\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#328)(self):**
+&mdash; **def [set\_test\_expired\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#570)(self):**
 
 Mark the tryjob result as a test expiration.
 
 This means a test task expired and was never scheduled, most likely due to
 lack of capacity.
 
-&mdash; **def [set\_test\_failure\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#303)(self):**
+&mdash; **def [set\_test\_failure\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#545)(self):**
 
 Mark the tryjob result as a test failure.
 
 This means we started running actual tests (not prerequisite steps
 like checkout or compile), and some of these tests have failed.
 
-&mdash; **def [set\_test\_timeout\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#320)(self):**
+&mdash; **def [set\_test\_timeout\_tryjob\_result](/recipes/recipe_modules/tryserver/api.py#562)(self):**
 
 Mark the tryjob result as a test timeout.
 
 This means tests were scheduled but didn't finish executing within the
 timeout.
 
-&emsp; **@property**<br>&mdash; **def [valid\_footers](/recipes/recipe_modules/tryserver/api.py#47)(self):**
+&emsp; **@property**<br>&mdash; **def [valid\_footers](/recipes/recipe_modules/tryserver/api.py#69)(self):**
 ### *recipe_modules* / [windows\_sdk](/recipes/recipe_modules/windows_sdk)
 
 [DEPS](/recipes/recipe_modules/windows_sdk/__init__.py#6): [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/step][recipe_engine/recipe_modules/step]
@@ -1303,6 +1311,12 @@ Move things around in a loop!
 
 
 &mdash; **def [RunSteps](/recipes/recipe_modules/tryserver/tests/get_files_affected_by_patch.py#17)(api):**
+### *recipes* / [tryserver:tests/get\_files\_affected\_by\_patch\_with\_submodules](/recipes/recipe_modules/tryserver/tests/get_files_affected_by_patch_with_submodules.py)
+
+[DEPS](/recipes/recipe_modules/tryserver/tests/get_files_affected_by_patch_with_submodules.py#7): [tryserver](#recipe_modules-tryserver), [recipe\_engine/assertions][recipe_engine/recipe_modules/assertions], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io]
+
+
+&mdash; **def [RunSteps](/recipes/recipe_modules/tryserver/tests/get_files_affected_by_patch_with_submodules.py#17)(api):**
 ### *recipes* / [tryserver:tests/get\_footers](/recipes/recipe_modules/tryserver/tests/get_footers.py)
 
 [DEPS](/recipes/recipe_modules/tryserver/tests/get_footers.py#8): [tryserver](#recipe_modules-tryserver), [recipe\_engine/assertions][recipe_engine/recipe_modules/assertions], [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties]
