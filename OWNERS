@@ -2,7 +2,6 @@ set noparent
 
 gavinmak@google.com
 yiwzhang@google.com
-bryner@google.com
 
 # Allow teams to self-manage who belongs to them.
 per-file BUILD_OWNERS=file://BUILD_OWNERS
