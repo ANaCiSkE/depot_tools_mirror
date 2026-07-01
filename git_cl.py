@@ -7634,10 +7634,8 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         'It is an error to set both.')
     parser.add_option('--js',
                       action='store_true',
-                      default=True,
                       help='Format javascript code with clang-format. '
-                      'Defaults to true. Has no effect if '
-                      '--no-clang-format is set.')
+                      'Has no effect if --no-clang-format is set.')
     parser.add_option('--diff',
                       action='store_true',
                       help='Print diff to stdout rather than modifying files.')
@@ -7738,34 +7736,29 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     if opts.js:
         clang_exts.extend(['.js', '.ts'])
 
-    formatters: list[tuple[list[str], FormatterFunction, list[str]]] = [
-        (GN_EXTS, _RunGnFormat, []),
-        (['.xml'], _RunMetricsXMLFormat, []),
-        (['.md'], _RunMarkdownFormat, []),
+    formatters: list[tuple[list[str], FormatterFunction]] = [
+        (GN_EXTS, _RunGnFormat),
+        (['.xml'], _RunMetricsXMLFormat),
+        (['.md'], _RunMarkdownFormat),
     ]
     if not opts.no_java:
-        formatters.append((['.java'], _RunGoogleJavaFormat, []))
+        formatters.append((['.java'], _RunGoogleJavaFormat))
     if opts.clang_format:
-        formatters.append((clang_exts, _RunClangFormatDiff, ['.html.ts']))
+        formatters.append((clang_exts, _RunClangFormatDiff))
     if opts.use_rust_fmt:
-        formatters.append((['.rs'], _RunRustFmt, []))
+        formatters.append((['.rs'], _RunRustFmt))
     if opts.use_swift_format:
-        formatters.append((['.swift'], _RunSwiftFormat, []))
+        formatters.append((['.swift'], _RunSwiftFormat))
     if opts.python is not False:
-        formatters.append((['.py'], _RunYapf, []))
+        formatters.append((['.py'], _RunYapf))
     if opts.mojom:
-        formatters.append((['.mojom', '.test-mojom'], _RunMojomFormat, []))
+        formatters.append((['.mojom', '.test-mojom'], _RunMojomFormat))
     if opts.lucicfg:
-        formatters.append((['.star'], _RunLUCICfgFormat, []))
+        formatters.append((['.star'], _RunLUCICfgFormat))
 
     return_value = 0
-    for item in formatters:
-        file_types, format_func, exclude_types = item
-
-        paths = [
-            p for p in diff_files if p.lower().endswith(tuple(file_types))
-            and not p.lower().endswith(tuple(exclude_types))
-        ]
+    for file_types, format_func in formatters:
+        paths = [p for p in diff_files if p.lower().endswith(tuple(file_types))]
         if not paths:
             continue
         ret = format_func(opts, paths, top_dir, diffs)
