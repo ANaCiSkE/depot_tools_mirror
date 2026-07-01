@@ -700,6 +700,8 @@ class GIT(object):
         env.setdefault('SSH_ASKPASS', 'true')
         # 'cat' is a magical git string that disables pagers on all platforms.
         env.setdefault('GIT_PAGER', 'cat')
+        # Git-on-Borg does not support Git LFS. Skip attempted checkouts.
+        env.setdefault('GIT_LFS_SKIP_SMUDGE', '1')
         return env
 
     @staticmethod
