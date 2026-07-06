@@ -194,6 +194,7 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     "Khronos",
     "Libpng-2.0",
     "OpenGLUT",
+    "opensift",
     "pffft",
     "PngSuite",
     "Punycode",
