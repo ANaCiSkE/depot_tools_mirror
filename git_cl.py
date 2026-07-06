@@ -14,7 +14,6 @@ import datetime
 import enum
 import fnmatch
 import functools
-import httplib2
 import itertools
 import json
 import logging
@@ -46,6 +45,7 @@ from typing import NoReturn
 from typing import Optional
 from typing import Sequence
 from typing import Tuple
+from typing import TypedDict
 
 import auth
 import clang_format
@@ -306,39 +306,78 @@ def _get_properties_from_options(options):
     return properties
 
 
-def _call_buildbucket(http, buildbucket_host, method, request):
-    """Calls a buildbucket v2 method and returns the parsed json response."""
-    headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-    }
-    request = json.dumps(request)
-    url = 'https://%s/prpc/buildbucket.v2.Builds/%s' % (buildbucket_host,
-                                                        method)
+class _BuildbucketTag(TypedDict, total=False):
+    key: str
+    value: str
 
-    logging.info('POST %s with %s' % (url, request))
 
-    attempts = 1
-    time_to_sleep = 1
-    while True:
-        response, content = http.request(url,
-                                         'POST',
-                                         body=request,
-                                         headers=headers)
-        if response.status == 200:
-            return json.loads(content[4:])
-        if attempts >= MAX_ATTEMPTS or 400 <= response.status < 500:
-            msg = '%s error when calling POST %s with %s: %s' % (
-                response.status, url, request, content)
-            raise BuildbucketResponseException(msg)
-        logging.debug('%s error when calling POST %s with %s. '
-                      'Sleeping for %d seconds and retrying...' %
-                      (response.status, url, request, time_to_sleep))
-        time.sleep(time_to_sleep)
-        time_to_sleep *= 2
-        attempts += 1
+class _BuildbucketSearchPredicate(TypedDict, total=False):
+    gerritChanges: List[Mapping[str, Any]]
+    builder: Mapping[str, str]
+    tags: List[_BuildbucketTag]
 
-    assert False, 'unreachable'
+
+class _BuildbucketSearchRequest(TypedDict, total=False):
+    predicate: _BuildbucketSearchPredicate
+    fields: str
+    pageSize: int
+    pageToken: str
+
+
+class _BuildbucketScheduleBuildRequest(TypedDict, total=False):
+    requestId: str
+    builder: Mapping[str, str]
+    gerritChanges: List[Mapping[str, Any]]
+    properties: Mapping[str, Any]
+    tags: List[_BuildbucketTag]
+    gitilesCommit: Mapping[str, str]
+
+
+def _buildbucket_batch(
+        buildbucket_host: str,
+        /,
+        searches: Sequence[_BuildbucketSearchRequest] = (),
+        schedules: Sequence[_BuildbucketScheduleBuildRequest] = (),
+    ) -> Mapping[str, Any]:
+    """Calls buildbucket.v2.Builds/Batch via bb and returns parsed json."""
+    requests = []
+    for s in searches:
+        requests.append({'searchBuilds': s})
+    for s in schedules:
+        requests.append({'scheduleBuild': s})
+
+    (out_str, err_str), returncode = subprocess2.communicate(
+        ['bb', 'batch', '-host', buildbucket_host],
+        stdin=json.dumps({'requests': requests}),
+        stdout=subprocess2.PIPE,
+        stderr=subprocess2.PIPE,
+        encoding='utf-8')
+    batch_res = None
+    if out_str.strip():
+        try:
+            batch_res = json.loads(out_str)
+        except ValueError:
+            pass
+
+    responses = batch_res.get('responses', []) if batch_res else []
+    has_errors = any('error' in r for r in responses)
+    if has_errors or returncode != 0:
+        msg = None if has_errors else (
+            err_str.strip() or out_str.strip() or ('exit code %d' % returncode))
+        raise BuildbucketResponseException(msg, responses=responses)
+
+    return batch_res or {}
+
+
+def _buildbucket_search(
+        buildbucket_host: str,
+        request: _BuildbucketSearchRequest) -> Mapping[str, Any]:
+    """Calls buildbucket.v2.Builds/SearchBuilds via bb and returns parsed json."""
+    batch_res = _buildbucket_batch(buildbucket_host, searches=[request])
+    responses = batch_res.get('responses', [])
+    if not responses:
+        return {}
+    return responses[0].get('searchBuilds', {})
 
 
 def _parse_bucket(raw_bucket):
@@ -361,7 +400,7 @@ def _parse_bucket(raw_bucket):
     return project, bucket
 
 
-def _canonical_git_googlesource_host(host):
+def _canonical_git_googlesource_host(host) -> str:
     """Normalizes Gerrit hosts (with '-review') to Git host."""
     assert host.endswith(_GOOGLESOURCE)
     # Prefix doesn't include '.' at the end.
@@ -403,24 +442,15 @@ def _trigger_tryjobs(changelist, jobs, options, patchset):
     if not requests:
         return
 
-    http = auth.Authenticator().authorize(httplib2.Http())
-    http.force_exception_to_status_code = True
-
-    batch_request = {'requests': requests}
-    batch_response = _call_buildbucket(http, DEFAULT_BUILDBUCKET_HOST, 'Batch',
-                                       batch_request)
-
-    errors = [
-        '  ' + response['error']['message']
-        for response in batch_response.get('responses', [])
-        if 'error' in response
-    ]
-    if errors:
-        raise BuildbucketResponseException(
-            'Failed to schedule builds for some bots:\n%s' % '\n'.join(errors))
+    _buildbucket_batch(DEFAULT_BUILDBUCKET_HOST, schedules=requests)
 
 
-def _make_tryjob_schedule_requests(changelist, jobs, options, patchset):
+def _make_tryjob_schedule_requests(
+    changelist,
+    jobs: List[Tuple[str, str, str]],
+    options,
+    patchset,
+) -> List[_BuildbucketScheduleBuildRequest]:
     """Constructs requests for Buildbucket to trigger tryjobs."""
     gerrit_changes = [changelist.GetGerritChange(patchset)]
     shared_properties = {
@@ -428,44 +458,47 @@ def _make_tryjob_schedule_requests(changelist, jobs, options, patchset):
     }
     shared_properties.update(_get_properties_from_options(options) or {})
 
-    shared_tags = [{'key': 'user_agent', 'value': 'git_cl_try'}]
+    shared_tags: List[_BuildbucketTag] = [{'key': 'user_agent', 'value': 'git_cl_try'}]
     if options.ensure_value('retry_failed', False):
         shared_tags.append({'key': 'retry_failed', 'value': '1'})
 
-    requests = []
+    requests: List[_BuildbucketScheduleBuildRequest] = []
     for (project, bucket, builder) in jobs:
         properties = shared_properties.copy()
         if 'presubmit' in builder.lower():
             properties['dry_run'] = 'true'
 
-        requests.append({
-            'scheduleBuild': {
-                'requestId': str(uuid.uuid4()),
-                'builder': {
-                    'project': getattr(options, 'project', None) or project,
-                    'bucket': bucket,
-                    'builder': builder,
-                },
-                'gerritChanges': gerrit_changes,
-                'properties': properties,
-                'tags': [
-                    {
-                        'key': 'builder',
-                        'value': builder
-                    },
-                ] + shared_tags,
-            }
-        })
+        sbr: _BuildbucketScheduleBuildRequest = {
+            'requestId': str(uuid.uuid4()),
+            'builder': {
+                'project': getattr(options, 'project', None) or project,
+                'bucket': bucket,
+                'builder': builder,
+            },
+            'gerritChanges': gerrit_changes,
+            'properties': properties,
+            'tags': [
+                _BuildbucketTag(**{
+                    'key': 'builder',
+                    'value': builder,
+                }),
+            ] + shared_tags,
+        }
 
         if options.ensure_value('revision', None):
             remote, remote_branch = changelist.GetRemoteBranch()
-            requests[-1]['scheduleBuild']['gitilesCommit'] = {
+            sbr['gitilesCommit'] = {
                 'host':
                 _canonical_git_googlesource_host(gerrit_changes[0]['host']),
                 'project': gerrit_changes[0]['project'],
                 'id': options.revision,
-                'ref': GetTargetRef(remote, remote_branch, None)
             }
+            ref = GetTargetRef(remote, remote_branch, None)
+            if ref:
+                sbr['gitilesCommit']['ref'] = ref
+
+        requests.append(sbr)
+
 
     return requests
 
@@ -476,26 +509,20 @@ def _fetch_tryjobs(changelist, buildbucket_host, patchset=None):
     Returns list of buildbucket.v2.Build with the try jobs for the changelist.
     """
     fields = ['id', 'builder', 'status', 'createTime', 'tags']
-    request = {
+    request: _BuildbucketSearchRequest = {
         'predicate': {
             'gerritChanges': [changelist.GetGerritChange(patchset)],
         },
         'fields': ','.join('builds.*.' + field for field in fields),
     }
 
-    authenticator = auth.Authenticator()
-    if authenticator.has_cached_credentials():
-        http = authenticator.authorize(httplib2.Http())
-    else:
-        print('Warning: Some results might be missing because %s' %
-              # Get the message on how to login.
-              (
-                  str(auth.LoginRequiredError()), ))
-        http = httplib2.Http()
-    http.force_exception_to_status_code = True
+    if subprocess2.call(['bb', 'auth-info'],
+                        stdout=subprocess2.DEVNULL,
+                        stderr=subprocess2.DEVNULL) == 1:
+        print('Warning: Some results might be missing because you are not '
+              'logged in. Please login first by running:\n  bb auth-login')
 
-    response = _call_buildbucket(http, buildbucket_host, 'SearchBuilds',
-                                 request)
+    response = _buildbucket_search(buildbucket_host, request)
     return response.get('builds', [])
 
 
@@ -941,7 +968,20 @@ def print_stats(args):
 
 
 class BuildbucketResponseException(Exception):
-    pass
+    def __init__(self, message: Optional[str] = None,
+                 responses: Optional[Sequence[Mapping[str, Any]]] = None):
+        self.responses = responses or []
+        if not message and self.responses:
+            errors = [
+                response['error']['message']
+                for response in self.responses
+                if 'error' in response and 'message' in response['error']
+            ]
+            if errors:
+                message = 'Buildbucket error:\n' + '\n'.join(
+                    '  ' + err for err in errors)
+        super(BuildbucketResponseException, self).__init__(
+            message or 'Unknown Buildbucket error')
 
 
 class Settings(object):
@@ -5553,7 +5593,7 @@ def GenerateGerritChangeId(message):
     return 'I%s' % change_hash.strip()
 
 
-def GetTargetRef(remote, remote_branch, target_branch):
+def GetTargetRef(remote, remote_branch, target_branch) -> Optional[str]:
     """Computes the remote branch ref to use for the CL.
 
     Args:
@@ -6781,7 +6821,7 @@ def CMDtry_results(parser, args):
     try:
         jobs = _fetch_tryjobs(cl, DEFAULT_BUILDBUCKET_HOST, patchset)
     except BuildbucketResponseException as ex:
-        print('Buildbucket error: %s' % ex)
+        print('ERROR: %s' % ex)
         return 1
     if options.json:
         write_json(options.json, jobs)

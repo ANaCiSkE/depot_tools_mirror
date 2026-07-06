@@ -692,6 +692,7 @@ class TestGitCl(unittest.TestCase):
                    }).start()
         mock.patch('git_cl.watchlists.Watchlists', WatchlistsMock).start()
         mock.patch('git_cl.auth.Authenticator', AuthenticatorMock).start()
+        mock.patch('git_cl.subprocess2.call', return_value=0).start()
         mock.patch('gerrit_util.GetChangeDetail').start()
         mock.patch(
             'git_cl.gerrit_util.GetChangeComments',
@@ -4685,9 +4686,10 @@ class CMDTestCaseBase(unittest.TestCase):
                    ).start()
         mock.patch('auth.Authenticator',
                    return_value=AuthenticatorMock()).start()
+        mock.patch('git_cl.subprocess2.call', return_value=0).start()
         mock.patch('gerrit_util.GetChangeDetail',
                    return_value=self._CHANGE_DETAIL).start()
-        mock.patch('git_cl._call_buildbucket',
+        mock.patch('git_cl._buildbucket_search',
                    return_value=self._DEFAULT_RESPONSE).start()
         mock.patch('git_common.is_dirty_git_tree', return_value=False).start()
         self.addCleanup(mock.patch.stopall)
@@ -4813,27 +4815,24 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     def testNoJobs(self):
-        git_cl._call_buildbucket.return_value = {}
+        git_cl._buildbucket_search.return_value = {}
 
         self.assertEqual(0, git_cl.main(['try-results']))
         self.assertEqual('No tryjobs scheduled.\n', sys.stdout.getvalue())
-        git_cl._call_buildbucket.assert_called_once_with(
-            mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
-            self._DEFAULT_REQUEST)
+        git_cl._buildbucket_search.assert_called_once_with(
+            'cr-buildbucket.appspot.com', self._DEFAULT_REQUEST)
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     def testTrivialCommits(self):
         self.assertEqual(0, git_cl.main(['try-results']))
-        git_cl._call_buildbucket.assert_called_with(
-            mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
-            self._DEFAULT_REQUEST)
+        git_cl._buildbucket_search.assert_called_with(
+            'cr-buildbucket.appspot.com', self._DEFAULT_REQUEST)
 
-        git_cl._call_buildbucket.return_value = {}
+        git_cl._buildbucket_search.return_value = {}
         self.assertEqual(0, git_cl.main(['try-results', '--patchset', '7']))
-        git_cl._call_buildbucket.assert_called_with(
-            mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
-            self._TRIVIAL_REQUEST)
+        git_cl._buildbucket_search.assert_called_with(
+            'cr-buildbucket.appspot.com', self._TRIVIAL_REQUEST)
         self.assertEqual([
             'Successes:',
             '  bot_success            https://ci.chromium.org/b/103',
@@ -4876,9 +4875,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
             'Total: 7 tryjobs',
         ],
                          sys.stdout.getvalue().splitlines())
-        git_cl._call_buildbucket.assert_called_once_with(
-            mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
-            self._DEFAULT_REQUEST)
+        git_cl._buildbucket_search.assert_called_once_with(
+            'cr-buildbucket.appspot.com', self._DEFAULT_REQUEST)
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
@@ -4902,20 +4900,29 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
             'Total: 7 tryjobs',
         ],
                          sys.stdout.getvalue().splitlines())
-        git_cl._call_buildbucket.assert_called_once_with(
-            mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
-            self._DEFAULT_REQUEST)
+        git_cl._buildbucket_search.assert_called_once_with(
+            'cr-buildbucket.appspot.com', self._DEFAULT_REQUEST)
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
     @mock.patch('git_cl.write_json')
     def testWriteToJson(self, mockJsonDump):
         self.assertEqual(0, git_cl.main(['try-results', '--json', 'file.json']))
-        git_cl._call_buildbucket.assert_called_once_with(
-            mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
-            self._DEFAULT_REQUEST)
+        git_cl._buildbucket_search.assert_called_once_with(
+            'cr-buildbucket.appspot.com', self._DEFAULT_REQUEST)
         mockJsonDump.assert_called_once_with('file.json',
                                              self._DEFAULT_RESPONSE['builds'])
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
+    def testNotLoggedInWarning(self):
+        with mock.patch('git_cl.subprocess2.call', return_value=1):
+            git_cl._buildbucket_search.return_value = {}
+            self.assertEqual(0, git_cl.main(['try-results']))
+            self.assertIn(
+                'Warning: Some results might be missing because you are not '
+                'logged in. Please login first by running:\n  bb auth-login\n',
+                sys.stdout.getvalue())
 
     def test_filter_failed_for_one_simple(self):
         self.assertEqual([], git_cl._filter_failed_for_retry([]))
@@ -4980,7 +4987,7 @@ class CMDTryTestCase(CMDTestCaseBase):
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
-    @mock.patch('git_cl._call_buildbucket')
+    @mock.patch('git_cl._buildbucket_batch')
     def testScheduleOnBuildbucket(self, mockCallBuildbucket):
         mockCallBuildbucket.return_value = {}
 
@@ -5029,13 +5036,15 @@ class CMDTryTestCase(CMDTestCaseBase):
                 },
             }],
         }
-        mockCallBuildbucket.assert_called_with(mock.ANY,
-                                               'cr-buildbucket.appspot.com',
-                                               'Batch', expected_request)
+        mockCallBuildbucket.assert_called_with(
+            'cr-buildbucket.appspot.com',
+            schedules=[
+                req['scheduleBuild'] for req in expected_request['requests']
+            ])
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
-    @mock.patch('git_cl._call_buildbucket')
+    @mock.patch('git_cl._buildbucket_batch')
     def testScheduleOnBuildbucketWithRevision(self, mockCallBuildbucket):
         mockCallBuildbucket.return_value = {}
         mock.patch('git_cl.Changelist.GetRemoteBranch',
@@ -5134,9 +5143,11 @@ class CMDTryTestCase(CMDTestCaseBase):
                 },
             }],
         }
-        mockCallBuildbucket.assert_called_with(mock.ANY,
-                                               'cr-buildbucket.appspot.com',
-                                               'Batch', expected_request)
+        mockCallBuildbucket.assert_called_with(
+            'cr-buildbucket.appspot.com',
+            schedules=[
+                req['scheduleBuild'] for req in expected_request['requests']
+            ])
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
@@ -5151,7 +5162,7 @@ class CMDTryTestCase(CMDTestCaseBase):
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
-    @mock.patch('git_cl._call_buildbucket')
+    @mock.patch('git_cl._buildbucket_batch')
     @mock.patch('git_cl._fetch_tryjobs')
     def testScheduleOnBuildbucketRetryFailed(self, mockFetchTryJobs,
                                              mockCallBuildbucket):
@@ -5211,9 +5222,11 @@ class CMDTryTestCase(CMDTestCaseBase):
                 },
             }],
         }
-        mockCallBuildbucket.assert_called_with(mock.ANY,
-                                               'cr-buildbucket.appspot.com',
-                                               'Batch', expected_request)
+        mockCallBuildbucket.assert_called_with(
+            'cr-buildbucket.appspot.com',
+            schedules=[
+                req['scheduleBuild'] for req in expected_request['requests']
+            ])
 
     def test_parse_bucket(self):
         test_cases = [
@@ -5281,26 +5294,24 @@ class MakeRequestsHelperTestCase(unittest.TestCase):
 
         # requestId is non-deterministic. Just assert that it's there and has
         # a particular length.
-        self.assertEqual(len(requests[0]['scheduleBuild'].pop('requestId')), 36)
+        self.assertEqual(len(requests[0].pop('requestId')), 36)
         self.assertEqual(requests, [{
-            'scheduleBuild': {
-                'builder': {
-                    'bucket': 'try',
-                    'builder': 'my-builder',
-                    'project': 'chromium'
-                },
-                'gerritChanges': [self.exampleGerritChange()],
-                'properties': {
-                    'category': 'git_cl_try'
-                },
-                'tags': [{
-                    'key': 'builder',
-                    'value': 'my-builder'
-                }, {
-                    'key': 'user_agent',
-                    'value': 'git_cl_try'
-                }]
-            }
+            'builder': {
+                'bucket': 'try',
+                'builder': 'my-builder',
+                'project': 'chromium'
+            },
+            'gerritChanges': [self.exampleGerritChange()],
+            'properties': {
+                'category': 'git_cl_try'
+            },
+            'tags': [{
+                'key': 'builder',
+                'value': 'my-builder'
+            }, {
+                'key': 'user_agent',
+                'value': 'git_cl_try'
+            }]
         }])
 
     def testMakeRequestsHelperPresubmitSetsDryRunProperty(self):
@@ -5311,7 +5322,7 @@ class MakeRequestsHelperTestCase(unittest.TestCase):
                                                          jobs,
                                                          options,
                                                          patchset=None)
-        self.assertEqual(requests[0]['scheduleBuild']['properties'], {
+        self.assertEqual(requests[0]['properties'], {
             'category': 'git_cl_try',
             'dry_run': 'true'
         })
@@ -5326,7 +5337,7 @@ class MakeRequestsHelperTestCase(unittest.TestCase):
                                                          options,
                                                          patchset=None)
         self.assertEqual(
-            requests[0]['scheduleBuild']['gitilesCommit'], {
+            requests[0]['gitilesCommit'], {
                 'host': 'chromium.googlesource.com',
                 'id': 'ba5eba11',
                 'project': 'depot_tools',
@@ -5342,7 +5353,7 @@ class MakeRequestsHelperTestCase(unittest.TestCase):
                                                          jobs,
                                                          options,
                                                          patchset=None)
-        self.assertEqual(requests[0]['scheduleBuild']['tags'],
+        self.assertEqual(requests[0]['tags'],
                          [{
                              'key': 'builder',
                              'value': 'my-builder'
@@ -5363,7 +5374,7 @@ class MakeRequestsHelperTestCase(unittest.TestCase):
                                                          jobs,
                                                          options,
                                                          patchset=None)
-        self.assertEqual(requests[0]['scheduleBuild']['properties'],
+        self.assertEqual(requests[0]['properties'],
                          {'category': 'my-special-category'})
 
 
@@ -6627,6 +6638,41 @@ class TestMergeCommentsIntoThreads(unittest.TestCase):
         # Check thread 3 (c7)
         self.assertIn('c7', threads_by_root)
         self.assertEqual(get_ids(threads_by_root['c7']), ['c7'])
+
+
+class BuildbucketBatchTest(unittest.TestCase):
+    @mock.patch('subprocess2.communicate')
+    def test_buildbucket_batch_success(self, mock_comm):
+        mock_comm.return_value = (('{"responses": [{"scheduleBuild": {"id": "1"}}]}', ''), 0)
+        res = git_cl._buildbucket_batch('cr-buildbucket.appspot.com')
+        self.assertEqual(res, {'responses': [{'scheduleBuild': {'id': '1'}}]})
+        mock_comm.assert_called_once_with(
+            ['bb', 'batch', '-host', 'cr-buildbucket.appspot.com'],
+            stdin='{"requests": []}',
+            stdout=git_cl.subprocess2.PIPE,
+            stderr=git_cl.subprocess2.PIPE,
+            encoding='utf-8')
+
+    @mock.patch('subprocess2.communicate')
+    def test_buildbucket_batch_error(self, mock_comm):
+        mock_comm.return_value = (('{"responses": [{"error": {"message": "bot fail"}}]}', ''), 1)
+        with self.assertRaises(git_cl.BuildbucketResponseException) as cm:
+            git_cl._buildbucket_batch('cr-buildbucket.appspot.com')
+        self.assertIn('bot fail', str(cm.exception))
+        self.assertEqual(len(cm.exception.responses), 1)
+
+    @mock.patch('subprocess2.communicate')
+    def test_buildbucket_search_success(self, mock_comm):
+        mock_comm.return_value = (('{"responses": [{"searchBuilds": {"builds": [{"id": "123"}]}}]}', ''), 0)
+        res = git_cl._buildbucket_search('cr-buildbucket.appspot.com', {})
+        self.assertEqual(res, {'builds': [{'id': '123'}]})
+
+    @mock.patch('subprocess2.communicate')
+    def test_buildbucket_search_error(self, mock_comm):
+        mock_comm.return_value = (('{"responses": [{"error": {"message": "search fail"}}]}', ''), 1)
+        with self.assertRaises(git_cl.BuildbucketResponseException) as cm:
+            git_cl._buildbucket_search('cr-buildbucket.appspot.com', {})
+        self.assertIn('search fail', str(cm.exception))
 
 
 if __name__ == '__main__':
