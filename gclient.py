@@ -3411,7 +3411,12 @@ def CMDgitmodules(parser, args):
     recursedeps = ls.get('recursedeps')
     with open(options.output_gitmodules, 'w', newline='') as f:
         for path, dep in ls.get('deps').items():
-            if path in options.skip_dep:
+            # Skip placeholder chromium dependencies to mirror the exceptions in
+            # presubmit_canned_checks.py. Otherwise, `gclient gitmodules` on a clean
+            # Dawn or ANGLE tree will fail presubmit requiring confusing manual changes.
+            if path in options.skip_dep or path in (
+                    'third_party/dummy_chromium',
+                    'third_party/placeholder_chromium'):
                 continue
             if dep.get('dep_type') != 'git':
                 continue
