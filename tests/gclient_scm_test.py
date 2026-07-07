@@ -75,6 +75,29 @@ class BasicTests(unittest.TestCase):
             gclient_scm.SCMWrapper._get_first_remote_url(FAKE_PATH),
             'first-value')
 
+    def testCanonicalGitUrl(self):
+        # Endpoint form folds cosmetic spellings of one fetch URL, but keeps
+        # the /a/ auth path distinct so switching to it is still applied.
+        canonical = 'https://x.googlesource.com/repo'
+        for url in ('https://x.googlesource.com/repo',
+                    'https://x.googlesource.com/repo/',
+                    'https://x.googlesource.com/repo.git',
+                    'https://x.googlesource.com/repo.git/',
+                    'git+https://x.googlesource.com/repo'):
+            self.assertEqual(gclient_scm._canonical_git_url(url), canonical)
+        self.assertNotEqual(
+            gclient_scm._canonical_git_url('https://x.googlesource.com/a/repo'),
+            canonical)
+
+    def testCanonicalGitRepo(self):
+        # Identity form additionally folds the /a/ auth path.
+        canonical = 'https://x.googlesource.com/repo'
+        for url in ('https://x.googlesource.com/repo',
+                    'https://x.googlesource.com/a/repo',
+                    'https://x.googlesource.com/a/repo.git/',
+                    'git+https://x.googlesource.com/a/repo.git'):
+            self.assertEqual(gclient_scm._canonical_git_repo(url), canonical)
+
     def testDeleteOrMoveRoot(self):
         root_dir = tempfile.mkdtemp()
         try:
@@ -885,6 +908,156 @@ class ManagedGitWrapperTestCaseMock(unittest.TestCase):
         mockClone.assert_called_with('refs/remotes/origin/main', self.url,
                                      options)
         self.checkstdout('\n')
+
+    @mock.patch('git_cache.Mirror.get_bootstrap_default_branch')
+    @mock.patch('gclient_scm.GitWrapper._UpdateMirrorIfNotContains')
+    @mock.patch('gclient_scm.GitWrapper._Clone')
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.path.exists')
+    @mock.patch('git_common.run')
+    def testUpdateFreshCheckoutUsesSnapshotDefaultBranch(
+            self, mockRun, mockExists, mockIsdir, mockClone, mockUpdateMirror,
+            mockBranch):
+        # No local .git: the default branch is read from the bootstrap snapshot.
+        mockIsdir.side_effect = lambda path: path == self.base_path
+        mockExists.side_effect = lambda path: path == self.base_path
+        mockRun.return_value = ''
+        mockBranch.return_value = 'main'
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+
+        options = self.Options()
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir,
+                                             self.relpath)
+        git_wrapper.update(options, None, [])
+
+        mockBranch.assert_called_once()
+        # The snapshot's default branch becomes the checkout revision.
+        self.assertEqual(mockClone.call_args[0][0], 'refs/remotes/origin/main')
+
+    @mock.patch('git_cache.Mirror.get_bootstrap_default_branch')
+    @mock.patch('gclient_scm.GitWrapper._SetFetchConfig')
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.path.exists')
+    @mock.patch('git_common.run')
+    def testUpdateExistingCheckoutSkipsSnapshotLookup(self, mockRun, mockExists,
+                                                      mockIsdir, mockSetFetch,
+                                                      mockBranch):
+        # A local .git already has the default branch in refs/remotes/*/HEAD, so
+        # update() must not hit the (gsutil) bootstrap snapshot. An unmanaged
+        # solution takes the early-return existing-checkout path.
+        git_dir = os.path.join(self.base_path, '.git')
+        mockIsdir.side_effect = lambda path: path == self.base_path
+        mockExists.side_effect = lambda path: path in (self.base_path, git_dir)
+        mockRun.return_value = 'refs/remotes/origin/main'
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+
+        options = self.Options(revision='unmanaged')
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir,
+                                             self.relpath)
+        git_wrapper.update(options, None, [])
+
+        mockBranch.assert_not_called()
+
+    @mock.patch('git_cache.Mirror.get_bootstrap_default_branch')
+    @mock.patch('gclient_scm.scm.GIT.GetRemoteHeadRef')
+    @mock.patch('gclient_scm.scm.GIT.GetConfig')
+    @mock.patch('gclient_scm.GitWrapper._SetFetchConfig')
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.path.exists')
+    @mock.patch('git_common.run')
+    def testUpdateUrlSwitchUsesNewMirrorDefaultBranch(self, mockRun, mockExists,
+                                                      mockIsdir, mockSetFetch,
+                                                      mockGetConfig,
+                                                      mockHeadRef, mockBranch):
+        # The checkout still points at the old upstream, so its local
+        # refs/remotes/*/HEAD describes the old repo and must not be trusted;
+        # the default branch comes from the new URL's snapshot.
+        url = 'https://example.com/new.git'
+        git_dir = os.path.join(self.base_path, '.git')
+        mockIsdir.side_effect = lambda path: path == self.base_path
+        mockExists.side_effect = lambda path: path in (self.base_path, git_dir)
+        mockRun.return_value = ''
+        mockGetConfig.return_value = 'https://example.com/old.git'
+        mockBranch.return_value = 'master'
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+
+        options = self.Options(revision='unmanaged')
+        git_wrapper = gclient_scm.GitWrapper(url, self.root_dir, self.relpath)
+        git_wrapper.update(options, None, [])
+
+        mockBranch.assert_called_once()
+        mockHeadRef.assert_not_called()
+
+    @mock.patch('git_cache.Mirror.get_bootstrap_default_branch')
+    @mock.patch('gclient_scm.scm.GIT.GetRemoteHeadRef')
+    @mock.patch('gclient_scm.scm.GIT.GetConfig')
+    @mock.patch('gclient_scm.GitWrapper._SetFetchConfig')
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.path.exists')
+    @mock.patch('git_common.run')
+    def testUpdateMatchingUrlTrustsLocalHead(self, mockRun, mockExists,
+                                             mockIsdir, mockSetFetch,
+                                             mockGetConfig, mockHeadRef,
+                                             mockBranch):
+        # The checkout already points at the requested upstream (its remote
+        # URL is the mirror of the requested url), so the local
+        # refs/remotes/*/HEAD wins and the snapshot is not consulted.
+        url = 'https://example.com/new.git'
+        git_dir = os.path.join(self.base_path, '.git')
+        mockIsdir.side_effect = lambda path: path == self.base_path
+        mockExists.side_effect = lambda path: path in (self.base_path, git_dir)
+        mockRun.return_value = ''
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+        mockGetConfig.return_value = os.path.join(
+            '/tmp/cache', git_cache.Mirror.UrlToCacheDir(url))
+        mockHeadRef.return_value = 'refs/remotes/origin/main'
+
+        options = self.Options(revision='unmanaged')
+        git_wrapper = gclient_scm.GitWrapper(url, self.root_dir, self.relpath)
+        git_wrapper.update(options, None, [])
+
+        mockBranch.assert_not_called()
+        mockHeadRef.assert_called_once_with(self.base_path,
+                                            url,
+                                            'origin',
+                                            use_local=True)
+
+    @mock.patch('git_cache.Mirror.get_bootstrap_default_branch')
+    @mock.patch('gclient_scm.scm.GIT.GetRemoteHeadRef')
+    @mock.patch('gclient_scm.scm.GIT.GetConfig')
+    @mock.patch('gclient_scm.GitWrapper._SetFetchConfig')
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.path.exists')
+    @mock.patch('git_common.run')
+    def testUpdateUpstreamFetchUrlTrustsLocalHead(self, mockRun, mockExists,
+                                                  mockIsdir, mockSetFetch,
+                                                  mockGetConfig, mockHeadRef,
+                                                  mockBranch):
+        # Unmanaged checkouts fetch from the upstream even with a cache
+        # configured; the local HEAD still wins over the snapshot.
+        url = 'https://example.com/new.git'
+        git_dir = os.path.join(self.base_path, '.git')
+        mockIsdir.side_effect = lambda path: path == self.base_path
+        mockExists.side_effect = lambda path: path in (self.base_path, git_dir)
+        mockRun.return_value = ''
+        git_cache.Mirror.SetCachePath('/tmp/cache')
+        self.addCleanup(git_cache.Mirror.SetCachePath, None)
+        mockGetConfig.return_value = url
+        mockHeadRef.return_value = 'refs/remotes/origin/main'
+
+        options = self.Options(revision='unmanaged')
+        git_wrapper = gclient_scm.GitWrapper(url, self.root_dir, self.relpath)
+        git_wrapper.update(options, None, [])
+
+        mockBranch.assert_not_called()
+        mockHeadRef.assert_called_once_with(self.base_path,
+                                            url,
+                                            'origin',
+                                            use_local=True)
 
 
 class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):

@@ -861,10 +861,13 @@ class GIT(object):
             return None
 
     @staticmethod
-    def GetRemoteHeadRef(cwd, url, remote):
+    def GetRemoteHeadRef(cwd, url, remote, use_local=True):
         """Returns the full default remote branch reference, e.g.
-        'refs/remotes/origin/main'."""
-        if os.path.exists(cwd):
+        'refs/remotes/origin/main'.
+
+        use_local=False skips the local refs/remotes/<remote>/HEAD lookup,
+        for callers whose cwd may point at a different upstream than url."""
+        if use_local and os.path.exists(cwd):
             ref = 'refs/remotes/%s/HEAD' % remote
             try:
                 # Try using local git copy first
