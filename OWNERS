@@ -61,3 +61,6 @@ per-file setup_btrfs_loop.sh=nbilling@google.com
 
 # Crowbar CLI
 per-file crowbar*=file://SECURITY_TEAM_OWNERS
+
+# Ruff formatter
+per-file ruff*=ovsienko@google.com
