@@ -118,13 +118,29 @@ class Mirror(object):
     def _init_sentient_file(self):
         return os.path.join(self.mirror_path, INIT_SENTIENT_FILE)
 
+    # Public googlesource hosts snapshotted into chromium-git-cache by the
+    # git_cache_updater builders; keep in sync with that producer config.
+    # A host with no snapshot for a repo just falls back to a normal clone.
+    BOOTSTRAP_BUCKET_HOSTS = frozenset((
+        'chromium.googlesource.com',
+        'aomedia.googlesource.com',
+        'android.googlesource.com',
+        'boringssl.googlesource.com',
+        'dawn.googlesource.com',
+        'pdfium.googlesource.com',
+        'quiche.googlesource.com',
+        'skia.googlesource.com',
+        'swiftshader.googlesource.com',
+        'webrtc.googlesource.com',
+    ))
+
     @property
     def bootstrap_bucket(self):
         b = os.getenv('OVERRIDE_BOOTSTRAP_BUCKET')
         if b:
             return b
         u = urllib.parse.urlparse(self.url)
-        if u.netloc == 'chromium.googlesource.com':
+        if u.netloc in self.BOOTSTRAP_BUCKET_HOSTS:
             return 'chromium-git-cache'
         # Not recognized.
         return None
@@ -386,7 +402,13 @@ class Mirror(object):
         return os.path.isfile(os.path.join(self.mirror_path, 'config'))
 
     def supported_project(self):
-        """Returns true if this repo is known to have a bootstrap zip file."""
+        """Returns true if this repo is known to have a bootstrap zip file.
+
+        Only hosts with comprehensive snapshot coverage: this gates
+        gc.autopacklimit=0 and the re-bootstrap-on-pack-growth strategy, which
+        assume a snapshot always exists. On the other BOOTSTRAP_BUCKET_HOSTS a
+        repo may 404, so it must keep normal git pack maintenance and only take
+        the snapshot as an optional clone seed."""
         u = urllib.parse.urlparse(self.url)
         return u.netloc in [
             'chromium.googlesource.com', 'chrome-internal.googlesource.com'

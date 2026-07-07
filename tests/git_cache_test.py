@@ -419,6 +419,56 @@ class GetBootstrapDefaultBranchTest(unittest.TestCase):
             self.assertIsNone(m.get_bootstrap_default_branch())
 
 
+class BootstrapBucketTest(unittest.TestCase):
+    def setUp(self):
+        self.cache_dir = tempfile.mkdtemp(prefix='gc_bucket_')
+        self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
+        git_cache.Mirror.SetCachePath(self.cache_dir)
+        mock.patch.dict('os.environ', clear=False).start()
+        self.addCleanup(mock.patch.stopall)
+        os.environ.pop('OVERRIDE_BOOTSTRAP_BUCKET', None)
+
+    def test_chromium_host(self):
+        m = git_cache.Mirror('https://chromium.googlesource.com/v8/v8')
+        self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache')
+
+    def test_additional_public_hosts(self):
+        for host in ('dawn', 'skia', 'webrtc', 'pdfium', 'boringssl', 'aomedia',
+                     'quiche', 'swiftshader', 'android'):
+            m = git_cache.Mirror('https://%s.googlesource.com/x' % host)
+            self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache', host)
+
+    def test_unknown_host_returns_none(self):
+        self.assertIsNone(git_cache.Mirror('https://example.com/x').bootstrap_bucket)
+
+    def test_override_env_wins(self):
+        with mock.patch.dict('os.environ',
+                             {'OVERRIDE_BOOTSTRAP_BUCKET': 'my-bucket'}):
+            m = git_cache.Mirror('https://example.com/x')
+            self.assertEqual(m.bootstrap_bucket, 'my-bucket')
+
+    def test_supported_project_only_comprehensive_hosts(self):
+        # Only fully-snapshotted hosts get gc.autopacklimit=0 / re-bootstrap.
+        self.assertTrue(
+            git_cache.Mirror(
+                'https://chromium.googlesource.com/x').supported_project())
+        # The other bucket hosts still seed from a snapshot when available, but
+        # keep normal git pack maintenance (a repo there may 404).
+        for host in ('dawn', 'skia', 'webrtc', 'pdfium', 'boringssl', 'aomedia',
+                     'quiche', 'swiftshader', 'android'):
+            m = git_cache.Mirror('https://%s.googlesource.com/x' % host)
+            self.assertFalse(m.supported_project(), host)
+            self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache', host)
+
+    def test_supported_project_chrome_internal(self):
+        m = git_cache.Mirror('https://chrome-internal.googlesource.com/x')
+        self.assertTrue(m.supported_project())
+
+    def test_supported_project_unknown_host(self):
+        m = git_cache.Mirror('https://example.com/x')
+        self.assertFalse(m.supported_project())
+
+
 class MirrorTest(unittest.TestCase):
     def test_same_cache_for_authenticated_and_unauthenticated_urls(self):
         # GoB can fetch a repo via two different URLs; if the url contains '/a/'
