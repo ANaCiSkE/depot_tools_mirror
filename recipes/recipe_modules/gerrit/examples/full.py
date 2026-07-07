@@ -1,10 +1,11 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
+from recipe_engine import post_process
 
 DEPS = [
     'gerrit',
+    'recipe_engine/buildbucket',
     'recipe_engine/json',
     'recipe_engine/raw_io',
     'recipe_engine/step',
@@ -119,29 +120,54 @@ def RunSteps(api):
       step_test_data=api.gerrit.test_api.get_empty_changes_response_data,
       verbose=True)
 
-
 def GenTests(api):
-  yield (
-      api.test('basic', status="INFRA_FAILURE") +
-      api.step_data('gerrit create_gerrit_branch (v8/v8 test)',
-                    api.gerrit.make_gerrit_create_branch_response_data()) +
-      api.step_data('gerrit create_gerrit_tag (v8/v8 1.0)',
-                    api.gerrit.make_gerrit_create_tag_response_data()) +
-      api.step_data('gerrit raw_create_tag',
-                    api.gerrit.make_gerrit_create_tag_response_data()) +
-      api.step_data('gerrit create change at (v8/v8 main)',
-                    api.gerrit.update_files_response_data()) +
-      api.step_data('verify the patchset exists on CL 91827.gerrit changes',
-                    api.gerrit.get_empty_changes_response_data()) +
-      api.step_data('gerrit submit change 91827',
-                    api.gerrit.update_files_response_data(status='MERGED')) +
-      api.step_data('gerrit get_gerrit_branch (v8/v8 main)',
-                    api.gerrit.make_gerrit_get_branch_response_data()) +
-      api.step_data('gerrit move changes',
-                    api.gerrit.get_move_change_response_data(branch='main')) +
-      api.step_data('gerrit relatedchanges',
-                    api.gerrit.get_related_changes_response_data()) +
-      api.step_data('gerrit changes empty query',
-                    api.gerrit.get_empty_changes_response_data()) +
-      api.step_data('gerrit get file content',
-                    api.gerrit.get_file_content_response_data('file content')))
+
+  def common_step_data():
+    return (
+        api.step_data('gerrit create_gerrit_branch (v8/v8 test)',
+                      api.gerrit.make_gerrit_create_branch_response_data()) +
+        api.step_data('gerrit create_gerrit_tag (v8/v8 1.0)',
+                      api.gerrit.make_gerrit_create_tag_response_data()) +
+        api.step_data('gerrit raw_create_tag',
+                      api.gerrit.make_gerrit_create_tag_response_data()) +
+        api.step_data('gerrit create change at (v8/v8 main)',
+                      api.gerrit.update_files_response_data()) +
+        api.step_data('verify the patchset exists on CL 91827.gerrit changes',
+                      api.gerrit.get_empty_changes_response_data()) +
+        api.step_data('gerrit submit change 91827',
+                      api.gerrit.update_files_response_data(status='MERGED')) +
+        api.step_data('gerrit get_gerrit_branch (v8/v8 main)',
+                      api.gerrit.make_gerrit_get_branch_response_data()) +
+        api.step_data('gerrit move changes',
+                      api.gerrit.get_move_change_response_data(branch='main')) +
+        api.step_data('gerrit relatedchanges',
+                      api.gerrit.get_related_changes_response_data()) +
+        api.step_data('gerrit changes empty query',
+                      api.gerrit.get_empty_changes_response_data()) +
+        api.step_data(
+            'gerrit get file content',
+            api.gerrit.get_file_content_response_data('file content')))
+
+  yield (api.test('basic', status="INFRA_FAILURE") + common_step_data())
+
+  yield (api.test('retry_success_on_first_retry', status="INFRA_FAILURE") +
+         api.buildbucket.build(
+             api.buildbucket.raw_swarming_build(
+                 bot_dimensions=api.buildbucket.tags(zone='us-atl'))) +
+         common_step_data() + api.step_data(
+             'gerrit changes', api.gerrit.get_empty_changes_response_data()) +
+         api.step_data('gerrit changes (2)',
+                       api.gerrit.get_one_change_response_data()) +
+         api.step_data('gerrit changes empty query (2)',
+                       api.gerrit.get_empty_changes_response_data()) +
+         api.step_data('gerrit changes empty query (3)',
+                       api.gerrit.get_empty_changes_response_data()) +
+         api.post_process(post_process.DropExpectation))
+
+  yield (api.test('no_retry_wrong_zone', status="INFRA_FAILURE") +
+         api.buildbucket.build(
+             api.buildbucket.raw_swarming_build(
+                 bot_dimensions=api.buildbucket.tags(zone='us-central'))) +
+         common_step_data() + api.step_data(
+             'gerrit changes', api.gerrit.get_empty_changes_response_data()) +
+         api.post_process(post_process.DropExpectation))
