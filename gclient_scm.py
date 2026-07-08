@@ -749,7 +749,7 @@ class GitWrapper(SCMWrapper):
                 elif ignore_submodules != 'dirty':
                     warning_message = (
                         "diff.ignoreSubmodules is not set to 'dirty' "
-                        "for this repository.\n"
+                        f"for this repository: {checkout_path}\n" +
                         "This may cause unexpected behavior with submodules; "
                         "see //docs/git_submodules.md\n"
                         "Consider setting the config:\n"
