@@ -5,4 +5,4 @@ per-file ninjalog_uploader_test.py=tikuta@chromium.org
 per-file reclient*=file://BUILD_OWNERS
 per-file reclient*=file://RECLIENT_OWNERS
 per-file siso*=file://BUILD_OWNERS
-
+per-file ruff*=ovsienko@google.com
