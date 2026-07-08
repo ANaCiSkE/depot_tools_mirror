@@ -1256,6 +1256,33 @@ def IsEnvCog():
     return os.getcwd().startswith('/google/cog/cloud')
 
 
+AI_AGENT_ENV_VARS = (
+    'GEMINI_CLI',
+    'CLAUDECODE',
+    'ANTIGRAVITY_AGENT',
+    'CODEX_SANDBOX',
+    'CURSOR_AGENT',
+    'AI_AGENT',
+)
+
+
+def GetAiAgentEnvVars(env=None):
+    """Returns a list of active AI agent environment variables."""
+    if env is None:
+        env = os.environ
+    active = []
+    for v in AI_AGENT_ENV_VARS:
+        val = env.get(v)
+        if val is not None and str(val).lower() not in ('', '0', 'false'):
+            active.append(v)
+    return active
+
+
+def IsEnvAi(env=None):
+    """Returns whether the command is running inside an active AI agent."""
+    return bool(GetAiAgentEnvVars(env))
+
+
 def UpgradeToHttps(url):
     """Upgrades random urls to https://.
 

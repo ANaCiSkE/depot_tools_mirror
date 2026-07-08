@@ -25,6 +25,7 @@ from typing import Callable, Optional
 import build_telemetry
 import caffeinate
 import gclient_paths
+import gclient_utils
 
 
 _SYSTEM_DICT = {"win32": "windows", "darwin": "mac", "linux": "linux"}
@@ -630,11 +631,7 @@ def main(args: list[str],
                 # Sisorc global flags are actually pre-subcommand flags.
                 pre_args = global_flags + pre_args
 
-                detected_env_vars = [
-                    v for v in ('GEMINI_CLI', 'CLAUDECODE', 'ANTIGRAVITY_AGENT',
-                                'CODEX_SANDBOX', 'CURSOR_AGENT', 'AI_AGENT')
-                    if env.get(v)
-                ]
+                detected_env_vars = gclient_utils.GetAiAgentEnvVars(env)
 
                 if subcmd:
                     # Apply subcommand-specific flags from .sisorc

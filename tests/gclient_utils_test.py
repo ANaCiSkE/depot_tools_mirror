@@ -416,6 +416,41 @@ class GClientUtilsTest(trial_dir.TestCase):
         self.assertEqual('(foo or bar) and (baz)',
                          gclient_utils.merge_conditions('foo or bar', 'baz'))
 
+    def testIsEnvAi(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(gclient_utils.IsEnvAi())
+            self.assertEqual(gclient_utils.GetAiAgentEnvVars(), [])
+        with mock.patch.dict(os.environ, {'GEMINI_CLI': '1'}, clear=True):
+            self.assertTrue(gclient_utils.IsEnvAi())
+            self.assertEqual(gclient_utils.GetAiAgentEnvVars(), ['GEMINI_CLI'])
+        with mock.patch.dict(os.environ, {'AI_AGENT': 'true'}, clear=True):
+            self.assertTrue(gclient_utils.IsEnvAi())
+            self.assertEqual(gclient_utils.GetAiAgentEnvVars(), ['AI_AGENT'])
+
+        for falsey_val in ('', '0', 'false', 'FALSE'):
+            with mock.patch.dict(os.environ, {'GEMINI_CLI': falsey_val},
+                                 clear=True):
+                self.assertFalse(gclient_utils.IsEnvAi())
+                self.assertEqual(gclient_utils.GetAiAgentEnvVars(), [])
+
+        self.assertFalse(gclient_utils.IsEnvAi({'GEMINI_CLI': None}))
+        self.assertFalse(
+            gclient_utils.IsEnvAi({
+                'GEMINI_CLI': '0',
+                'AI_AGENT': 'false'
+            }))
+        self.assertTrue(
+            gclient_utils.IsEnvAi({
+                'GEMINI_CLI': '0',
+                'AI_AGENT': '1'
+            }))
+        self.assertEqual(
+            gclient_utils.GetAiAgentEnvVars({
+                'GEMINI_CLI': '0',
+                'AI_AGENT': '1'
+            }), ['AI_AGENT'])
+
+
 if __name__ == '__main__':
     unittest.main()
 

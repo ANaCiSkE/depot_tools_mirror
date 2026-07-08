@@ -1597,6 +1597,8 @@ def CreateDraft(host, change, revision='current', body=None):
 
     https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#create-draft
     """
+    if isinstance(body, dict) and gclient_utils.IsEnvAi():
+        body.setdefault('is_ai', True)
     path = f'changes/{change}/revisions/{revision}/drafts'
     conn = CreateHttpConn(host, path, reqtype='PUT', body=body)
     return ReadHttpJsonResponse(conn)
@@ -1924,6 +1926,12 @@ def SetReview(host,
     if labels:
         body['labels'] = labels
     if comments:
+        if gclient_utils.IsEnvAi():
+            for comment_list in comments.values():
+                if isinstance(comment_list, list):
+                    for comment in comment_list:
+                        if isinstance(comment, dict):
+                            comment.setdefault('is_ai', True)
         body['comments'] = comments
     if notify is not None:
         body['notify'] = 'ALL' if notify else 'NONE'

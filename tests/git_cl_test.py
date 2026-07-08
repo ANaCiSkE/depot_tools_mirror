@@ -663,8 +663,12 @@ class TestGitCl(unittest.TestCase):
 
         oldEnv = dict(os.environ)
         def _resetEnv():
-            os.environ = oldEnv
+            os.environ.clear()
+            os.environ.update(oldEnv)
         self.addCleanup(_resetEnv)
+        for var in ('GEMINI_CLI', 'CLAUDECODE', 'ANTIGRAVITY_AGENT',
+                    'CODEX_SANDBOX', 'CURSOR_AGENT', 'AI_AGENT'):
+            os.environ.pop(var, None)
 
         self.failed = False
         mock.patch('sys.stdout', io.StringIO()).start()
