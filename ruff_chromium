@@ -16,7 +16,31 @@ import os
 import sys
 import subprocess
 import tomllib
+import difflib
 from pathlib import PurePath
+from typing import NamedTuple
+
+
+class LineRange(NamedTuple):
+    """Represents a 1-based line range interval [start, end]."""
+    start: int
+    end: int
+
+
+class ParsedArguments(NamedTuple):
+    """Holds the parsed line ranges and the scrubbed pass-through arguments."""
+    ranges: list[LineRange]
+    pass_through_args: list[str]
+
+
+class FormattingOptions(NamedTuple):
+    """Isolates the parsed formatting options and positional target files."""
+    has_format: bool
+    has_diff: bool
+    has_check: bool
+    target_files: list[str]
+    chain_base_args: list[str]
+    subcmd_idx: int
 
 
 def match_pattern(file_path: str, config_dir: str, pattern: str) -> bool:
@@ -217,6 +241,319 @@ def has_yapf_config(target_path: str) -> bool:
     return False
 
 
+def parse_range(s: str) -> tuple[int, int]:
+    """Parses a range string 'startLine:startCol-endLine:endCol' or 'startLine-endLine'.
+
+    Args:
+        s: Range argument string.
+
+    Returns:
+        A LineRange instance containing 1-based start and end line numbers.
+
+    Raises:
+        ValueError: If range format is invalid or start/end line numbers are invalid.
+    """
+    parts = s.split("-")
+    if len(parts) != 2:
+        raise ValueError(f"invalid range format (missing '-'): {s!r}")
+    start_parts = parts[0].split(":")
+    end_parts = parts[1].split(":")
+
+    try:
+        start_line = int(start_parts[0])
+    except ValueError as e:
+        raise ValueError(f"invalid start line: {e}") from e
+    if start_line < 1:
+        raise ValueError(f"start line {start_line} must be >= 1")
+    if len(start_parts) > 1:
+        int(start_parts[1])  # Validate start col is int
+
+    try:
+        end_line = int(end_parts[0])
+    except ValueError as e:
+        raise ValueError(f"invalid end line: {e}") from e
+    if len(end_parts) > 1:
+        int(end_parts[1])  # Validate end col is int
+
+    if start_line > end_line:
+        raise ValueError(
+            f"start line {start_line} is greater than end line {end_line}")
+    return LineRange(start=start_line, end=end_line)
+
+
+def merge_ranges(ranges: list[LineRange]) -> list[LineRange]:
+    """Merges overlapping or adjacent line ranges.
+
+    Assumes the input list is already sorted ascending by start line.
+    Merging adjacent ranges (e.g. 1-5 and 6-10) prevents redundant formatting calls.
+
+    Args:
+        ranges: List of LineRange items sorted ascending by start line.
+
+    Returns:
+        List of merged LineRange items sorted ascending.
+    """
+    if len(ranges) <= 1:
+        return list(ranges)
+    merged: list[LineRange] = []
+    curr_start, curr_end = ranges[0].start, ranges[0].end
+    for r in ranges[1:]:
+        if r.start <= curr_end + 1:
+            curr_end = max(curr_end, r.end)
+        else:
+            merged.append(LineRange(start=curr_start, end=curr_end))
+            curr_start, curr_end = r.start, r.end
+    merged.append(LineRange(start=curr_start, end=curr_end))
+    return merged
+
+
+def parse_ranges(args: list[str]) -> ParsedArguments:
+    """Extracts --range flags and gathers pass-through arguments.
+
+    Args:
+        args: Command-line arguments.
+
+    Returns:
+        A ParsedArguments dataclass instance containing the line ranges and remaining arguments.
+
+    Raises:
+        ValueError: If a range flag or value is invalid.
+    """
+    ranges: list[LineRange] = []
+    pass_through_args: list[str] = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("--range="):
+            try:
+                ranges.append(parse_range(arg.split("=", 1)[1]))
+            except ValueError as e:
+                raise ValueError(f"invalid --range flag {arg!r}: {e}") from e
+            i += 1
+        elif arg == "--range":
+            if i + 1 >= len(args):
+                raise ValueError("missing value for --range flag")
+            val = args[i + 1]
+            try:
+                ranges.append(parse_range(val))
+            except ValueError as e:
+                raise ValueError(f"invalid --range value {val!r}: {e}") from e
+            i += 2
+        else:
+            pass_through_args.append(arg)
+            i += 1
+    return ParsedArguments(ranges=ranges, pass_through_args=pass_through_args)
+
+
+def parse_formatting_options(pass_through_args: list[str]) -> FormattingOptions:
+    """Scans and isolates formatting subcommands, diff/check flags, target files, and index.
+
+    Args:
+        pass_through_args: List of command-line arguments after extracting range flags.
+
+    Returns:
+        A FormattingOptions dataclass instance containing the parsed configuration.
+    """
+    has_format = False
+    has_diff = False
+    has_check = False
+    target_files: list[str] = []
+    chain_base_args: list[str] = []
+
+    flags_with_values = {
+        '--config',
+        '-c',
+        '--target-version',
+        '--line-length',
+        '--stdin-filename',
+        '--exclude',
+        '--extension',
+    }
+    skip_next = False
+    subcmd_idx = -1
+    for arg in pass_through_args:
+        if skip_next:
+            skip_next = False
+            chain_base_args.append(arg)
+            continue
+        if arg == "format" and not has_format:
+            has_format = True
+            subcmd_idx = len(chain_base_args)
+            chain_base_args.append(arg)
+        elif arg == "--diff":
+            has_diff = True
+        elif arg == "--check":
+            has_check = True
+        elif arg in ("-i", "--in-place"):
+            pass
+        elif arg in flags_with_values:
+            chain_base_args.append(arg)
+            skip_next = True
+        elif not arg.startswith("-") and arg != "-":
+            target_files.append(arg)
+            if len(target_files) > 1:
+                chain_base_args.append(arg)
+        else:
+            chain_base_args.append(arg)
+
+    return FormattingOptions(
+        has_format=has_format,
+        has_diff=has_diff,
+        has_check=has_check,
+        target_files=target_files,
+        chain_base_args=chain_base_args,
+        subcmd_idx=subcmd_idx,
+    )
+
+
+def execute_ranges_chain(
+    chain_base_args: list[str],
+    subcmd_idx: int,
+    ranges: list[LineRange],
+    original_val: bytes,
+) -> tuple[int, bytes]:
+    """Runs ruff sequentially over in-memory buffers for all merged ranges.
+
+    Args:
+        chain_base_args: Base arguments for intermediate runs.
+        subcmd_idx: The index of the subcommand 'format' in chain_base_args.
+        ranges: The list of parsed LineRange items.
+        original_val: The original byte value read from disk.
+
+    Returns:
+        A tuple of (exit_code, formatted_val).
+    """
+    current_val = original_val
+    ranges.sort(key=lambda r: r.start)
+    merged = merge_ranges(ranges)
+    merged.reverse()
+
+    for r in merged:
+        range_arg = f"--range={r.start}:1-{r.end}:1"
+        if subcmd_idx != -1:
+            step_args = chain_base_args[:subcmd_idx + 1] + [
+                range_arg
+            ] + chain_base_args[subcmd_idx + 1:]
+        else:
+            step_args = [range_arg] + chain_base_args
+        cmd = [sys.executable, "-m", "ruff"] + step_args
+        proc = subprocess.run(cmd, input=current_val, capture_output=True)
+        if proc.returncode != 0:
+            sys.stderr.buffer.write(proc.stderr)
+            sys.stderr.write(f"ruff failed on range {r.start}-{r.end}\n")
+            return proc.returncode, b""
+        current_val = proc.stdout
+
+    return 0, current_val
+
+
+def dispatch_output(
+    target: str,
+    original_val: bytes,
+    current_val: bytes,
+    has_check: bool,
+    has_diff: bool,
+) -> int:
+    """Emits diffs to stdout, returns checks, or writes formatted contents back to disk.
+
+    Args:
+        target: Target filepath.
+        original_val: The original byte contents of target.
+        current_val: The formatted byte contents.
+        has_check: True if '--check' was specified.
+        has_diff: True if '--diff' was specified.
+
+    Returns:
+        Exit code (0 on success, non-zero on error or check failure).
+    """
+    if has_diff:
+        orig_lines = original_val.decode(
+            "utf-8", errors="replace").splitlines(keepends=True)
+        curr_lines = current_val.decode(
+            "utf-8", errors="replace").splitlines(keepends=True)
+        diff_lines = difflib.unified_diff(orig_lines,
+                                          curr_lines,
+                                          fromfile=target,
+                                          tofile=target)
+        diff_bytes = "".join(diff_lines).encode("utf-8")
+        sys.stdout.buffer.write(diff_bytes)
+        sys.stdout.buffer.flush()
+
+    if has_check:
+        return 1 if current_val != original_val else 0
+
+    if has_diff:
+        return 0
+
+    if current_val != original_val:
+        try:
+            with open(target, "wb") as f:
+                f.write(current_val)
+        except Exception as e:
+            sys.stderr.write(f"failed to write {target}: {e}\n")
+            return 1
+    return 0
+
+
+def run_ruff_with_ranges(args: list[str]) -> int:
+    """Formats multiple regions of a target file by chaining Ruff over in-memory stdin/stdout.
+
+    Args:
+        args: Command-line arguments passed to the ruff wrapper.
+
+    Returns:
+        Exit code (0 on success, non-zero on error or check failure).
+    """
+    try:
+        parsed_args = parse_ranges(args)
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        return 1
+
+    # We are calling ruff as is if there is only one or no ranges.
+    if len(parsed_args.ranges) < 2:
+        cmd = [sys.executable, "-m", "ruff"] + args
+        return subprocess.call(cmd)
+
+    opts = parse_formatting_options(parsed_args.pass_through_args)
+
+    if not opts.has_format:
+        sys.stderr.write(
+            "multiple ranges are only supported for the 'format' subcommand\n")
+        return 1
+    if len(opts.target_files) != 1 or "-" in parsed_args.pass_through_args:
+        sys.stderr.write(
+            "multi-range formatting requires exactly one target file on disk (stdin '-' is not supported)\n"
+        )
+        return 1
+
+    target = opts.target_files[0]
+
+    try:
+        with open(target, "rb") as f:
+            original_val = f.read()
+    except Exception as e:
+        sys.stderr.write(f"failed to read {target}: {e}\n")
+        return 1
+
+    has_stdin_filename = any(
+        a == "--stdin-filename" or a.startswith("--stdin-filename=")
+        for a in opts.chain_base_args)
+    if not has_stdin_filename:
+        opts.chain_base_args.append(f"--stdin-filename={target}")
+    opts.chain_base_args.append("-")
+
+    exit_code, formatted_val = execute_ranges_chain(opts.chain_base_args,
+                                                    opts.subcmd_idx,
+                                                    parsed_args.ranges,
+                                                    original_val)
+    if exit_code != 0:
+        return exit_code
+
+    return dispatch_output(target, original_val, formatted_val, opts.has_check,
+                           opts.has_diff)
+
+
 def translate_args(args: list[str]) -> list[str]:
     """Translates Ruff command-line arguments into YAPF command-line arguments.
 
@@ -306,10 +643,9 @@ def main() -> int:
             break
 
     if should_use_ruff(target_path):
-        # Run Ruff from the vpython environment
-        # sys.executable points to the vpython python interpreter
-        cmd = [sys.executable, "-m", "ruff"] + args
-        return subprocess.call(cmd)
+        # Run Ruff from the vpython environment, supporting multi-range chaining
+        # when >= 2 --range flags are provided over stdin.
+        return run_ruff_with_ranges(args)
     else:
         # Before attempting YAPF as a backoff, ascertain that a YAPF formatter/config
         # is present. If the file was rejected by Ruff (e.g. excluded in ruff.toml)
