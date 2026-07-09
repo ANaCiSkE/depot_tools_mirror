@@ -6,3 +6,6 @@ per-file reclient*=file://BUILD_OWNERS
 per-file reclient*=file://RECLIENT_OWNERS
 per-file siso*=file://BUILD_OWNERS
 per-file ruff*=ovsienko@google.com
+
+# Temp ownership of git cl while it get modified to work with ruff
+per-file git_cl_test.py=ovsienko@google.com
