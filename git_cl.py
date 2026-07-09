@@ -998,6 +998,7 @@ class Settings(object):
         self.git_editor = None
         self.format_full_by_default = None
         self.is_status_commit_order_by_date = None
+        self.format_js = None
 
     def _LazyUpdateIfNeeded(self):
         """Updates the settings from a codereview.settings file, if available."""
@@ -1120,6 +1121,11 @@ class Settings(object):
             self.is_status_commit_order_by_date = self._GetConfigBool(
                 'cl.date-order')
         return self.is_status_commit_order_by_date
+
+    def GetFormatJs(self):
+        if self.format_js is None:
+            self.format_js = self._GetConfig('cl.format-js').lower() == 'true'
+        return self.format_js
 
     def _GetConfig(self, key, default=''):
         self._LazyUpdateIfNeeded()
@@ -3922,6 +3928,9 @@ def LoadCodereviewSettingsFromFile(fileobj):
     SetProperty('cpplint-ignore-regex', 'LINT_IGNORE_REGEX')
     SetProperty('run-post-upload-hook', 'RUN_POST_UPLOAD_HOOK')
     SetProperty('format-full-by-default', 'FORMAT_FULL_BY_DEFAULT')
+
+    if 'FORMAT_JS' in keyvals:
+        scm.GIT.SetConfig(root, 'cl.format-js', keyvals['FORMAT_JS'])
 
     if 'GERRIT_HOST' in keyvals:
         scm.GIT.SetConfig(root, 'gerrit.host', keyvals['GERRIT_HOST'])
@@ -7672,10 +7681,15 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         'If neither --python or --no-python are set, python files that have a '
         '.style.yapf file in an ancestor directory will be formatted. '
         'It is an error to set both.')
-    parser.add_option('--js',
-                      action='store_true',
-                      help='Format javascript code with clang-format. '
-                      'Has no effect if --no-clang-format is set.')
+    default_js = settings.GetFormatJs()
+    parser.add_option(
+        '--js',
+        action='store_true',
+        dest='js',
+        default=default_js,
+        help='Format javascript/typescript code with clang-format. '
+        'Defaults to False unless FORMAT_JS is set to True in codereview.settings.'
+    )
     parser.add_option(
         '--no-js',
         action='store_false',
@@ -7781,29 +7795,34 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     if opts.js:
         clang_exts.extend(['.js', '.ts'])
 
-    formatters: list[tuple[list[str], FormatterFunction]] = [
-        (GN_EXTS, _RunGnFormat),
-        (['.xml'], _RunMetricsXMLFormat),
-        (['.md'], _RunMarkdownFormat),
+    formatters: list[tuple[list[str], FormatterFunction, list[str]]] = [
+        (GN_EXTS, _RunGnFormat, []),
+        (['.xml'], _RunMetricsXMLFormat, []),
+        (['.md'], _RunMarkdownFormat, []),
     ]
     if not opts.no_java:
-        formatters.append((['.java'], _RunGoogleJavaFormat))
+        formatters.append((['.java'], _RunGoogleJavaFormat, []))
     if opts.clang_format:
-        formatters.append((clang_exts, _RunClangFormatDiff))
+        formatters.append((clang_exts, _RunClangFormatDiff, ['.html.ts']))
     if opts.use_rust_fmt:
-        formatters.append((['.rs'], _RunRustFmt))
+        formatters.append((['.rs'], _RunRustFmt, []))
     if opts.use_swift_format:
-        formatters.append((['.swift'], _RunSwiftFormat))
+        formatters.append((['.swift'], _RunSwiftFormat, []))
     if opts.python is not False:
-        formatters.append((['.py'], _RunYapf))
+        formatters.append((['.py'], _RunYapf, []))
     if opts.mojom:
-        formatters.append((['.mojom', '.test-mojom'], _RunMojomFormat))
+        formatters.append((['.mojom', '.test-mojom'], _RunMojomFormat, []))
     if opts.lucicfg:
-        formatters.append((['.star'], _RunLUCICfgFormat))
+        formatters.append((['.star'], _RunLUCICfgFormat, []))
 
     return_value = 0
-    for file_types, format_func in formatters:
-        paths = [p for p in diff_files if p.lower().endswith(tuple(file_types))]
+    for item in formatters:
+        file_types, format_func, exclude_types = item
+
+        paths = [
+            p for p in diff_files if p.lower().endswith(tuple(file_types))
+            and not p.lower().endswith(tuple(exclude_types))
+        ]
         if not paths:
             continue
         ret = format_func(opts, paths, top_dir, diffs)
