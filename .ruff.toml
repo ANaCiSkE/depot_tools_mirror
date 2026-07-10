@@ -1,0 +1,17 @@
+# Copyright 2026 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+line-length = 80
+extend-include = [
+    "black",
+    "cros",
+    "isort",
+    "pylint-2.17",
+    "pylint-2.6",
+    "pylint-2.7",
+    "pylint-3.2",
+    "repo",
+    "ruff_chromium",
+    "yapf",
+]

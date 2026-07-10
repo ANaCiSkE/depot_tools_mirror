@@ -64,6 +64,7 @@ per-file crowbar*=file://SECURITY_TEAM_OWNERS
 
 # Ruff formatter
 per-file ruff*=ovsienko@google.com
+per-file .ruff.toml=ovsienko@google.com
 
 # Temp ownership of git cl while it get modified to work with ruff
 per-file git_cl.py=ovsienko@google.com
