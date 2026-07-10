@@ -5946,8 +5946,8 @@ class CMDFormatTestCase(unittest.TestCase):
                 mock.ANY, mock.ANY)
             git_cl.RunCommand.assert_called_with(
                 [
-                    'vpython3', mock.ANY, '--style', mock.ANY,
-                    'testing/xvfb_unittest.py', '-l', '18-24', '--diff'
+                    'vpython3', mock.ANY, 'format', 'testing/xvfb_unittest.py',
+                    '--range', '18:1-25:1', '--diff'
                 ],
                 cwd=self._top_dir,
                 error_ok=True,
@@ -6813,6 +6813,86 @@ class BuildbucketBatchTest(unittest.TestCase):
         with self.assertRaises(git_cl.BuildbucketResponseException) as cm:
             git_cl._buildbucket_search('cr-buildbucket.appspot.com', {})
         self.assertIn('search fail', str(cm.exception))
+
+
+class TestRuffIntegration(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.orig_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def write_file(self, path, content):
+        full_path = os.path.join(self.test_dir, path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return full_path
+
+    @mock.patch("git_cl.RunCommand")
+    def test_run_python_format_ruff_routing(self, mock_run):
+        mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
+        self.write_file("ruff.toml", "")
+        git_cl._RunPythonFormat(mock_opts, ["foo.py"], self.test_dir, None)
+        depot_tools_path = os.path.dirname(os.path.abspath(git_cl.__file__))
+        expected_tool = os.path.join(depot_tools_path, "ruff_chromium")
+        mock_run.assert_called_once_with(
+            ["vpython3", expected_tool, "format", "foo.py"],
+            cwd=self.test_dir,
+            shell=sys.platform == 'win32')
+
+    @mock.patch("git_cl.RunCommand")
+    def test_run_python_format_yapf_config_routed_to_ruff_chromium(
+            self, mock_run):
+        mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
+        self.write_file(".style.yapf", "")
+        git_cl._RunPythonFormat(mock_opts, ["foo.py"], self.test_dir, None)
+        depot_tools_path = os.path.dirname(os.path.abspath(git_cl.__file__))
+        expected_tool = os.path.join(depot_tools_path, "ruff_chromium")
+        mock_run.assert_called_once_with(
+            ["vpython3", expected_tool, "format", "foo.py"],
+            cwd=self.test_dir,
+            shell=sys.platform == 'win32')
+
+    @mock.patch("git_cl.RunCommand")
+    def test_run_python_format_excluded_file_routed_to_ruff_chromium(
+            self, mock_run):
+        # When opts.python is None (presubmit default), git_cl delegates unconditionally
+        # to ruff_chromium, relying on ruff_chromium to evaluate exclusions and skip
+        # formatting (no-op) when no YAPF config is present.
+        mock_opts = mock.Mock(python=None, full=True, diff=False, dry_run=False)
+        self.write_file("ruff.toml", 'exclude = ["excluded.py"]\n')
+        git_cl._RunPythonFormat(mock_opts, ["excluded.py"], self.test_dir, None)
+        depot_tools_path = os.path.dirname(os.path.abspath(git_cl.__file__))
+        expected_tool = os.path.join(depot_tools_path, "ruff_chromium")
+        mock_run.assert_called_once_with(
+            ["vpython3", expected_tool, "format", "excluded.py"],
+            cwd=self.test_dir,
+            shell=sys.platform == 'win32')
+
+    @mock.patch("git_cl.RunCommand")
+    @mock.patch("git_cl._ComputeFormatDiffLineRanges")
+    def test_run_python_format_ruff_ranges(self, mock_ranges, mock_run):
+        mock_opts = mock.Mock(python=True,
+                              full=False,
+                              diff=False,
+                              dry_run=False)
+        mock_ranges.return_value = {"foo.py": [(10, 12), (20, 25)]}
+        self.write_file("ruff.toml", "")
+        git_cl._RunPythonFormat(mock_opts, ["foo.py"], self.test_dir,
+                                {"foo.py": "dummy diff"})
+        depot_tools_path = os.path.dirname(os.path.abspath(git_cl.__file__))
+        expected_tool = os.path.join(depot_tools_path, "ruff_chromium")
+        mock_run.assert_called_once_with([
+            "vpython3", expected_tool, "format", "foo.py", "--range",
+            "10:1-13:1", "--range", "20:1-26:1"
+        ],
+                                         cwd=self.test_dir,
+                                         shell=sys.platform == 'win32')
 
 
 if __name__ == '__main__':
