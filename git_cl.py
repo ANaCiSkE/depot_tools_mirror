@@ -706,7 +706,7 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
         if not diff:
             continue
 
-        prev_end = 1
+        prev_end = 0
         for match in re.findall(pattern, diff, flags=re.MULTILINE):
             if not match:
                 continue

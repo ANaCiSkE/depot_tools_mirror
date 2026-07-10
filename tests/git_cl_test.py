@@ -6894,6 +6894,20 @@ class TestRuffIntegration(unittest.TestCase):
                                          cwd=self.test_dir,
                                          shell=sys.platform == 'win32')
 
+    def test_compute_format_diff_line_ranges_starts_at_line_1(self):
+        diff = ("diff --git a/foo.py b/foo.py\n"
+                "index 0000000..1111111\n"
+                "--- /dev/null\n"
+                "+++ b/foo.py\n"
+                "@@ -0,0 +1,5 @@\n"
+                "+# new file\n"
+                "+x = 1\n"
+                "+y = 2\n"
+                "+z = 3\n"
+                "+w = 4\n")
+        res = git_cl._ComputeFormatDiffLineRanges(["foo.py"], {"foo.py": diff})
+        self.assertEqual({"foo.py": [(1, 5)]}, res)
+
 
 if __name__ == '__main__':
     logging.basicConfig(
