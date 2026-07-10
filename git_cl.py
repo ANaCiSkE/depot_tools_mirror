@@ -137,6 +137,9 @@ DEFAULT_BUILDBUCKET_HOST = 'cr-buildbucket.appspot.com'
 DEFAULT_LINT_REGEX = r"(.*\.cpp|.*\.cc|.*\.h)"
 DEFAULT_LINT_IGNORE_REGEX = r"$^"
 
+# File name for yapf style config files.
+YAPF_CONFIG_FILENAME = '.style.yapf'
+
 # The issue, patchset and codereview server are stored on git config for each
 # branch under branch.<branch-name>.<config-key>.
 ISSUE_CONFIG_KEY = 'gerritissue'
@@ -735,6 +738,37 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
                 line_diffs[file].append((diff_start, diff_end))
 
     return line_diffs
+
+
+def _FindYapfConfigFile(fpath, yapf_config_cache, top_dir=None):
+    """Checks if a yapf file is in any parent directory of fpath until top_dir.
+
+    Recursively checks parent directories to find yapf file and if no yapf file
+    is found returns None. Uses yapf_config_cache as a cache for previously found
+    configs.
+    """
+    fpath = os.path.abspath(fpath)
+    # Return result if we've already computed it.
+    if fpath in yapf_config_cache:
+        return yapf_config_cache[fpath]
+
+    parent_dir = os.path.dirname(fpath)
+    if os.path.isfile(fpath):
+        ret = _FindYapfConfigFile(parent_dir, yapf_config_cache, top_dir)
+    else:
+        # Otherwise fpath is a directory
+        yapf_file = os.path.join(fpath, YAPF_CONFIG_FILENAME)
+        if os.path.isfile(yapf_file):
+            ret = yapf_file
+        elif fpath in (top_dir, parent_dir):
+            # If we're at the top level directory, or if we're at root
+            # there is no provided style.
+            ret = None
+        else:
+            # Otherwise recurse on the current directory.
+            ret = _FindYapfConfigFile(parent_dir, yapf_config_cache, top_dir)
+    yapf_config_cache[fpath] = ret
+    return ret
 
 
 def _FindMarkdownConfigFile(fpath: str,
@@ -7351,34 +7385,29 @@ def _RunSwiftFormat(opts, paths, top_dir, diffs):
     return 0
 
 
-def _RunPythonFormat(
-    opts: optparse.Values,
-    paths: list[str],
-    top_dir: str,
-    diffs: Mapping[str, str] | None,
-) -> int:
-    """Formats Python source files using ruff_chromium.
-
-    Formatting is dispatched to the ruff_chromium wrapper, which evaluates
-    governing repository configuration files (.ruff.toml, ruff.toml, .style.yapf,
-    or pyproject.toml) and formats with Ruff or falls back to YAPF accordingly.
-
-    Args:
-        opts: Command-line options parsed by optparse containing format flags
-            such as dry_run, diff, full, and python.
-        paths: List of file paths scheduled for formatting evaluation.
-        top_dir: Absolute path to the top-level repository root directory.
-        diffs: Mapping of modified file paths to their git diff contents, used
-            to compute partial line range formatting when opts.full is False.
-
-    Returns:
-        Exit code indicating presubmit or format status (0 for success or clean
-        check, 2 when dry_run formatting diffs exist or tool failures occur).
-    """
+def _RunYapf(opts, paths, top_dir, diffs):
     depot_tools_path = os.path.dirname(os.path.abspath(__file__))
-    ruff_chromium_tool = os.path.join(depot_tools_path, 'ruff_chromium')
+    yapf_tool = os.path.join(depot_tools_path, 'yapf')
 
-    line_diffs = {}
+    # Used for caching.
+    yapf_configs = {}
+    for p in paths:
+        # Find the yapf style config for the current file, defaults to depot
+        # tools default.
+        _FindYapfConfigFile(p, yapf_configs, top_dir)
+
+    # Turn on python formatting by default if a yapf config is specified.
+    # This breaks in the case of this repo though since the specified
+    # style file is also the global default.
+    if opts.python is None:
+        paths = [
+            p for p in paths
+            if _FindYapfConfigFile(p, yapf_configs, top_dir) is not None
+        ]
+
+    # Note: yapf still seems to fix indentation of the entire file
+    # even if line ranges are specified.
+    # See https://github.com/google/yapf/issues/499
     if paths and diffs:
         line_diffs = _ComputeFormatDiffLineRanges(paths, diffs)
 
@@ -7387,26 +7416,36 @@ def _RunPythonFormat(
 
     return_value = 0
     for path in paths:
-        cmd = ['vpython3', ruff_chromium_tool, 'format', path]
+        yapf_style = _FindYapfConfigFile(path, yapf_configs, top_dir)
+        # Default to pep8 if not .style.yapf is found.
+        if not yapf_style:
+            yapf_style = 'pep8'
+
+        cmd = ['vpython3', yapf_tool, '--style', yapf_style, path]
+
         if not opts.full:
             ranges = line_diffs.get(path)
             if not ranges:
                 continue
+            # Only run yapf over changed line ranges.
             for diff_start, diff_end in ranges:
-                cmd += ['--range', f'{diff_start}:1-{diff_end + 1}:1']
+                cmd += ['-l', '{}-{}'.format(diff_start, diff_end)]
+
         if opts.diff or opts.dry_run:
             cmd += ['--diff']
+            # Will return non-zero exit code if non-empty diff.
             stdout = RunCommand(cmd,
                                 error_ok=True,
                                 stderr=subprocess2.PIPE,
                                 cwd=top_dir,
-                                shell=sys.platform == 'win32')
+                                shell=sys.platform.startswith('win32'))
             if opts.diff:
                 sys.stdout.write(stdout)
             if opts.dry_run and len(stdout) > 0:
                 return_value = 2
         else:
-            RunCommand(cmd, cwd=top_dir, shell=sys.platform == 'win32')
+            cmd += ['-i']
+            RunCommand(cmd, cwd=top_dir, shell=sys.platform.startswith('win32'))
     return return_value
 
 
@@ -7770,7 +7809,7 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     if opts.use_swift_format:
         formatters.append((['.swift'], _RunSwiftFormat, []))
     if opts.python is not False:
-        formatters.append((['.py'], _RunPythonFormat, []))
+        formatters.append((['.py'], _RunYapf, []))
     if opts.mojom:
         formatters.append((['.mojom', '.test-mojom'], _RunMojomFormat, []))
     if opts.lucicfg:
