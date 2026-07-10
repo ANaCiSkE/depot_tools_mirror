@@ -10,24 +10,8 @@ import string
 import sys
 import tokenize
 
-import os
-
-# Temporarily promote depot_tools to sys.path[0] so that 'from third_party
-# import schema' loads depot_tools/third_party/schema instead of colliding with
-# site-packages/third_party in virtual environments.
-#
-# TODO(b/529940779): Remove this workaround once the proper fix in
-# https://crrev.com/i/9489642 has landed.
-_THIS_DIR = os.path.abspath(os.path.dirname(__file__))
-_old_path = list(sys.path)
-if _THIS_DIR in sys.path:
-    sys.path.remove(_THIS_DIR)
-sys.path.insert(0, _THIS_DIR)
-
 import gclient_utils
 from third_party import schema
-
-sys.path[:] = _old_path
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
