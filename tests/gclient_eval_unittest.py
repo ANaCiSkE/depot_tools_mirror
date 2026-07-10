@@ -874,6 +874,90 @@ class CipdTest(unittest.TestCase):
                 '}',
             ]))
 
+    def test_sets_cipd_binop_vars(self):
+        local_scope = gclient_eval.Exec(
+            file_join([
+                'vars = {',
+                '    "cipd-rev": "2@30.0.14608247",',
+                '}',
+                'deps = {',
+                '    "src/cipd/package": {',
+                '        "packages": [',
+                '            {',
+                '                "package": "some/cipd/package",',
+                '                "version": "version:" + Var("cipd-rev"),',
+                '            },',
+                '        ],',
+                '        "dep_type": "cipd",',
+                '    },',
+                '}',
+            ]))
+
+        gclient_eval.SetCIPD(local_scope, 'src/cipd/package',
+                             'some/cipd/package', 'version:2@30.0.15729638')
+        result = gclient_eval.RenderDEPSFile(local_scope)
+
+        self.assertEqual(
+            result,
+            file_join([
+                'vars = {',
+                '    "cipd-rev": "2@30.0.15729638",',
+                '}',
+                'deps = {',
+                '    "src/cipd/package": {',
+                '        "packages": [',
+                '            {',
+                '                "package": "some/cipd/package",',
+                '                "version": "version:" + Var("cipd-rev"),',
+                '            },',
+                '        ],',
+                '        "dep_type": "cipd",',
+                '    },',
+                '}',
+            ]))
+
+    def test_sets_cipd_braced_vars(self):
+        local_scope = gclient_eval.Exec(
+            file_join([
+                'vars = {',
+                '    "cipd-rev": "2@30.0.14608247",',
+                '}',
+                'deps = {',
+                '    "src/cipd/package": {',
+                '        "packages": [',
+                '            {',
+                '                "package": "some/cipd/package",',
+                '                "version": "version:{cipd-rev}",',
+                '            },',
+                '        ],',
+                '        "dep_type": "cipd",',
+                '    },',
+                '}',
+            ]))
+
+        gclient_eval.SetCIPD(local_scope, 'src/cipd/package',
+                             'some/cipd/package', 'version:2@30.0.15729638')
+        result = gclient_eval.RenderDEPSFile(local_scope)
+
+        self.assertEqual(
+            result,
+            file_join([
+                'vars = {',
+                '    "cipd-rev": "2@30.0.15729638",',
+                '}',
+                'deps = {',
+                '    "src/cipd/package": {',
+                '        "packages": [',
+                '            {',
+                '                "package": "some/cipd/package",',
+                '                "version": "version:{cipd-rev}",',
+                '            },',
+                '        ],',
+                '        "dep_type": "cipd",',
+                '    },',
+                '}',
+            ]))
+
 
 class RevisionTest(unittest.TestCase):
     def assert_gets_and_sets_revision(self,

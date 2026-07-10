@@ -990,10 +990,27 @@ def SetCIPD(gclient_dict, dep_name, package_name, new_version):
             "The deps entry for %s:%s has no formatting information." %
             (dep_name, package_name))
 
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        try:
+            prefix = _gclient_eval(node.left,
+                                   vars_dict=gclient_dict.get('vars'))
+            if isinstance(prefix, str) and new_version.startswith(prefix):
+                new_version = new_version[len(prefix):]
+        except Exception:
+            pass
+        node = node.right
+
     if not isinstance(node, ast.Call) and not _IsStringConstant(node):
         raise ValueError(
             "Unsupported dependency revision format. Please file a bug to the "
             "Infra>SDK component in crbug.com")
+
+    if _IsStringConstant(node):
+        if node.value.endswith('}'):
+            last_brace = node.value.rfind('{')
+            prefix = node.value[:last_brace]
+            if new_version.startswith(prefix):
+                new_version = new_version[len(prefix):]
 
     var_name = _GetVarName(node)
     if var_name is not None:
