@@ -14,6 +14,7 @@
 
 import os
 import sys
+import argparse
 import subprocess
 import tomllib
 import difflib
@@ -134,7 +135,20 @@ def ruff_should_format(file_path: str, config_dir: str, config_bytes: bytes,
     return True
 
 
-def should_use_ruff(target_path: str) -> bool:
+def extract_root_flag(args: list[str]) -> tuple[str | None, list[str]]:
+    """Extracts --root, --top-dir, or --root-dir from args using argparse."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--root",
+                        "--top-dir",
+                        "--root-dir",
+                        dest="root_dir",
+                        default=None)
+    opts, remaining = parser.parse_known_args(args)
+    root_dir = os.path.abspath(opts.root_dir) if opts.root_dir else None
+    return root_dir, remaining
+
+
+def should_use_ruff(target_path: str, root_dir: str | None = None) -> bool:
     """Determines whether to format target_path using Ruff or fall back to YAPF.
 
     Args:
@@ -196,6 +210,10 @@ def should_use_ruff(target_path: str) -> bool:
         if os.path.exists(os.path.join(search_dir, ".style.yapf")):
             return False
 
+        if root_dir and os.path.abspath(search_dir) == os.path.abspath(
+                root_dir):
+            break
+
         parent_dir = os.path.dirname(search_dir)
         if parent_dir == search_dir:
             break
@@ -204,7 +222,7 @@ def should_use_ruff(target_path: str) -> bool:
     return False
 
 
-def has_yapf_config(target_path: str) -> bool:
+def has_yapf_config(target_path: str, root_dir: str | None = None) -> bool:
     """Determines whether a YAPF formatting configuration governs target_path.
 
     Args:
@@ -232,6 +250,10 @@ def has_yapf_config(target_path: str) -> bool:
                     return True
             except Exception:
                 pass
+
+        if root_dir and os.path.abspath(search_dir) == os.path.abspath(
+                root_dir):
+            break
 
         parent_dir = os.path.dirname(search_dir)
         if parent_dir == search_dir:
@@ -308,40 +330,16 @@ def merge_ranges(ranges: list[LineRange]) -> list[LineRange]:
 
 
 def parse_ranges(args: list[str]) -> ParsedArguments:
-    """Extracts --range flags and gathers pass-through arguments.
-
-    Args:
-        args: Command-line arguments.
-
-    Returns:
-        A ParsedArguments dataclass instance containing the line ranges and remaining arguments.
-
-    Raises:
-        ValueError: If a range flag or value is invalid.
-    """
+    """Extracts --range flags and gathers pass-through arguments using argparse."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--range", action="append", dest="ranges", default=[])
+    opts, pass_through_args = parser.parse_known_args(args)
     ranges: list[LineRange] = []
-    pass_through_args: list[str] = []
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        if arg.startswith("--range="):
-            try:
-                ranges.append(parse_range(arg.split("=", 1)[1]))
-            except ValueError as e:
-                raise ValueError(f"invalid --range flag {arg!r}: {e}") from e
-            i += 1
-        elif arg == "--range":
-            if i + 1 >= len(args):
-                raise ValueError("missing value for --range flag")
-            val = args[i + 1]
-            try:
-                ranges.append(parse_range(val))
-            except ValueError as e:
-                raise ValueError(f"invalid --range value {val!r}: {e}") from e
-            i += 2
-        else:
-            pass_through_args.append(arg)
-            i += 1
+    for r in opts.ranges:
+        try:
+            ranges.append(parse_range(r))
+        except ValueError as e:
+            raise ValueError(f"invalid --range value {r!r}: {e}") from e
     return ParsedArguments(ranges=ranges, pass_through_args=pass_through_args)
 
 
@@ -627,7 +625,7 @@ def main() -> int:
     Returns:
         Exit code of the invoked formatter subprocess.
     """
-    args = sys.argv[1:]
+    root_dir, args = extract_root_flag(sys.argv[1:])
 
     # Determine target path for config detection
     target_path = os.getcwd()
@@ -642,7 +640,7 @@ def main() -> int:
             target_path = arg
             break
 
-    if should_use_ruff(target_path):
+    if should_use_ruff(target_path, root_dir):
         # Run Ruff from the vpython environment, supporting multi-range chaining
         # when >= 2 --range flags are provided over stdin.
         return run_ruff_with_ranges(args)
@@ -650,7 +648,7 @@ def main() -> int:
         # Before attempting YAPF as a backoff, ascertain that a YAPF formatter/config
         # is present. If the file was rejected by Ruff (e.g. excluded in ruff.toml)
         # and no YAPF config governs the directory, return 0 (no-op).
-        if not has_yapf_config(target_path):
+        if not has_yapf_config(target_path, root_dir):
             return 0
 
         # Fallback to YAPF
