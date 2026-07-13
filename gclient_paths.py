@@ -167,12 +167,29 @@ def GetExeSuffix():
 
 
 @functools.lru_cache
-def _GetGClientSolutions(gclient_root_dir_path):
-    gclient_config_file = os.path.join(gclient_root_dir_path, '.gclient')
+def _GetGClientConfigInner(gclient_root_dir_path, filename):
+    gclient_config_file = os.path.join(gclient_root_dir_path, filename)
+    if not os.path.exists(gclient_config_file):
+        return None
     gclient_config_contents = gclient_utils.FileRead(gclient_config_file)
-    env = gclient_eval.ParseLocalConfig(gclient_config_contents,
-                                        gclient_config_file)
-    return env.get('solutions', [])
+    return gclient_eval.ParseLocalConfig(gclient_config_contents,
+                                         gclient_config_file)
+
+
+def GetGClientConfig(gclient_root_dir_path=None, filename='.gclient'):
+    """Returns the parsed .gclient config contents as a dict, or None if not found."""
+    if not gclient_root_dir_path:
+        gclient_root_dir_path = FindGclientRoot(os.getcwd(), filename)
+    if not gclient_root_dir_path:
+        return None
+    return _GetGClientConfigInner(gclient_root_dir_path, filename)
+
+
+@functools.lru_cache
+def _GetGClientSolutions(gclient_root_dir_path):
+    config = GetGClientConfig(gclient_root_dir_path)
+    return config.get('solutions', []) if config else []
+
 
 
 def GetGClientPrimarySolutionName(gclient_root_dir_path):

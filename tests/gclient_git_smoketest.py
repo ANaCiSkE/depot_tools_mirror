@@ -1004,6 +1004,104 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
             'bar_rev',
         ], results[0].splitlines())
 
+    def testGetConfig(self):
+        gclient_file = os.path.join(self.root_dir, '.gclient')
+        with open(gclient_file, 'w') as f:
+            f.write('\n'.join([
+                'solutions = [',
+                '  {',
+                '    "name": "src",',
+                '    "url": "https://chromium.googlesource.com/chromium/src.git",',
+                '    "deps_file": "DEPS",',
+                '    "managed": False,',
+                '    "custom_deps": {',
+                '      "src/third_party/WebKit": None,',
+                '    },',
+                '    "custom_vars": {',
+                '      "checkout_android": True,',
+                '    },',
+                '    "custom_hooks": [',
+                '      {"name": "my_hook", "action": ["python3", "do_something.py"]},',
+                '    ],',
+                '  },',
+                ']',
+                'target_os = ["android", "chromeos"]',
+                'target_os_only = True',
+                'target_cpu = ["arm", "x64"]',
+                'target_cpu_only = False',
+                'cache_dir = "/path/to/cache"',
+                'hooks = [',
+                '  {"name": "global_hook", "action": ["python3", "global.py"]}',
+                ']',
+                'target_os_tuple = ("ios", "mac")',
+            ]))
+
+        # Test printing all config.
+        results = self.gclient(['getconfig'])
+        parsed_config = json.loads(results[0])
+        self.assertEqual(parsed_config['solutions'][0]['name'], 'src')
+        self.assertEqual(parsed_config['solutions'][0]['custom_deps'],
+                         {'src/third_party/WebKit': None})
+        self.assertEqual(parsed_config['solutions'][0]['custom_vars'],
+                         {'checkout_android': True})
+        self.assertEqual(parsed_config['solutions'][0]['custom_hooks'],
+                         [{
+                             'name': 'my_hook',
+                             'action': ['python3', 'do_something.py']
+                         }])
+        self.assertEqual(parsed_config['target_os'], ['android', 'chromeos'])
+        self.assertEqual(parsed_config['target_os_only'], True)
+        self.assertEqual(parsed_config['target_cpu'], ['arm', 'x64'])
+        self.assertEqual(parsed_config['target_cpu_only'], False)
+        self.assertEqual(parsed_config['cache_dir'], '/path/to/cache')
+        self.assertEqual(parsed_config['hooks'],
+                         [{
+                             'name': 'global_hook',
+                             'action': ['python3', 'global.py']
+                         }])
+        self.assertEqual(parsed_config['target_os_tuple'], ['ios', 'mac'])
+
+        # Test querying individual keys.
+        results = self.gclient([
+            'getconfig', 'target_os', 'target_cpu_only', 'target_os_tuple',
+            'cache_dir'
+        ])
+        lines = results[0].splitlines()
+        self.assertEqual(json.loads(lines[0]), ['android', 'chromeos'])
+        self.assertEqual(lines[1], 'false')
+        self.assertEqual(json.loads(lines[2]), ['ios', 'mac'])
+        self.assertEqual(lines[3], '/path/to/cache')
+
+        # Test pre-validation: querying a mix of valid and invalid keys should not print anything to stdout.
+        stdout, stderr, returncode = self.gclient(
+            ['getconfig', 'target_os', 'nonexistent_key'], error_ok=True)
+        self.assertEqual(2, returncode)
+        self.assertEqual('', stdout.strip())
+        self.assertIn('Key nonexistent_key not found in .gclient config',
+                      stderr)
+
+    def testGetConfigEmpty(self):
+        gclient_file = os.path.join(self.root_dir, '.gclient')
+        with open(gclient_file, 'w') as f:
+            f.write('')
+
+        # Test printing all config, which should output {} since .gclient is empty but exists.
+        stdout, stderr, returncode = self.gclient(['getconfig'])
+        self.assertEqual(0, returncode)
+        self.assertEqual('{}', stdout.strip())
+
+        # Test querying keys when empty.
+        stdout, stderr, returncode = self.gclient(['getconfig', 'target_os'],
+                                                  error_ok=True)
+        self.assertEqual(2, returncode)
+        self.assertIn('Key target_os not found in .gclient config', stderr)
+
+        # Test when .gclient is missing.
+        os.remove(gclient_file)
+        stdout, stderr, returncode = self.gclient(['getconfig'], error_ok=True)
+        self.assertEqual(1, returncode)
+        self.assertIn('Could not find .gclient configuration file.', stderr)
+
     # TODO(crbug.com/1024683): Enable for windows.
     @unittest.skipIf(sys.platform == 'win32', 'not yet fixed on win')
     def testFlatten(self):

@@ -4256,6 +4256,46 @@ def CMDrevinfo(parser, args):
     return 0
 
 
+# TODO(crbug.com/327270127): Collect metrics for getconfig.
+@subcommand.usage('[key1] [key2] ...')
+def CMDgetconfig(parser, args):
+    """Gets config values from the .gclient file.
+
+    If no keys are specified, prints the entire configuration as a JSON object.
+    Otherwise, prints the value of each specified key sequentially. Strings
+    are printed as raw text; other values are printed as JSON-serialized
+    strings.
+
+    If a specified key does not exist in the .gclient file, exits with exit
+    code 2.
+    """
+    (options, args) = parser.parse_args(args)
+    config = gclient_paths.GetGClientConfig(filename=options.config_filename)
+    if config is None:
+        raise gclient_utils.Error(
+            f'Could not find {options.config_filename} configuration file.')
+
+    if not args:
+        print(json.dumps(config, indent=2))
+        return 0
+
+    # Pre-validate that all requested keys exist to avoid partial output.
+    missing_keys = [key for key in args if key not in config]
+    if missing_keys:
+        for key in missing_keys:
+            print(f'Key {key} not found in {options.config_filename} config',
+                  file=sys.stderr)
+        return 2
+
+    for key in args:
+        val = config[key]
+        if isinstance(val, str):
+            print(val)
+        else:
+            print(json.dumps(val))
+    return 0
+
+
 @metrics.collector.collect_metrics('gclient getdep')
 def CMDgetdep(parser, args):
     """Gets revision information and variable values from a DEPS file.

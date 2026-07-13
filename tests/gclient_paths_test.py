@@ -102,6 +102,35 @@ class FindGclientRootTest(TestBase):
                                                        'z')))
 
 
+class GetGClientConfigTest(TestBase):
+
+    def testGetGClientConfig_SpecifiedPath(self):
+        self.make_file_tree({
+            '.gclient':
+            'solutions = [{"name": "foo"}]\ntarget_os = ["android"]'
+        })
+        config = gclient_paths.GetGClientConfig(self.root)
+        self.assertEqual(config, {
+            'solutions': [{
+                'name': 'foo'
+            }],
+            'target_os': ['android']
+        })
+
+    def testGetGClientConfig_AutoDetectPath(self):
+        self.make_file_tree({
+            '.gclient': 'solutions = [{"name": "foo"}]',
+            '.gclient_entries': 'entries = {"foo": "..."}',
+        })
+        self.cwd = os.path.join(self.root, 'foo', 'bar')
+        config = gclient_paths.GetGClientConfig()
+        self.assertEqual(config, {'solutions': [{'name': 'foo'}]})
+
+    def testGetGClientConfig_NotFound(self):
+        config = gclient_paths.GetGClientConfig()
+        self.assertIsNone(config)
+
+
 class GetGClientPrimarySolutionNameTest(TestBase):
     def testGetGClientPrimarySolutionName(self):
         self.make_file_tree({'.gclient': 'solutions = [{"name": "foo"}]'})
