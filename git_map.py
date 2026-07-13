@@ -23,8 +23,9 @@ import gclient_utils
 import git_common
 import setup_color
 import subprocess2
+import from_third_party
 
-from third_party import colorama
+colorama = from_third_party.import_module('colorama')
 
 RESET = colorama.Fore.RESET + colorama.Back.RESET + colorama.Style.RESET_ALL
 BRIGHT = colorama.Style.BRIGHT

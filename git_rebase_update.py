@@ -19,8 +19,9 @@ from pprint import pformat
 import gclient_utils
 import git_common as git
 import setup_color
+import from_third_party
 
-from third_party import colorama
+colorama = from_third_party.import_module('colorama')
 
 STARTING_BRANCH_KEY = 'depot-tools.rebase-update.starting-branch'
 STARTING_WORKDIR_KEY = 'depot-tools.rebase-update.starting-workdir'

@@ -52,7 +52,9 @@ from typing import Iterable, Optional
 import mdformat
 import setup_color
 import utils
-from third_party import colorama
+import from_third_party
+
+colorama = from_third_party.import_module('colorama')
 
 # Internal formatting rules.
 _WRAP_WIDTH = '80'

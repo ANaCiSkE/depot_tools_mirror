@@ -117,7 +117,9 @@ import setup_color
 import subcommand
 import subprocess2
 import upload_to_google_storage_first_class
-from third_party.repo.progress import Progress
+import from_third_party
+
+Progress = from_third_party.import_module('repo.progress').Progress
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long

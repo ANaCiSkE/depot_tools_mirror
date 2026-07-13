@@ -75,8 +75,9 @@ import subprocess2
 import utils
 import swift_format
 import watchlists
+import from_third_party
 
-from third_party import colorama
+colorama = from_third_party.import_module('colorama')
 
 
 __version__ = '2.0'

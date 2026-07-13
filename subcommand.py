@@ -87,6 +87,13 @@ def _get_color_module():
 
     If so, assumes colors are supported and return the module handle.
     """
+    try:
+        import from_third_party
+        mod = from_third_party.get('colorama')
+        if mod:
+            return mod
+    except ImportError:
+        pass
     return sys.modules.get('colorama') or sys.modules.get(
         'third_party.colorama')
 

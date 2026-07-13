@@ -7,7 +7,9 @@ import ctypes
 import platform
 import subprocess
 import sys
-from third_party import colorama
+import from_third_party
+
+colorama = from_third_party.import_module('colorama')
 
 IS_TTY = None
 OUT_TYPE = 'unknown'

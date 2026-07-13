@@ -9,8 +9,9 @@ import sys
 import threading
 
 from multiprocessing.pool import IMapIterator
+import from_third_party
 
-from third_party import colorama
+colorama = from_third_party.import_module('colorama')
 
 
 def wrapper(func):

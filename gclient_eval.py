@@ -11,7 +11,9 @@ import sys
 import tokenize
 
 import gclient_utils
-from third_party import schema
+import from_third_party
+
+schema = from_third_party.import_module('schema')
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
