@@ -6,6 +6,26 @@
 #   name: "infra/python/wheels/ruff/${vpython_platform}"
 #   version: "version:0.15.17"
 # >
+# wheel: <
+#   name: "infra/python/wheels/yapf-py3"
+#   version: "version:0.40.2"
+# >
+# wheel: <
+#   name: "infra/python/wheels/platformdirs-py3"
+#   version: "version:4.1.0"
+# >
+# wheel: <
+#   name: "infra/python/wheels/importlib-metadata-py3"
+#   version: "version:7.0.0"
+# >
+# wheel: <
+#   name: "infra/python/wheels/tomli-py3"
+#   version: "version:2.0.1"
+# >
+# wheel: <
+#  name: "infra/python/wheels/zipp-py3"
+#  version: "version:3.7.0"
+# >
 # [VPYTHON:END]
 
 # Copyright 2026 The Chromium Authors. All rights reserved.
@@ -16,14 +36,14 @@ import os
 import sys
 import argparse
 import subprocess
-import tomllib
+import json
 import difflib
-from pathlib import PurePath
+import tomllib
 from typing import NamedTuple
 
 
 class LineRange(NamedTuple):
-    """Represents a 1-based line range interval [start, end]."""
+    """Represents a 1-based line range interval [start, end) where end is exclusive."""
     start: int
     end: int
 
@@ -44,95 +64,92 @@ class FormattingOptions(NamedTuple):
     subcmd_idx: int
 
 
-def match_pattern(file_path: str, config_dir: str, pattern: str) -> bool:
-    """Checks if file_path matches a given Ruff pattern (glob or prefix).
-
-    Args:
-        file_path: Absolute or relative path to the target file being evaluated.
-        config_dir: Directory containing the configuration file where the pattern was defined.
-        pattern: Ruff glob or directory prefix pattern from include/exclude lists.
-
-    Returns:
-        True if the file matches the pattern, False otherwise.
-    """
-    # Unsupported by ruff pattern, so we don't support it either.
-    if "**" in pattern:
-        return False
-
-    pattern_clean = os.path.normpath(pattern)
-    # Strip leading slashes/backslashes so os.path.join does not treat anchored patterns
-    # (like "/foo.py") as absolute filesystem roots and discard config_dir.
-    pattern_rel = pattern_clean.lstrip(r"\/")
-    abs_pattern = os.path.join(
-        config_dir, pattern_rel) if config_dir != "." else pattern_rel
-
-    # 1. Directory prefix match: os.path.relpath checks if file_path is inside abs_pattern directory
-    # (e.g., pattern "third_party" matches any file inside "third_party/...").
-    try:
-        rel = os.path.relpath(file_path, abs_pattern)
-        if not rel.startswith("..") and not os.path.isabs(rel):
-            return True
-    except ValueError:
-        pass
-
-    # 2. Filename glob match: if pattern has no path separators (e.g., "*.py"), match against filename anywhere in tree.
-    if "/" not in pattern_clean and "\\" not in pattern_clean:
-        if PurePath(file_path).match(pattern_clean):
-            return True
-
-    # 3. Simple path glob match: if pattern has path separators (e.g., "foo/*.py"), match against relative path from config_dir.
-    if "/" in pattern_clean or "\\" in pattern_clean:
-        if PurePath(file_path).match(abs_pattern):
-            return True
-
-    return False
+_dir_config_cache: dict[tuple[str, str | None], str | None] = {}
 
 
-def ruff_should_format(file_path: str, config_dir: str, config_bytes: bytes,
-                       is_pyproject: bool) -> bool:
-    """Determines if a file should be formatted by Ruff based on TOML config.
+def resolve_config_for_dir(target_dir: str,
+                           root_dir: str | None = None) -> str | None:
+    search_dir = os.path.abspath(target_dir)
+    abs_root = os.path.abspath(root_dir) if root_dir else None
+    cache_key = (search_dir, abs_root)
+    traversed_dirs = []
 
-    Args:
-        file_path: Path to the target file being formatted.
-        config_dir: Directory containing the configuration file.
-        config_bytes: Raw byte content of the TOML configuration file.
-        is_pyproject: True if the config file is pyproject.toml, False for ruff.toml/.ruff.toml.
+    while True:
+        if cache_key in _dir_config_cache:
+            resolved = _dir_config_cache[cache_key]
+            for d in traversed_dirs:
+                _dir_config_cache[(d, abs_root)] = resolved
+            return resolved
 
-    Returns:
-        True if Ruff should format the file (included and not excluded),
-        False otherwise. If file is unreadable opt for YAPF.
-    """
-    try:
-        cfg = tomllib.loads(config_bytes.decode("utf-8"))
-    except Exception:
-        # If TOML is malformed, default to Ruff to let Ruff report syntax error
-        return True
+        traversed_dirs.append(search_dir)
 
-    # Backported logic from Ruff to parse the TOML file.
-    target = cfg.get("tool", {}).get("ruff", {}) if is_pyproject else cfg
-    excludes = [
-        *target.get("exclude", []),
-        *target.get("extend-exclude", []),
-        *target.get("format", {}).get("exclude", []),
-    ]
-    includes = [
-        *target.get("include", []),
-        *target.get("extend-include", []),
-    ]
+        # 1. Check .style.yapf first (prioritize YAPF)
+        if os.path.isfile(os.path.join(search_dir, ".style.yapf")):
+            resolved = "yapf"
+            break
 
-    # 1. Check inclusion if explicitly defined. Note: bool() ensures an empty list [] in TOML
-    # is treated as False (no include filter), whereas a non-empty list actively filters formatting.
-    if bool(target.get("include")):
-        if not any(
-                match_pattern(file_path, config_dir, pat) for pat in includes):
-            return False
+        # 2. Check ruff.toml / .ruff.toml
+        if os.path.isfile(os.path.join(
+                search_dir, ".ruff.toml")) or os.path.isfile(
+                    os.path.join(search_dir, "ruff.toml")):
+            resolved = "ruff"
+            break
 
-    # 2. Check exclusion
-    for pattern in excludes:
-        if match_pattern(file_path, config_dir, pattern):
-            return False
+        # 3. Check pyproject.toml
+        pyproject = os.path.join(search_dir, "pyproject.toml")
+        if os.path.isfile(pyproject):
+            try:
+                with open(pyproject, "rb") as f:
+                    cfg = tomllib.loads(f.read().decode("utf-8",
+                                                        errors="ignore"))
+                tool = cfg.get("tool", {})
+                has_ruff = "ruff" in tool
+                has_yapf = "yapf" in tool
+                has_other = "black" in tool or "pyink" in tool
 
-    return True
+                if has_ruff and not (has_yapf or has_other):
+                    resolved = "ruff"
+                    break
+                elif has_yapf:
+                    # If both Ruff and YAPF are configured, we prioritize YAPF.
+                    # We stop traversal here (closest config wins) rather than
+                    # falling back to a potential Ruff config higher in the tree.
+                    resolved = "yapf"
+                    break
+                elif has_other:
+                    # If another unsupported formatter (like Black) is configured,
+                    # we must NOT format it with Ruff, and we shouldn't fall back
+                    # to a parent YAPF config either.
+                    resolved = None
+                    break
+            except Exception as e:
+                sys.stderr.write(f"Warning: failed to parse {pyproject}: {e}\n")
+
+        if abs_root and search_dir == abs_root:
+            resolved = None
+            break
+
+        parent_dir = os.path.dirname(search_dir)
+        if parent_dir == search_dir:
+            resolved = None
+            break
+        search_dir = parent_dir
+        cache_key = (search_dir, abs_root)
+
+    for d in traversed_dirs:
+        _dir_config_cache[(d, abs_root)] = resolved
+    return resolved
+
+
+_ruff_bin = None
+
+
+def get_ruff_bin() -> str:
+    global _ruff_bin
+    if _ruff_bin is None:
+        import ruff
+        _ruff_bin = ruff.find_ruff_bin()
+    return _ruff_bin
 
 
 def extract_root_flag(args: list[str]) -> tuple[str | None, list[str]]:
@@ -162,64 +179,7 @@ def should_use_ruff(target_path: str, root_dir: str | None = None) -> bool:
         os.path.isfile(abs_target)
         or not os.path.exists(abs_target)) else abs_target
 
-    # Traverse upwards from the target file's directory. Child directories are never evaluated
-    # because Ruff configs only apply to files within their own directory tree or below.
-    while True:
-        # Check .ruff.toml first (highest precedence in same dir)
-        dot_ruff = os.path.join(search_dir, ".ruff.toml")
-        if os.path.isfile(dot_ruff):
-            try:
-                with open(dot_ruff, "rb") as f:
-                    if ruff_should_format(abs_target, search_dir, f.read(),
-                                          False):
-                        return True
-            except Exception:
-                return False
-
-        # Check ruff.toml second
-        ruff_toml = os.path.join(search_dir, "ruff.toml")
-        if os.path.isfile(ruff_toml):
-            try:
-                with open(ruff_toml, "rb") as f:
-                    if ruff_should_format(abs_target, search_dir, f.read(),
-                                          False):
-                        return True
-            except Exception:
-                return False
-
-        # Check pyproject.toml third
-        pyproject = os.path.join(search_dir, "pyproject.toml")
-        if os.path.isfile(pyproject):
-            try:
-                with open(pyproject, "rb") as f:
-                    content_bytes = f.read()
-                content_str = content_bytes.decode("utf-8", errors="ignore")
-                if "[tool.ruff]" in content_str:
-                    if "[tool.yapf]" in content_str or "[tool.black]" in content_str or "[tool.pyink]" in content_str:
-                        pass
-                    elif ruff_should_format(abs_target, search_dir,
-                                            content_bytes, True):
-                        if os.path.exists(
-                                os.path.join(search_dir, ".style.yapf")):
-                            return False
-                        return True
-            except Exception:
-                pass
-
-        # Check for explicit yapf config
-        if os.path.exists(os.path.join(search_dir, ".style.yapf")):
-            return False
-
-        if root_dir and os.path.abspath(search_dir) == os.path.abspath(
-                root_dir):
-            break
-
-        parent_dir = os.path.dirname(search_dir)
-        if parent_dir == search_dir:
-            break
-        search_dir = parent_dir
-
-    return False
+    return resolve_config_for_dir(search_dir, root_dir) == "ruff"
 
 
 def has_yapf_config(target_path: str, root_dir: str | None = None) -> bool:
@@ -236,34 +196,10 @@ def has_yapf_config(target_path: str, root_dir: str | None = None) -> bool:
     search_dir = (os.path.dirname(abs_target) if
                   (os.path.isfile(abs_target)
                    or not os.path.exists(abs_target)) else abs_target)
-
-    while True:
-        if os.path.isfile(os.path.join(search_dir, ".style.yapf")):
-            return True
-
-        pyproject = os.path.join(search_dir, "pyproject.toml")
-        if os.path.isfile(pyproject):
-            try:
-                with open(pyproject, "rb") as f:
-                    content = f.read().decode("utf-8", errors="ignore")
-                if "[tool.yapf]" in content:
-                    return True
-            except Exception:
-                pass
-
-        if root_dir and os.path.abspath(search_dir) == os.path.abspath(
-                root_dir):
-            break
-
-        parent_dir = os.path.dirname(search_dir)
-        if parent_dir == search_dir:
-            break
-        search_dir = parent_dir
-
-    return False
+    return resolve_config_for_dir(search_dir, root_dir) == "yapf"
 
 
-def parse_range(s: str) -> tuple[int, int]:
+def parse_range(s: str) -> LineRange:
     """Parses a range string 'startLine:startCol-endLine:endCol' or 'startLine-endLine'.
 
     Args:
@@ -288,18 +224,35 @@ def parse_range(s: str) -> tuple[int, int]:
     if start_line < 1:
         raise ValueError(f"start line {start_line} must be >= 1")
     if len(start_parts) > 1:
-        int(start_parts[1])  # Validate start col is int
+        try:
+            int(start_parts[1])  # Validate start col is int
+        except ValueError as e:
+            raise ValueError(f"invalid start column: {e}") from e
 
     try:
         end_line = int(end_parts[0])
     except ValueError as e:
         raise ValueError(f"invalid end line: {e}") from e
-    if len(end_parts) > 1:
-        int(end_parts[1])  # Validate end col is int
+
+    has_end_col = len(end_parts) > 1
+    if has_end_col:
+        try:
+            end_col = int(end_parts[1])
+        except ValueError as e:
+            raise ValueError(f"invalid end column: {e}") from e
+    else:
+        end_col = 1
 
     if start_line > end_line:
         raise ValueError(
             f"start line {start_line} is greater than end line {end_line}")
+
+    # If end column is not specified, we assume the range is inclusive of end_line.
+    # If end column is specified and > 1, it includes parts of the end line.
+    # In both cases, we increment end_line to convert to exclusive [start, end) range.
+    if not has_end_col or end_col > 1:
+        end_line += 1
+
     return LineRange(start=start_line, end=end_line)
 
 
@@ -307,7 +260,7 @@ def merge_ranges(ranges: list[LineRange]) -> list[LineRange]:
     """Merges overlapping or adjacent line ranges.
 
     Assumes the input list is already sorted ascending by start line.
-    Merging adjacent ranges (e.g. 1-5 and 6-10) prevents redundant formatting calls.
+    Merging adjacent ranges (e.g. [1, 5) and [5, 10)) prevents redundant formatting calls.
 
     Args:
         ranges: List of LineRange items sorted ascending by start line.
@@ -320,7 +273,7 @@ def merge_ranges(ranges: list[LineRange]) -> list[LineRange]:
     merged: list[LineRange] = []
     curr_start, curr_end = ranges[0].start, ranges[0].end
     for r in ranges[1:]:
-        if r.start <= curr_end + 1:
+        if r.start <= curr_end:
             curr_end = max(curr_end, r.end)
         else:
             merged.append(LineRange(start=curr_start, end=curr_end))
@@ -434,7 +387,7 @@ def execute_ranges_chain(
             ] + chain_base_args[subcmd_idx + 1:]
         else:
             step_args = [range_arg] + chain_base_args
-        cmd = [sys.executable, "-m", "ruff"] + step_args
+        cmd = [get_ruff_bin()] + step_args
         proc = subprocess.run(cmd, input=current_val, capture_output=True)
         if proc.returncode != 0:
             sys.stderr.buffer.write(proc.stderr)
@@ -510,7 +463,7 @@ def run_ruff_with_ranges(args: list[str]) -> int:
 
     # We are calling ruff as is if there is only one or no ranges.
     if len(parsed_args.ranges) < 2:
-        cmd = [sys.executable, "-m", "ruff"] + args
+        cmd = [get_ruff_bin()] + args + ["--force-exclude"]
         return subprocess.call(cmd)
 
     opts = parse_formatting_options(parsed_args.pass_through_args)
@@ -539,6 +492,7 @@ def run_ruff_with_ranges(args: list[str]) -> int:
         for a in opts.chain_base_args)
     if not has_stdin_filename:
         opts.chain_base_args.append(f"--stdin-filename={target}")
+    opts.chain_base_args.append("--force-exclude")
     opts.chain_base_args.append("-")
 
     exit_code, formatted_val = execute_ranges_chain(opts.chain_base_args,
@@ -577,10 +531,10 @@ def translate_args(args: list[str]) -> list[str]:
         elif arg == "--range":
             val = args[i + 1]
             try:
-                parts = val.split("-")
-                start_line = parts[0].split(":")[0]
-                end_line = parts[1].split(":")[0]
-                yapf_args.extend(["--line", f"{start_line}-{end_line}"])
+                r = parse_range(val)
+                yapf_start = r.start
+                yapf_end = max(yapf_start, r.end - 1)
+                yapf_args.extend(["--line", f"{yapf_start}-{yapf_end}"])
             except Exception:
                 yapf_args.extend(["--range", val])
             i += 2
@@ -588,10 +542,10 @@ def translate_args(args: list[str]) -> list[str]:
         elif arg.startswith("--range="):
             val = arg.split("=", 1)[1]
             try:
-                parts = val.split("-")
-                start_line = parts[0].split(":")[0]
-                end_line = parts[1].split(":")[0]
-                yapf_args.extend(["--line", f"{start_line}-{end_line}"])
+                r = parse_range(val)
+                yapf_start = r.start
+                yapf_end = max(yapf_start, r.end - 1)
+                yapf_args.extend(["--line", f"{yapf_start}-{yapf_end}"])
             except Exception:
                 yapf_args.append(arg)
             i += 1
@@ -619,6 +573,230 @@ def translate_args(args: list[str]) -> list[str]:
     return yapf_args
 
 
+def get_yapf_style(target_path: str, root_dir: str | None = None) -> str:
+    abs_target = os.path.abspath(target_path)
+    search_dir = (os.path.dirname(abs_target) if
+                  (os.path.isfile(abs_target)
+                   or not os.path.exists(abs_target)) else abs_target)
+
+    while True:
+        style_file = os.path.join(search_dir, ".style.yapf")
+        if os.path.isfile(style_file):
+            return style_file
+
+        pyproject = os.path.join(search_dir, "pyproject.toml")
+        if os.path.isfile(pyproject):
+            try:
+                with open(pyproject, "rb") as f:
+                    content = f.read().decode("utf-8", errors="ignore")
+                if "[tool.yapf]" in content:
+                    return pyproject
+            except Exception:
+                pass
+
+        if root_dir and os.path.abspath(search_dir) == os.path.abspath(
+                root_dir):
+            break
+
+        parent_dir = os.path.dirname(search_dir)
+        if parent_dir == search_dir:
+            break
+        search_dir = parent_dir
+
+    return "pep8"
+
+
+def format_ruff_batch_no_range(paths: list[str], diff: bool,
+                               dry_run: bool) -> int:
+    if not paths:
+        return 0
+
+    # Chunk paths on Windows to avoid the command line length limit (8191 characters).
+    # On other platforms, we run a single invocation for better performance.
+    chunk_size = 50 if sys.platform == "win32" else len(paths)
+    has_changes = False
+    has_error = False
+    for i in range(0, len(paths), chunk_size):
+        chunk = paths[i:i + chunk_size]
+        cmd = [get_ruff_bin(), "format", "--force-exclude"]
+        if diff:
+            cmd.append("--diff")
+        elif dry_run:
+            cmd.append("--check")
+        cmd.extend(chunk)
+
+        proc = subprocess.run(cmd, capture_output=True)
+
+        if proc.returncode > 1 or proc.returncode < 0:
+            sys.stderr.buffer.write(proc.stderr)
+            has_error = True
+        elif proc.returncode == 1 and dry_run:
+            has_changes = True
+
+        if diff or dry_run:
+            if diff:
+                sys.stdout.buffer.write(proc.stdout)
+
+    if has_error:
+        return 1
+    if has_changes:
+        return 2
+    return 0
+
+
+def format_yapf_batch(
+    files: list[tuple[str, list[LineRange]]],
+    root_dir: str | None,
+    diff: bool,
+    dry_run: bool,
+    full: bool,
+) -> int:
+    # The import of yapf is 77 ms performance hit, so call it only when needed.
+    import yapf
+
+    has_changes = False
+    has_error = False
+    for path, ranges in files:
+        if ranges and not full:
+            yapf_lines = [(r.start, r.end - 1) for r in ranges if r.start < r.end]
+            if not yapf_lines:
+                continue
+        else:
+            yapf_lines = None
+        in_place = not (diff or dry_run)
+        print_diff = diff
+        quiet = dry_run and not diff
+        style_config = get_yapf_style(path, root_dir)
+
+        try:
+            changed = yapf.FormatFiles(
+                [path],
+                lines=yapf_lines,
+                style_config=style_config,
+                in_place=in_place,
+                print_diff=print_diff,
+                quiet=quiet,
+            )
+            if changed and dry_run:
+                has_changes = True
+        except Exception as e:
+            sys.stderr.write(f"YAPF failed on {path}: {e}\n")
+            has_error = True
+
+    if has_error:
+        return 1
+    if has_changes:
+        return 2
+    return 0
+
+
+def run_batch() -> int:
+    """Runs formatting in batch mode by reading configuration from stdin.
+
+    The input JSON is expected to be a dictionary with the following schema:
+    {
+        "root": string (optional, root directory of the repository),
+        "diff": boolean (optional, whether to print diff instead of in-place format),
+        "dry_run": boolean (optional, same as diff for Ruff, prevents write for YAPF),
+        "full": boolean (optional, whether to format full files instead of ranges),
+        "files": [
+            {
+                "path": string (relative path to file),
+                "ranges": [[start, end], ...] (optional, 1-based line ranges.
+                           NOTE: Ranges must use exclusive end lines [start, end),
+                           matching Ruff's range semantics. The caller must convert
+                           inclusive ranges by adding 1 to the end line.)
+            },
+            ...
+        ]
+    }
+
+    Returns:
+        Exit code (0 on success, non-zero on error).
+    """
+    try:
+        config = json.load(sys.stdin)
+    except Exception as e:
+        sys.stderr.write(f"Failed to parse batch config JSON: {e}\n")
+        return 1
+
+    if not isinstance(config, dict):
+        sys.stderr.write("Batch config must be a JSON object\n")
+        return 1
+
+    root_dir = config.get("root")
+    if root_dir is not None:
+        if not isinstance(root_dir, str):
+            sys.stderr.write("Batch config 'root' must be a string\n")
+            return 1
+        root_dir = os.path.abspath(root_dir)
+
+    files_cfg = config.get("files", [])
+    if not isinstance(files_cfg, list):
+        sys.stderr.write("Batch config 'files' must be a list\n")
+        return 1
+
+    for f in files_cfg:
+        if not isinstance(f, dict) or "path" not in f or not isinstance(
+                f["path"], str):
+            sys.stderr.write("Invalid file entry in batch config\n")
+            return 1
+        ranges_cfg = f.get("ranges", [])
+        if not isinstance(ranges_cfg, list):
+            sys.stderr.write("File 'ranges' must be a list\n")
+            return 1
+        for r in ranges_cfg:
+            if not isinstance(r, list) or len(r) != 2 or not isinstance(
+                    r[0], int) or not isinstance(r[1], int):
+                sys.stderr.write("Invalid range entry in batch config\n")
+                return 1
+
+    diff = config.get("diff", False)
+    dry_run = config.get("dry_run", False)
+    full = config.get("full", False)
+
+    ruff_files_no_range = []
+    yapf_files = []
+
+    for f in files_cfg:
+        path = f["path"]
+        if root_dir and not os.path.isabs(path):
+            path = os.path.join(root_dir, path)
+        ranges = [LineRange(r[0], r[1]) for r in f.get("ranges", [])]
+
+        if should_use_ruff(path, root_dir):
+            # Ruff files are formatted in their entirety to maximize batching
+            # performance. This is safe because onboarded files are already
+            # fully formatted, so formatting the whole file won't affect
+            # untouched lines.
+            ruff_files_no_range.append(path)
+        elif has_yapf_config(path, root_dir):
+            yapf_files.append((path, ranges))
+
+    has_changes = False
+    has_error = False
+
+    if ruff_files_no_range:
+        code = format_ruff_batch_no_range(ruff_files_no_range, diff, dry_run)
+        if code == 1:
+            has_error = True
+        elif code == 2:
+            has_changes = True
+
+    if yapf_files:
+        code = format_yapf_batch(yapf_files, root_dir, diff, dry_run, full)
+        if code == 1:
+            has_error = True
+        elif code == 2:
+            has_changes = True
+
+    if has_error:
+        return 1
+    if has_changes:
+        return 2
+    return 0
+
+
 def main() -> int:
     """Main entrypoint for the depot_tools ruff wrapper.
 
@@ -626,6 +804,9 @@ def main() -> int:
         Exit code of the invoked formatter subprocess.
     """
     root_dir, args = extract_root_flag(sys.argv[1:])
+
+    if args and args[0] == "--batch":
+        return run_batch()
 
     # Determine target path for config detection
     target_path = os.getcwd()
@@ -641,8 +822,6 @@ def main() -> int:
             break
 
     if should_use_ruff(target_path, root_dir):
-        # Run Ruff from the vpython environment, supporting multi-range chaining
-        # when >= 2 --range flags are provided over stdin.
         return run_ruff_with_ranges(args)
     else:
         # Before attempting YAPF as a backoff, ascertain that a YAPF formatter/config
