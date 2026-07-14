@@ -5493,6 +5493,11 @@ class CMDFormatTestCase(unittest.TestCase):
     def _make_markdown_config(self, path):
         self._make_temp_file(os.path.join(path, '.style.mdformat'), [])
 
+    def _make_lit_template_formatter_config(self, path):
+        self._make_temp_file(
+            os.path.join(path, '.style.lit_template_formatter'), [])
+
+
     def testMarkdownFormat(self):
         self._make_markdown_config('agents')
         to_be_fixed_md = os.path.join(self._top_dir, 'agents/to_be_fixed.md')
@@ -5583,6 +5588,70 @@ class CMDFormatTestCase(unittest.TestCase):
                          '-world  \n'
                          '+world\n')
         self.assertEqual(expected_diff, stdout_val)
+
+    @mock.patch('gclient_paths.GetPrimarySolutionPath')
+    @mock.patch('git_cl.subprocess2.call')
+    def testLitTemplateFormatter(self, mock_call, mock_solution_path):
+        """Note: This test does not run the real formatter. It validates that
+        the correct arguments are passed to it and that it is invoked for
+        .html.ts files when the style file is found.
+        """
+        mock_solution_path.return_value = self._top_dir
+        self._make_temp_file(
+            os.path.join('ui', 'webui', 'resources', 'tools',
+                         'lit_template_formatter', 'main.js'), ['// dummy'])
+        self._make_temp_file(os.path.join('third_party', 'node', 'node.py'),
+                             ['# dummy'])
+        self._make_lit_template_formatter_config('webui')
+        foo_html_ts = os.path.join(self._top_dir, 'webui', 'foo.html.ts')
+        bar_html_ts = os.path.join(self._top_dir, 'other', 'bar.html.ts')
+        self._make_temp_file(os.path.join('webui', 'foo.html.ts'), ['// test'])
+        self._make_temp_file(os.path.join('other', 'bar.html.ts'), ['// test'])
+
+        expected_formatter = os.path.join(self._top_dir, 'ui', 'webui',
+                                          'resources', 'tools',
+                                          'lit_template_formatter', 'main.js')
+        expected_node = os.path.join(self._top_dir, 'third_party', 'node',
+                                     'node.py')
+
+        # 1. Normal format: only foo_html_ts should be formatted (bar_html_ts skipped).
+        mock_call.return_value = 0
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        self.assertEqual(
+            0,
+            git_cl._RunLitTemplateFormatter(mock_opts,
+                                            [foo_html_ts, bar_html_ts],
+                                            self._top_dir, None))
+        mock_call.assert_called_once_with(
+            ['vpython3', expected_node, expected_formatter, foo_html_ts],
+            cwd=self._top_dir)
+
+        # 2. Dry-run mode: should pass --dry-run and return 2 when unformatted.
+        mock_call.reset_mock()
+        mock_call.return_value = 2
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        self.assertEqual(
+            2,
+            git_cl._RunLitTemplateFormatter(mock_opts, [foo_html_ts],
+                                            self._top_dir, None))
+        mock_call.assert_called_once_with([
+            'vpython3', expected_node, expected_formatter, '--dry-run',
+            foo_html_ts
+        ],
+                                          cwd=self._top_dir)
+
+        # 3. Diff mode: should pass --diff.
+        mock_call.reset_mock()
+        mock_call.return_value = 0
+        mock_opts = mock.Mock(dry_run=False, diff=True)
+        self.assertEqual(
+            0,
+            git_cl._RunLitTemplateFormatter(mock_opts, [foo_html_ts],
+                                            self._top_dir, None))
+        mock_call.assert_called_once_with([
+            'vpython3', expected_node, expected_formatter, '--diff', foo_html_ts
+        ],
+                                          cwd=self._top_dir)
 
     def _run_command_mock(self, return_value):
         def f(*args, **kwargs):

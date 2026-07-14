@@ -97,6 +97,9 @@ opt-in by placing a marker file in the directory hierarchy:
 2. **Markdown**: Place a `.style.mdformat` file in an ancestor directory to
    enable formatting with `mdformat`. (Note for `jj` users in the Chromium
    repo: you must also update the file patterns in `tools/jj/config.toml`).
+3. **Lit HTML templates**: Place a `.style.lit_template_formatter` file in an
+   ancestor directory to enable formatting of `.html.ts` files with
+   `ui/webui/resources/tools/lit_template_formatter/main.js`.
 
 When one of these markers is found, `git cl format` will automatically include
 those files in its formatting pass.

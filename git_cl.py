@@ -787,6 +787,23 @@ def _FindMarkdownConfigFile(fpath: str,
     return markdown_config_cache[fpath]
 
 
+def _FindLitTemplateFormatterConfigFile(
+        fpath: str,
+        config_cache: dict[str, str | None],
+        top_dir: str | None = None) -> str | None:
+    """Checks if a .style.lit_template_formatter file is in any parent directory
+    of fpath until top_dir.
+
+    Recursively checks parent directories to find the config file and if none
+    is found returns None. Uses config_cache as a cache.
+    """
+    if fpath not in config_cache:
+        config_cache[fpath] = utils.find_config_file(
+            fpath, '.style.lit_template_formatter', top_dir)
+    return config_cache[fpath]
+
+
+
 def _GetYapfIgnorePatterns(top_dir):
     """Returns all patterns in the .yapfignore file.
 
@@ -7585,6 +7602,58 @@ def _RunMarkdownFormat(opts: optparse.Values, paths: list[str], top_dir: str,
     return return_value
 
 
+def _RunLitTemplateFormatter(opts: optparse.Values, paths: list[str],
+                             top_dir: str,
+                             diffs: Mapping[str, str] | None) -> int:
+    """Runs lit_template_formatter on .html.ts files."""
+    config_cache: dict[str, str | None] = {}
+    paths = [
+        p for p in paths if _FindLitTemplateFormatterConfigFile(
+            p, config_cache, top_dir) is not None
+    ]
+    if not paths:
+        return 0
+
+    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
+    if not primary_solution_path:
+        print('Could not find the primary solution path, skipping Lit '
+              'template formatting.')
+        return 0
+
+    formatter_path = os.path.join(primary_solution_path, 'ui', 'webui',
+                                  'resources', 'tools',
+                                  'lit_template_formatter', 'main.js')
+    if not os.path.exists(formatter_path):
+        print(f'lit_template_formatter not found at "{formatter_path}", '
+              'skipping Lit template formatting.')
+        return 0
+
+    node_py_path = os.path.join(primary_solution_path, 'third_party', 'node',
+                                'node.py')
+    if not os.path.exists(node_py_path):
+        print(f'node.py not found at "{node_py_path}", skipping Lit template '
+              'formatting.')
+        return 0
+
+    cmd = ['vpython3', node_py_path, formatter_path]
+    if opts.dry_run:
+        cmd.append('--dry-run')
+    if opts.diff:
+        cmd.append('--diff')
+
+    return_value = 0
+    for paths_batch in _SplitArgsByCmdLineLimit(paths):
+        exit_code = subprocess2.call(cmd + paths_batch, cwd=top_dir)
+        if exit_code != 0:
+            if opts.dry_run:
+                return_value = 2
+            else:
+                return_value = exit_code
+
+    return return_value
+
+
+
 def _RunGnFormat(opts, paths, top_dir, diffs):
     cmd = [sys.executable, os.path.join(DEPOT_TOOLS, 'gn.py'), 'format']
     if opts.dry_run or opts.diff:
@@ -7758,6 +7827,7 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     marker files in the directory hierarchy:
       - Python: .style.yapf
       - Markdown: .style.mdformat
+      - Lit HTML templates (.html.ts): .style.lit_template_formatter
     """
     clang_exts = ['.cc', '.cpp', '.h', '.m', '.mm', '.proto']
     GN_EXTS = ['.gn', '.gni', '.typemap']
@@ -7799,7 +7869,8 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         '--no-js',
         action='store_false',
         dest='js',
-        help='Disables formatting of javascript code with clang-format.')
+        help=
+        'Disable formatting of javascript/typescript code with clang-format.')
     parser.add_option('--diff',
                       action='store_true',
                       help='Print diff to stdout rather than modifying files.')
@@ -7904,6 +7975,7 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         (GN_EXTS, _RunGnFormat, []),
         (['.xml'], _RunMetricsXMLFormat, []),
         (['.md'], _RunMarkdownFormat, []),
+        (['.html.ts'], _RunLitTemplateFormatter, []),
     ]
     if not opts.no_java:
         formatters.append((['.java'], _RunGoogleJavaFormat, []))
