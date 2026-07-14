@@ -7386,6 +7386,109 @@ def _RunSwiftFormat(opts, paths, top_dir, diffs):
     return 0
 
 
+_ruff_batch_supported_cache: bool | None = None
+
+
+def _GetRuffChromiumPath() -> str:
+    """Returns the absolute path to the ruff_chromium wrapper script."""
+    depot_tools_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(depot_tools_path, 'ruff_chromium')
+
+
+def _IsRuffBatchSupported(ruff_chromium_path: str) -> bool:
+    """Checks if the ruff_chromium wrapper supports batch formatting.
+
+    It does this by checking if the wrapper defines 'def run_batch('.
+    """
+    global _ruff_batch_supported_cache
+    if _ruff_batch_supported_cache is not None:
+        return _ruff_batch_supported_cache
+
+    try:
+        with open(ruff_chromium_path, 'r', encoding='utf-8') as f:
+            _ruff_batch_supported_cache = 'def run_batch(' in f.read()
+    except (OSError, UnicodeDecodeError):
+        _ruff_batch_supported_cache = False
+
+    return _ruff_batch_supported_cache
+
+
+def _RunPythonFormat(
+    opts: optparse.Values,
+    paths: list[str],
+    top_dir: str,
+    diffs: Mapping[str, str] | None,
+) -> int:
+    """Formats python files using ruff_chromium in batch mode if supported.
+
+    If ruff_chromium is not present or batch mode is not supported, it falls
+    back to YAPF formatting.
+    """
+    ruff_chromium = _GetRuffChromiumPath()
+
+    use_ruff_batch = False
+    if os.path.exists(ruff_chromium):
+        use_ruff_batch = _IsRuffBatchSupported(ruff_chromium)
+
+    if not use_ruff_batch:
+        return _RunYapf(opts, paths, top_dir, diffs)
+
+    config = {
+        "root": top_dir,
+        "diff": bool(opts.diff),
+        "dry_run": bool(opts.dry_run),
+        "full": bool(opts.full),
+        "files": []
+    }
+
+    line_diffs = {}
+    if paths and diffs:
+        line_diffs = _ComputeFormatDiffLineRanges(paths, diffs)
+
+    for path in paths:
+        file_entry: dict[str, Any] = {"path": path}
+        if not opts.full:
+            ranges = line_diffs.get(path)
+            if not ranges:
+                continue
+            file_entry["ranges"] = [[start, end + 1] for start, end in ranges]
+        config["files"].append(file_entry)
+
+    if not config["files"]:
+        return 0
+
+    cmd = ['vpython3', ruff_chromium, '--batch']
+    stdin_data = json.dumps(config).encode('utf-8')
+
+    try:
+        (stdout,
+         stderr), code = subprocess2.communicate(cmd,
+                                                 stdin=stdin_data,
+                                                 stdout=subprocess2.PIPE,
+                                                 stderr=subprocess2.PIPE,
+                                                 cwd=top_dir,
+                                                 shell=sys.platform == 'win32')
+
+        if code == 1:
+            if stderr:
+                sys.stderr.buffer.write(stderr)
+            return 1
+        if code == 2:
+            if opts.diff and stdout:
+                sys.stdout.buffer.write(stdout)
+            return 2
+        if code == 0:
+            if opts.diff and stdout:
+                sys.stdout.buffer.write(stdout)
+            return 0
+        if stderr:
+            sys.stderr.buffer.write(stderr)
+        return 1
+    except Exception as e:
+        sys.stderr.write(f"Failed to run ruff_chromium --batch: {e}\n")
+        return 1
+
+
 def _RunYapf(opts, paths, top_dir, diffs):
     depot_tools_path = os.path.dirname(os.path.abspath(__file__))
     yapf_tool = os.path.join(depot_tools_path, 'yapf')
@@ -7680,7 +7783,8 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         dest='python',
         help='Disables python formatting on all python files. '
         'If neither --python or --no-python are set, python files that have a '
-        '.style.yapf file in an ancestor directory will be formatted. '
+        '.style.yapf or ruff config file (ruff.toml or .ruff.toml) in an '
+        'ancestor directory will be formatted. '
         'It is an error to set both.')
     default_js = settings.GetFormatJs()
     parser.add_option(
@@ -7810,7 +7914,7 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     if opts.use_swift_format:
         formatters.append((['.swift'], _RunSwiftFormat, []))
     if opts.python is not False:
-        formatters.append((['.py'], _RunYapf, []))
+        formatters.append((['.py'], _RunPythonFormat, []))
     if opts.mojom:
         formatters.append((['.mojom', '.test-mojom'], _RunMojomFormat, []))
     if opts.lucicfg:

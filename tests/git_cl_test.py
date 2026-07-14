@@ -5919,8 +5919,9 @@ class CMDFormatTestCase(unittest.TestCase):
             'if --input_diff_file is given.',
         )
 
+    @mock.patch('git_cl._IsRuffBatchSupported', return_value=False)
     @mock.patch('git_cl._RunClangFormatDiff', return_value=0)
-    def testInputDiffFile(self, clang_formatter):
+    def testInputDiffFile(self, clang_formatter, mock_supported):
         """Tests git cl format with --input_diff_file."""
         # Windows doesn't allow a file to be reopened while it's open by
         # another handler.
@@ -6827,6 +6828,54 @@ class BuildbucketBatchTest(unittest.TestCase):
                 "+w = 4\n")
         res = git_cl._ComputeFormatDiffLineRanges(["foo.py"], {"foo.py": diff})
         self.assertEqual({"foo.py": [(1, 5)]}, res)
+
+
+class TestRuffBatchIntegration(unittest.TestCase):
+
+    def setUp(self):
+        super(TestRuffBatchIntegration, self).setUp()
+        self.test_dir = tempfile.mkdtemp()
+        self.orig_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self.addCleanup(shutil.rmtree, self.test_dir)
+        self.addCleanup(os.chdir, self.orig_cwd)
+
+    @mock.patch('git_cl._IsRuffBatchSupported', return_value=False)
+    @mock.patch('git_cl._RunYapf')
+    def test_fallback_to_yapf(self, mock_run_yapf, mock_supported):
+        mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
+        with mock.patch('os.path.exists', return_value=True):
+            git_cl._RunPythonFormat(mock_opts, ["foo.py"], self.test_dir, None)
+        mock_run_yapf.assert_called_once_with(mock_opts, ["foo.py"],
+                                              self.test_dir, None)
+
+    @mock.patch('git_cl._IsRuffBatchSupported', return_value=True)
+    @mock.patch('subprocess2.communicate')
+    def test_ruff_batch_success(self, mock_communicate, mock_supported):
+        mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
+        mock_communicate.return_value = ((b'', b''), 0)
+
+        with mock.patch('os.path.exists', return_value=True):
+            code = git_cl._RunPythonFormat(mock_opts, ["foo.py"], self.test_dir,
+                                           None)
+
+        self.assertEqual(0, code)
+        expected_config = {
+            "root": self.test_dir,
+            "diff": False,
+            "dry_run": False,
+            "full": True,
+            "files": [{
+                "path": "foo.py"
+            }]
+        }
+        self.assertEqual(1, mock_communicate.call_count)
+        call_args, call_kwargs = mock_communicate.call_args
+        self.assertEqual(
+            ['vpython3', git_cl._GetRuffChromiumPath(), '--batch'],
+            call_args[0])
+        self.assertEqual(
+            json.dumps(expected_config).encode('utf-8'), call_kwargs['stdin'])
 
 
 if __name__ == '__main__':
