@@ -185,6 +185,10 @@ class BadCommitRefException(Exception):
         super(BadCommitRefException, self).__init__(msg)
 
 
+class UnsupportedRefStorageError(Exception):
+    """The repository's ref storage format can't be used with this tool."""
+
+
 class _MemoizeWrapper(object):
 
     def __init__(self, f: Callable[[Any], Any], *, threadsafe: bool):
@@ -1421,6 +1425,24 @@ def make_workdir_common(repository,
 
 
 def make_workdir(repository, new_workdir):
+    # Repositories using the reftable ref storage format keep refs, reflogs
+    # and HEAD in .git/reftable rather than in the files symlinked below, so
+    # a symlink-based workdir can't share refs while keeping an independent
+    # HEAD. Refuse rather than create a broken workdir.
+    try:
+        # Read the config directly instead of using `git rev-parse
+        # --show-ref-format` to avoid opening the repository.
+        ref_storage = run('config', '--file',
+                          os.path.join(repository,
+                                       'config'), 'extensions.refstorage')
+    except subprocess2.CalledProcessError:
+        # Unset means the default "files" backend.
+        ref_storage = ''
+    if ref_storage.strip().lower() == 'reftable':
+        raise UnsupportedRefStorageError(
+            f'{repository} uses the reftable ref storage format, which does not '
+            'support symlink-based workdirs. Use "git worktree" instead.')
+
     GIT_DIRECTORY_WHITELIST = [
         'config',
         'info',

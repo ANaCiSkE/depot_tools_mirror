@@ -298,7 +298,8 @@ class GitRepo(object):
 
         self.to_schema_refs = ['--branches']
 
-        self.git('init', '-b', DEFAULT_BRANCH)
+        self.git('-c', 'init.defaultRefFormat=files', 'init', '-b',
+                 DEFAULT_BRANCH)
         self.git('config', 'user.name', 'testcase')
         self.git('config', 'user.email', 'testcase@example.com')
         for commit in schema.walk():

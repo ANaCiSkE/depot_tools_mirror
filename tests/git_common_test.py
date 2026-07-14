@@ -1115,6 +1115,16 @@ class GitMakeWorkdir(git_test_utils.GitRepoReadOnlyTestBase, GitCommonTestBase):
                 os.path.join(self.repo.repo_path, '.git', path))
         self.assertFalse(os.path.islink(os.path.join(workdir, '.git', 'HEAD')))
 
+    def testMakeWorkdirReftable(self):
+        src_git_dir = os.path.join(self._tempdir, 'src.git')
+        os.makedirs(src_git_dir)
+        with open(os.path.join(src_git_dir, 'config'), 'w') as f:
+            f.write('[extensions]\n\trefStorage = reftable\n')
+        workdir = os.path.join(self._tempdir, 'workdir')
+        with self.assertRaises(self.gc.UnsupportedRefStorageError):
+            self.gc.make_workdir(src_git_dir, os.path.join(workdir, '.git'))
+        self.assertFalse(os.path.exists(workdir))
+
 
 class GitTestUtilsTest(git_test_utils.GitRepoReadOnlyTestBase):
     REPO_SCHEMA = """
