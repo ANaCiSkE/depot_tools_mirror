@@ -1683,14 +1683,15 @@ def CheckOwnersFormat(input_api, output_api):
 
 
 def CheckOwners(input_api, output_api, source_file_filter=None, allow_tbr=True):
+    # Let Gerrit do this check rather than presubmits.
+    if input_api.gerrit and input_api.gerrit.IsCodeOwnersEnabledOnRepo():
+        return []
+
     # Skip OWNERS check when Owners-Override label is approved. This is intended
     # for global owners, trusted bots, and on-call sheriffs. Review is still
     # required for these changes.
     if (input_api.change.issue and input_api.gerrit.IsOwnersOverrideApproved(
             input_api.change.issue)):
-        return []
-
-    if input_api.gerrit and input_api.gerrit.IsCodeOwnersEnabledOnRepo():
         return []
 
     host = "none"
