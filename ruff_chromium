@@ -455,18 +455,28 @@ def run_ruff_with_ranges(args: list[str]) -> int:
     Returns:
         Exit code (0 on success, non-zero on error or check failure).
     """
+    ruff_args = list(args)
     try:
-        parsed_args = parse_ranges(args)
+        parsed_args = parse_ranges(ruff_args)
     except ValueError as e:
         sys.stderr.write(f"{e}\n")
         return 1
 
+    opts = parse_formatting_options(parsed_args.pass_through_args)
+
+    if not opts.has_format:
+        ruff_args.insert(0, "format")
+        try:
+            parsed_args = parse_ranges(ruff_args)
+        except ValueError as e:
+            sys.stderr.write(f"{e}\n")
+            return 1
+        opts = parse_formatting_options(parsed_args.pass_through_args)
+
     # We are calling ruff as is if there is only one or no ranges.
     if len(parsed_args.ranges) < 2:
-        cmd = [get_ruff_bin()] + args + ["--force-exclude"]
+        cmd = [get_ruff_bin()] + ruff_args + ["--force-exclude"]
         return subprocess.call(cmd)
-
-    opts = parse_formatting_options(parsed_args.pass_through_args)
 
     if not opts.has_format:
         sys.stderr.write(

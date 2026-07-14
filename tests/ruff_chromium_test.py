@@ -999,6 +999,81 @@ class TestRunRuffWithRanges(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
+    @patch("subprocess.call")
+    def test_run_ruff_direct_with_format(self, mock_call):
+        mock_call.return_value = 0
+        ret = run_ruff_with_ranges(["format", "file.py"])
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        self.assertEqual(args_passed[1], "format")
+        self.assertEqual(args_passed[2], "file.py")
+        self.assertIn("--force-exclude", args_passed)
+
+    @patch("subprocess.call")
+    def test_run_ruff_direct_without_format(self, mock_call):
+        mock_call.return_value = 0
+        ret = run_ruff_with_ranges(["file.py"])
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        # Verify 'format' was inserted
+        self.assertEqual(args_passed[1], "format")
+        self.assertEqual(args_passed[2], "file.py")
+        self.assertIn("--force-exclude", args_passed)
+
+    @patch("subprocess.run")
+    @patch("sys.stdout")
+    def test_run_ruff_multi_range_without_format(self, mock_stdout, mock_run):
+        # Verify that if we have multiple ranges but no 'format' subcommand,
+        # it is robustly inserted and we don't fail early.
+        with tempfile.NamedTemporaryFile(mode="wb",
+                                         prefix="test_file",
+                                         suffix=".py",
+                                         delete=False) as f:
+            f.write(b"line1\nline2\nline3\nline4\nline5\nline6\nline7\n")
+            temp_path = f.name
+        try:
+            proc1 = Mock(returncode=0, stdout=b"int_out\n")
+            proc2 = Mock(returncode=0, stdout=b"final_out\n")
+            mock_run.side_effect = [proc1, proc2]
+
+            ret = run_ruff_with_ranges(
+                ["--range=1:1-3:1", "--range=5:1-7:1", temp_path])
+            self.assertEqual(ret, 0)
+            self.assertEqual(mock_run.call_count, 2)
+            # Verify the first argument in the subprocess call is 'format'
+            self.assertEqual(mock_run.call_args_list[0][0][0][1], "format")
+            self.assertEqual(mock_run.call_args_list[1][0][0][1], "format")
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    @patch("subprocess.call")
+    def test_run_ruff_direct_format_as_flag_value(self, mock_call):
+        mock_call.return_value = 0
+        # 'format' is the value of --stdin-filename, not the subcommand.
+        ret = run_ruff_with_ranges(["--stdin-filename", "format", "-"])
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        # Verify 'format' was inserted as subcommand
+        self.assertEqual(args_passed[1], "format")
+        self.assertIn("--stdin-filename", args_passed)
+        self.assertIn("format", args_passed)
+
+    @patch("subprocess.call")
+    def test_run_ruff_direct_format_as_filename(self, mock_call):
+        mock_call.return_value = 0
+        # Use './format' to avoid subcommand ambiguity
+        ret = run_ruff_with_ranges(["./format"])
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        # Verify 'format' was inserted as subcommand, and './format' remains
+        self.assertEqual(args_passed[1], "format")
+        self.assertEqual(args_passed[2], "./format")
+
 
 if __name__ == "__main__":
     unittest.main()
