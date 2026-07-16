@@ -10,7 +10,6 @@ details on the presubmit API built into depot_tools.
 PRESUBMIT_VERSION = '2.0.0'
 
 import fnmatch
-import os
 import sys
 
 # CIPD ensure manifest for checking CIPD client itself.
@@ -29,46 +28,73 @@ $VerifiedPlatform linux-mips64 linux-mips64le linux-mipsle
 TEST_TIMEOUT_S = 450  # 7m 30s
 
 
-def CheckPylint2(input_api, output_api):
-    """Gather all the pylint logic into one place to make it self-contained."""
+def CheckPylint(input_api, output_api):
+    """Run Pylint 3.X on supported python files."""
     files_to_check = [
+        r'^mcp/.*\.py$',
         r'^[^/]*\.py$',
         r'^testing_support/[^/]*\.py$',
         r'^tests/[^/]*\.py$',
         r'^recipe_modules/.*\.py$',  # Allow recursive search in recipe modules.
     ]
     disabled_warnings = [
-        'R0401',  # Cyclic import
-        'W0613',  # Unused argument
-        'C0415',  # import-outside-toplevel
-        'R1710',  # inconsistent-return-statements
-        'E1101',  # no-member
-        'E1120',  # no-value-for-parameter
-        'R1708',  # stop-iteration-return
-        'W1510',  # subprocess-run-check
-        # Checks which should be re-enabled after Python 2 support is removed.
-        'R0205',  # useless-object-inheritance
-        'R1725',  # super-with-arguments
-        'W0707',  # raise-missing-from
-        'W1113',  # keyword-arg-before-vararg
-    ]
-    return input_api.RunTests(input_api.canned_checks.GetPylint(
-        input_api,
-        output_api,
-        files_to_check=files_to_check,
-        files_to_skip=_GetPylintFilesToSkip(input_api),
-        disabled_warnings=disabled_warnings,
-        version='2.7'),
-                              parallel=False)
-
-
-def CheckPylint3(input_api, output_api):
-    """Like CheckPylint2, but using Pylint 3.X"""
-    files_to_check = [
-        r'^mcp/.*\.py$',
-    ]
-    disabled_warnings = [
+        'anomalous-backslash-in-string',
+        'arguments-differ',
+        'bad-indentation',
+        'bad-super-call',
+        'cell-var-from-loop',
+        'consider-using-dict-items',
+        'consider-using-enumerate',
+        'consider-using-from-import',
+        'consider-using-generator',
+        'consider-using-max-builtin',
+        'consider-using-with',
+        'cyclic-import',
+        'deprecated-method',
+        'deprecated-module',
         'duplicate-code',  # Tends to flag false positives.
+        'eval-used',
+        'exec-used',
+        'format-string-without-interpolation',
+        'function-redefined',
+        'implicit-str-concat',
+        'import-outside-toplevel',
+        'inconsistent-return-statements',
+        'line-too-long',
+        'logging-not-lazy',
+        'method-cache-max-size-none',
+        'missing-module-docstring',
+        'multiple-imports',
+        'no-member',
+        'no-self-argument',
+        'no-value-for-parameter',
+        'not-an-iterable',
+        'not-callable',
+        'pointless-exception-statement',
+        'possibly-used-before-assignment',
+        'protected-access',
+        'raise-missing-from',
+        'redundant-u-string-prefix',
+        'singleton-comparison',
+        'stop-iteration-return',
+        'subprocess-run-check',
+        'superfluous-parens',
+        'undefined-variable',
+        'unnecessary-dunder-call',
+        'unnecessary-lambda-assignment',
+        'unnecessary-negation',
+        'unspecified-encoding',
+        'unsubscriptable-object',
+        'unused-argument',
+        'unused-import',
+        'unused-variable',
+        'use-dict-literal',
+        'use-implicit-booleaness-not-comparison',
+        'use-maxsplit-arg',
+        'use-yield-from',
+        'used-before-assignment',
+        'useless-object-inheritance',
+        'useless-option-value',
     ]
     return input_api.RunTests(
         input_api.canned_checks.GetPylint(
