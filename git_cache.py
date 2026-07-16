@@ -134,12 +134,23 @@ class Mirror(object):
         'webrtc.googlesource.com',
     ))
 
+    # Map of aliased URLs to canonical URLs for caching purposes. Repos in this
+    # map are pristine mirrors, and can share the upstream repo's git cache & GS
+    # bootstrap snapshot.
+    URL_ALIASES = {
+        'chrome-internal.googlesource.com/chrome/experimental/chromium/src':
+        'chromium.googlesource.com/chromium/src',
+    }
+
     @property
     def bootstrap_bucket(self):
         b = os.getenv('OVERRIDE_BOOTSTRAP_BUCKET')
         if b:
             return b
-        u = urllib.parse.urlparse(self.url)
+        # The URL might be an alias from URL_ALIASES. So need to check the URL
+        # of its cache dir, which should point to a canonical URL.
+        cache_dir_url = self.CacheDirToUrl(self.basedir)
+        u = urllib.parse.urlparse(cache_dir_url)
         if u.netloc in self.BOOTSTRAP_BUCKET_HOSTS:
             return 'chromium-git-cache'
         # Not recognized.
@@ -168,6 +179,8 @@ class Mirror(object):
 
         # Use the same dir for authenticated URLs and unauthenticated URLs.
         norm_url = norm_url.replace('googlesource.com/a/', 'googlesource.com/')
+
+        norm_url = Mirror.URL_ALIASES.get(norm_url, norm_url)
 
         norm_url = norm_url.replace(':', '__')
 

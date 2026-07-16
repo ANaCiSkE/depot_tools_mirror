@@ -441,6 +441,16 @@ class BootstrapBucketTest(unittest.TestCase):
     def test_unknown_host_returns_none(self):
         self.assertIsNone(git_cache.Mirror('https://example.com/x').bootstrap_bucket)
 
+    def test_aliased_url(self):
+        url = ('https://chrome-internal.googlesource.com/'
+               'chrome/experimental/chromium/src')
+        m = git_cache.Mirror(url)
+        self.assertEqual(m.basedir, 'chromium.googlesource.com-chromium-src')
+        self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache')
+        expected_gs_path = ('gs://chromium-git-cache/v2/'
+                            'chromium.googlesource.com-chromium-src')
+        self.assertEqual(m._gs_path, expected_gs_path)
+
     def test_override_env_wins(self):
         with mock.patch.dict('os.environ',
                              {'OVERRIDE_BOOTSTRAP_BUCKET': 'my-bucket'}):
