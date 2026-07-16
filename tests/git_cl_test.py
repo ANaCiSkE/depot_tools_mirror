@@ -219,6 +219,108 @@ class TestGitClBasic(unittest.TestCase):
         )
         sys.exit.assert_called_once_with(1)
 
+    @mock.patch('git_cl.subcommand.CommandDispatcher.execute')
+    @mock.patch('scm.GIT.Capture')
+    def test_main_untracked_cache_bug(self, mock_capture, mock_execute):
+        mock_execute.side_effect = subprocess2.CalledProcessError(
+            128, ['git', 'status'], '.', b'',
+            b'BUG: dir.c:4033: untracked_cache_invalidate_trimmed_path given zero length path'
+        )
+        mock_capture.return_value = os.path.abspath('/path/to/.git')
+
+        with self.assertRaises(SystemExitMock):
+            git_cl.main(['status'])
+
+        lock_path = os.path.join(os.path.abspath('/path/to/.git'), 'index.lock')
+        index_path = os.path.join(os.path.abspath('/path/to/.git'), 'index')
+        expected_msg = (
+            f'Git encountered a bug with the untracked cache.\n'
+            f'To fix this, please rebuild your git index.\n'
+            f'\n'
+            f'Make sure no Git process is running first, then run:\n'
+            f'  rm -f {lock_path}\n'
+            f'  rm -f {index_path}\n'
+            f'  git reset\n'
+            f'\n'
+            f'Note: This will unstage any staged changes.\n'
+            f'\n'
+            f'(Optional) To prevent this from happening again, run:\n'
+            f'  git update-index --no-untracked-cache\n'
+            f'  git config core.untrackedCache false\n'
+        )
+        self.assertEqual(sys.stderr.getvalue(), expected_msg)
+        sys.exit.assert_called_once_with(1)
+
+    @mock.patch('git_cl.subcommand.CommandDispatcher.execute')
+    @mock.patch('scm.GIT.Capture')
+    @mock.patch('git_cl.FindGitDir')
+    def test_main_untracked_cache_bug_find_git_dir(self, mock_find,
+                                                   mock_capture, mock_execute):
+        mock_execute.side_effect = subprocess2.CalledProcessError(
+            128, ['git', 'status'], '.', b'',
+            b'BUG: dir.c:4033: untracked_cache_invalidate_trimmed_path given zero length path'
+        )
+        mock_capture.side_effect = OSError('git failed')
+        mock_find.return_value = os.path.abspath('/path/to/found/.git')
+
+        with self.assertRaises(SystemExitMock):
+            git_cl.main(['status'])
+
+        lock_path = os.path.join(os.path.abspath('/path/to/found/.git'), 'index.lock')
+        index_path = os.path.join(os.path.abspath('/path/to/found/.git'), 'index')
+        expected_msg = (
+            f'Git encountered a bug with the untracked cache.\n'
+            f'To fix this, please rebuild your git index.\n'
+            f'\n'
+            f'Make sure no Git process is running first, then run:\n'
+            f'  rm -f {lock_path}\n'
+            f'  rm -f {index_path}\n'
+            f'  git reset\n'
+            f'\n'
+            f'Note: This will unstage any staged changes.\n'
+            f'\n'
+            f'(Optional) To prevent this from happening again, run:\n'
+            f'  git update-index --no-untracked-cache\n'
+            f'  git config core.untrackedCache false\n'
+        )
+        self.assertEqual(sys.stderr.getvalue(), expected_msg)
+        sys.exit.assert_called_once_with(1)
+
+    @mock.patch('git_cl.subcommand.CommandDispatcher.execute')
+    @mock.patch('scm.GIT.Capture')
+    @mock.patch('git_cl.FindGitDir')
+    def test_main_untracked_cache_bug_fallback(self, mock_find, mock_capture,
+                                               mock_execute):
+        mock_execute.side_effect = subprocess2.CalledProcessError(
+            128, ['git', 'status'], '.', b'',
+            b'BUG: dir.c:4033: untracked_cache_invalidate_trimmed_path given zero length path'
+        )
+        mock_capture.side_effect = OSError('git failed')
+        mock_find.return_value = None
+
+        with self.assertRaises(SystemExitMock):
+            git_cl.main(['status'])
+
+        lock_path = '$(git rev-parse --git-dir)/index.lock'
+        index_path = '$(git rev-parse --git-dir)/index'
+        expected_msg = (
+            f'Git encountered a bug with the untracked cache.\n'
+            f'To fix this, please rebuild your git index.\n'
+            f'\n'
+            f'Make sure no Git process is running first, then run:\n'
+            f'  rm -f {lock_path}\n'
+            f'  rm -f {index_path}\n'
+            f'  git reset\n'
+            f'\n'
+            f'Note: This will unstage any staged changes.\n'
+            f'\n'
+            f'(Optional) To prevent this from happening again, run:\n'
+            f'  git update-index --no-untracked-cache\n'
+            f'  git config core.untrackedCache false\n'
+        )
+        self.assertEqual(sys.stderr.getvalue(), expected_msg)
+        sys.exit.assert_called_once_with(1)
+
     def test_fetch_description(self):
         cl = git_cl.Changelist(issue=1, codereview_host='host')
         cl.description = 'x'
@@ -6945,6 +7047,76 @@ class TestRuffBatchIntegration(unittest.TestCase):
             call_args[0])
         self.assertEqual(
             json.dumps(expected_config).encode('utf-8'), call_kwargs['stdin'])
+
+
+class TestFindGitDir(unittest.TestCase):
+
+    def setUp(self):
+        super(TestFindGitDir, self).setUp()
+        self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+
+    def tearDown(self):
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+        super(TestFindGitDir, self).tearDown()
+
+    def test_find_git_dir_normal(self):
+        git_dir = os.path.join(self.test_dir, '.git')
+        os.makedirs(git_dir)
+        self.assertEqual(git_cl.FindGitDir(self.test_dir), git_dir)
+        sub_dir = os.path.join(self.test_dir, 'sub', 'dir')
+        os.makedirs(sub_dir)
+        self.assertEqual(git_cl.FindGitDir(sub_dir), git_dir)
+
+    def test_find_git_dir_worktree_absolute(self):
+        target_git_dir = os.path.abspath(
+            os.path.join(self.test_dir, 'main_repo', '.git', 'worktrees', 'wt'))
+        os.makedirs(target_git_dir)
+        wt_root = os.path.join(self.test_dir, 'wt_root')
+        os.makedirs(wt_root)
+        git_file = os.path.join(wt_root, '.git')
+        with open(git_file, 'w') as f:
+            f.write(f'gitdir: {target_git_dir}\n')
+        self.assertEqual(git_cl.FindGitDir(wt_root), target_git_dir)
+        sub_dir = os.path.join(wt_root, 'sub', 'dir')
+        os.makedirs(sub_dir)
+        self.assertEqual(git_cl.FindGitDir(sub_dir), target_git_dir)
+
+    def test_find_git_dir_worktree_relative(self):
+        wt_root = os.path.join(self.test_dir, 'wt_root')
+        os.makedirs(wt_root)
+        target_git_dir = os.path.join(self.test_dir, 'target_git_dir')
+        os.makedirs(target_git_dir)
+        git_file = os.path.join(wt_root, '.git')
+        with open(git_file, 'w') as f:
+            f.write('gitdir: ../target_git_dir\n')
+        self.assertEqual(git_cl.FindGitDir(wt_root),
+                         os.path.abspath(target_git_dir))
+
+    def test_find_git_dir_not_found(self):
+        self.assertIsNone(git_cl.FindGitDir(self.test_dir))
+        sub_dir = os.path.join(self.test_dir, 'sub', 'dir')
+        os.makedirs(sub_dir)
+        self.assertIsNone(git_cl.FindGitDir(sub_dir))
+
+    def test_find_git_dir_invalid_file(self):
+        wt_root = os.path.join(self.test_dir, 'wt_root')
+        os.makedirs(wt_root)
+        git_file = os.path.join(wt_root, '.git')
+        with open(git_file, 'w') as f:
+            f.write('not a gitdir link\n')
+        self.assertIsNone(git_cl.FindGitDir(wt_root))
+
+    def test_find_git_dir_read_error(self):
+        wt_root = os.path.join(self.test_dir, 'wt_root')
+        os.makedirs(wt_root)
+        git_file = os.path.join(wt_root, '.git')
+        with open(git_file, 'w') as f:
+            f.write('gitdir: foo\n')
+        with mock.patch('builtins.open',
+                        side_effect=OSError('permission denied')):
+            self.assertIsNone(git_cl.FindGitDir(wt_root))
 
 
 if __name__ == '__main__':
