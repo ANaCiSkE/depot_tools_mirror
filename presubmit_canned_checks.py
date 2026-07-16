@@ -588,8 +588,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     }
 
     # To avoid triggering on the magic string, break it up.
-    LINT_THEN_CHANGE_EXCEPTION = ('LI'
-                                  'NT.ThenChange(')
+    LINT_THEN_CHANGE_EXCEPTION = ('LI' + 'NT.ThenChange(')
 
     # Language specific exceptions to max line length.
     # '.h' is considered an obj-c file extension, since OBJC_EXCEPTIONS are a
