@@ -15,3 +15,5 @@ extend-include = [
     "ruff_chromium",
     "yapf",
 ]
+
+extend-exclude = ["*pb2.py"]
