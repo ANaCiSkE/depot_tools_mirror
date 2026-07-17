@@ -894,8 +894,7 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         # Gitlink in the middle of other files.
         self.input_api.subprocess.check_output.side_effect = [
             b'',  # git show HEAD:DEPS
-            b'100644 blob 1111\tfile1\0'
-            b'160000 commit 2222\tsubmodule\0'
+            b'100644 blob 1111\tfile1\0' + b'160000 commit 2222\tsubmodule\0' +
             b'100644 blob 3333\tfile2\0'
         ]
 
@@ -908,8 +907,7 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         # Gitlink at the very start.
         self.input_api.subprocess.check_output.side_effect = [
             b'',  # git show HEAD:DEPS
-            b'160000 commit 2222\tsubmodule\0'
-            b'100644 blob 3333\tfile2\0'
+            b'160000 commit 2222\tsubmodule\0' + b'100644 blob 3333\tfile2\0'
         ]
 
         results = presubmit_canned_checks.CheckForCommitObjects(
@@ -921,8 +919,7 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         # Gitlink at the very end.
         self.input_api.subprocess.check_output.side_effect = [
             b'',  # git show HEAD:DEPS
-            b'100644 blob 3333\tfile2\0'
-            b'160000 commit 2222\tsubmodule\0'
+            b'100644 blob 3333\tfile2\0' + b'160000 commit 2222\tsubmodule\0'
         ]
 
         results = presubmit_canned_checks.CheckForCommitObjects(
@@ -934,8 +931,7 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         # Multiple gitlinks.
         self.input_api.subprocess.check_output.side_effect = [
             b'',  # git show HEAD:DEPS
-            b'160000 commit 1111\tsub1\0'
-            b'100644 blob 2222\tfile\0'
+            b'160000 commit 1111\tsub1\0' + b'100644 blob 2222\tfile\0' +
             b'160000 commit 3333\tsub2\0'
         ]
 
@@ -958,7 +954,7 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         }
         self.input_api.subprocess.check_output.side_effect = [
             b'',  # git show HEAD:DEPS
-            b'160000 commit 1111\tsrc/third_party/sub1\0'
+            b'160000 commit 1111\tsrc/third_party/sub1\0' +
             b'160000 commit 1111\tsrc/third_party/sub2\0'
         ]
 
