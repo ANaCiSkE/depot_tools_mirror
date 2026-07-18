@@ -21,7 +21,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   cipd selfupdate-roll -version-file tmp \
 #        -version git_revision:161d3029a2818c224db3154cf3e78fde51a1047f
 #   cat tmp.digests
-OLD_VERSION = 'git_revision:161d3029a2818c224db3154cf3e78fde51a1047f'
+OLD_VERSION = "git_revision:161d3029a2818c224db3154cf3e78fde51a1047f"
 OLD_DIGESTS = """
 aix-ppc64        sha256  2e947e55e7fe25d3b5ab5524f8603a3b15d13c209f18873704cfc2c4a95ee685
 dragonfly-amd64  sha256  f0229d21ae5c19ddfd4689d2c93937d085a090b8ccadd4a177d897d7d884f5b9
@@ -66,8 +66,9 @@ class CipdBootstrapTest(unittest.TestCase):
     WARNING: This integration test touches real network and real CIPD backend and
     downloads several megabytes of stuff.
     """
+
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp('depot_tools_cipd')
+        self.tempdir = tempfile.mkdtemp("depot_tools_cipd")
 
     def tearDown(self):
         shutil.rmtree(self.tempdir)
@@ -79,33 +80,37 @@ class CipdBootstrapTest(unittest.TestCase):
             cipd_version: if not None, a value to put into cipd_client_version file.
         """
         names = (
-            '.cipd_impl.ps1',
-            'cipd',
-            'cipd.bat',
-            'cipd_client_version',
-            'cipd_client_version.digests',
+            ".cipd_impl.ps1",
+            "cipd",
+            "cipd.bat",
+            "cipd_client_version",
+            "cipd_client_version.digests",
         )
         for f in names:
-            shutil.copy2(os.path.join(ROOT_DIR, f),
-                         os.path.join(self.tempdir, f))
+            shutil.copy2(
+                os.path.join(ROOT_DIR, f), os.path.join(self.tempdir, f)
+            )
         if cipd_version is not None:
-            with open(os.path.join(self.tempdir, 'cipd_client_version'),
-                      'wt') as f:
-                f.write(cipd_version + '\n')
+            with open(
+                os.path.join(self.tempdir, "cipd_client_version"), "wt"
+            ) as f:
+                f.write(cipd_version + "\n")
         if digests is not None:
-            p = os.path.join(self.tempdir, 'cipd_client_version.digests')
-            with open(p, 'wt') as f:
-                f.write(digests + '\n')
+            p = os.path.join(self.tempdir, "cipd_client_version.digests")
+            with open(p, "wt") as f:
+                f.write(digests + "\n")
 
     def call_cipd_help(self):
         """Calls 'cipd help' bootstrapping the client in tempdir.
 
         Returns (exit code, merged stdout and stderr).
         """
-        exe = 'cipd.bat' if sys.platform == 'win32' else 'cipd'
-        p = subprocess.Popen([os.path.join(self.tempdir, exe), 'help'],
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
+        exe = "cipd.bat" if sys.platform == "win32" else "cipd"
+        p = subprocess.Popen(
+            [os.path.join(self.tempdir, exe), "help"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
         out, _ = p.communicate()
         return p.returncode, out
 
@@ -114,20 +119,21 @@ class CipdBootstrapTest(unittest.TestCase):
         self.stage_files()
         ret, out = self.call_cipd_help()
         if ret:
-            self.fail('Bootstrap from scratch failed:\n%s' % out)
+            self.fail("Bootstrap from scratch failed:\n%s" % out)
 
     def test_self_update(self):
         """Updating the existing client in-place."""
         self.stage_files(cipd_version=OLD_VERSION, digests=OLD_DIGESTS)
         ret, out = self.call_cipd_help()
         if ret:
-            self.fail('Update to %s fails:\n%s' % (OLD_VERSION, out))
+            self.fail("Update to %s fails:\n%s" % (OLD_VERSION, out))
         self.stage_files()
         ret, out = self.call_cipd_help()
         if ret:
-            self.fail('Update from %s to the tip fails:\n%s' %
-                      (OLD_VERSION, out))
+            self.fail(
+                "Update from %s to the tip fails:\n%s" % (OLD_VERSION, out)
+            )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

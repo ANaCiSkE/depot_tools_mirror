@@ -21,9 +21,9 @@ with tempfile.TemporaryDirectory() as tempdir:
     shutil.copyfile(THIS_DIR / "gitconfig", target_config)
     shutil.copyfile(THIS_DIR / "cookiefile.txt", target_cookies)
 
-    print('http.proxy=localhost:12345')
-    print(f'include.path={target_config}')
-    print(f'http.cookiefile={target_cookies}')
+    print("http.proxy=localhost:12345")
+    print(f"include.path={target_config}")
+    print(f"http.cookiefile={target_cookies}")
     sys.stdout.flush()
     # need to fully close file descriptor, sys.stdout.close() doesn't seem to cut
     # it.

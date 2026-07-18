@@ -54,19 +54,19 @@ def _get_siso_bin_dir(tmp_path: Path) -> Path:
 
 
 def _get_siso_bin_path(tmp_path: Path) -> Path:
-    return _get_siso_bin_dir(tmp_path) / ('siso' + gclient_paths.GetExeSuffix())
+    return _get_siso_bin_dir(tmp_path) / ("siso" + gclient_paths.GetExeSuffix())
 
 
-def create_telemetry_cfg(tmp_path: Path,
-                         mocker: Any,
-                         enabled: bool = True) -> build_telemetry.Config:
+def create_telemetry_cfg(
+    tmp_path: Path, mocker: Any, enabled: bool = True
+) -> build_telemetry.Config:
     config_path = tmp_path / "build_telemetry.cfg"
     status = "opt-in" if enabled else "opt-out"
     config_data = {
         "user": "test@google.com",
         "status": status,
         "countdown": 0,
-        "version": 1
+        "version": 1,
     }
     config_path.write_text(json.dumps(config_data))
 
@@ -78,8 +78,9 @@ def create_telemetry_cfg(tmp_path: Path,
 
 
 @pytest.fixture
-def siso_test_fixture(tmp_path: Path,
-                      mocker: Any) -> Generator[None, None, None]:
+def siso_test_fixture(
+    tmp_path: Path, mocker: Any
+) -> Generator[None, None, None]:
     # Replace trial dir functionality with tmp_parth.
     previous_dir = os.getcwd()
     (tmp_path / "src").mkdir(parents=True, exist_ok=True)
@@ -90,8 +91,9 @@ def siso_test_fixture(tmp_path: Path,
 
 
 @pytest.fixture
-def siso_project_setup(siso_test_fixture: None, tmp_path: Path,
-                       mocker: Any) -> None:
+def siso_project_setup(
+    siso_test_fixture: None, tmp_path: Path, mocker: Any
+) -> None:
     sisoenv_dir = _get_siso_config_dir(tmp_path)
     sisoenv_dir.mkdir(parents=True, exist_ok=True)
     (sisoenv_dir / ".sisoenv").write_text("SISO_PROJECT=test-project\n")
@@ -106,18 +108,22 @@ def siso_project_setup(siso_test_fixture: None, tmp_path: Path,
     (tmp_path / ".gclient_entries").write_text("entries = {'src': '...'}")
     (tmp_path / "src" / "out" / "Default").mkdir(parents=True, exist_ok=True)
 
-    mocker.patch("siso._get_siso_subcmds",
-                 return_value={"ninja", "query", "other"})
+    mocker.patch(
+        "siso._get_siso_subcmds", return_value={"ninja", "query", "other"}
+    )
     mocker.patch("siso._supports_namespace", return_value=True)
-    mocker.patch("siso._handle_collector",
-                 side_effect=lambda _p, _a, e, subcmd="": e)
+    mocker.patch(
+        "siso._handle_collector", side_effect=lambda _p, _a, e, subcmd="": e
+    )
 
     # Create enabled telemetry config by default
     create_telemetry_cfg(tmp_path, mocker, enabled=True)
 
+
 def test_load_sisorc_no_file(siso_test_fixture: Any) -> None:
     global_flags, subcmd_flags = siso.load_sisorc(
-        os.path.join("build", "config", "siso", ".sisorc"))
+        os.path.join("build", "config", "siso", ".sisorc")
+    )
     assert global_flags == []
     assert subcmd_flags == {}
 
@@ -141,15 +147,27 @@ ninja --failure_verbose=false -k=0
     [
         pytest.param(
             [
-                "-mutexprofile", "siso_mutex.prof", "ninja", "-project",
-                "rbe-chrome-untrusted", "--enable_cloud_logging", "-C",
-                "out/Default"
+                "-mutexprofile",
+                "siso_mutex.prof",
+                "ninja",
+                "-project",
+                "rbe-chrome-untrusted",
+                "--enable_cloud_logging",
+                "-C",
+                "out/Default",
             ],
             {"ninja", "query"},
-            (["-mutexprofile", "siso_mutex.prof"], "ninja", [
-                "-project", "rbe-chrome-untrusted", "--enable_cloud_logging",
-                "-C", "out/Default"
-            ]),
+            (
+                ["-mutexprofile", "siso_mutex.prof"],
+                "ninja",
+                [
+                    "-project",
+                    "rbe-chrome-untrusted",
+                    "--enable_cloud_logging",
+                    "-C",
+                    "out/Default",
+                ],
+            ),
             id="complex_global_flags",
         ),
         pytest.param(
@@ -172,9 +190,12 @@ ninja --failure_verbose=false -k=0
         ),
     ],
 )
-def test_split_args(args: List[str], subcmds: set[str],
-                    want: Tuple[List[str], str,
-                                List[str]], mocker: Any) -> None:
+def test_split_args(
+    args: List[str],
+    subcmds: set[str],
+    want: Tuple[List[str], str, List[str]],
+    mocker: Any,
+) -> None:
     mocker.patch("siso._get_siso_subcmds", return_value=subcmds)
     got = siso.split_args(args, "siso")
     assert got == want
@@ -229,7 +250,8 @@ Subcommands for auth:
         auth-check       prints current auth status
         login            login to siso system
         logout           logout from siso system
-""")
+""",
+    )
     got = siso._get_siso_subcmds("siso")
     assert got == {"collector", "ninja", "auth-check", "login", "logout"}
 
@@ -381,15 +403,18 @@ Subcommands for auth:
             ["-C", "out/Default", "--metrics_labels=foo=bar"],
             {},
             [
-                "-C", "out/Default", "--metrics_labels=foo=bar",
-                "--namespace=developer"
+                "-C",
+                "out/Default",
+                "--metrics_labels=foo=bar",
+                "--namespace=developer",
             ],
             id="labels_exist",
         ),
     ],
 )
-def test_apply_telemetry_flags(subcmd_args: List[str], env: Dict[str, str],
-                               want: List[str]) -> None:
+def test_apply_telemetry_flags(
+    subcmd_args: List[str], env: Dict[str, str], want: List[str]
+) -> None:
     got = siso.apply_telemetry_flags(subcmd_args, env)
     assert got == want
 
@@ -435,13 +460,11 @@ def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
             id="rbe_metrics_project_env",
         ),
         pytest.param(
-            [], {"SISO_PROJECT": "proj4"}, "proj4", id="siso_project_env"),
+            [], {"SISO_PROJECT": "proj4"}, "proj4", id="siso_project_env"
+        ),
         pytest.param(
             [],
-            {
-                "RBE_metrics_project": "proj3",
-                "SISO_PROJECT": "proj4"
-            },
+            {"RBE_metrics_project": "proj3", "SISO_PROJECT": "proj4"},
             "proj3",
             id="rbe_and_siso_project_env",
         ),
@@ -464,12 +487,14 @@ def test_apply_telemetry_flags_sets_expected_env_var(mocker: Any) -> None:
             "proj1",
             id="short_metrics_project_arg",
         ),
-        pytest.param(["-project", "proj2"], {}, "proj2",
-                     id="short_project_arg"),
+        pytest.param(
+            ["-project", "proj2"], {}, "proj2", id="short_project_arg"
+        ),
     ],
 )
-def test_fetch_metrics_project(subcmd_args: List[str], env: Dict[str, str],
-                               want: str) -> None:
+def test_fetch_metrics_project(
+    subcmd_args: List[str], env: Dict[str, str], want: str
+) -> None:
     got = siso._fetch_metrics_project(subcmd_args, env)
     assert got == want
 
@@ -480,8 +505,9 @@ def test_fetch_metrics_project(subcmd_args: List[str], env: Dict[str, str],
         (
             "Linux",
             {
-                "XDG_RUNTIME_DIR": os.path.join("{root_dir}", "run", "user",
-                                                "1000")
+                "XDG_RUNTIME_DIR": os.path.join(
+                    "{root_dir}", "run", "user", "1000"
+                )
             },
             os.path.join("{root_dir}", "run", "user", "1000", "{user}", "siso"),
         ),
@@ -489,18 +515,18 @@ def test_fetch_metrics_project(subcmd_args: List[str], env: Dict[str, str],
         (
             "Darwin",
             {
-                "TMPDIR":
-                os.path.join("{root_dir}", "var", "folders", "12", "345..."),
+                "TMPDIR": os.path.join(
+                    "{root_dir}", "var", "folders", "12", "345..."
+                ),
             },
-            os.path.join("{root_dir}", "var", "folders", "12", "345...",
-                         "{user}", "siso"),
+            os.path.join(
+                "{root_dir}", "var", "folders", "12", "345...", "{user}", "siso"
+            ),
         ),
         ("Darwin", {}, os.path.join("/tmp", "{user}", "siso")),
         (
             "Linux",
-            {
-                "XDG_RUNTIME_DIR": "a" * 100
-            },
+            {"XDG_RUNTIME_DIR": "a" * 100},
             os.path.join("/tmp", "{user}", "siso"),
         ),
     ],
@@ -558,14 +584,16 @@ def test_main_handle_collector_skipped(
     mocker.patch("siso._fetch_metrics_project", return_value=project_val)
 
     runner = mocker.Mock(return_value=0)
-    telemetry_cfg = create_telemetry_cfg(tmp_path,
-                                         mocker,
-                                         enabled=telemetry_enabled)
+    telemetry_cfg = create_telemetry_cfg(
+        tmp_path, mocker, enabled=telemetry_enabled
+    )
 
-    siso.main(["siso.py"] + args + ([subcmd] if subcmd else []),
-              telemetry_cfg=telemetry_cfg,
-              env={"SISO_PATH": str(siso_bin_path)},
-              runner=runner)
+    siso.main(
+        ["siso.py"] + args + ([subcmd] if subcmd else []),
+        telemetry_cfg=telemetry_cfg,
+        env={"SISO_PATH": str(siso_bin_path)},
+        runner=runner,
+    )
 
     # Verify that the runner was NOT passed a collector address in its env
     _, called_kwargs = runner.call_args
@@ -576,23 +604,16 @@ def test_main_handle_collector_skipped(
 @pytest.fixture
 def start_collector_mocks(mocker: Any) -> Dict[str, Any]:
     mocks = {
-        "subprocess_run":
-        mocker.patch("siso.subprocess.run"),
-        "kill_collector":
-        mocker.patch("siso._kill_collector"),
-        "time_sleep":
-        mocker.patch("siso.time.sleep"),
-        "time_time":
-        mocker.patch("siso.time.time",
-                     side_effect=(1000 + i * 0.1 for i in range(100))),
-        "http_connection":
-        mocker.patch("siso.http.client.HTTPConnection"),
-        "subprocess_popen":
-        mocker.patch("siso.subprocess.Popen"),
-        "os_path_exists":
-        mocker.patch("os.path.exists", return_value=True),
-        "os_remove":
-        mocker.patch("os.remove"),
+        "subprocess_run": mocker.patch("siso.subprocess.run"),
+        "kill_collector": mocker.patch("siso._kill_collector"),
+        "time_sleep": mocker.patch("siso.time.sleep"),
+        "time_time": mocker.patch(
+            "siso.time.time", side_effect=(1000 + i * 0.1 for i in range(100))
+        ),
+        "http_connection": mocker.patch("siso.http.client.HTTPConnection"),
+        "subprocess_popen": mocker.patch("siso.subprocess.Popen"),
+        "os_path_exists": mocker.patch("os.path.exists", return_value=True),
+        "os_remove": mocker.patch("os.remove"),
     }
     mock_conn = mocker.Mock()
     mocks["http_connection"].return_value = mock_conn
@@ -618,18 +639,22 @@ def _configure_http_responses(
         path = request_path_history[-1]
         if path == "/health/status":
             if not status_responses:
-                return mocker.Mock(status=404,
-                                   read=mocker.Mock(return_value=b""))
+                return mocker.Mock(
+                    status=404, read=mocker.Mock(return_value=b"")
+                )
             status_code, _ = status_responses.pop(0)
-            return mocker.Mock(status=status_code,
-                               read=mocker.Mock(return_value=b""))
+            return mocker.Mock(
+                status=status_code, read=mocker.Mock(return_value=b"")
+            )
         if path == "/health/config":
             if not config_responses:
-                return mocker.Mock(status=200,
-                                   read=mocker.Mock(return_value=b"{}"))
+                return mocker.Mock(
+                    status=200, read=mocker.Mock(return_value=b"{}")
+                )
             status_code, _ = config_responses.pop(0)
-            return mocker.Mock(status=status_code,
-                               read=mocker.Mock(return_value=b""))
+            return mocker.Mock(
+                status=status_code, read=mocker.Mock(return_value=b"")
+            )
         return mocker.Mock(status=404)
 
     mock_conn.request.side_effect = request_side_effect
@@ -637,8 +662,8 @@ def _configure_http_responses(
 
 
 def test_handle_collector_removes_existing_socket_file(
-        siso_test_fixture: Any, start_collector_mocks: Dict[str, Any],
-        mocker: Any) -> None:
+    siso_test_fixture: Any, start_collector_mocks: Dict[str, Any], mocker: Any
+) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_os_path_exists = mocker.patch("os.path.exists", return_value=True)
     mock_os_remove = mocker.patch("os.remove")
@@ -650,14 +675,14 @@ def test_handle_collector_removes_existing_socket_file(
     mock_os_remove.assert_called_with(sockets_file)
 
 
-def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
-                                                   start_collector_mocks: Dict[
-                                                       str, Any],
-                                                   mocker: Any) -> None:
+def test_handle_collector_remove_socket_file_fails(
+    siso_test_fixture: Any, start_collector_mocks: Dict[str, Any], mocker: Any
+) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_os_path_exists = mocker.patch("os.path.exists", return_value=True)
-    mock_os_remove = mocker.patch("os.remove",
-                                  side_effect=OSError("Permission denied"))
+    mock_os_remove = mocker.patch(
+        "os.remove", side_effect=OSError("Permission denied")
+    )
     mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
     mocker.patch("siso._fetch_metrics_project", return_value="test-project")
     siso_path = "siso_path"
@@ -770,8 +795,8 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "-C",
                 "out/Default",
             ],
-            "depot_tools/siso.py: %s\n" %
-            shlex.join(["-gflag", "ninja", "-sflag", "-C", "out/Default"]),
+            "depot_tools/siso.py: %s\n"
+            % shlex.join(["-gflag", "ninja", "-sflag", "-C", "out/Default"]),
             id="with_sisorc",
         ),
         pytest.param(
@@ -786,8 +811,8 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "-C",
                 "out/Default",
             ],
-            "depot_tools/siso.py: %s\n" %
-            shlex.join(["-gflag_only", "ninja", "-C", "out/Default"]),
+            "depot_tools/siso.py: %s\n"
+            % shlex.join(["-gflag_only", "ninja", "-C", "out/Default"]),
             id="with_sisorc_global_flags_only",
         ),
         pytest.param(
@@ -802,8 +827,8 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "-C",
                 "out/Default",
             ],
-            "depot_tools/siso.py: %s\n" %
-            shlex.join(["ninja", "-sflag_only", "-C", "out/Default"]),
+            "depot_tools/siso.py: %s\n"
+            % shlex.join(["ninja", "-sflag_only", "-C", "out/Default"]),
             id="with_sisorc_subcmd_flags_only",
         ),
         pytest.param(
@@ -827,14 +852,24 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "--enable_cloud_logging",
                 "--metrics_project=telemetry-project",
             ],
-            "depot_tools/siso.py: %s\n" % shlex.join([
-                "-gflag_tel", "ninja", "-sflag_tel", "-C", "out/Default",
-                "--metrics_labels",
-                f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
-                "--namespace=developer", "--enable_cloud_monitoring",
-                "--enable_cloud_profiler", "--enable_cloud_trace",
-                "--enable_cloud_logging", "--metrics_project=telemetry-project"
-            ]),
+            "depot_tools/siso.py: %s\n"
+            % shlex.join(
+                [
+                    "-gflag_tel",
+                    "ninja",
+                    "-sflag_tel",
+                    "-C",
+                    "out/Default",
+                    "--metrics_labels",
+                    f"type=developer,tool=siso,host_os={siso._SYSTEM_DICT.get(sys.platform, sys.platform)}",
+                    "--namespace=developer",
+                    "--enable_cloud_monitoring",
+                    "--enable_cloud_profiler",
+                    "--enable_cloud_trace",
+                    "--enable_cloud_logging",
+                    "--metrics_project=telemetry-project",
+                ]
+            ),
             id="with_sisorc_global_and_subcmd_flags_and_telemetry",
         ),
         pytest.param(
@@ -850,13 +885,16 @@ def test_handle_collector_remove_socket_file_fails(siso_test_fixture: Any,
                 "-C",
                 "out/Default",
             ],
-            "depot_tools/siso.py: %s\n" % shlex.join([
-                "-gflag_non_ninja",
-                "query",
-                "-sflag_non_ninja",
-                "-C",
-                "out/Default",
-            ]),
+            "depot_tools/siso.py: %s\n"
+            % shlex.join(
+                [
+                    "-gflag_non_ninja",
+                    "query",
+                    "-sflag_non_ninja",
+                    "-C",
+                    "out/Default",
+                ]
+            ),
             id="with_sisorc_non_ninja_subcmd",
         ),
     ],
@@ -892,18 +930,20 @@ def test_main_process_args(
 
     mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
     runner = mocker.Mock(return_value=0)
-    telemetry_cfg = create_telemetry_cfg(tmp_path,
-                                         mocker,
-                                         enabled=should_collect_logs)
+    telemetry_cfg = create_telemetry_cfg(
+        tmp_path, mocker, enabled=should_collect_logs
+    )
 
     # Provide a SISO_PATH to point to our dummy binary
     env_with_path = env.copy()
     env_with_path["SISO_PATH"] = str(siso_bin_path)
 
-    siso.main(["siso.py"] + args,
-              telemetry_cfg=telemetry_cfg,
-              env=env_with_path,
-              runner=runner)
+    siso.main(
+        ["siso.py"] + args,
+        telemetry_cfg=telemetry_cfg,
+        env=env_with_path,
+        runner=runner,
+    )
 
     # Verify runner was called with the expected arguments
     assert runner.call_count == 1
@@ -917,6 +957,7 @@ def test_main_process_args(
     expected_full_stderr += want_stderr
     assert actual_stderr == expected_full_stderr
 
+
 # Else it won"t even compile on Windows.
 if sys.platform != "win32":
     SIGKILL = siso.signal.SIGKILL  # pylint: disable=no-member
@@ -929,8 +970,8 @@ else:
     "stdout, stderr, returncode, kill_side_effect, expected_result, expected_kill_args",
     [
         pytest.param(
-            b"123\n", b"", 0, None, True,
-            (123, SIGKILL), id="found_and_killed"),
+            b"123\n", b"", 0, None, True, (123, SIGKILL), id="found_and_killed"
+        ),
         pytest.param(
             b"",
             b"lsof: no process found\n",
@@ -973,14 +1014,15 @@ def test_kill_collector_posix(
     mocker.patch("sys.platform", new="linux")
     mock_os_kill = mocker.patch("siso.os.kill")
     mock_subprocess_run = mocker.patch("siso.subprocess.run")
-    mock_subprocess_run.return_value = mocker.Mock(stdout=stdout,
-                                                   stderr=stderr,
-                                                   returncode=returncode)
+    mock_subprocess_run.return_value = mocker.Mock(
+        stdout=stdout, stderr=stderr, returncode=returncode
+    )
     mock_os_kill.side_effect = kill_side_effect
     result = siso._kill_collector()
     assert result == expected_result
     mock_subprocess_run.assert_called_once_with(
-        ["lsof", "-t", f"-i:{siso._OTLP_HEALTH_PORT}"], capture_output=True)
+        ["lsof", "-t", f"-i:{siso._OTLP_HEALTH_PORT}"], capture_output=True
+    )
     if expected_kill_args:
         mock_os_kill.assert_called_once_with(*expected_kill_args)
     else:
@@ -994,8 +1036,9 @@ def test_kill_collector_posix(
         pytest.param(
             [
                 (
-                    f"  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n"
-                    .encode("utf-8"),
+                    f"  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n".encode(
+                        "utf-8"
+                    ),
                     b"",
                     0,
                 ),
@@ -1023,8 +1066,9 @@ def test_kill_collector_posix(
         pytest.param(
             [
                 (
-                    f"  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       5678\r\n"
-                    .encode("utf-8"),
+                    f"  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       5678\r\n".encode(
+                        "utf-8"
+                    ),
                     b"",
                     0,
                 ),
@@ -1048,8 +1092,9 @@ def test_kill_collector_posix(
         pytest.param(
             [
                 (
-                    f"  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n"
-                    .encode("utf-8"),
+                    f"  TCP    127.0.0.1:{siso._OTLP_HEALTH_PORT}        [::]:0                 LISTENING       1234\r\n".encode(
+                        "utf-8"
+                    ),
                     b"",
                     0,
                 ),
@@ -1097,9 +1142,7 @@ def test_handle_collector_dead_then_healthy(
     mocker: Any,
 ) -> None:
     mocker.patch("sys.platform", new=platform)
-    mocker.patch("subprocess.CREATE_NO_WINDOW",
-                 creationflags,
-                 create=True)
+    mocker.patch("subprocess.CREATE_NO_WINDOW", creationflags, create=True)
     mock_json_loads = mocker.patch("siso.json.loads")
     m = start_collector_mocks
     siso_path = "siso_path"
@@ -1116,15 +1159,7 @@ def test_handle_collector_dead_then_healthy(
     else:
         endpoint = siso._OTLP_DEFAULT_TCP_ENDPOINT
     config = {
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": endpoint
-                    }
-                }
-            }
-        }
+        "receivers": {"otlp": {"protocols": {"grpc": {"endpoint": endpoint}}}}
     }
     mock_json_loads.side_effect = [status_healthy, config]
     env = {}
@@ -1147,10 +1182,9 @@ def test_handle_collector_dead_then_healthy(
     m["kill_collector"].assert_not_called()
 
 
-def test_handle_collector_unhealthy_then_healthy(siso_test_fixture: Any,
-                                                 start_collector_mocks: Dict[
-                                                     str, Any],
-                                                 mocker: Any) -> None:
+def test_handle_collector_unhealthy_then_healthy(
+    siso_test_fixture: Any, start_collector_mocks: Dict[str, Any], mocker: Any
+) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_json_loads = mocker.patch("siso.json.loads")
     m = start_collector_mocks
@@ -1166,20 +1200,8 @@ def test_handle_collector_unhealthy_then_healthy(siso_test_fixture: Any,
     status_healthy = {"healthy": True, "status": "StatusOK"}
     endpoint = os.path.join("/tmp", "testuser", "siso", f"{project}.sock")
     config_project_full = {
-        "exporters": {
-            "googlecloud": {
-                "project": project
-            }
-        },
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": endpoint
-                    }
-                }
-            }
-        },
+        "exporters": {"googlecloud": {"project": project}},
+        "receivers": {"otlp": {"protocols": {"grpc": {"endpoint": endpoint}}}},
     }
     mock_json_loads.side_effect = [
         status_unhealthy,
@@ -1203,9 +1225,9 @@ def test_handle_collector_unhealthy_then_healthy(siso_test_fixture: Any,
     m["kill_collector"].assert_called_once()
 
 
-def test_handle_collector_already_healthy(siso_test_fixture: Any,
-                                          start_collector_mocks: Dict[str, Any],
-                                          mocker: Any) -> None:
+def test_handle_collector_already_healthy(
+    siso_test_fixture: Any, start_collector_mocks: Dict[str, Any], mocker: Any
+) -> None:
     mocker.patch("sys.platform", new="linux")
     mock_json_loads = mocker.patch("siso.json.loads")
     m = start_collector_mocks
@@ -1220,20 +1242,8 @@ def test_handle_collector_already_healthy(siso_test_fixture: Any,
     status_healthy = {"healthy": True, "status": "StatusOK"}
     endpoint = os.path.join("/tmp", "testuser", "siso", f"{project}.sock")
     config_project_full = {
-        "exporters": {
-            "googlecloud": {
-                "project": project
-            }
-        },
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": endpoint
-                    }
-                }
-            }
-        },
+        "exporters": {"googlecloud": {"project": project}},
+        "receivers": {"otlp": {"protocols": {"grpc": {"endpoint": endpoint}}}},
     }
     mock_json_loads.side_effect = [
         status_healthy,
@@ -1248,9 +1258,9 @@ def test_handle_collector_already_healthy(siso_test_fixture: Any,
     m["kill_collector"].assert_not_called()
 
 
-def test_handle_collector_never_healthy(siso_test_fixture: Any,
-                                        start_collector_mocks: Dict[str, Any],
-                                        mocker: Any) -> None:
+def test_handle_collector_never_healthy(
+    siso_test_fixture: Any, start_collector_mocks: Dict[str, Any], mocker: Any
+) -> None:
     mocker.patch("sys.platform", new="linux")
     m = start_collector_mocks
 
@@ -1266,9 +1276,9 @@ def test_handle_collector_never_healthy(siso_test_fixture: Any,
 
     siso_path = "siso_path"
     project = "test-project"
-    _configure_http_responses(mocker,
-                              m["mock_conn"],
-                              status_responses=[(404, None)])
+    _configure_http_responses(
+        mocker, m["mock_conn"], status_responses=[(404, None)]
+    )
     env = {}
     args = ["ninja", "--project", project]
     res_env = siso._handle_collector(siso_path, args, env)
@@ -1317,15 +1327,7 @@ def test_handle_collector_lifecycle(
     endpoint = os.path.join("/tmp", "testuser", "siso", f"{project}.sock")
     status_healthy = {"healthy": True, "status": "StatusOK"}
     config_with_socket = {
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": endpoint
-                    }
-                }
-            }
-        }
+        "receivers": {"otlp": {"protocols": {"grpc": {"endpoint": endpoint}}}}
     }
     json_loads_map = {
         "status_healthy": status_healthy,
@@ -1404,20 +1406,15 @@ def test_handle_collector_missing_sockets_file_appears_later(
 
     status_healthy = {"healthy": True, "status": "StatusOK"}
     config_with_socket = {
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": endpoint
-                    }
-                }
-            }
-        }
+        "receivers": {"otlp": {"protocols": {"grpc": {"endpoint": endpoint}}}}
     }
 
     mock_json_loads = mocker.patch("siso.json.loads")
     mock_json_loads.side_effect = [
-        status_healthy, config_with_socket, status_healthy, config_with_socket
+        status_healthy,
+        config_with_socket,
+        status_healthy,
+        config_with_socket,
     ]
 
     env = {}
@@ -1461,20 +1458,13 @@ def test_handle_collector_missing_sockets_file_never_appears(
 
     status_healthy = {"healthy": True, "status": "StatusOK"}
     config_with_socket = {
-        "receivers": {
-            "otlp": {
-                "protocols": {
-                    "grpc": {
-                        "endpoint": endpoint
-                    }
-                }
-            }
-        }
+        "receivers": {"otlp": {"protocols": {"grpc": {"endpoint": endpoint}}}}
     }
 
     mock_json_loads = mocker.patch("siso.json.loads")
     mock_json_loads.side_effect = itertools.cycle(
-        [status_healthy, config_with_socket])
+        [status_healthy, config_with_socket]
+    )
 
     env = {}
     args = ["ninja", "--project", project]
@@ -1492,8 +1482,9 @@ def test_handle_collector_missing_sockets_file_never_appears(
         (False, False),
     ],
 )
-def test_check_outdir(tmp_path: Path, mocker: Any, file_exists: bool,
-                      expected_exit: bool) -> None:
+def test_check_outdir(
+    tmp_path: Path, mocker: Any, file_exists: bool, expected_exit: bool
+) -> None:
     out_dir = tmp_path / "out" / "Default"
     out_dir.mkdir(parents=True)
     if file_exists:
@@ -1518,9 +1509,13 @@ def test_check_outdir(tmp_path: Path, mocker: Any, file_exists: bool,
         (False, "backend_config/README.md"),
     ],
 )
-def test_main_backend_star_missing(siso_project_setup: None, tmp_path: Path,
-                                   mocker: Any, is_corp: bool,
-                                   expected_msg_part: str) -> None:
+def test_main_backend_star_missing(
+    siso_project_setup: None,
+    tmp_path: Path,
+    mocker: Any,
+    is_corp: bool,
+    expected_msg_part: str,
+) -> None:
     # Setup project structure
     backend_config_dir = _get_siso_config_dir(tmp_path) / "backend_config"
     backend_config_dir.mkdir()
@@ -1535,8 +1530,9 @@ def test_main_backend_star_missing(siso_project_setup: None, tmp_path: Path,
     assert expected_msg_part in mock_stderr.getvalue()
 
 
-def test_main_siso_binary_missing(siso_project_setup: None, tmp_path: Path,
-                                  mocker: Any) -> None:
+def test_main_siso_binary_missing(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     # Remove created siso.
     siso_bin_path = _get_siso_bin_path(tmp_path)
     siso_bin_path.unlink()
@@ -1549,8 +1545,9 @@ def test_main_siso_binary_missing(siso_project_setup: None, tmp_path: Path,
     assert "Could not find siso in third_party/siso" in mock_stderr.getvalue()
 
 
-def test_main_siso_override_path_missing(siso_project_setup: None,
-                                         tmp_path: Path, mocker: Any) -> None:
+def test_main_siso_override_path_missing(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     # Setup project structure (minimal needed to reach the check)
     mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
 
@@ -1563,8 +1560,9 @@ def test_main_siso_override_path_missing(siso_project_setup: None,
     assert "Could not find Siso at provided SISO_PATH" in mock_stderr.getvalue()
 
 
-def test_main_sisoenv_missing(siso_project_setup: None, tmp_path: Path,
-                              mocker: Any) -> None:
+def test_main_sisoenv_missing(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     # Setup project structure
     # Do NOT create .sisoenv
     sisoenv_file = _get_sisoenv_path(tmp_path)
@@ -1582,21 +1580,23 @@ def test_main_sisoenv_missing(siso_project_setup: None, tmp_path: Path,
     "env, expected_val",
     [
         ({}, "1"),
-        ({
-            "PYTHONDONTWRITEBYTECODE": "0"
-        }, "0"),
-        ({
-            "PYTHONPYCACHEPREFIX": "/tmp/pycache"
-        }, None),
-        ({
-            "PYTHONPYCACHEPREFIX": "/tmp/pycache",
-            "PYTHONDONTWRITEBYTECODE": "0"
-        }, "0"),
+        ({"PYTHONDONTWRITEBYTECODE": "0"}, "0"),
+        ({"PYTHONPYCACHEPREFIX": "/tmp/pycache"}, None),
+        (
+            {
+                "PYTHONPYCACHEPREFIX": "/tmp/pycache",
+                "PYTHONDONTWRITEBYTECODE": "0",
+            },
+            "0",
+        ),
     ],
 )
-def test_env_python_dont_write_bytecode(siso_project_setup: None, mocker: Any,
-                                        env: Dict[str, str],
-                                        expected_val: Optional[str]) -> None:
+def test_env_python_dont_write_bytecode(
+    siso_project_setup: None,
+    mocker: Any,
+    env: Dict[str, str],
+    expected_val: Optional[str],
+) -> None:
     runner = mocker.Mock(return_value=0)
 
     siso.main(["siso.py", "ninja"], env=env, runner=runner)
@@ -1609,8 +1609,9 @@ def test_env_python_dont_write_bytecode(siso_project_setup: None, mocker: Any,
         assert call_env.get("PYTHONDONTWRITEBYTECODE") == expected_val
 
 
-def test_main_fallback_to_siso_path(siso_project_setup: None, tmp_path: Path,
-                                    mocker: Any) -> None:
+def test_main_fallback_to_siso_path(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     # Setup: valid solution path but NO .sisoenv
     sisoenv_file = _get_sisoenv_path(tmp_path)
     sisoenv_file.unlink()
@@ -1624,9 +1625,9 @@ def test_main_fallback_to_siso_path(siso_project_setup: None, tmp_path: Path,
 
     env = {"SISO_PATH": str(siso_bin)}
 
-    exit_code = siso.main(["siso.py", "ninja", "-C", "out/Default"],
-                          env=env,
-                          runner=runner)
+    exit_code = siso.main(
+        ["siso.py", "ninja", "-C", "out/Default"], env=env, runner=runner
+    )
 
     assert exit_code == 0
     # Verify runner called with override path
@@ -1664,15 +1665,15 @@ def test_main_fallback_to_siso_path(siso_project_setup: None, tmp_path: Path,
             id="quote_escaped_flag_at_the_end_preserved",
         ),
         pytest.param(
-            ["siso.py", 'ninja -C out/Default --flag="value\""'],
+            ["siso.py", 'ninja -C out/Default --flag="value""'],
             ["C:\\siso.exe", "ninja", "-C", "out/Default", '--flag="value"'],
             id="quote_escaped_flag_with_trailing_backslash_stripped",
         ),
     ],
 )
-def test_main_windows_arg_splitting(input_args: List[str],
-                                    expected_cmd: List[str],
-                                    mocker: Any) -> None:
+def test_main_windows_arg_splitting(
+    input_args: List[str], expected_cmd: List[str], mocker: Any
+) -> None:
     mocker.patch("siso.signal.signal")
 
     # Mock internals to bypass file checks
@@ -1691,8 +1692,9 @@ def test_main_windows_arg_splitting(input_args: List[str],
     assert cmd == expected_cmd
 
 
-def test_main_e2e(siso_project_setup: None, tmp_path: Path,
-                  mocker: Any) -> None:
+def test_main_e2e(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     # siso binary, already set up.
     siso_bin = _get_siso_bin_path(tmp_path)
 
@@ -1714,14 +1716,16 @@ def test_main_e2e(siso_project_setup: None, tmp_path: Path,
     assert any(arg.startswith("--metrics_labels") for arg in cmd)
 
 
-def test_main_dynamic_subcmds_e2e(siso_project_setup: None, tmp_path: Path,
-                                  mocker: Any) -> None:
+def test_main_dynamic_subcmds_e2e(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     siso_bin = _get_siso_bin_path(tmp_path)
     runner = mocker.Mock(return_value=0)
 
     # Mock _get_siso_subcmds to return dynamic subcmds including a custom one
-    mocker.patch("siso._get_siso_subcmds",
-                 return_value={"custom_subcmd", "ninja"})
+    mocker.patch(
+        "siso._get_siso_subcmds", return_value={"custom_subcmd", "ninja"}
+    )
 
     args = ["siso.py", "-mutexprofile", "prof", "custom_subcmd", "-flag"]
 
@@ -1741,16 +1745,23 @@ def test_main_dynamic_subcmds_e2e(siso_project_setup: None, tmp_path: Path,
     assert cmd[custom_idx + 1] == "-flag"
 
 
-def test_main_complex_args_e2e(siso_project_setup: None, tmp_path: Path,
-                               mocker: Any) -> None:
+def test_main_complex_args_e2e(
+    siso_project_setup: None, tmp_path: Path, mocker: Any
+) -> None:
     siso_bin = _get_siso_bin_path(tmp_path)
     runner = mocker.Mock(return_value=0)
 
     # Complex command similar to the reported issue.
     args = [
-        "siso.py", "-mutexprofile", "siso_mutex.prof", "ninja", "-project",
-        "rbe-chrome-untrusted", "--enable_cloud_logging", "-C",
-        str(tmp_path / "src" / "out" / "Default")
+        "siso.py",
+        "-mutexprofile",
+        "siso_mutex.prof",
+        "ninja",
+        "-project",
+        "rbe-chrome-untrusted",
+        "--enable_cloud_logging",
+        "-C",
+        str(tmp_path / "src" / "out" / "Default"),
     ]
 
     exit_code = siso.main(args, runner=runner)
@@ -1771,13 +1782,21 @@ def test_main_complex_args_e2e(siso_project_setup: None, tmp_path: Path,
     assert any(arg.startswith("--metrics_labels") for arg in cmd[ninja_idx:])
     assert any(
         arg.startswith("--metrics_project=rbe-chrome-untrusted")
-        for arg in cmd[ninja_idx:])
+        for arg in cmd[ninja_idx:]
+    )
 
 
-@pytest.mark.parametrize("env_var", [
-    'GEMINI_CLI', 'CLAUDECODE', 'CODEX_SANDBOX', 'CURSOR_AGENT', 'AI_AGENT',
-    None,
-])
+@pytest.mark.parametrize(
+    "env_var",
+    [
+        "GEMINI_CLI",
+        "CLAUDECODE",
+        "CODEX_SANDBOX",
+        "CURSOR_AGENT",
+        "AI_AGENT",
+        None,
+    ],
+)
 @pytest.mark.parametrize("subcmd", ["ninja", "query"])
 @pytest.mark.parametrize("exit_code", [0, 1])
 def test_ai_agent_env_prepends_flags(
@@ -1797,10 +1816,12 @@ def test_ai_agent_env_prepends_flags(
     if env_var:
         env[env_var] = "1"
 
-    siso.main(["siso.py", subcmd, "-C", "out/Default"],
-              telemetry_cfg=cfg,
-              env=env,
-              runner=runner)
+    siso.main(
+        ["siso.py", subcmd, "-C", "out/Default"],
+        telemetry_cfg=cfg,
+        env=env,
+        runner=runner,
+    )
 
     args = runner.call_args.args[0]
     subcmd = args[1]
@@ -1821,6 +1842,7 @@ def test_ai_agent_env_prepends_flags(
         assert "--namespace=developer:ai-agent" not in subcmd_args
         assert "Detected AI agent env" not in stdout
         assert "finished" not in stdout
+
 
 def test_apply_telemetry_flags_physical_gwindows(mocker: Any) -> None:
     mocker.patch("sys.platform", "win32")
@@ -1850,7 +1872,6 @@ def test_apply_telemetry_flags_gwindows_cloudtop(mocker: Any) -> None:
     assert "--enable_cloud_logging" in got
     assert "--enable_cloud_monitoring" in got
     assert "--enable_cloud_profiler" in got
-
 
 
 def test_apply_telemetry_flags_user_override_trace(mocker: Any) -> None:
@@ -1884,10 +1905,12 @@ def test_ai_agent_env_multiple_vars(
         "AI_AGENT": "1",
     }
 
-    siso.main(["siso.py", "ninja", "-C", "out/Default"],
-              telemetry_cfg=cfg,
-              env=env,
-              runner=runner)
+    siso.main(
+        ["siso.py", "ninja", "-C", "out/Default"],
+        telemetry_cfg=cfg,
+        env=env,
+        runner=runner,
+    )
 
     stdout = mock_stdout.getvalue()
     assert "Detected AI agent env (GEMINI_CLI, AI_AGENT)" in stdout

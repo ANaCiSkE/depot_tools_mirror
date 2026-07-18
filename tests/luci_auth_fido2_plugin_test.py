@@ -41,20 +41,19 @@ import luci_auth_fido2_plugin as plugin
 
 
 class TestFido2Plugin(unittest.TestCase):
-
     def test_parse_plugin_request(self):
         req = b'{"type":"get","origin":"https://accounts.google.com","requestData":{"rpId":"google.com","challenge":"alice-==","timeout":30000,"allowCredentials":[{"type":"public-key","id":"key="}],"userVerification":"preferred","extensions":{"appid":"google.com"}}}'
         got = plugin.parse_plugin_request(req)
         want = plugin.PluginRequest(
-            origin='https://accounts.google.com',
+            origin="https://accounts.google.com",
             public_key_credential_request=PublicKeyCredentialRequestOptions(
-                challenge=b'jX\x9c{',
+                challenge=b"jX\x9c{",
                 timeout=30_000,
-                rp_id='google.com',
+                rp_id="google.com",
                 allow_credentials=[
                     PublicKeyCredentialDescriptor(
                         type=PublicKeyCredentialType.PUBLIC_KEY,
-                        id=b'\x91\xec',
+                        id=b"\x91\xec",
                     )
                 ],
                 user_verification=UserVerificationRequirement.DISCOURAGED,
@@ -63,7 +62,8 @@ class TestFido2Plugin(unittest.TestCase):
         self.assertEqual(got, want)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG if '-v' in sys.argv else logging.ERROR)
+        level=logging.DEBUG if "-v" in sys.argv else logging.ERROR
+    )
     unittest.main()

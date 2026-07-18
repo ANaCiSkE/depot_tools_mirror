@@ -12,11 +12,17 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def recipes_py(*args):
-    recipes_cfg_path = os.path.join(ROOT_DIR, 'infra', 'config', 'recipes.cfg')
-    subprocess.check_call([os.path.join(ROOT_DIR, 'recipes', 'recipes.py'),
-                           '--package', recipes_cfg_path] + list(args))
+    recipes_cfg_path = os.path.join(ROOT_DIR, "infra", "config", "recipes.cfg")
+    subprocess.check_call(
+        [
+            os.path.join(ROOT_DIR, "recipes", "recipes.py"),
+            "--package",
+            recipes_cfg_path,
+        ]
+        + list(args)
+    )
 
 
-recipes_py('test', 'run')
+recipes_py("test", "run")
 
-recipes_py('lint')
+recipes_py("lint")

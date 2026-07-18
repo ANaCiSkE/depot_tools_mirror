@@ -24,105 +24,179 @@ import git_cache
 
 class GitCacheTest(unittest.TestCase):
     def setUp(self):
-        self.cache_dir = tempfile.mkdtemp(prefix='git_cache_test_')
+        self.cache_dir = tempfile.mkdtemp(prefix="git_cache_test_")
         self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
-        self.origin_dir = tempfile.mkdtemp(suffix='origin.git')
+        self.origin_dir = tempfile.mkdtemp(suffix="origin.git")
         self.addCleanup(shutil.rmtree, self.origin_dir, ignore_errors=True)
         git_cache.Mirror.SetCachePath(self.cache_dir)
 
         # Ensure git_cache works with safe.bareRepository.
         mock.patch.dict(
-            'os.environ', {
-                'GIT_CONFIG_GLOBAL': os.path.join(self.cache_dir, '.gitconfig'),
-            }).start()
+            "os.environ",
+            {
+                "GIT_CONFIG_GLOBAL": os.path.join(self.cache_dir, ".gitconfig"),
+            },
+        ).start()
         self.addCleanup(mock.patch.stopall)
-        self.git([
-            'config', '--file',
-            os.path.join(self.cache_dir, '.gitconfig'), '--add',
-            'safe.bareRepository', 'explicit'
-        ])
+        self.git(
+            [
+                "config",
+                "--file",
+                os.path.join(self.cache_dir, ".gitconfig"),
+                "--add",
+                "safe.bareRepository",
+                "explicit",
+            ]
+        )
 
     def git(self, cmd, cwd=None):
         cwd = cwd or self.origin_dir
-        git = 'git.bat' if sys.platform == 'win32' else 'git'
+        git = "git.bat" if sys.platform == "win32" else "git"
         subprocess.check_call([git] + cmd, cwd=cwd)
 
     def testParseFetchSpec(self):
-        testData = [([], []),
-                    (['main'], [('+refs/heads/main:refs/heads/main',
-                                 r'\+refs/heads/main:.*')]),
-                    (['main/'], [('+refs/heads/main:refs/heads/main',
-                                  r'\+refs/heads/main:.*')]),
-                    (['+main'], [('+refs/heads/main:refs/heads/main',
-                                  r'\+refs/heads/main:.*')]),
-                    (['master'], [('+refs/heads/master:refs/heads/master',
-                                   r'\+refs/heads/master:.*')]),
-                    (['master/'], [('+refs/heads/master:refs/heads/master',
-                                    r'\+refs/heads/master:.*')]),
-                    (['+master'], [('+refs/heads/master:refs/heads/master',
-                                    r'\+refs/heads/master:.*')]),
-                    (['refs/heads/*'], [('+refs/heads/*:refs/heads/*',
-                                         r'\+refs/heads/\*:.*')]),
-                    (['foo/bar/*',
-                      'baz'], [('+refs/heads/foo/bar/*:refs/heads/foo/bar/*',
-                                r'\+refs/heads/foo/bar/\*:.*'),
-                               ('+refs/heads/baz:refs/heads/baz',
-                                r'\+refs/heads/baz:.*')]),
-                    (['refs/foo/*:refs/bar/*'], [('+refs/foo/*:refs/bar/*',
-                                                  r'\+refs/foo/\*:.*')])]
+        testData = [
+            ([], []),
+            (
+                ["main"],
+                [("+refs/heads/main:refs/heads/main", r"\+refs/heads/main:.*")],
+            ),
+            (
+                ["main/"],
+                [("+refs/heads/main:refs/heads/main", r"\+refs/heads/main:.*")],
+            ),
+            (
+                ["+main"],
+                [("+refs/heads/main:refs/heads/main", r"\+refs/heads/main:.*")],
+            ),
+            (
+                ["master"],
+                [
+                    (
+                        "+refs/heads/master:refs/heads/master",
+                        r"\+refs/heads/master:.*",
+                    )
+                ],
+            ),
+            (
+                ["master/"],
+                [
+                    (
+                        "+refs/heads/master:refs/heads/master",
+                        r"\+refs/heads/master:.*",
+                    )
+                ],
+            ),
+            (
+                ["+master"],
+                [
+                    (
+                        "+refs/heads/master:refs/heads/master",
+                        r"\+refs/heads/master:.*",
+                    )
+                ],
+            ),
+            (
+                ["refs/heads/*"],
+                [("+refs/heads/*:refs/heads/*", r"\+refs/heads/\*:.*")],
+            ),
+            (
+                ["foo/bar/*", "baz"],
+                [
+                    (
+                        "+refs/heads/foo/bar/*:refs/heads/foo/bar/*",
+                        r"\+refs/heads/foo/bar/\*:.*",
+                    ),
+                    ("+refs/heads/baz:refs/heads/baz", r"\+refs/heads/baz:.*"),
+                ],
+            ),
+            (
+                ["refs/foo/*:refs/bar/*"],
+                [("+refs/foo/*:refs/bar/*", r"\+refs/foo/\*:.*")],
+            ),
+        ]
 
-        mirror = git_cache.Mirror('test://phony.example.biz')
+        mirror = git_cache.Mirror("test://phony.example.biz")
         for fetch_specs, expected in testData:
-            mirror = git_cache.Mirror('test://phony.example.biz',
-                                      refs=fetch_specs)
+            mirror = git_cache.Mirror(
+                "test://phony.example.biz", refs=fetch_specs
+            )
             self.assertEqual(mirror.fetch_specs, set(expected))
 
     def testPopulate(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
 
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate()
 
     def testPopulateResetFetchConfig(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
 
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate()
 
         # Add a bad refspec to the cache's fetch config.
-        cache_dir = os.path.join(self.cache_dir,
-                                 mirror.UrlToCacheDir(self.origin_dir))
-        self.git([
-            '--git-dir', cache_dir, 'config', '--add', 'remote.origin.fetch',
-            '+refs/heads/foo:refs/heads/foo'
-        ],
-                 cwd=cache_dir)
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        self.git(
+            [
+                "--git-dir",
+                cache_dir,
+                "config",
+                "--add",
+                "remote.origin.fetch",
+                "+refs/heads/foo:refs/heads/foo",
+            ],
+            cwd=cache_dir,
+        )
 
         mirror.populate(reset_fetch_config=True)
 
     def testPopulateTwice(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
 
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate()
@@ -130,27 +204,34 @@ class GitCacheTest(unittest.TestCase):
         mirror.populate()
 
     def testPopulateDeletesTmpPackFiles(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
 
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate()
 
         # Create tmp pack files.
-        pack_dir = os.path.join(mirror.mirror_path, 'objects', 'pack')
+        pack_dir = os.path.join(mirror.mirror_path, "objects", "pack")
         os.makedirs(pack_dir, exist_ok=True)
-        tmp_pack_path = os.path.join(pack_dir, 'tmp_pack_abc')
-        tmp_idx_path = os.path.join(pack_dir, '.tmp-1234-pack-def.idx')
-        with open(tmp_pack_path, 'w') as f:
-            f.write('content')
-        with open(tmp_idx_path, 'w') as f:
-            f.write('idx content')
+        tmp_pack_path = os.path.join(pack_dir, "tmp_pack_abc")
+        tmp_idx_path = os.path.join(pack_dir, ".tmp-1234-pack-def.idx")
+        with open(tmp_pack_path, "w") as f:
+            f.write("content")
+        with open(tmp_idx_path, "w") as f:
+            f.write("idx content")
 
         self.assertTrue(os.path.exists(tmp_pack_path))
         self.assertTrue(os.path.exists(tmp_idx_path))
@@ -161,66 +242,89 @@ class GitCacheTest(unittest.TestCase):
         self.assertFalse(os.path.exists(tmp_pack_path))
         self.assertFalse(os.path.exists(tmp_idx_path))
 
-
-    @mock.patch('sys.stdout', StringIO())
+    @mock.patch("sys.stdout", StringIO())
     def testPruneRequired(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['checkout', '-b', 'foo'])
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["checkout", "-b", "foo"])
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate()
-        self.git(['checkout', '-b', 'foo_tmp', 'foo'])
-        self.git(['branch', '-D', 'foo'])
-        self.git(['checkout', '-b', 'foo/bar', 'foo_tmp'])
+        self.git(["checkout", "-b", "foo_tmp", "foo"])
+        self.git(["branch", "-D", "foo"])
+        self.git(["checkout", "-b", "foo/bar", "foo_tmp"])
         mirror.populate()
-        self.assertNotIn(git_cache.GIT_CACHE_CORRUPT_MESSAGE,
-                         sys.stdout.getvalue())
+        self.assertNotIn(
+            git_cache.GIT_CACHE_CORRUPT_MESSAGE, sys.stdout.getvalue()
+        )
 
-    @mock.patch('sys.stdout', StringIO())
+    @mock.patch("sys.stdout", StringIO())
     def testBadInit(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
 
         mirror = git_cache.Mirror(self.origin_dir)
 
         # Simulate init being interrupted during fetch phase.
-        with mock.patch.object(mirror, '_fetch'):
+        with mock.patch.object(mirror, "_fetch"):
             mirror.populate()
 
         # Corrupt message is not expected at this point since it was
         # "interrupted".
-        self.assertNotIn(git_cache.GIT_CACHE_CORRUPT_MESSAGE,
-                         sys.stdout.getvalue())
+        self.assertNotIn(
+            git_cache.GIT_CACHE_CORRUPT_MESSAGE, sys.stdout.getvalue()
+        )
 
         # We call mirror.populate() without _fetch patched. This time, a
         # sentient file should prompt cache deletion.
         mirror.populate()
-        self.assertIn(git_cache.GIT_CACHE_CORRUPT_MESSAGE,
-                      sys.stdout.getvalue())
+        self.assertIn(
+            git_cache.GIT_CACHE_CORRUPT_MESSAGE, sys.stdout.getvalue()
+        )
 
     def _makeGitRepoWithTag(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
-        self.git(['tag', 'TAG'])
-        self.git(['pack-refs'])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        self.git(["tag", "TAG"])
+        self.git(["pack-refs"])
 
     def testPopulateFetchTagsByDefault(self):
         self._makeGitRepoWithTag()
@@ -229,9 +333,10 @@ class GitCacheTest(unittest.TestCase):
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate()
 
-        cache_dir = os.path.join(self.cache_dir,
-                                 mirror.UrlToCacheDir(self.origin_dir))
-        self.assertTrue(os.path.exists(cache_dir + '/refs/tags/TAG'))
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        self.assertTrue(os.path.exists(cache_dir + "/refs/tags/TAG"))
 
     def testPopulateFetchWithoutTags(self):
         self._makeGitRepoWithTag()
@@ -240,52 +345,61 @@ class GitCacheTest(unittest.TestCase):
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate(no_fetch_tags=True)
 
-        cache_dir = os.path.join(self.cache_dir,
-                                 mirror.UrlToCacheDir(self.origin_dir))
-        self.assertFalse(os.path.exists(cache_dir + '/refs/tags/TAG'))
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        self.assertFalse(os.path.exists(cache_dir + "/refs/tags/TAG"))
 
     def testPopulateResetFetchConfigEmptyFetchConfig(self):
-        self.git(['init', '-q'])
-        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
-            f.write('touched\n')
-        self.git(['add', 'foo'])
-        self.git([
-            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
-            'commit', '-m', 'foo'
-        ])
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
 
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate(reset_fetch_config=True)
 
-    @mock.patch('gclient_utils.exponential_backoff_retry')
+    @mock.patch("gclient_utils.exponential_backoff_retry")
     def testSetSymbolicRefIgnoreUnknown(self, mock_retry):
-        mock_retry.return_value = 'HEAD branch: (unknown)'
+        mock_retry.return_value = "HEAD branch: (unknown)"
         mirror = git_cache.Mirror(self.origin_dir)
-        with mock.patch.object(mirror, 'RunGit') as mock_rungit:
+        with mock.patch.object(mirror, "RunGit") as mock_rungit:
             mirror._set_symbolic_ref()
             mock_rungit.assert_not_called()
 
-    @mock.patch('gclient_utils.exponential_backoff_retry')
+    @mock.patch("gclient_utils.exponential_backoff_retry")
     def testSetSymbolicRefKnown(self, mock_retry):
-        mock_retry.return_value = 'HEAD branch: main'
+        mock_retry.return_value = "HEAD branch: main"
         mirror = git_cache.Mirror(self.origin_dir)
-        with mock.patch.object(mirror, 'RunGit') as mock_rungit:
+        with mock.patch.object(mirror, "RunGit") as mock_rungit:
             mirror._set_symbolic_ref()
             mock_rungit.assert_called_once_with(
-                ['symbolic-ref', 'HEAD', 'refs/heads/main'])
+                ["symbolic-ref", "HEAD", "refs/heads/main"]
+            )
 
 
 class GitCacheDirTest(unittest.TestCase):
     def setUp(self):
         try:
-            delattr(git_cache.Mirror, 'cachepath')
+            delattr(git_cache.Mirror, "cachepath")
         except AttributeError:
             pass
         super(GitCacheDirTest, self).setUp()
 
     def tearDown(self):
         try:
-            delattr(git_cache.Mirror, 'cachepath')
+            delattr(git_cache.Mirror, "cachepath")
         except AttributeError:
             pass
         super(GitCacheDirTest, self).tearDown()
@@ -299,49 +413,51 @@ class GitCacheDirTest(unittest.TestCase):
             finally:
                 os.close(fd)
 
-            git_cache.Mirror._GIT_CONFIG_LOCATION = ['-f', tmpFile]
+            git_cache.Mirror._GIT_CONFIG_LOCATION = ["-f", tmpFile]
 
-            self.assertEqual(git_cache.Mirror.GetCachePath(), 'hello world')
+            self.assertEqual(git_cache.Mirror.GetCachePath(), "hello world")
         finally:
             git_cache.Mirror._GIT_CONFIG_LOCATION = old
             os.remove(tmpFile)
 
     def test_environ_read(self):
-        path = os.environ.get('GIT_CACHE_PATH')
-        config = os.environ.get('GIT_CONFIG')
+        path = os.environ.get("GIT_CACHE_PATH")
+        config = os.environ.get("GIT_CONFIG")
         try:
-            os.environ['GIT_CACHE_PATH'] = 'hello world'
-            os.environ['GIT_CONFIG'] = 'disabled'
+            os.environ["GIT_CACHE_PATH"] = "hello world"
+            os.environ["GIT_CONFIG"] = "disabled"
 
-            self.assertEqual(git_cache.Mirror.GetCachePath(), 'hello world')
+            self.assertEqual(git_cache.Mirror.GetCachePath(), "hello world")
         finally:
-            for name, val in zip(('GIT_CACHE_PATH', 'GIT_CONFIG'),
-                                 (path, config)):
+            for name, val in zip(
+                ("GIT_CACHE_PATH", "GIT_CONFIG"), (path, config)
+            ):
                 if val is None:
                     os.environ.pop(name, None)
                 else:
                     os.environ[name] = val
 
     def test_manual_set(self):
-        git_cache.Mirror.SetCachePath('hello world')
-        self.assertEqual(git_cache.Mirror.GetCachePath(), 'hello world')
+        git_cache.Mirror.SetCachePath("hello world")
+        self.assertEqual(git_cache.Mirror.GetCachePath(), "hello world")
 
     def test_unconfigured(self):
-        path = os.environ.get('GIT_CACHE_PATH')
-        config = os.environ.get('GIT_CONFIG')
+        path = os.environ.get("GIT_CACHE_PATH")
+        config = os.environ.get("GIT_CONFIG")
         try:
-            os.environ.pop('GIT_CACHE_PATH', None)
-            os.environ['GIT_CONFIG'] = 'disabled'
+            os.environ.pop("GIT_CACHE_PATH", None)
+            os.environ["GIT_CONFIG"] = "disabled"
 
-            with self.assertRaisesRegex(RuntimeError, 'cache\.cachepath'):
+            with self.assertRaisesRegex(RuntimeError, "cache\.cachepath"):
                 git_cache.Mirror.GetCachePath()
 
             # negatively cached value still raises
-            with self.assertRaisesRegex(RuntimeError, 'cache\.cachepath'):
+            with self.assertRaisesRegex(RuntimeError, "cache\.cachepath"):
                 git_cache.Mirror.GetCachePath()
         finally:
-            for name, val in zip(('GIT_CACHE_PATH', 'GIT_CONFIG'),
-                                 (path, config)):
+            for name, val in zip(
+                ("GIT_CACHE_PATH", "GIT_CONFIG"), (path, config)
+            ):
                 if val is None:
                     os.environ.pop(name, None)
                 else:
@@ -350,132 +466,166 @@ class GitCacheDirTest(unittest.TestCase):
 
 class BootstrapConcurrencyTest(unittest.TestCase):
     def test_default_tracks_sync_parallelism(self):
-        with mock.patch.dict('os.environ', clear=False):
-            os.environ.pop('GIT_CACHE_BOOTSTRAP_CONCURRENCY', None)
-            self.assertEqual(git_cache._bootstrap_concurrency(),
-                             max(8, gclient_utils.NumLocalCpus()))
+        with mock.patch.dict("os.environ", clear=False):
+            os.environ.pop("GIT_CACHE_BOOTSTRAP_CONCURRENCY", None)
+            self.assertEqual(
+                git_cache._bootstrap_concurrency(),
+                max(8, gclient_utils.NumLocalCpus()),
+            )
 
     def test_override(self):
-        with mock.patch.dict('os.environ',
-                             {'GIT_CACHE_BOOTSTRAP_CONCURRENCY': '32'}):
+        with mock.patch.dict(
+            "os.environ", {"GIT_CACHE_BOOTSTRAP_CONCURRENCY": "32"}
+        ):
             self.assertEqual(git_cache._bootstrap_concurrency(), 32)
 
     def test_clamped_to_at_least_one(self):
-        with mock.patch.dict('os.environ',
-                             {'GIT_CACHE_BOOTSTRAP_CONCURRENCY': '0'}):
+        with mock.patch.dict(
+            "os.environ", {"GIT_CACHE_BOOTSTRAP_CONCURRENCY": "0"}
+        ):
             self.assertEqual(git_cache._bootstrap_concurrency(), 1)
 
     def test_garbage_falls_back_to_default(self):
-        with mock.patch.dict('os.environ',
-                             {'GIT_CACHE_BOOTSTRAP_CONCURRENCY': 'lots'}):
-            self.assertEqual(git_cache._bootstrap_concurrency(),
-                             max(8, gclient_utils.NumLocalCpus()))
+        with mock.patch.dict(
+            "os.environ", {"GIT_CACHE_BOOTSTRAP_CONCURRENCY": "lots"}
+        ):
+            self.assertEqual(
+                git_cache._bootstrap_concurrency(),
+                max(8, gclient_utils.NumLocalCpus()),
+            )
 
 
 class GetBootstrapDefaultBranchTest(unittest.TestCase):
     def setUp(self):
-        self.cache_dir = tempfile.mkdtemp(prefix='gc_defbranch_')
+        self.cache_dir = tempfile.mkdtemp(prefix="gc_defbranch_")
         self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
         git_cache.Mirror.SetCachePath(self.cache_dir)
 
-    def _patched(self, ls_lines, head='ref: refs/heads/main\n', ls_code=0):
+    def _patched(self, ls_lines, head="ref: refs/heads/main\n", ls_code=0):
         class _FakeGsutil:
             def __init__(self, *a, **k):
                 pass
 
             def check_call(self, *args):
-                if args[0] == 'ls':
-                    return (ls_code, '\n'.join(ls_lines), '')
-                if args[0] == 'cat':
-                    return (0, head, '')
-                return (1, '', '')
+                if args[0] == "ls":
+                    return (ls_code, "\n".join(ls_lines), "")
+                if args[0] == "cat":
+                    return (0, head, "")
+                return (1, "", "")
 
-        return mock.patch.object(git_cache, 'Gsutil', _FakeGsutil)
+        return mock.patch.object(git_cache, "Gsutil", _FakeGsutil)
 
     def test_reads_default_branch_from_snapshot_head(self):
-        m = git_cache.Mirror('https://chromium.googlesource.com/foo/bar')
+        m = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
         gp = m._gs_path
-        with self._patched(['%s/42/' % gp, '%s/42.ready' % gp]):
-            self.assertEqual(m.get_bootstrap_default_branch(), 'main')
+        with self._patched(["%s/42/" % gp, "%s/42.ready" % gp]):
+            self.assertEqual(m.get_bootstrap_default_branch(), "main")
 
     def test_respects_non_main_default(self):
-        m = git_cache.Mirror('https://chromium.googlesource.com/foo/bar')
+        m = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
         gp = m._gs_path
-        with self._patched(['%s/7/' % gp, '%s/7.ready' % gp],
-                           head='ref: refs/heads/master\n'):
-            self.assertEqual(m.get_bootstrap_default_branch(), 'master')
+        with self._patched(
+            ["%s/7/" % gp, "%s/7.ready" % gp], head="ref: refs/heads/master\n"
+        ):
+            self.assertEqual(m.get_bootstrap_default_branch(), "master")
 
     def test_bucket_without_snapshot_returns_none(self):
         # Supported host, but no snapshot uploaded for this repo yet.
-        m = git_cache.Mirror('https://chromium.googlesource.com/foo/bar')
+        m = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
         with self._patched([]):
             self.assertIsNone(m.get_bootstrap_default_branch())
 
     def test_unsupported_host_returns_none(self):
         # Host has no bootstrap bucket at all.
-        with mock.patch.dict('os.environ', clear=False):
-            os.environ.pop('OVERRIDE_BOOTSTRAP_BUCKET', None)
-            m = git_cache.Mirror('https://unknown.example.com/foo/bar')
+        with mock.patch.dict("os.environ", clear=False):
+            os.environ.pop("OVERRIDE_BOOTSTRAP_BUCKET", None)
+            m = git_cache.Mirror("https://unknown.example.com/foo/bar")
             self.assertIsNone(m.get_bootstrap_default_branch())
 
 
 class BootstrapBucketTest(unittest.TestCase):
     def setUp(self):
-        self.cache_dir = tempfile.mkdtemp(prefix='gc_bucket_')
+        self.cache_dir = tempfile.mkdtemp(prefix="gc_bucket_")
         self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
         git_cache.Mirror.SetCachePath(self.cache_dir)
-        mock.patch.dict('os.environ', clear=False).start()
+        mock.patch.dict("os.environ", clear=False).start()
         self.addCleanup(mock.patch.stopall)
-        os.environ.pop('OVERRIDE_BOOTSTRAP_BUCKET', None)
+        os.environ.pop("OVERRIDE_BOOTSTRAP_BUCKET", None)
 
     def test_chromium_host(self):
-        m = git_cache.Mirror('https://chromium.googlesource.com/v8/v8')
-        self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache')
+        m = git_cache.Mirror("https://chromium.googlesource.com/v8/v8")
+        self.assertEqual(m.bootstrap_bucket, "chromium-git-cache")
 
     def test_additional_public_hosts(self):
-        for host in ('dawn', 'skia', 'webrtc', 'pdfium', 'boringssl', 'aomedia',
-                     'quiche', 'swiftshader', 'android'):
-            m = git_cache.Mirror('https://%s.googlesource.com/x' % host)
-            self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache', host)
+        for host in (
+            "dawn",
+            "skia",
+            "webrtc",
+            "pdfium",
+            "boringssl",
+            "aomedia",
+            "quiche",
+            "swiftshader",
+            "android",
+        ):
+            m = git_cache.Mirror("https://%s.googlesource.com/x" % host)
+            self.assertEqual(m.bootstrap_bucket, "chromium-git-cache", host)
 
     def test_unknown_host_returns_none(self):
-        self.assertIsNone(git_cache.Mirror('https://example.com/x').bootstrap_bucket)
+        self.assertIsNone(
+            git_cache.Mirror("https://example.com/x").bootstrap_bucket
+        )
 
     def test_aliased_url(self):
-        url = ('https://chrome-internal.googlesource.com/'
-               'chrome/experimental/chromium/src')
+        url = (
+            "https://chrome-internal.googlesource.com/"
+            "chrome/experimental/chromium/src"
+        )
         m = git_cache.Mirror(url)
-        self.assertEqual(m.basedir, 'chromium.googlesource.com-chromium-src')
-        self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache')
-        expected_gs_path = ('gs://chromium-git-cache/v2/'
-                            'chromium.googlesource.com-chromium-src')
+        self.assertEqual(m.basedir, "chromium.googlesource.com-chromium-src")
+        self.assertEqual(m.bootstrap_bucket, "chromium-git-cache")
+        expected_gs_path = (
+            "gs://chromium-git-cache/v2/chromium.googlesource.com-chromium-src"
+        )
         self.assertEqual(m._gs_path, expected_gs_path)
 
     def test_override_env_wins(self):
-        with mock.patch.dict('os.environ',
-                             {'OVERRIDE_BOOTSTRAP_BUCKET': 'my-bucket'}):
-            m = git_cache.Mirror('https://example.com/x')
-            self.assertEqual(m.bootstrap_bucket, 'my-bucket')
+        with mock.patch.dict(
+            "os.environ", {"OVERRIDE_BOOTSTRAP_BUCKET": "my-bucket"}
+        ):
+            m = git_cache.Mirror("https://example.com/x")
+            self.assertEqual(m.bootstrap_bucket, "my-bucket")
 
     def test_supported_project_only_comprehensive_hosts(self):
         # Only fully-snapshotted hosts get gc.autopacklimit=0 / re-bootstrap.
         self.assertTrue(
             git_cache.Mirror(
-                'https://chromium.googlesource.com/x').supported_project())
+                "https://chromium.googlesource.com/x"
+            ).supported_project()
+        )
         # The other bucket hosts still seed from a snapshot when available, but
         # keep normal git pack maintenance (a repo there may 404).
-        for host in ('dawn', 'skia', 'webrtc', 'pdfium', 'boringssl', 'aomedia',
-                     'quiche', 'swiftshader', 'android'):
-            m = git_cache.Mirror('https://%s.googlesource.com/x' % host)
+        for host in (
+            "dawn",
+            "skia",
+            "webrtc",
+            "pdfium",
+            "boringssl",
+            "aomedia",
+            "quiche",
+            "swiftshader",
+            "android",
+        ):
+            m = git_cache.Mirror("https://%s.googlesource.com/x" % host)
             self.assertFalse(m.supported_project(), host)
-            self.assertEqual(m.bootstrap_bucket, 'chromium-git-cache', host)
+            self.assertEqual(m.bootstrap_bucket, "chromium-git-cache", host)
 
     def test_supported_project_chrome_internal(self):
-        m = git_cache.Mirror('https://chrome-internal.googlesource.com/x')
+        m = git_cache.Mirror("https://chrome-internal.googlesource.com/x")
         self.assertTrue(m.supported_project())
 
     def test_supported_project_unknown_host(self):
-        m = git_cache.Mirror('https://example.com/x')
+        m = git_cache.Mirror("https://example.com/x")
         self.assertFalse(m.supported_project())
 
 
@@ -488,22 +638,32 @@ class MirrorTest(unittest.TestCase):
         # only want to maintain a single cache for the repo.
         self.assertEqual(
             git_cache.Mirror.UrlToCacheDir(
-                'https://chromium.googlesource.com/a/chromium/src.git'),
-            'chromium.googlesource.com-chromium-src')
+                "https://chromium.googlesource.com/a/chromium/src.git"
+            ),
+            "chromium.googlesource.com-chromium-src",
+        )
 
     def test_ssh_url_in_UrlToCacheDir_and_CacheDirToUrl(self):
         ssh_url = "git@github.com:chromium/chromium.git"
-        self.assertEqual(git_cache.Mirror.UrlToCacheDir(ssh_url),
-                         "git@github.com__chromium-chromium")
+        self.assertEqual(
+            git_cache.Mirror.UrlToCacheDir(ssh_url),
+            "git@github.com__chromium-chromium",
+        )
         self.assertEqual(
             git_cache.Mirror.CacheDirToUrl(
-                git_cache.Mirror.UrlToCacheDir(ssh_url)), ssh_url[:-4])
+                git_cache.Mirror.UrlToCacheDir(ssh_url)
+            ),
+            ssh_url[:-4],
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG if '-v' in sys.argv else logging.ERROR)
+        level=logging.DEBUG if "-v" in sys.argv else logging.ERROR
+    )
     sys.exit(
         coverage_utils.covered_main(
-            (os.path.join(DEPOT_TOOLS_ROOT, 'git_cache.py')),
-            required_percentage=0))
+            (os.path.join(DEPOT_TOOLS_ROOT, "git_cache.py")),
+            required_percentage=0,
+        )
+    )

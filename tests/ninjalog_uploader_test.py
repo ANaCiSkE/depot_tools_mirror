@@ -18,7 +18,6 @@ import ninjalog_uploader
 
 
 class NinjalogUploaderTest(unittest.TestCase):
-
     def test_parse_gn_args(self):
         gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(json.dumps([]))
         self.assertEqual(gn_args, {})
@@ -26,269 +25,324 @@ class NinjalogUploaderTest(unittest.TestCase):
 
         # Extract current configs from GN's output json.
         gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(
-            json.dumps([
-                {
-                    'current': {
-                        'value': 'true',
-                        'file': '//path/to/args.gn',
+            json.dumps(
+                [
+                    {
+                        "current": {
+                            "value": "true",
+                            "file": "//path/to/args.gn",
+                        },
+                        "default": {"value": "false"},
+                        "name": "is_component_build",
                     },
-                    'default': {
-                        'value': 'false'
-                    },
-                    'name': 'is_component_build'
-                },
-                {
-                    'default': {
-                        'value': '"x64"'
-                    },
-                    'name': 'host_cpu'
-                },
-            ]))
+                    {"default": {"value": '"x64"'}, "name": "host_cpu"},
+                ]
+            )
+        )
 
-        self.assertEqual(gn_args, {
-            'is_component_build': 'true',
-            'host_cpu': 'x64',
-        })
-        self.assertEqual(explicit_keys, ['is_component_build'])
+        self.assertEqual(
+            gn_args,
+            {
+                "is_component_build": "true",
+                "host_cpu": "x64",
+            },
+        )
+        self.assertEqual(explicit_keys, ["is_component_build"])
 
         gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(
-            json.dumps([
-                {
-                    'current': {
-                        'value': 'true',
-                        'file': '//.gn',
+            json.dumps(
+                [
+                    {
+                        "current": {
+                            "value": "true",
+                            "file": "//.gn",
+                        },
+                        "default": {"value": "false"},
+                        "name": "is_component_build",
                     },
-                    'default': {
-                        'value': 'false'
+                    {
+                        "current": {
+                            "value": "false",
+                            "file": "//path/to/args.gn",
+                        },
+                        "default": {"value": "false"},
+                        "name": "use_remoteexec",
                     },
-                    'name': 'is_component_build'
-                },
-                {
-                    'current': {
-                        'value': 'false',
-                        'file': '//path/to/args.gn',
-                    },
-                    'default': {
-                        'value': 'false'
-                    },
-                    'name': 'use_remoteexec'
-                },
-            ]))
-        self.assertEqual(gn_args, {
-            'is_component_build': 'true',
-            'use_remoteexec': 'false'
-        })
-        self.assertEqual(explicit_keys, ['use_remoteexec'])
+                ]
+            )
+        )
+        self.assertEqual(
+            gn_args, {"is_component_build": "true", "use_remoteexec": "false"}
+        )
+        self.assertEqual(explicit_keys, ["use_remoteexec"])
 
         # Do not include sensitive information.
-        with unittest.mock.patch('getpass.getuser', return_value='bob'):
+        with unittest.mock.patch("getpass.getuser", return_value="bob"):
             gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(
-                json.dumps([
-                    {
-                        'current': {
-                            'value': 'xyz',
-                            'file': '//path/to/args.gn',
+                json.dumps(
+                    [
+                        {
+                            "current": {
+                                "value": "xyz",
+                                "file": "//path/to/args.gn",
+                            },
+                            "default": {"value": ""},
+                            "name": "google_api_key",
                         },
-                        'default': {
-                            'value': ''
+                        {
+                            "current": {
+                                "value": "/home/bob/bobo",
+                                "file": "//path/to/args.gn",
+                            },
+                            "default": {"value": ""},
+                            "name": "path_with_homedir",
                         },
-                        'name': 'google_api_key'
-                    },
-                    {
-                        'current': {
-                            'value': '/home/bob/bobo',
-                            'file': '//path/to/args.gn',
-                        },
-                        'default': {
-                            'value': ''
-                        },
-                        'name': 'path_with_homedir'
-                    },
-                ]))
+                    ]
+                )
+            )
             self.assertEqual(
-                gn_args, {
-                    'google_api_key': '<omitted>',
-                    'path_with_homedir': '/home/$USER/bobo',
-                })
+                gn_args,
+                {
+                    "google_api_key": "<omitted>",
+                    "path_with_homedir": "/home/$USER/bobo",
+                },
+            )
 
     def test_get_ninjalog(self):
         # No args => default to cwd.
-        self.assertEqual(ninjalog_uploader.GetNinjalog(['ninja']),
-                         './.ninja_log')
+        self.assertEqual(
+            ninjalog_uploader.GetNinjalog(["ninja"]), "./.ninja_log"
+        )
 
         # Specified by -C case.
         self.assertEqual(
-            ninjalog_uploader.GetNinjalog(['ninja', '-C', 'out/Release']),
-            'out/Release/.ninja_log')
+            ninjalog_uploader.GetNinjalog(["ninja", "-C", "out/Release"]),
+            "out/Release/.ninja_log",
+        )
         self.assertEqual(
-            ninjalog_uploader.GetNinjalog(['ninja', '-Cout/Release']),
-            'out/Release/.ninja_log')
+            ninjalog_uploader.GetNinjalog(["ninja", "-Cout/Release"]),
+            "out/Release/.ninja_log",
+        )
 
         # Invalid -C flag case.
-        self.assertEqual(ninjalog_uploader.GetNinjalog(['ninja', '-C']),
-                         './.ninja_log')
+        self.assertEqual(
+            ninjalog_uploader.GetNinjalog(["ninja", "-C"]), "./.ninja_log"
+        )
 
         # Multiple target directories => use the last directory.
         self.assertEqual(
             ninjalog_uploader.GetNinjalog(
-                ['ninja', '-C', 'out/Release', '-C', 'out/Debug']),
-            'out/Debug/.ninja_log')
+                ["ninja", "-C", "out/Release", "-C", "out/Debug"]
+            ),
+            "out/Debug/.ninja_log",
+        )
 
     def test_get_build_target_from_command_line(self):
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py', 'chrome']), ['chrome'])
+                ["python3", "ninja.py", "chrome"]
+            ),
+            ["chrome"],
+        )
 
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py']), [])
+                ["python3", "ninja.py"]
+            ),
+            [],
+        )
 
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py', '-j', '1000', 'chrome']), ['chrome'])
+                ["python3", "ninja.py", "-j", "1000", "chrome"]
+            ),
+            ["chrome"],
+        )
 
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py', 'chrome', '-j', '1000']), ['chrome'])
+                ["python3", "ninja.py", "chrome", "-j", "1000"]
+            ),
+            ["chrome"],
+        )
 
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py', '-C', 'chrome']), [])
+                ["python3", "ninja.py", "-C", "chrome"]
+            ),
+            [],
+        )
 
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py', '-Cout/Release', 'chrome']), ['chrome'])
+                ["python3", "ninja.py", "-Cout/Release", "chrome"]
+            ),
+            ["chrome"],
+        )
 
         self.assertEqual(
             ninjalog_uploader.GetBuildTargetFromCommandLine(
-                ['python3', 'ninja.py', '-C', 'out/Release', 'chrome', 'all']),
-            ['chrome', 'all'])
+                ["python3", "ninja.py", "-C", "out/Release", "chrome", "all"]
+            ),
+            ["chrome", "all"],
+        )
 
-    @unittest.skipIf(sys.platform == 'win32', 'posix path test')
+    @unittest.skipIf(sys.platform == "win32", "posix path test")
     def test_get_build_target_from_command_line_filter_posix(self):
         self.assertEqual(
-            ninjalog_uploader.GetBuildTargetFromCommandLine([
-                'python3', 'ninja.py', '-C', 'out/Release', 'chrome', 'all',
-                '/path/to/foo', '-p'
-            ]), ['chrome', 'all'])
+            ninjalog_uploader.GetBuildTargetFromCommandLine(
+                [
+                    "python3",
+                    "ninja.py",
+                    "-C",
+                    "out/Release",
+                    "chrome",
+                    "all",
+                    "/path/to/foo",
+                    "-p",
+                ]
+            ),
+            ["chrome", "all"],
+        )
 
-    @unittest.skipUnless(sys.platform == 'win32', 'Windows path test')
+    @unittest.skipUnless(sys.platform == "win32", "Windows path test")
     def test_get_build_target_from_command_line_filter_win(self):
         self.assertEqual(
-            ninjalog_uploader.GetBuildTargetFromCommandLine([
-                'python3', 'ninja.py', '-C', 'out/Release', 'chrome', 'all',
-                'C:\\path\\to\\foo', '-p'
-            ]), ['chrome', 'all'])
+            ninjalog_uploader.GetBuildTargetFromCommandLine(
+                [
+                    "python3",
+                    "ninja.py",
+                    "-C",
+                    "out/Release",
+                    "chrome",
+                    "all",
+                    "C:\\path\\to\\foo",
+                    "-p",
+                ]
+            ),
+            ["chrome", "all"],
+        )
 
     def test_get_j_flag(self):
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja']), None)
+        self.assertEqual(ninjalog_uploader.GetJflag(["ninja"]), None)
 
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-j', '1000']),
-                         1000)
+        self.assertEqual(
+            ninjalog_uploader.GetJflag(["ninja", "-j", "1000"]), 1000
+        )
 
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-j', '1000a']),
-                         None)
+        self.assertEqual(
+            ninjalog_uploader.GetJflag(["ninja", "-j", "1000a"]), None
+        )
 
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-j', 'a']), None)
+        self.assertEqual(ninjalog_uploader.GetJflag(["ninja", "-j", "a"]), None)
 
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-j1000']), 1000)
+        self.assertEqual(ninjalog_uploader.GetJflag(["ninja", "-j1000"]), 1000)
 
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-ja']), None)
+        self.assertEqual(ninjalog_uploader.GetJflag(["ninja", "-ja"]), None)
 
-        self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-j']), None)
+        self.assertEqual(ninjalog_uploader.GetJflag(["ninja", "-j"]), None)
 
     def test_get_gce_metadata(self):
-        with unittest.mock.patch('urllib.request.urlopen') as urlopen_mock:
+        with unittest.mock.patch("urllib.request.urlopen") as urlopen_mock:
             urlopen_mock.side_effect = urllib.error.HTTPError(
-                'http://test/not-found', http.HTTPStatus.NOT_FOUND, 'not found',
-                None, None)
+                "http://test/not-found",
+                http.HTTPStatus.NOT_FOUND,
+                "not found",
+                None,
+                None,
+            )
             self.assertEqual(ninjalog_uploader.GetGCEMetadata(), {})
 
         with unittest.mock.patch(
-                'ninjalog_uploader._getGCEInfo') as getGCEInfo_mock:
+            "ninjalog_uploader._getGCEInfo"
+        ) as getGCEInfo_mock:
             getGCEInfo_mock.return_value = {
                 "instance": {
-                    "machineType":
-                    "projects/12345/machineTypes/n2d-standard-128",
+                    "machineType": "projects/12345/machineTypes/n2d-standard-128",
                 },
-                "project": {
-                    "projectId": "cloudtop-test"
-                }
+                "project": {"projectId": "cloudtop-test"},
             }
-            self.assertEqual(ninjalog_uploader.GetGCEMetadata(), {
-                'gce_machine_type': 'n2d-standard-128',
-                'is_cloudtop': True,
-            })
+            self.assertEqual(
+                ninjalog_uploader.GetGCEMetadata(),
+                {
+                    "gce_machine_type": "n2d-standard-128",
+                    "is_cloudtop": True,
+                },
+            )
 
         with unittest.mock.patch(
-                'ninjalog_uploader._getGCEInfo') as getGCEInfo_mock:
+            "ninjalog_uploader._getGCEInfo"
+        ) as getGCEInfo_mock:
             getGCEInfo_mock.return_value = {
                 "instance": {
-                    "machineType":
-                    "projects/12345/machineTypes/n2d-standard-128",
+                    "machineType": "projects/12345/machineTypes/n2d-standard-128",
                 },
-                "project": {
-                    "projectId": "gce-project"
-                }
+                "project": {"projectId": "gce-project"},
             }
-            self.assertEqual(ninjalog_uploader.GetGCEMetadata(), {
-                'gce_machine_type': 'n2d-standard-128',
-            })
+            self.assertEqual(
+                ninjalog_uploader.GetGCEMetadata(),
+                {
+                    "gce_machine_type": "n2d-standard-128",
+                },
+            )
 
-    @unittest.mock.patch('ninjalog_uploader.GetGCEMetadata')
-    @unittest.mock.patch('ninjalog_uploader.ParseGNArgs')
-    def test_get_metadata_with_edit_monitor_enabled(self, mock_parse_gn_args,
-                                                    mock_get_gce_metadata):
+    @unittest.mock.patch("ninjalog_uploader.GetGCEMetadata")
+    @unittest.mock.patch("ninjalog_uploader.ParseGNArgs")
+    def test_get_metadata_with_edit_monitor_enabled(
+        self, mock_parse_gn_args, mock_get_gce_metadata
+    ):
         mock_parse_gn_args.return_value = ({}, [])
         mock_get_gce_metadata.return_value = {}
 
         metadata = ninjalog_uploader.GetMetadata(
-            cmdline=['python3', 'ninja.py', 'chrome'],
-            ninjalog=os.path.join('out', 'Release', '.ninja_log'),
+            cmdline=["python3", "ninja.py", "chrome"],
+            ninjalog=os.path.join("out", "Release", ".ninja_log"),
             exit_code=0,
             build_duration=123,
-            user='user@example.com',
-            edit_monitor_state='enabled',
+            user="user@example.com",
+            edit_monitor_state="enabled",
         )
 
-        self.assertEqual(metadata['edit_monitor_state'], 'enabled')
+        self.assertEqual(metadata["edit_monitor_state"], "enabled")
 
-    @unittest.mock.patch('ninjalog_uploader.GetGCEMetadata')
-    @unittest.mock.patch('ninjalog_uploader.ParseGNArgs')
-    def test_get_metadata_with_edit_monitor_unset(self, mock_parse_gn_args,
-                                                  mock_get_gce_metadata):
+    @unittest.mock.patch("ninjalog_uploader.GetGCEMetadata")
+    @unittest.mock.patch("ninjalog_uploader.ParseGNArgs")
+    def test_get_metadata_with_edit_monitor_unset(
+        self, mock_parse_gn_args, mock_get_gce_metadata
+    ):
         mock_parse_gn_args.return_value = ({}, [])
         mock_get_gce_metadata.return_value = {}
 
         metadata = ninjalog_uploader.GetMetadata(
-            cmdline=['python3', 'ninja.py', 'chrome'],
-            ninjalog=os.path.join('out', 'Release', '.ninja_log'),
+            cmdline=["python3", "ninja.py", "chrome"],
+            ninjalog=os.path.join("out", "Release", ".ninja_log"),
             exit_code=0,
             build_duration=123,
-            user='user@example.com',
-            edit_monitor_state='',
+            user="user@example.com",
+            edit_monitor_state="",
         )
 
-        self.assertEqual(metadata['edit_monitor_state'], '')
+        self.assertEqual(metadata["edit_monitor_state"], "")
 
-    @unittest.mock.patch('ninjalog_uploader.GetGCEMetadata')
-    @unittest.mock.patch('ninjalog_uploader.ParseGNArgs')
+    @unittest.mock.patch("ninjalog_uploader.GetGCEMetadata")
+    @unittest.mock.patch("ninjalog_uploader.ParseGNArgs")
     def test_get_metadata_with_edit_monitor_disabled_opt_out(
-            self, mock_parse_gn_args, mock_get_gce_metadata):
+        self, mock_parse_gn_args, mock_get_gce_metadata
+    ):
         mock_parse_gn_args.return_value = ({}, [])
         mock_get_gce_metadata.return_value = {}
 
         metadata = ninjalog_uploader.GetMetadata(
-            cmdline=['python3', 'ninja.py', 'chrome'],
-            ninjalog=os.path.join('out', 'Release', '.ninja_log'),
+            cmdline=["python3", "ninja.py", "chrome"],
+            ninjalog=os.path.join("out", "Release", ".ninja_log"),
             exit_code=0,
             build_duration=123,
-            user='user@example.com',
-            edit_monitor_state='disabled_opt_out',
+            user="user@example.com",
+            edit_monitor_state="disabled_opt_out",
         )
 
-        self.assertEqual(metadata['edit_monitor_state'], 'disabled_opt_out')
+        self.assertEqual(metadata["edit_monitor_state"], "disabled_opt_out")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

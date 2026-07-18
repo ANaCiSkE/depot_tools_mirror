@@ -18,20 +18,20 @@ import build_telemetry
 
 
 class BuildTelemetryTest(unittest.TestCase):
-
     def test_check_auth(self):
-        with unittest.mock.patch('subprocess.check_output') as run_mock:
-            auth = {'email': 'bob@google.com'}
+        with unittest.mock.patch("subprocess.check_output") as run_mock:
+            auth = {"email": "bob@google.com"}
             run_mock.return_value = json.dumps(auth)
             self.assertEqual(build_telemetry.check_auth(), auth)
 
-        with unittest.mock.patch('subprocess.check_output') as run_mock:
+        with unittest.mock.patch("subprocess.check_output") as run_mock:
             run_mock.side_effect = subprocess.CalledProcessError(
-                1, cmd=['check auth'], stderr='failed')
+                1, cmd=["check auth"], stderr="failed"
+            )
             self.assertEqual(build_telemetry.check_auth(), {})
 
-        with unittest.mock.patch('subprocess.check_output') as run_mock:
-            run_mock.return_value = ''
+        with unittest.mock.patch("subprocess.check_output") as run_mock:
+            run_mock.return_value = ""
             self.assertEqual(build_telemetry.check_auth(), {})
 
     def test_load_and_save_config(self):
@@ -39,8 +39,9 @@ class BuildTelemetryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.check_auth') as check_auth:
-                check_auth.return_value = {'email': 'bob@google.com'}
+                "build_telemetry.check_auth"
+            ) as check_auth:
+                check_auth.return_value = {"email": "bob@google.com"}
 
                 # Initial config load
                 cfg = build_telemetry.load_config(cfg_path, test_countdown)
@@ -62,7 +63,7 @@ class BuildTelemetryTest(unittest.TestCase):
                 # The cached result should be reused.
                 check_auth.assert_called_once()
 
-    @unittest.mock.patch('shutil.which')
+    @unittest.mock.patch("shutil.which")
     def test_enabled(self, mock_shutil):
         test_countdown = 2
         mock_shutil.return_value = "path"
@@ -71,8 +72,9 @@ class BuildTelemetryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.check_auth') as check_auth:
-                check_auth.return_value = {'email': 'bob@google.com'}
+                "build_telemetry.check_auth"
+            ) as check_auth:
+                check_auth.return_value = {"email": "bob@google.com"}
 
                 # Initial config load
                 cfg = build_telemetry.load_config(cfg_path, test_countdown)
@@ -114,8 +116,9 @@ class BuildTelemetryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.check_auth') as check_auth:
-                check_auth.return_value = {'email': 'bob@google.com'}
+                "build_telemetry.check_auth"
+            ) as check_auth:
+                check_auth.return_value = {"email": "bob@google.com"}
                 # After opt-out, it should not display the notice and
                 # change the countdown.
                 cfg = build_telemetry.load_config(cfg_path, test_countdown)
@@ -143,11 +146,12 @@ class BuildTelemetryTest(unittest.TestCase):
             mock_shutil.return_value = None
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.check_auth') as check_auth:
-                check_auth.return_value = {'email': 'bob@example.com'}
+                "build_telemetry.check_auth"
+            ) as check_auth:
+                check_auth.return_value = {"email": "bob@example.com"}
                 cfg = build_telemetry.load_config(cfg_path)
                 self.assertFalse(cfg.enabled())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

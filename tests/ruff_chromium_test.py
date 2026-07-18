@@ -245,16 +245,18 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO("invalid json")):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Failed to parse batch config JSON",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Failed to parse batch config JSON", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_not_dict(self, mock_stderr):
         with patch("sys.stdin", io.StringIO(json.dumps([1, 2]))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Batch config must be a JSON object",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Batch config must be a JSON object", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_root(self, mock_stderr):
@@ -262,8 +264,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Batch config 'root' must be a string",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Batch config 'root' must be a string", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_files(self, mock_stderr):
@@ -271,8 +274,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Batch config 'files' must be a list",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Batch config 'files' must be a list", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_file_entry(self, mock_stderr):
@@ -280,8 +284,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Invalid file entry in batch config",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Invalid file entry in batch config", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_file_entry_missing_path(self, mock_stderr):
@@ -289,8 +294,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Invalid file entry in batch config",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Invalid file entry in batch config", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_file_entry_path_not_string(self, mock_stderr):
@@ -298,8 +304,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Invalid file entry in batch config",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Invalid file entry in batch config", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_ranges_not_list(self, mock_stderr):
@@ -315,8 +322,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Invalid range entry in batch config",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Invalid range entry in batch config", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_range_length(self, mock_stderr):
@@ -324,8 +332,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Invalid range entry in batch config",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Invalid range entry in batch config", mock_stderr.getvalue()
+        )
 
     @patch("sys.stderr", new_callable=io.StringIO)
     def test_batch_invalid_range_elements(self, mock_stderr):
@@ -333,8 +342,9 @@ class TestBatchMode(unittest.TestCase):
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
         self.assertEqual(1, ret)
-        self.assertIn("Invalid range entry in batch config",
-                      mock_stderr.getvalue())
+        self.assertIn(
+            "Invalid range entry in batch config", mock_stderr.getvalue()
+        )
 
     def test_batch_empty(self):
         config = {"files": []}
@@ -359,7 +369,8 @@ class TestBatchMode(unittest.TestCase):
         self.assertEqual(0, ret)
         expected_path = os.path.join(self.test_dir, "foo.py")
         mock_run.assert_called_once_with(
-            ["ruff", "format", "--force-exclude", expected_path], capture_output=True
+            ["ruff", "format", "--force-exclude", expected_path],
+            capture_output=True,
         )
         mock_yapf.assert_not_called()
 
@@ -379,7 +390,8 @@ class TestBatchMode(unittest.TestCase):
         self.assertEqual(0, ret)
         expected_path = os.path.join(self.test_dir, "foo.py")
         mock_run.assert_called_once_with(
-            ["ruff", "format", "--force-exclude", expected_path], capture_output=True
+            ["ruff", "format", "--force-exclude", expected_path],
+            capture_output=True,
         )
 
     @patch("depot_tools_ruff_chromium.should_use_ruff")
@@ -411,7 +423,9 @@ class TestBatchMode(unittest.TestCase):
     @patch("depot_tools_ruff_chromium.should_use_ruff")
     @patch("depot_tools_ruff_chromium.has_yapf_config")
     @patch("yapf.FormatFiles")
-    def test_batch_yapf_dry_run_changes(self, mock_format, mock_has_yapf, mock_should_use):
+    def test_batch_yapf_dry_run_changes(
+        self, mock_format, mock_has_yapf, mock_should_use
+    ):
         foo_path = self.write_file("foo.py", "def foo():pass\n")
         config = {
             "root": self.test_dir,
@@ -434,6 +448,7 @@ class TestBatchMode(unittest.TestCase):
             print_diff=False,
             quiet=True,
         )
+
     @patch("depot_tools_ruff_chromium.should_use_ruff")
     @patch("depot_tools_ruff_chromium.has_yapf_config")
     @patch("yapf.FormatFiles")
@@ -570,7 +585,9 @@ class TestBatchMode(unittest.TestCase):
             "files": [{"path": "foo.py", "ranges": []}],
         }
         mock_should_use.return_value = True
-        mock_run.return_value = Mock(returncode=1, stdout=b"diff output", stderr=b"")
+        mock_run.return_value = Mock(
+            returncode=1, stdout=b"diff output", stderr=b""
+        )
 
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
@@ -585,7 +602,9 @@ class TestBatchMode(unittest.TestCase):
             "files": [{"path": "foo.py", "ranges": []}],
         }
         mock_should_use.return_value = True
-        mock_run.return_value = Mock(returncode=2, stdout=b"", stderr=b"some error")
+        mock_run.return_value = Mock(
+            returncode=2, stdout=b"", stderr=b"some error"
+        )
 
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
             ret = run_batch()
@@ -595,7 +614,9 @@ class TestBatchMode(unittest.TestCase):
     @patch("depot_tools_ruff_chromium.should_use_ruff")
     @patch("depot_tools_ruff_chromium.has_yapf_config")
     @patch("yapf.FormatFiles")
-    def test_batch_yapf_error_returns_1(self, mock_format, mock_has_yapf, mock_should_use):
+    def test_batch_yapf_error_returns_1(
+        self, mock_format, mock_has_yapf, mock_should_use
+    ):
         foo_path = self.write_file("foo.py", "def foo():pass\n")
         config = {
             "root": self.test_dir,
@@ -626,11 +647,15 @@ class TestBatchMode(unittest.TestCase):
                 {"path": yapf_path, "ranges": []},
             ],
         }
+
         def ruff_routing(path, root_dir=None):
             return "ruff.py" in path
+
         mock_should_use.side_effect = ruff_routing
         mock_has_yapf.return_value = True
-        mock_run.return_value = Mock(returncode=2, stdout=b"", stderr=b"ruff error")
+        mock_run.return_value = Mock(
+            returncode=2, stdout=b"", stderr=b"ruff error"
+        )
         mock_format.return_value = True
 
         with patch("sys.stdin", io.StringIO(json.dumps(config))):
@@ -654,8 +679,10 @@ class TestBatchMode(unittest.TestCase):
                 {"path": yapf_path, "ranges": []},
             ],
         }
+
         def ruff_routing(path, root_dir=None):
             return "ruff.py" in path
+
         mock_should_use.side_effect = ruff_routing
         mock_has_yapf.return_value = True
         mock_run.return_value = Mock(returncode=1, stdout=b"", stderr=b"")
@@ -665,6 +692,8 @@ class TestBatchMode(unittest.TestCase):
             ret = run_batch()
 
         self.assertEqual(1, ret)
+
+
 class TestParseRange(unittest.TestCase):
     def test_valid_ranges(self):
         # end_col > 1 -> end_line incremented (exclusive end)
@@ -1027,10 +1056,9 @@ class TestRunRuffWithRanges(unittest.TestCase):
     def test_run_ruff_multi_range_without_format(self, mock_stdout, mock_run):
         # Verify that if we have multiple ranges but no 'format' subcommand,
         # it is robustly inserted and we don't fail early.
-        with tempfile.NamedTemporaryFile(mode="wb",
-                                         prefix="test_file",
-                                         suffix=".py",
-                                         delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix="test_file", suffix=".py", delete=False
+        ) as f:
             f.write(b"line1\nline2\nline3\nline4\nline5\nline6\nline7\n")
             temp_path = f.name
         try:
@@ -1039,7 +1067,8 @@ class TestRunRuffWithRanges(unittest.TestCase):
             mock_run.side_effect = [proc1, proc2]
 
             ret = run_ruff_with_ranges(
-                ["--range=1:1-3:1", "--range=5:1-7:1", temp_path])
+                ["--range=1:1-3:1", "--range=5:1-7:1", temp_path]
+            )
             self.assertEqual(ret, 0)
             self.assertEqual(mock_run.call_count, 2)
             # Verify the first argument in the subprocess call is 'format'

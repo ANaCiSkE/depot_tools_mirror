@@ -26,9 +26,10 @@ class Basic(git_test_utils.GitRepoReadWriteTestBase):
     def setUpClass(cls):
         super(Basic, cls).setUpClass()
         import git_number
+
         cls.gn = git_number
         cls.old_POOL_KIND = cls.gn.POOL_KIND
-        cls.gn.POOL_KIND = 'threads'
+        cls.gn.POOL_KIND = "threads"
 
     @classmethod
     def tearDownClass(cls):
@@ -47,38 +48,45 @@ class Basic(git_test_utils.GitRepoReadWriteTestBase):
         return [self.gn.get_num(ref) for ref in refs]
 
     def testBasic(self):
-        self.assertEqual([0], self._git_number([self.repo['A']]))
-        self.assertEqual([2], self._git_number([self.repo['F']]))
-        self.assertEqual([0], self._git_number([self.repo['X']]))
-        self.assertEqual([4], self._git_number([self.repo['E']]))
+        self.assertEqual([0], self._git_number([self.repo["A"]]))
+        self.assertEqual([2], self._git_number([self.repo["F"]]))
+        self.assertEqual([0], self._git_number([self.repo["X"]]))
+        self.assertEqual([4], self._git_number([self.repo["E"]]))
 
     def testInProcessCache(self):
         self.assertEqual(
             None,
-            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo['A'])))
-        self.assertEqual([4], self._git_number([self.repo['E']]))
+            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo["A"])),
+        )
+        self.assertEqual([4], self._git_number([self.repo["E"]]))
         self.assertEqual(
-            0, self.repo.run(self.gn.get_num,
-                             binascii.unhexlify(self.repo['A'])))
+            0,
+            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo["A"])),
+        )
 
     def testOnDiskCache(self):
         self.assertEqual(
             None,
-            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo['A'])))
-        self.assertEqual([4], self._git_number([self.repo['E']], cache=True))
-        self.assertEqual([4], self._git_number([self.repo['E']], cache=True))
+            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo["A"])),
+        )
+        self.assertEqual([4], self._git_number([self.repo["E"]], cache=True))
+        self.assertEqual([4], self._git_number([self.repo["E"]], cache=True))
         self.gn.clear_caches()
         self.assertEqual(
-            0, self.repo.run(self.gn.get_num,
-                             binascii.unhexlify(self.repo['A'])))
+            0,
+            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo["A"])),
+        )
         self.gn.clear_caches()
         self.repo.run(self.gn.clear_caches, True)
         self.assertEqual(
             None,
-            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo['A'])))
+            self.repo.run(self.gn.get_num, binascii.unhexlify(self.repo["A"])),
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(
         coverage_utils.covered_main(
-            os.path.join(DEPOT_TOOLS_ROOT, 'git_number.py'), '3.7'))
+            os.path.join(DEPOT_TOOLS_ROOT, "git_number.py"), "3.7"
+        )
+    )

@@ -17,30 +17,30 @@ import detect_host_arch
 class DetectHostArchTest(unittest.TestCase):
     def setUp(self):
         super(DetectHostArchTest, self).setUp()
-        mock.patch('platform.machine').start()
-        mock.patch('platform.processor').start()
-        mock.patch('platform.architecture').start()
+        mock.patch("platform.machine").start()
+        mock.patch("platform.processor").start()
+        mock.patch("platform.architecture").start()
         self.addCleanup(mock.patch.stopall)
 
     def testHostArch(self):
         test_cases = [
-            ('ia86', '', [''], 'x86'),
-            ('i86pc', '', [''], 'x86'),
-            ('x86_64', '', [''], 'x64'),
-            ('amd64', '', [''], 'x64'),
-            ('x86_64', '', ['32bit'], 'x86'),
-            ('amd64', '', ['32bit'], 'x86'),
-            ('arm', '', [''], 'arm'),
-            ('aarch64', '', [''], 'arm64'),
-            ('aarch64', '', ['32bit'], 'arm'),
-            ('arm64', '', [''], 'arm64'),
-            ('amd64', 'ARMv8 (64-bit) Family', ['64bit', 'WindowsPE'], 'x64'),
-            ('arm64', 'ARMv8 (64-bit) Family', ['32bit', 'WindowsPE'], 'x64'),
-            ('mips64', '', [''], 'mips64'),
-            ('mips', '', [''], 'mips'),
-            ('ppc64', '', [''], 'ppc64'),
-            ('foo', 'powerpc', [''], 'ppc64'),
-            ('s390x', '', [''], 's390x'),
+            ("ia86", "", [""], "x86"),
+            ("i86pc", "", [""], "x86"),
+            ("x86_64", "", [""], "x64"),
+            ("amd64", "", [""], "x64"),
+            ("x86_64", "", ["32bit"], "x86"),
+            ("amd64", "", ["32bit"], "x86"),
+            ("arm", "", [""], "arm"),
+            ("aarch64", "", [""], "arm64"),
+            ("aarch64", "", ["32bit"], "arm"),
+            ("arm64", "", [""], "arm64"),
+            ("amd64", "ARMv8 (64-bit) Family", ["64bit", "WindowsPE"], "x64"),
+            ("arm64", "ARMv8 (64-bit) Family", ["32bit", "WindowsPE"], "x64"),
+            ("mips64", "", [""], "mips64"),
+            ("mips", "", [""], "mips"),
+            ("ppc64", "", [""], "ppc64"),
+            ("foo", "powerpc", [""], "ppc64"),
+            ("s390x", "", [""], "s390x"),
         ]
 
         for machine, processor, arch, expected in test_cases:
@@ -51,5 +51,5 @@ class DetectHostArchTest(unittest.TestCase):
             self.assertEqual(expected, detect_host_arch.HostArch())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

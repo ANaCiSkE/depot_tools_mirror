@@ -9,7 +9,7 @@ import re
 import sys
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GCLIENT_PATH = os.path.join(ROOT_DIR, 'gclient')
+GCLIENT_PATH = os.path.join(ROOT_DIR, "gclient")
 sys.path.insert(0, ROOT_DIR)
 
 import subprocess2
@@ -21,32 +21,36 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
         super(GClientSmokeBase, self).setUp()
         # Make sure it doesn't try to auto update when testing!
         self.env = os.environ.copy()
-        self.env['DEPOT_TOOLS_UPDATE'] = '0'
-        self.env['DEPOT_TOOLS_METRICS'] = '0'
+        self.env["DEPOT_TOOLS_UPDATE"] = "0"
+        self.env["DEPOT_TOOLS_METRICS"] = "0"
         # Suppress Python 3 warnings and other test undesirables.
-        self.env['GCLIENT_TEST'] = '1'
+        self.env["GCLIENT_TEST"] = "1"
         self.maxDiff = None
 
     def gclient(self, cmd, cwd=None, error_ok=False):
         if not cwd:
             cwd = self.root_dir
         cmd = [GCLIENT_PATH] + cmd
-        process = subprocess2.Popen(cmd,
-                                    cwd=cwd,
-                                    env=self.env,
-                                    stdout=subprocess2.PIPE,
-                                    stderr=subprocess2.PIPE,
-                                    universal_newlines=True)
+        process = subprocess2.Popen(
+            cmd,
+            cwd=cwd,
+            env=self.env,
+            stdout=subprocess2.PIPE,
+            stderr=subprocess2.PIPE,
+            universal_newlines=True,
+        )
         (stdout, stderr) = process.communicate()
-        logging.debug("XXX: %s\n%s\nXXX" % (' '.join(cmd), stdout))
-        logging.debug("YYY: %s\n%s\nYYY" % (' '.join(cmd), stderr))
+        logging.debug("XXX: %s\n%s\nXXX" % (" ".join(cmd), stdout))
+        logging.debug("YYY: %s\n%s\nYYY" % (" ".join(cmd), stderr))
 
         if not error_ok:
             self.assertEqual(0, process.returncode, stderr)
 
-        return (stdout.replace('\r\n',
-                               '\n'), stderr.replace('\r\n',
-                                                     '\n'), process.returncode)
+        return (
+            stdout.replace("\r\n", "\n"),
+            stderr.replace("\r\n", "\n"),
+            process.returncode,
+        )
 
     def untangle(self, stdout):
         """Separates output based on thread IDs."""
@@ -54,7 +58,7 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
         remaining = []
         task_id = 0
         for line in stdout.splitlines(False):
-            m = re.match(r'^(\d)+>(.*)$', line)
+            m = re.match(r"^(\d)+>(.*)$", line)
             if not m:
                 if task_id:
                     # Lines broken with carriage breaks don't have a thread ID,
@@ -70,11 +74,11 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
         for key in sorted(tasks.keys()):
             out.extend(tasks[key])
         out.extend(remaining)
-        return '\n'.join(out)
+        return "\n".join(out)
 
-    def parseGclient(self, cmd, items, expected_stderr='', untangle=False):
+    def parseGclient(self, cmd, items, expected_stderr="", untangle=False):
         """Parse gclient's output to make it easier to test.
-    If untangle is True, tries to sort out the output from parallel checkout."""
+        If untangle is True, tries to sort out the output from parallel checkout."""
         (stdout, stderr, _) = self.gclient(cmd)
         if untangle:
             stdout = self.untangle(stdout)
@@ -95,7 +99,7 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
             # Intentionally skips empty lines.
             if not line:
                 continue
-            if not line.startswith('__'):
+            if not line.startswith("__"):
                 if results:
                     results[-1].append(line)
                 else:
@@ -104,15 +108,14 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
                     pass
                 continue
 
-            match = re.match(r'^________ ([a-z]+) \'(.*)\' in \'(.*)\'$', line)
+            match = re.match(r"^________ ([a-z]+) \'(.*)\' in \'(.*)\'$", line)
             if match:
                 results.append(
-                    [[match.group(1),
-                      match.group(2),
-                      match.group(3)]])
+                    [[match.group(1), match.group(2), match.group(3)]]
+                )
                 continue
 
-            match = re.match(r'^_____ (.*) is missing, syncing instead$', line)
+            match = re.match(r"^_____ (.*) is missing, syncing instead$", line)
             if match:
                 # Blah, it's when a dependency is deleted, we should probably
                 # not output this message.
@@ -121,9 +124,9 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
 
             # These two regexps are a bit too broad, they are necessary only for
             # git checkouts.
-            if (re.match(r'_____ [^ ]+ at [^ ]+', line) or re.match(
-                    r'_____ [^ ]+ : Attempting rebase onto [0-9a-f]+...',
-                    line)):
+            if re.match(r"_____ [^ ]+ at [^ ]+", line) or re.match(
+                r"_____ [^ ]+ : Attempting rebase onto [0-9a-f]+...", line
+            ):
                 continue
 
             # Fail for any unrecognized lines that start with '__'.
@@ -139,15 +142,21 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
             else:
                 verb = items[i]
                 path = self.root_dir
-            self.checkString(results[i][0][0], verb,
-                             (i, results[i][0][0], verb))
-            if sys.platform == 'win32':
+            self.checkString(
+                results[i][0][0], verb, (i, results[i][0][0], verb)
+            )
+            if sys.platform == "win32":
                 # Make path lower case since casing can change randomly.
-                self.checkString(results[i][0][2].lower(), path.lower(),
-                                 (i, results[i][0][2].lower(), path.lower()))
+                self.checkString(
+                    results[i][0][2].lower(),
+                    path.lower(),
+                    (i, results[i][0][2].lower(), path.lower()),
+                )
             else:
-                self.checkString(results[i][0][2], path,
-                                 (i, results[i][0][2], path))
-        self.assertEqual(len(results), len(items),
-                         (stdout, items, len(results)))
+                self.checkString(
+                    results[i][0][2], path, (i, results[i][0][2], path)
+                )
+        self.assertEqual(
+            len(results), len(items), (stdout, items, len(results))
+        )
         return results

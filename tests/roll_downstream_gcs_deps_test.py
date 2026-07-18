@@ -15,23 +15,22 @@ import roll_downstream_gcs_deps
 
 
 class CopyPackageTest(unittest.TestCase):
-
     def testNoDepsToRoll(self):
         with self.assertRaises(Exception):
-            roll_downstream_gcs_deps.copy_packages('', '', ['foo'], ['foo'])
+            roll_downstream_gcs_deps.copy_packages("", "", ["foo"], ["foo"])
 
         with self.assertRaises(Exception):
-            roll_downstream_gcs_deps.copy_packages('deps = {"foo": ""}',
-                                                   'deps = {}', ['foo'],
-                                                   ['foo'])
+            roll_downstream_gcs_deps.copy_packages(
+                'deps = {"foo": ""}', "deps = {}", ["foo"], ["foo"]
+            )
 
         with self.assertRaises(Exception):
-            roll_downstream_gcs_deps.copy_packages('deps = {"foo": ""}',
-                                                   'deps = {"bar": ""}',
-                                                   ['foo'], ['baz'])
+            roll_downstream_gcs_deps.copy_packages(
+                'deps = {"foo": ""}', 'deps = {"bar": ""}', ["foo"], ["baz"]
+            )
 
     def testNoGCSDeps(self):
-        source_deps = '''
+        source_deps = """
 deps = {
   "foo": {
     'dep_type': 'unknown',
@@ -45,8 +44,8 @@ deps = {
     ]
   },
 }
-'''
-        destination_deps = '''
+"""
+        destination_deps = """
 deps = {
   "foo": {
     'dep_type': 'unknown',
@@ -60,14 +59,14 @@ deps = {
     ]
   },
 }
-'''
+"""
         with self.assertRaises(Exception):
-            roll_downstream_gcs_deps.copy_packages(source_deps,
-                                                   destination_deps, ['foo'],
-                                                   ['foo'])
+            roll_downstream_gcs_deps.copy_packages(
+                source_deps, destination_deps, ["foo"], ["foo"]
+            )
 
     def testObjectInLineUpdate(self):
-        source_deps = '''
+        source_deps = """
 deps = {
   "foo": {
     'dep_type': 'gcs',
@@ -84,8 +83,8 @@ deps = {
     ]
   },
 }
-'''
-        destination_deps = '''
+"""
+        destination_deps = """
 deps = {
   "other": "preserved",
   "foo": {
@@ -104,8 +103,8 @@ deps = {
   },
   "another": "preserved",
 }
-'''
-        expected_deps = '''
+"""
+        expected_deps = """
 deps = {
   "other": "preserved",
   "foo": {
@@ -124,14 +123,14 @@ deps = {
   },
   "another": "preserved",
 }
-'''
-        result = roll_downstream_gcs_deps.copy_packages(source_deps,
-                                                        destination_deps,
-                                                        ['foo'], ['foo'])
+"""
+        result = roll_downstream_gcs_deps.copy_packages(
+            source_deps, destination_deps, ["foo"], ["foo"]
+        )
         self.assertEqual(result, expected_deps)
 
     def testGCSRustPackageNewPlatform(self):
-        source_deps = '''
+        source_deps = """
 deps = {
   'src/third_party/rust-toolchain': {
     'dep_type': 'gcs',
@@ -168,8 +167,8 @@ deps = {
     ],
   },
 }
-'''
-        destination_deps = '''
+"""
+        destination_deps = """
 deps = {
   'third_party/rust-toolchain': {
     'dep_type': 'gcs',
@@ -185,8 +184,8 @@ deps = {
     ],
   },
 }
-'''
-        expected_deps = '''
+"""
+        expected_deps = """
 deps = {
   'third_party/rust-toolchain': {
     'dep_type': 'gcs',
@@ -223,23 +222,30 @@ deps = {
     ],
   },
 }
-'''
+"""
         result = roll_downstream_gcs_deps.copy_packages(
-            source_deps, destination_deps, ['src/third_party/rust-toolchain'],
-            ['third_party/rust-toolchain'])
+            source_deps,
+            destination_deps,
+            ["src/third_party/rust-toolchain"],
+            ["third_party/rust-toolchain"],
+        )
         self.assertEqual(result, expected_deps)
 
         with self.assertRaises(Exception):
             # no destination_package match, so expect a failure.
             roll_downstream_gcs_deps.copy_packages(
-                source_deps, destination_deps,
-                ['src/third_party/rust-toolchain'],
-                ['src/third_party/rust-toolchain'])
+                source_deps,
+                destination_deps,
+                ["src/third_party/rust-toolchain"],
+                ["src/third_party/rust-toolchain"],
+            )
 
 
-if __name__ == '__main__':
-    level = logging.DEBUG if '-v' in sys.argv else logging.FATAL
-    logging.basicConfig(level=level,
-                        format='%(asctime).19s %(levelname)s %(filename)s:'
-                        '%(lineno)s %(message)s')
+if __name__ == "__main__":
+    level = logging.DEBUG if "-v" in sys.argv else logging.FATAL
+    logging.basicConfig(
+        level=level,
+        format="%(asctime).19s %(levelname)s %(filename)s:"
+        "%(lineno)s %(message)s",
+    )
     unittest.main()

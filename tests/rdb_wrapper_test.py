@@ -21,27 +21,27 @@ import rdb_wrapper
 @contextlib.contextmanager
 def lucictx(ctx):
     try:
-        orig = os.environ.get('LUCI_CONTEXT')
+        orig = os.environ.get("LUCI_CONTEXT")
 
         if ctx is None:
-            os.environ.pop('LUCI_CONTEXT', '')
+            os.environ.pop("LUCI_CONTEXT", "")
             yield
         else:
             # windows doesn't allow a file to be opened twice at the same time.
             # therefore, this closes the temp file before yield, so that
             # rdb_wrapper.client() can open the LUCI_CONTEXT file.
             f = tempfile.NamedTemporaryFile(delete=False)
-            f.write(json.dumps(ctx).encode('utf-8'))
+            f.write(json.dumps(ctx).encode("utf-8"))
             f.close()
-            os.environ['LUCI_CONTEXT'] = f.name
+            os.environ["LUCI_CONTEXT"] = f.name
             yield
             os.unlink(f.name)
 
     finally:
         if orig is None:
-            os.environ.pop('LUCI_CONTEXT', '')
+            os.environ.pop("LUCI_CONTEXT", "")
         else:
-            os.environ['LUCI_CONTEXT'] = orig
+            os.environ["LUCI_CONTEXT"] = orig
 
 
 @mock.patch.dict(os.environ, {})
@@ -51,96 +51,97 @@ class TestClient(unittest.TestCase):
             with rdb_wrapper.client("prefix") as s:
                 self.assertIsNone(s)
 
-        with lucictx({'something else': {'key': 'value'}}):
+        with lucictx({"something else": {"key": "value"}}):
             with rdb_wrapper.client("prefix") as s:
                 self.assertIsNone(s)
 
     def test_with_lucictx(self):
         with lucictx(
-            {'result_sink': {
-                'address': '127',
-                'auth_token': 'secret'
-            }}):
+            {"result_sink": {"address": "127", "auth_token": "secret"}}
+        ):
             with rdb_wrapper.client("prefix") as s:
                 self.assertIsNotNone(s)
                 self.assertEqual(
                     s._url,
-                    'http://127/prpc/luci.resultsink.v1.Sink/ReportTestResults',
+                    "http://127/prpc/luci.resultsink.v1.Sink/ReportTestResults",
                 )
                 self.assertDictEqual(
-                    s._session.headers, {
-                        'Accept': 'application/json',
-                        'Authorization': 'ResultSink secret',
-                        'Content-Type': 'application/json',
-                    })
+                    s._session.headers,
+                    {
+                        "Accept": "application/json",
+                        "Authorization": "ResultSink secret",
+                        "Content-Type": "application/json",
+                    },
+                )
 
 
 class TestResultSink(unittest.TestCase):
     struct_test_dict = {
-        'coarseName': None,
-        'fineName': None,
-        'caseNameComponents': ['function_foo'],
+        "coarseName": None,
+        "fineName": None,
+        "caseNameComponents": ["function_foo"],
     }
 
     def test_report(self):
         session = mock.MagicMock()
-        sink = rdb_wrapper.ResultSink(session, 'http://host', 'test_id_prefix/')
+        sink = rdb_wrapper.ResultSink(session, "http://host", "test_id_prefix/")
         sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123)
         expected = {
-            'testId': 'test_id_prefix/function_foo',
-            'status': rdb_wrapper.STATUS_PASS,
-            'expected': True,
-            'duration': '123.000000000s',
-            'testIdStructured': TestResultSink.struct_test_dict,
+            "testId": "test_id_prefix/function_foo",
+            "status": rdb_wrapper.STATUS_PASS,
+            "expected": True,
+            "duration": "123.000000000s",
+            "testIdStructured": TestResultSink.struct_test_dict,
         }
         session.post.assert_called_once_with(
-            'http://host',
-            json={'testResults': [expected]},
+            "http://host",
+            json={"testResults": [expected]},
         )
 
     def test_report_failure_reason(self):
         session = mock.MagicMock()
-        sink = rdb_wrapper.ResultSink(session, 'http://host', 'test_id_prefix/')
-        sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123, 'Bad CL.')
+        sink = rdb_wrapper.ResultSink(session, "http://host", "test_id_prefix/")
+        sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123, "Bad CL.")
         expected = {
-            'testId': 'test_id_prefix/function_foo',
-            'status': rdb_wrapper.STATUS_PASS,
-            'expected': True,
-            'duration': '123.000000000s',
-            'testIdStructured': TestResultSink.struct_test_dict,
-            'failureReason': {
-                'primaryErrorMessage': 'Bad CL.',
+            "testId": "test_id_prefix/function_foo",
+            "status": rdb_wrapper.STATUS_PASS,
+            "expected": True,
+            "duration": "123.000000000s",
+            "testIdStructured": TestResultSink.struct_test_dict,
+            "failureReason": {
+                "primaryErrorMessage": "Bad CL.",
             },
         }
         session.post.assert_called_once_with(
-            'http://host',
-            json={'testResults': [expected]},
+            "http://host",
+            json={"testResults": [expected]},
         )
 
     def test_report_failure_reason_truncated(self):
         session = mock.MagicMock()
-        sink = rdb_wrapper.ResultSink(session, 'http://host', 'test_id_prefix/')
-        sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123, 'X' * 2000)
+        sink = rdb_wrapper.ResultSink(session, "http://host", "test_id_prefix/")
+        sink.report("function_foo", rdb_wrapper.STATUS_PASS, 123, "X" * 2000)
         trunc_text = rdb_wrapper._FAILURE_REASON_TRUNCATE_TEXT
         limit = rdb_wrapper._FAILURE_REASON_LENGTH_LIMIT
-        expected_truncated_error = 'X' * (limit - len(trunc_text)) + trunc_text
+        expected_truncated_error = "X" * (limit - len(trunc_text)) + trunc_text
         expected = {
-            'testId': 'test_id_prefix/function_foo',
-            'status': rdb_wrapper.STATUS_PASS,
-            'expected': True,
-            'duration': '123.000000000s',
-            'testIdStructured': TestResultSink.struct_test_dict,
-            'failureReason': {
-                'primaryErrorMessage': expected_truncated_error,
+            "testId": "test_id_prefix/function_foo",
+            "status": rdb_wrapper.STATUS_PASS,
+            "expected": True,
+            "duration": "123.000000000s",
+            "testIdStructured": TestResultSink.struct_test_dict,
+            "failureReason": {
+                "primaryErrorMessage": expected_truncated_error,
             },
         }
         session.post.assert_called_once_with(
-            'http://host',
-            json={'testResults': [expected]},
+            "http://host",
+            json={"testResults": [expected]},
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG if '-v' in sys.argv else logging.ERROR)
+        level=logging.DEBUG if "-v" in sys.argv else logging.ERROR
+    )
     unittest.main()

@@ -26,187 +26,229 @@ from testing_support.fake_repos import join, write
 
 class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
     """Doesn't require git-daemon."""
+
     @property
     def git_base(self):
-        return 'git://random.server/git/'
+        return "git://random.server/git/"
 
     def testNotConfigured(self):
-        res = ('', 'Error: client not configured; see \'gclient config\'\n', 1)
-        self.check(res, self.gclient(['diff'], error_ok=True))
-        self.check(res, self.gclient(['pack'], error_ok=True))
-        self.check(res, self.gclient(['revert'], error_ok=True))
-        self.check(res, self.gclient(['revinfo'], error_ok=True))
-        self.check(res, self.gclient(['runhooks'], error_ok=True))
-        self.check(res, self.gclient(['status'], error_ok=True))
-        self.check(res, self.gclient(['sync'], error_ok=True))
-        self.check(res, self.gclient(['update'], error_ok=True))
+        res = ("", "Error: client not configured; see 'gclient config'\n", 1)
+        self.check(res, self.gclient(["diff"], error_ok=True))
+        self.check(res, self.gclient(["pack"], error_ok=True))
+        self.check(res, self.gclient(["revert"], error_ok=True))
+        self.check(res, self.gclient(["revinfo"], error_ok=True))
+        self.check(res, self.gclient(["runhooks"], error_ok=True))
+        self.check(res, self.gclient(["status"], error_ok=True))
+        self.check(res, self.gclient(["sync"], error_ok=True))
+        self.check(res, self.gclient(["update"], error_ok=True))
 
     def testConfig(self):
         # Get any bootstrapping out of the way.
-        results = self.gclient(['version'])
+        results = self.gclient(["version"])
 
-        p = join(self.root_dir, '.gclient')
+        p = join(self.root_dir, ".gclient")
 
         def test(cmd, expected):
             if os.path.exists(p):
                 os.remove(p)
             results = self.gclient(cmd)
-            self.check(('', '', 0), results)
-            with open(p, 'r') as f:
+            self.check(("", "", 0), results)
+            with open(p, "r") as f:
                 actual = {}
                 exec(f.read(), {}, actual)
                 self.assertEqual(expected, actual)
 
         test(
-            ['config', self.git_base + 'src/'], {
-                'solutions': [{
-                    'name': 'src',
-                    'url': self.git_base + 'src',
-                    'deps_file': 'DEPS',
-                    'managed': False,
-                    'custom_deps': {},
-                    'custom_vars': {},
-                }],
-            })
+            ["config", self.git_base + "src/"],
+            {
+                "solutions": [
+                    {
+                        "name": "src",
+                        "url": self.git_base + "src",
+                        "deps_file": "DEPS",
+                        "managed": False,
+                        "custom_deps": {},
+                        "custom_vars": {},
+                    }
+                ],
+            },
+        )
 
         test(
             [
-                'config', self.git_base + 'repo_1', '--name', 'src',
-                '--cache-dir', 'none'
-            ], {
-                'solutions': [{
-                    'name': 'src',
-                    'url': self.git_base + 'repo_1',
-                    'deps_file': 'DEPS',
-                    'managed': False,
-                    'custom_deps': {},
-                    'custom_vars': {},
-                }],
-                'cache_dir':
-                None
-            })
+                "config",
+                self.git_base + "repo_1",
+                "--name",
+                "src",
+                "--cache-dir",
+                "none",
+            ],
+            {
+                "solutions": [
+                    {
+                        "name": "src",
+                        "url": self.git_base + "repo_1",
+                        "deps_file": "DEPS",
+                        "managed": False,
+                        "custom_deps": {},
+                        "custom_vars": {},
+                    }
+                ],
+                "cache_dir": None,
+            },
+        )
 
         test(
             [
-                'config', 'https://example.com/foo', 'faa', '--cache-dir',
-                'something'
-            ], {
-                'solutions': [{
-                    'name': 'foo',
-                    'url': 'https://example.com/foo',
-                    'deps_file': 'DEPS',
-                    'managed': False,
-                    'custom_deps': {},
-                    'custom_vars': {},
-                }],
-                'cache_dir':
-                'something'
-            })
+                "config",
+                "https://example.com/foo",
+                "faa",
+                "--cache-dir",
+                "something",
+            ],
+            {
+                "solutions": [
+                    {
+                        "name": "foo",
+                        "url": "https://example.com/foo",
+                        "deps_file": "DEPS",
+                        "managed": False,
+                        "custom_deps": {},
+                        "custom_vars": {},
+                    }
+                ],
+                "cache_dir": "something",
+            },
+        )
 
         test(
-            ['config', 'https://example.com/foo', '--deps', 'blah'], {
-                'solutions': [{
-                    'name': 'foo',
-                    'url': 'https://example.com/foo',
-                    'deps_file': 'blah',
-                    'managed': False,
-                    'custom_deps': {},
-                    'custom_vars': {},
-                }]
-            })
+            ["config", "https://example.com/foo", "--deps", "blah"],
+            {
+                "solutions": [
+                    {
+                        "name": "foo",
+                        "url": "https://example.com/foo",
+                        "deps_file": "blah",
+                        "managed": False,
+                        "custom_deps": {},
+                        "custom_vars": {},
+                    }
+                ]
+            },
+        )
 
         test(
             [
-                'config', self.git_base + 'src/', '--custom-var',
-                'bool_var=True', '--custom-var', 'str_var="abc"'
-            ], {
-                'solutions': [{
-                    'name': 'src',
-                    'url': self.git_base + 'src',
-                    'deps_file': 'DEPS',
-                    'managed': False,
-                    'custom_deps': {},
-                    'custom_vars': {
-                        'bool_var': True,
-                        'str_var': 'abc',
-                    },
-                }]
-            })
+                "config",
+                self.git_base + "src/",
+                "--custom-var",
+                "bool_var=True",
+                "--custom-var",
+                'str_var="abc"',
+            ],
+            {
+                "solutions": [
+                    {
+                        "name": "src",
+                        "url": self.git_base + "src",
+                        "deps_file": "DEPS",
+                        "managed": False,
+                        "custom_deps": {},
+                        "custom_vars": {
+                            "bool_var": True,
+                            "str_var": "abc",
+                        },
+                    }
+                ]
+            },
+        )
 
         test(
-            ['config', self.git_base + 'src/', '--managed'], {
-                'solutions': [{
-                    'name': 'src',
-                    'url': self.git_base + 'src',
-                    'deps_file': 'DEPS',
-                    'managed': True,
-                    'custom_deps': {},
-                    'custom_vars': {},
-                }],
-            })
+            ["config", self.git_base + "src/", "--managed"],
+            {
+                "solutions": [
+                    {
+                        "name": "src",
+                        "url": self.git_base + "src",
+                        "deps_file": "DEPS",
+                        "managed": True,
+                        "custom_deps": {},
+                        "custom_vars": {},
+                    }
+                ],
+            },
+        )
 
         test(
-            ['config', self.git_base + 'src/', '--unmanaged'], {
-                'solutions': [{
-                    'name': 'src',
-                    'url': self.git_base + 'src',
-                    'deps_file': 'DEPS',
-                    'managed': False,
-                    'custom_deps': {},
-                    'custom_vars': {},
-                }],
-            })
+            ["config", self.git_base + "src/", "--unmanaged"],
+            {
+                "solutions": [
+                    {
+                        "name": "src",
+                        "url": self.git_base + "src",
+                        "deps_file": "DEPS",
+                        "managed": False,
+                        "custom_deps": {},
+                        "custom_vars": {},
+                    }
+                ],
+            },
+        )
 
-        test(['config', '--spec', 'bah = ["blah blah"]'],
-             {'bah': ["blah blah"]})
+        test(
+            ["config", "--spec", 'bah = ["blah blah"]'], {"bah": ["blah blah"]}
+        )
 
         os.remove(p)
-        results = self.gclient(['config', 'foo', 'faa', 'fuu'], error_ok=True)
+        results = self.gclient(["config", "foo", "faa", "fuu"], error_ok=True)
         err = (
-            'Usage: gclient.py config [options] [url]\n\n'
-            'gclient.py: error: Inconsistent arguments. Use either --spec or one'
-            ' or 2 args\n')
-        self.check(('', err, 2), results)
-        self.assertFalse(os.path.exists(join(self.root_dir, '.gclient')))
+            "Usage: gclient.py config [options] [url]\n\n"
+            "gclient.py: error: Inconsistent arguments. Use either --spec or one"
+            " or 2 args\n"
+        )
+        self.check(("", err, 2), results)
+        self.assertFalse(os.path.exists(join(self.root_dir, ".gclient")))
 
     def testSolutionNone(self):
         results = self.gclient(
-            ['config', '--spec', 'solutions=[{"name": "./", "url": None}]'])
-        self.check(('', '', 0), results)
-        results = self.gclient(['sync'])
-        self.check(('', '', 0), results)
+            ["config", "--spec", 'solutions=[{"name": "./", "url": None}]']
+        )
+        self.check(("", "", 0), results)
+        results = self.gclient(["sync"])
+        self.check(("", "", 0), results)
         self.assertTree({})
-        results = self.gclient(['revinfo'])
-        self.check(('./: None\n', '', 0), results)
-        self.check(('', '', 0), self.gclient(['diff']))
+        results = self.gclient(["revinfo"])
+        self.check(("./: None\n", "", 0), results)
+        self.check(("", "", 0), self.gclient(["diff"]))
         self.assertTree({})
-        self.check(('', '', 0), self.gclient(['pack']))
-        self.check(('', '', 0), self.gclient(['revert']))
+        self.check(("", "", 0), self.gclient(["pack"]))
+        self.check(("", "", 0), self.gclient(["revert"]))
         self.assertTree({})
-        self.check(('', '', 0), self.gclient(['runhooks']))
+        self.check(("", "", 0), self.gclient(["runhooks"]))
         self.assertTree({})
-        self.check(('', '', 0), self.gclient(['status']))
+        self.check(("", "", 0), self.gclient(["status"]))
 
     def testDifferentTopLevelDirectory(self):
         # Check that even if the .gclient file does not mention the directory
         # src itself, but it is included via dependencies, the .gclient file is
         # used.
-        self.gclient(['config', self.git_base + 'src.DEPS'])
-        deps = join(self.root_dir, 'src.DEPS')
+        self.gclient(["config", self.git_base + "src.DEPS"])
+        deps = join(self.root_dir, "src.DEPS")
         os.mkdir(deps)
-        subprocess2.check_output(['git', 'init'], cwd=deps)
-        write(join(deps, 'DEPS'), 'deps = { "src": "%ssrc" }' % (self.git_base))
-        subprocess2.check_output(['git', 'add', 'DEPS'], cwd=deps)
-        subprocess2.check_output(['git', 'commit', '-a', '-m', 'DEPS file'],
-                                 cwd=deps)
-        src = join(self.root_dir, 'src')
+        subprocess2.check_output(["git", "init"], cwd=deps)
+        write(join(deps, "DEPS"), 'deps = { "src": "%ssrc" }' % (self.git_base))
+        subprocess2.check_output(["git", "add", "DEPS"], cwd=deps)
+        subprocess2.check_output(
+            ["git", "commit", "-a", "-m", "DEPS file"], cwd=deps
+        )
+        src = join(self.root_dir, "src")
         os.mkdir(src)
-        subprocess2.check_output(['git', 'init'], cwd=src)
-        res = self.gclient(['status', '--jobs', '1', '-v'], src)
-        self.checkBlock(res[0], [('running', deps), ('running', src)])
+        subprocess2.check_output(["git", "init"], cwd=src)
+        res = self.gclient(["status", "--jobs", "1", "-v"], src)
+        self.checkBlock(res[0], [("running", deps), ("running", src)])
 
 
-if __name__ == '__main__':
-    if '-v' in sys.argv:
+if __name__ == "__main__":
+    if "-v" in sys.argv:
         logging.basicConfig(level=logging.DEBUG)
     unittest.main()

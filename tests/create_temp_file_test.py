@@ -18,7 +18,6 @@ import create_temp_file
 
 
 class TestCreateTempFileFromStdin(unittest.TestCase):
-
     def setUp(self):
         """Set up test environment: capture stdout and stderr."""
         self.held_stdout = sys.stdout
@@ -35,12 +34,12 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
 
     def _read_content_and_delete_file(self, file_path):
         """Helper to read content of a temporary file."""
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             ret = f.read()
         os.remove(file_path)
         return ret
 
-    @patch('sys.stdin', new_callable=io.StringIO)
+    @patch("sys.stdin", new_callable=io.StringIO)
     def test_basic_text_input(self, mock_stdin):
         """Test with basic multi-line text input."""
         test_content = "Hello, world!\nThis is a test.\n"
@@ -58,7 +57,7 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
         self.assertEqual(self.new_stderr.getvalue(), "")  # No errors on stderr
         self.assertEqual(file_content, test_content)
 
-    @patch('sys.stdin', new_callable=io.StringIO)
+    @patch("sys.stdin", new_callable=io.StringIO)
     def test_empty_input(self, mock_stdin):
         """Test with empty input from stdin."""
         test_content = ""
@@ -73,7 +72,7 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
         self.assertFalse(os.path.exists(output))
         self.assertEqual(self.new_stderr.getvalue(), "")
 
-    @patch('sys.stdin', new_callable=io.StringIO)
+    @patch("sys.stdin", new_callable=io.StringIO)
     def test_with_prefix(self, mock_stdin):
         """Test if the --prefix argument is respected."""
         test_content = "Prefix test content.\n"
@@ -82,8 +81,9 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
 
         # Simulate argparse.args
         mock_args = argparse.Namespace(prefix="myprefix_", suffix=None)
-        with patch('argparse.ArgumentParser.parse_args',
-                   return_value=mock_args):
+        with patch(
+            "argparse.ArgumentParser.parse_args", return_value=mock_args
+        ):
             create_temp_file.run(prefix=mock_args.prefix)
 
         output = self.new_stdout.getvalue().strip()
@@ -92,7 +92,7 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
         file_content = self._read_content_and_delete_file(output)
         self.assertEqual(file_content, test_content)
 
-    @patch('sys.stdin', new_callable=io.StringIO)
+    @patch("sys.stdin", new_callable=io.StringIO)
     def test_with_suffix(self, mock_stdin):
         """Test if the --suffix argument is respected."""
         test_content = "Suffix test content.\n"
@@ -101,8 +101,9 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
 
         # Simulate argparse.args
         mock_args = argparse.Namespace(prefix=None, suffix=".log")
-        with patch('argparse.ArgumentParser.parse_args',
-                   return_value=mock_args):
+        with patch(
+            "argparse.ArgumentParser.parse_args", return_value=mock_args
+        ):
             create_temp_file.run(suffix=mock_args.suffix)
 
         output = self.new_stdout.getvalue().strip()
@@ -112,5 +113,5 @@ class TestCreateTempFileFromStdin(unittest.TestCase):
         self.assertEqual(file_content, test_content)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
