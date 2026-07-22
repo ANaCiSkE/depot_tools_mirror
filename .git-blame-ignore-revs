@@ -18,6 +18,10 @@
 # - Because you must use a hash, you need to append to this list in a follow-up
 #   CL to the actual reformatting CL that you are trying to ignore.
 
+# ruff reformatting
+93974d01460c8a37dda1fb935e4c861bdd9146d5
+1709e20d5ca2afe97bfa726168719c3b77eb9883
+
 # switch to 4 space indent
 691128f836966a645a53185c98e8f83a9b1bcf0c
 f38dc929a88633e54d1911ba94b2b37a6c164238
