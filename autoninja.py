@@ -77,7 +77,8 @@ def _import_from_path(module_name, file_path):
     except:
         raise ImportError(
             'Could not import module "{}" from "{}"'.format(
-                module_name, file_path),
+                module_name, file_path
+            ),
             name=module_name,
             path=file_path,
         )
@@ -99,9 +100,9 @@ def _has_internal_checkout(output_dir):
 
 def _reclient_rbe_project():
     """Returns RBE project used by reclient."""
-    instance = os.environ.get('RBE_instance')
+    instance = os.environ.get("RBE_instance")
     if instance:
-        m = re.match(instance, r'projects/([^/]*)/instances/.*')
+        m = re.match(instance, r"projects/([^/]*)/instances/.*")
         if m:
             return m[1]
     reproxy_cfg_path = reclient_helper.find_reclient_cfg()
@@ -109,7 +110,7 @@ def _reclient_rbe_project():
         return ""
     with open(reproxy_cfg_path) as f:
         for line in f:
-            m = re.match(r'instance\s*=\s*projects/([^/]*)/instances/.*', line)
+            m = re.match(r"instance\s*=\s*projects/([^/]*)/instances/.*", line)
             if m:
                 return m[1]
     return ""
@@ -117,18 +118,18 @@ def _reclient_rbe_project():
 
 def _siso_rbe_project(output_dir):
     """Returns RBE project used by siso."""
-    siso_project = os.environ.get('SISO_PROJECT')
+    siso_project = os.environ.get("SISO_PROJECT")
     if siso_project:
         return siso_project
     root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
     if not root_dir:
         return ""
-    sisoenv_path = os.path.join(root_dir, 'build/config/siso/.sisoenv')
+    sisoenv_path = os.path.join(root_dir, "build/config/siso/.sisoenv")
     if not os.path.exists(sisoenv_path):
         return ""
     with open(sisoenv_path) as f:
         for line in f:
-            m = re.match(r'SISO_PROJECT=\s*(\S*)\s*', line)
+            m = re.match(r"SISO_PROJECT=\s*(\S*)\s*", line)
             if m:
                 return m[1]
     return ""
@@ -209,8 +210,8 @@ def _convert_ninja_j_to_siso_flags(j_value, use_remoteexec, args):
         else:
             print(
                 "WARNING: Ignoring -j %s because it is larger than "
-                "num_cpus=%d. Use -local_jobs=%s instead if it's intentional." %
-                (j_value, num_cpus, j_value),
+                "num_cpus=%d. Use -local_jobs=%s instead if it's intentional."
+                % (j_value, num_cpus, j_value),
                 file=sys.stderr,
             )
     # replace -j with -local_jobs,-remote_jobs.
@@ -218,13 +219,13 @@ def _convert_ninja_j_to_siso_flags(j_value, use_remoteexec, args):
     j_value_index = None
     for i in range(len(args)):
         arg = args[i]
-        if arg.startswith('-j'):
-            if arg == '-j':
+        if arg.startswith("-j"):
+            if arg == "-j":
                 j_value_index = i + 1
             if local_jobs:
-                return_args.extend(['-local_jobs=' + local_jobs])
+                return_args.extend(["-local_jobs=" + local_jobs])
             if remote_jobs:
-                return_args.extend(['-remote_jobs=' + remote_jobs])
+                return_args.extend(["-remote_jobs=" + remote_jobs])
             continue
         if i == j_value_index:
             continue
@@ -237,19 +238,22 @@ def _check_reclient_cfgs(output_dir):
     if not root_dir:
         return
     if not os.path.exists(
-            os.path.join(
-                root_dir,
-                "buildtools/reclient_cfgs/chromium-browser-clang/.cipd")):
+        os.path.join(
+            root_dir, "buildtools/reclient_cfgs/chromium-browser-clang/.cipd"
+        )
+    ):
         # reclient cfgs is not deployed by cipd
         return
     cr_build_revision_path = os.path.join(
-        root_dir, "third_party/llvm-build/Release+Asserts/cr_build_revision")
+        root_dir, "third_party/llvm-build/Release+Asserts/cr_build_revision"
+    )
     cr_build_revision = None
     if os.path.exists(cr_build_revision_path):
         with open(cr_build_revision_path) as f:
             cr_build_revision = f.read().strip()
     rewrapper_cfg_path = os.path.join(
-        root_dir, "buildtools/reclient_cfgs/chromium-browser-clang/rewrapper_")
+        root_dir, "buildtools/reclient_cfgs/chromium-browser-clang/rewrapper_"
+    )
     if sys.platform == "win32":
         rewrapper_cfg_path += "windows.cfg"
     elif sys.platform == "darwin":
@@ -277,9 +281,9 @@ def _check_reclient_cfgs(output_dir):
             )
 
 
-def _main_inner(input_args,
-                build_id,
-                telemetry_cfg: Optional[build_telemetry.Config] = None):
+def _main_inner(
+    input_args, build_id, telemetry_cfg: Optional[build_telemetry.Config] = None
+):
     # if user doesn't set PYTHONPYCACHEPREFIX and PYTHONDONTWRITEBYTECODE
     # set PYTHONDONTWRITEBYTECODE=1 not to create many *.pyc in workspace
     # and keep workspace clean.
@@ -320,9 +324,9 @@ def _main_inner(input_args,
         elif arg in ("--project", "-project"):
             project = input_args[index + 2]
         elif arg.startswith("--project="):
-            project = arg[len("--project="):]
+            project = arg[len("--project=") :]
         elif arg.startswith("-project="):
-            project = arg[len("-project="):]
+            project = arg[len("-project=") :]
         elif arg in ("-h", "--help"):
             print(_HELP_MESSAGE, file=sys.stderr)
 
@@ -375,10 +379,13 @@ def _main_inner(input_args,
             # If use_siso is True by default, but the output directory is still using
             # Ninja, print the suggestion message.
             is_ninja_used = os.path.exists(
-                os.path.join(output_dir, ".ninja_deps"))
+                os.path.join(output_dir, ".ninja_deps")
+            )
             if use_siso and is_ninja_used:
-                print(_SISO_SUGGESTION.format(output_dir=output_dir),
-                      file=sys.stderr)
+                print(
+                    _SISO_SUGGESTION.format(output_dir=output_dir),
+                    file=sys.stderr,
+                )
                 use_siso = False
 
         if use_reclient is None and use_remoteexec:
@@ -407,7 +414,7 @@ def _main_inner(input_args,
             # user may login on non-@google.com account on corp,
             # but need to use @google.com and rbe-chrome-untrusted
             # with src-internal.
-            if project == 'rbe-chromium-untrusted':
+            if project == "rbe-chromium-untrusted":
                 print(
                     "You can't use rbe-chromium-untrusted for "
                     "src-internal.\n"
@@ -420,7 +427,7 @@ def _main_inner(input_args,
             # only @google.com is allowed to use rbe-chrome-untrusted
             # and use @google.com on non-corp machine is not allowed
             # by corp security policy.
-            if project == 'rbe-chrome-untrusted':
+            if project == "rbe-chrome-untrusted":
                 print(
                     "You can't use rbe-chrome-untrusted on non-corp "
                     "machine.\n"
@@ -472,16 +479,19 @@ def _main_inner(input_args,
     # ninja.
     if sys.platform in ["darwin", "linux"]:
         import resource
+
         # Increase the number of allowed open file descriptors to the maximum.
         fileno_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
         if fileno_limit < hard_limit:
             try:
-                resource.setrlimit(resource.RLIMIT_NOFILE,
-                                   (hard_limit, hard_limit))
+                resource.setrlimit(
+                    resource.RLIMIT_NOFILE, (hard_limit, hard_limit)
+                )
             except Exception:
                 pass
             fileno_limit, hard_limit = resource.getrlimit(
-                resource.RLIMIT_NOFILE)
+                resource.RLIMIT_NOFILE
+            )
 
     # use_siso may not be set when running `autoninja -help` without `-C`.
     if use_siso is None:
@@ -496,22 +506,24 @@ def _main_inner(input_args,
         ninja_marker = os.path.join(output_dir, ".ninja_log")
         if os.path.exists(ninja_marker) and not os.path.exists(siso_marker):
             print(
-                "Run gn clean before switching from ninja to siso in %s" %
-                output_dir,
+                "Run gn clean before switching from ninja to siso in %s"
+                % output_dir,
                 file=sys.stderr,
             )
             return 1
 
         if j_value:
-            input_args = _convert_ninja_j_to_siso_flags(j_value, use_remoteexec,
-                                                        input_args)
+            input_args = _convert_ninja_j_to_siso_flags(
+                j_value, use_remoteexec, input_args
+            )
 
         # Build ID consistently used in other tools. e.g. Reclient, ninjalog.
         os.environ.setdefault("SISO_BUILD_ID", build_id)
         with android_build_server_helper.build_server_context(
-                build_id,
-                output_dir,
-                use_android_build_server=use_android_build_server):
+            build_id,
+            output_dir,
+            use_android_build_server=use_android_build_server,
+        ):
 
             def run_siso(args):
                 if summarize_build:
@@ -519,25 +531,29 @@ def _main_inner(input_args,
                     # settings are being used.
                     _print_cmd(args)
                 return siso.main(args, telemetry_cfg)
+
             if use_remoteexec:
                 if use_reclient and not t_specified:
                     # TODO: crbug.com/379584977 - Remove siso/reclient
                     # integration.
-                    return reclient_helper.run_siso([
-                        'siso',
-                        'ninja',
-                        # Do not authenticate when using Reproxy.
-                        '-project=',
-                        '-reapi_instance=',
-                        '-reapi_address=',
-                    ] + input_args[1:])
+                    return reclient_helper.run_siso(
+                        [
+                            "siso",
+                            "ninja",
+                            # Do not authenticate when using Reproxy.
+                            "-project=",
+                            "-reapi_instance=",
+                            "-reapi_address=",
+                        ]
+                        + input_args[1:]
+                    )
                 return run_siso(["siso", "ninja"] + input_args[1:])
             return run_siso(["siso", "ninja", "--offline"] + input_args[1:])
 
     if os.path.exists(siso_marker):
         print(
-            "Run gn clean before switching from siso to ninja in %s" %
-            output_dir,
+            "Run gn clean before switching from siso to ninja in %s"
+            % output_dir,
             file=sys.stderr,
         )
         return 1
@@ -548,12 +564,13 @@ def _main_inner(input_args,
     if "--virtual-build-path" in input_args:
         print(
             "Warning: --virtual-build-path is only supported when using Siso. Ignoring flag.",
-            file=sys.stderr)
+            file=sys.stderr,
+        )
         input_args = [
             arg for arg in input_args if arg != "--virtual-build-path"
         ]
 
-    ninja_args = ['ninja']
+    ninja_args = ["ninja"]
     num_cores = multiprocessing.cpu_count()
     if not j_value and not t_specified:
         if not offline and use_remoteexec:
@@ -565,8 +582,8 @@ def _main_inner(input_args,
                 num_cores //= 2
 
             core_multiplier = int(
-                os.environ.get("NINJA_CORE_MULTIPLIER",
-                               default_core_multiplier))
+                os.environ.get("NINJA_CORE_MULTIPLIER", default_core_multiplier)
+            )
             j_value = num_cores * core_multiplier
 
             core_limit = int(os.environ.get("NINJA_CORE_LIMIT", j_value))
@@ -603,8 +620,8 @@ def _main_inner(input_args,
         _print_cmd(ninja_args)
 
     with android_build_server_helper.build_server_context(
-            build_id, output_dir,
-            use_android_build_server=use_android_build_server):
+        build_id, output_dir, use_android_build_server=use_android_build_server
+    ):
         if use_reclient and not t_specified:
             return reclient_helper.run_ninja(ninja_args)
         return ninja.main(ninja_args)
@@ -643,9 +660,12 @@ def _upload_sisolog(input_args: list[str], build_id: str):
     for file in _SISO_FILES_TO_UPLOAD:
         # This folder structure mimics the recipe used by the RBE workers
         # https://source.chromium.org/chromium/infra/infra_superproject/+/main:build/recipes/recipe_modules/siso/api.py
-        formatted_gcs_path = os.path.join(_LOGS_STORAGE_BUCKET, top_dir,
-                                          f"reports.{timestamp}.{build_id}",
-                                          file)
+        formatted_gcs_path = os.path.join(
+            _LOGS_STORAGE_BUCKET,
+            top_dir,
+            f"reports.{timestamp}.{build_id}",
+            file,
+        )
         siso_logs_file = os.path.join(out_dir, file)
 
         # Run upload script without wait.

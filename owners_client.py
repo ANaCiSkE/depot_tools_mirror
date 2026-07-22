@@ -24,8 +24,9 @@ class OwnersClient(object):
     All code should use this class to interact with OWNERS files instead of the
     owners database in owners.py
     """
+
     # '*' means that everyone can approve.
-    EVERYONE = '*'
+    EVERYONE = "*"
 
     # Possible status of a file.
     # - INSUFFICIENT_REVIEWERS: The path needs owners approval, but none of its
@@ -33,16 +34,16 @@ class OwnersClient(object):
     # - PENDING: An owner of this path has been added as reviewer, but approval
     #   has not been given yet.
     # - APPROVED: The path has been approved by an owner.
-    APPROVED = 'APPROVED'
-    PENDING = 'PENDING'
-    INSUFFICIENT_REVIEWERS = 'INSUFFICIENT_REVIEWERS'
+    APPROVED = "APPROVED"
+    PENDING = "PENDING"
+    INSUFFICIENT_REVIEWERS = "INSUFFICIENT_REVIEWERS"
 
     def ListOwners(self, path):
         """List all owners for a file.
 
         The returned list is sorted so that better owners appear first.
         """
-        raise Exception('Not implemented')
+        raise Exception("Not implemented")
 
     def BatchListOwners(self, paths):
         """List all owners for a group of files.
@@ -52,9 +53,10 @@ class OwnersClient(object):
         if not paths:
             return dict()
         nproc = min(gerrit_util.MAX_CONCURRENT_CONNECTION, len(paths))
-        with git_common.ScopedPool(nproc, kind='threads') as pool:
+        with git_common.ScopedPool(nproc, kind="threads") as pool:
             return dict(
-                pool.imap_unordered(lambda p: (p, self.ListOwners(p)), paths))
+                pool.imap_unordered(lambda p: (p, self.ListOwners(p)), paths)
+            )
 
     def GetFilesApprovalStatus(self, paths, approvers, reviewers):
         """Check the approval status for the given paths.
@@ -117,9 +119,9 @@ class OwnersClient(object):
 
         return selected
 
-    def SuggestMinimalOwners(self,
-                             paths: list[str],
-                             exclude: list[str] = None) -> list[str]:
+    def SuggestMinimalOwners(
+        self, paths: list[str], exclude: list[str] = None
+    ) -> list[str]:
         """
         Suggest a set of owners for the given paths. Never return an owner in
         the |exclude| list.
@@ -145,7 +147,8 @@ class OwnersClient(object):
 
         # Return an arbitrary common owner, preferring those with a good score
         sorted_common_owners = [
-            owner for owner in self.ScoreOwners(paths, exclude=exclude)
+            owner
+            for owner in self.ScoreOwners(paths, exclude=exclude)
             if owner in common_owners
         ]
 
@@ -155,6 +158,7 @@ class OwnersClient(object):
 
 class GerritClient(OwnersClient):
     """Implement OwnersClient using OWNERS REST API."""
+
     def __init__(self, host, project, branch):
         super(GerritClient, self).__init__()
 
@@ -172,7 +176,7 @@ class GerritClient(OwnersClient):
 
     def _FetchOwners(self, path, cache, highest_score_only=False):
         # Always use slashes as separators.
-        path = path.replace(os.sep, '/')
+        path = path.replace(os.sep, "/")
         if path not in cache:
             # GetOwnersForFile returns a list of account details sorted by order
             # of best reviewer for path. If owners have the same score, the
@@ -184,14 +188,16 @@ class GerritClient(OwnersClient):
                 path,
                 resolve_all_users=False,
                 highest_score_only=highest_score_only,
-                seed=self._seed)
+                seed=self._seed,
+            )
             cache[path] = [
-                d['account']['email'] for d in data['code_owners']
-                if 'account' in d and 'email' in d['account']
+                d["account"]["email"]
+                for d in data["code_owners"]
+                if "account" in d and "email" in d["account"]
             ]
             # If owned_by_all_users is true, add everyone as an owner at the end
             # of the owners list.
-            if data.get('owned_by_all_users', False):
+            if data.get("owned_by_all_users", False):
                 cache[path].append(self.EVERYONE)
         return cache[path]
 
@@ -199,19 +205,21 @@ class GerritClient(OwnersClient):
         return self._FetchOwners(path, self._owners_cache)
 
     def ListBestOwners(self, path):
-        return self._FetchOwners(path,
-                                 self._best_owners_cache,
-                                 highest_score_only=True)
+        return self._FetchOwners(
+            path, self._best_owners_cache, highest_score_only=True
+        )
 
     def BatchListBestOwners(self, paths):
         """List only the higest-scoring owners for a group of files.
 
         Returns a dictionary {path: [owners]}.
         """
-        with git_common.ScopedPool(kind='threads') as pool:
+        with git_common.ScopedPool(kind="threads") as pool:
             return dict(
-                pool.imap_unordered(lambda p: (p, self.ListBestOwners(p)),
-                                    paths))
+                pool.imap_unordered(
+                    lambda p: (p, self.ListBestOwners(p)), paths
+                )
+            )
 
 
 def GetCodeOwnersClient(host, project, branch, cache=None):
@@ -232,7 +240,8 @@ def GetCodeOwnersClient(host, project, branch, cache=None):
     if is_enabled:
         return GerritClient(host, project, branch)
     raise Exception(
-        'code-owners plugin is not enabled. Ask your host admin to enable it '
-        'on %s. Read more about code-owners at '
-        'https://chromium-review.googlesource.com/'
-        'plugins/code-owners/Documentation/index.html.' % host)
+        "code-owners plugin is not enabled. Ask your host admin to enable it "
+        "on %s. Read more about code-owners at "
+        "https://chromium-review.googlesource.com/"
+        "plugins/code-owners/Documentation/index.html." % host
+    )

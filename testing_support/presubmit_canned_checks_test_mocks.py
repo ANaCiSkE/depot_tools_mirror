@@ -15,11 +15,13 @@ from presubmit_canned_checks import _ReportErrorFileAndLine
 
 
 class MockCannedChecks(object):
-    def _FindNewViolationsOfRule(self,
-                                 callable_rule,
-                                 input_api,
-                                 source_file_filter=None,
-                                 error_formatter=_ReportErrorFileAndLine):
+    def _FindNewViolationsOfRule(
+        self,
+        callable_rule,
+        input_api,
+        source_file_filter=None,
+        error_formatter=_ReportErrorFileAndLine,
+    ):
         """Find all newly introduced violations of a per-line rule (a callable).
 
         Arguments:
@@ -35,21 +37,23 @@ class MockCannedChecks(object):
             A list of the newly-introduced violations reported by the rule.
         """
         errors = []
-        for f in input_api.AffectedFiles(include_deletes=False,
-                                         file_filter=source_file_filter):
+        for f in input_api.AffectedFiles(
+            include_deletes=False, file_filter=source_file_filter
+        ):
             # For speed, we do two passes, checking first the full file.
             # Shelling out to the SCM to determine the changed region can be
             # quite expensive on Win32.  Assuming that most files will be kept
             # problem-free, we can skip the SCM operations most of the time.
-            extension = str(f.LocalPath()).rsplit('.', 1)[-1]
+            extension = str(f.LocalPath()).rsplit(".", 1)[-1]
             if all(callable_rule(extension, line) for line in f.NewContents()):
                 # No violation found in full text: can skip considering diff.
                 continue
 
             for line_num, line in f.ChangedContents():
                 if not callable_rule(extension, line):
-                    errors.append(error_formatter(f.LocalPath(), line_num,
-                                                  line))
+                    errors.append(
+                        error_formatter(f.LocalPath(), line_num, line)
+                    )
 
         return errors
 
@@ -79,11 +83,11 @@ class MockInputApi(object):
         self.no_diffs = False
         self.change = MockChange([])
         self.presubmit_local_path = os.path.dirname(__file__)
-        self.logging = logging.getLogger('PRESUBMIT')
+        self.logging = logging.getLogger("PRESUBMIT")
 
     @property
     def is_windows(self):
-        return self.platform == 'win32'
+        return self.platform == "win32"
 
     def CreateMockFileInPath(self, f_list):
         self.os_path.exists = lambda x: x in f_list
@@ -92,7 +96,7 @@ class MockInputApi(object):
         for file in self.files:  # pylint: disable=redefined-builtin
             if file_filter and not file_filter(file):
                 continue
-            if not include_deletes and file.Action() == 'D':
+            if not include_deletes and file.Action() == "D":
                 continue
             yield file
 
@@ -103,13 +107,15 @@ class MockInputApi(object):
         self,
         file,  # pylint: disable=redefined-builtin
         files_to_check=(),
-        files_to_skip=()):
+        files_to_skip=(),
+    ):
         local_path = file.LocalPath()
         found_in_files_to_check = not files_to_check
         if files_to_check:
             if isinstance(files_to_check, str):
                 raise TypeError(
-                    'files_to_check should be an iterable of strings')
+                    "files_to_check should be an iterable of strings"
+                )
             for pattern in files_to_check:
                 compiled_pattern = re.compile(pattern)
                 if compiled_pattern.search(local_path):
@@ -118,7 +124,8 @@ class MockInputApi(object):
         if files_to_skip:
             if isinstance(files_to_skip, str):
                 raise TypeError(
-                    'files_to_skip should be an iterable of strings')
+                    "files_to_skip should be an iterable of strings"
+                )
             for pattern in files_to_skip:
                 compiled_pattern = re.compile(pattern)
                 if compiled_pattern.search(local_path):
@@ -131,12 +138,12 @@ class MockInputApi(object):
     def PresubmitLocalPath(self):
         return self.presubmit_local_path
 
-    def ReadFile(self, filename, mode='rU'):
-        if hasattr(filename, 'AbsoluteLocalPath'):
+    def ReadFile(self, filename, mode="rU"):
+        if hasattr(filename, "AbsoluteLocalPath"):
             filename = filename.AbsoluteLocalPath()
         for file_ in self.files:
             if file_.LocalPath() == filename:
-                return '\n'.join(file_.NewContents())
+                return "\n".join(file_.NewContents())
         # Otherwise, file is not in our mock API.
         raise IOError("No such file or directory: '%s'" % filename)
 
@@ -147,8 +154,9 @@ class MockOutputApi(object):
     An instance of this class can be passed to presubmit unittests for outputing
     various types of results.
     """
+
     class PresubmitResult(object):
-        def __init__(self, message, items=None, long_text=''):
+        def __init__(self, message, items=None, long_text=""):
             self.message = message
             self.items = items
             self.long_text = long_text
@@ -157,28 +165,32 @@ class MockOutputApi(object):
             return self.message
 
     class PresubmitError(PresubmitResult):
-        def __init__(self, message, items=None, long_text=''):
-            MockOutputApi.PresubmitResult.__init__(self, message, items,
-                                                   long_text)
-            self.type = 'error'
+        def __init__(self, message, items=None, long_text=""):
+            MockOutputApi.PresubmitResult.__init__(
+                self, message, items, long_text
+            )
+            self.type = "error"
 
     class PresubmitPromptWarning(PresubmitResult):
-        def __init__(self, message, items=None, long_text=''):
-            MockOutputApi.PresubmitResult.__init__(self, message, items,
-                                                   long_text)
-            self.type = 'warning'
+        def __init__(self, message, items=None, long_text=""):
+            MockOutputApi.PresubmitResult.__init__(
+                self, message, items, long_text
+            )
+            self.type = "warning"
 
     class PresubmitNotifyResult(PresubmitResult):
-        def __init__(self, message, items=None, long_text=''):
-            MockOutputApi.PresubmitResult.__init__(self, message, items,
-                                                   long_text)
-            self.type = 'notify'
+        def __init__(self, message, items=None, long_text=""):
+            MockOutputApi.PresubmitResult.__init__(
+                self, message, items, long_text
+            )
+            self.type = "notify"
 
     class PresubmitPromptOrNotify(PresubmitResult):
-        def __init__(self, message, items=None, long_text=''):
-            MockOutputApi.PresubmitResult.__init__(self, message, items,
-                                                   long_text)
-            self.type = 'promptOrNotify'
+        def __init__(self, message, items=None, long_text=""):
+            MockOutputApi.PresubmitResult.__init__(
+                self, message, items, long_text
+            )
+            self.type = "promptOrNotify"
 
     def __init__(self):
         self.more_cc = []
@@ -193,22 +205,28 @@ class MockFile(object):
     This class can be used to form the mock list of changed files in
     MockInputApi for presubmit unittests.
     """
-    def __init__(self,
-                 local_path,
-                 new_contents,
-                 old_contents=None,
-                 action='A',
-                 scm_diff=None):
+
+    def __init__(
+        self,
+        local_path,
+        new_contents,
+        old_contents=None,
+        action="A",
+        scm_diff=None,
+    ):
         self._local_path = local_path
         self._new_contents = new_contents
-        self._changed_contents = [(i + 1, l)
-                                  for i, l in enumerate(new_contents)]
+        self._changed_contents = [
+            (i + 1, l) for i, l in enumerate(new_contents)
+        ]
         self._action = action
         if scm_diff:
             self._scm_diff = scm_diff
         else:
-            self._scm_diff = ("--- /dev/null\n+++ %s\n@@ -0,0 +1,%d @@\n" %
-                              (local_path, len(new_contents)))
+            self._scm_diff = "--- /dev/null\n+++ %s\n@@ -0,0 +1,%d @@\n" % (
+                local_path,
+                len(new_contents),
+            )
             for l in new_contents:
                 self._scm_diff += "+%s\n" % l
         self._old_contents = old_contents
@@ -263,7 +281,7 @@ class MockChange(object):
     current change.
     """
 
-    def __init__(self, changed_files, description='', issue=0):
+    def __init__(self, changed_files, description="", issue=0):
         self._changed_files = changed_files
         self.footers = defaultdict(list)
         self._description = description
@@ -272,10 +290,9 @@ class MockChange(object):
     def LocalPaths(self):
         return self._changed_files
 
-    def AffectedFiles(self,
-                      include_dirs=False,
-                      include_deletes=True,
-                      file_filter=None):
+    def AffectedFiles(
+        self, include_dirs=False, include_deletes=True, file_filter=None
+    ):
         return self._changed_files
 
     def GitFootersFromDescription(self):

@@ -11,30 +11,30 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class CrashpadConfig(config_util.Config):
     """Basic Config class for Crashpad."""
+
     @staticmethod
     def fetch_spec(props):
         spec = {
-            'solutions': [
+            "solutions": [
                 {
-                    'name': 'crashpad',
-                    'url':
-                    'https://chromium.googlesource.com/crashpad/crashpad.git',
+                    "name": "crashpad",
+                    "url": "https://chromium.googlesource.com/crashpad/crashpad.git",
                 },
             ],
         }
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'crashpad'
+        return "crashpad"
 
 
 def main(argv=None):
     return CrashpadConfig().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

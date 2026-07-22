@@ -25,8 +25,9 @@ import subcommand
 # Analogous to gc.autopacklimit git config.
 GC_AUTOPACKLIMIT = 50
 
-GIT_CACHE_CORRUPT_MESSAGE = 'WARNING: The Git cache is corrupt.'
+GIT_CACHE_CORRUPT_MESSAGE = "WARNING: The Git cache is corrupt."
 INIT_SENTIENT_FILE = ".mirror_init"
+
 
 def _bootstrap_concurrency():
     """Max concurrent gsutil snapshot downloads.
@@ -39,7 +40,7 @@ def _bootstrap_concurrency():
     $GIT_CACHE_BOOTSTRAP_CONCURRENCY (gsutil spawns many threads, so a lower
     value can ease resource pressure on very large fetches).
     """
-    env = os.environ.get('GIT_CACHE_BOOTSTRAP_CONCURRENCY')
+    env = os.environ.get("GIT_CACHE_BOOTSTRAP_CONCURRENCY")
     if env:
         try:
             return max(1, int(env))
@@ -64,10 +65,10 @@ class ClobberNeeded(Exception):
 
 
 class Mirror(object):
-
-    git_exe = 'git.bat' if sys.platform.startswith('win') else 'git'
-    gsutil_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              'gsutil.py')
+    git_exe = "git.bat" if sys.platform.startswith("win") else "git"
+    gsutil_exe = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "gsutil.py"
+    )
     cachepath_lock = threading.Lock()
 
     UNSET_CACHEPATH = object()
@@ -82,13 +83,13 @@ class Mirror(object):
         Returns (fetchspec, value_regex), where value_regex can be used
         with 'git config --replace-all'.
         """
-        parts = spec.split(':', 1)
-        src = parts[0].lstrip('+').rstrip('/')
-        if not src.startswith('refs/'):
-            src = 'refs/heads/%s' % src
-        dest = parts[1].rstrip('/') if len(parts) > 1 else src
-        regex = r'\+%s:.*' % src.replace('*', r'\*')
-        return ('+%s:%s' % (src, dest), regex)
+        parts = spec.split(":", 1)
+        src = parts[0].lstrip("+").rstrip("/")
+        if not src.startswith("refs/"):
+            src = "refs/heads/%s" % src
+        dest = parts[1].rstrip("/") if len(parts) > 1 else src
+        regex = r"\+%s:.*" % src.replace("*", r"\*")
+        return ("+%s:%s" % (src, dest), regex)
 
     def __init__(self, url, refs=None, commits=None, print_func=None):
         self.url = url
@@ -111,8 +112,9 @@ class Mirror(object):
         try:
             yield
         finally:
-            self.print('%s took %.1f minutes' % (what,
-                                                 (time.time() - start) / 60.0))
+            self.print(
+                "%s took %.1f minutes" % (what, (time.time() - start) / 60.0)
+            )
 
     @property
     def _init_sentient_file(self):
@@ -121,30 +123,31 @@ class Mirror(object):
     # Public googlesource hosts snapshotted into chromium-git-cache by the
     # git_cache_updater builders; keep in sync with that producer config.
     # A host with no snapshot for a repo just falls back to a normal clone.
-    BOOTSTRAP_BUCKET_HOSTS = frozenset((
-        'chromium.googlesource.com',
-        'aomedia.googlesource.com',
-        'android.googlesource.com',
-        'boringssl.googlesource.com',
-        'dawn.googlesource.com',
-        'pdfium.googlesource.com',
-        'quiche.googlesource.com',
-        'skia.googlesource.com',
-        'swiftshader.googlesource.com',
-        'webrtc.googlesource.com',
-    ))
+    BOOTSTRAP_BUCKET_HOSTS = frozenset(
+        (
+            "chromium.googlesource.com",
+            "aomedia.googlesource.com",
+            "android.googlesource.com",
+            "boringssl.googlesource.com",
+            "dawn.googlesource.com",
+            "pdfium.googlesource.com",
+            "quiche.googlesource.com",
+            "skia.googlesource.com",
+            "swiftshader.googlesource.com",
+            "webrtc.googlesource.com",
+        )
+    )
 
     # Map of aliased URLs to canonical URLs for caching purposes. Repos in this
     # map are pristine mirrors, and can share the upstream repo's git cache & GS
     # bootstrap snapshot.
     URL_ALIASES = {
-        'chrome-internal.googlesource.com/chrome/experimental/chromium/src':
-        'chromium.googlesource.com/chromium/src',
+        "chrome-internal.googlesource.com/chrome/experimental/chromium/src": "chromium.googlesource.com/chromium/src",
     }
 
     @property
     def bootstrap_bucket(self):
-        b = os.getenv('OVERRIDE_BOOTSTRAP_BUCKET')
+        b = os.getenv("OVERRIDE_BOOTSTRAP_BUCKET")
         if b:
             return b
         # The URL might be an alias from URL_ALIASES. So need to check the URL
@@ -152,13 +155,13 @@ class Mirror(object):
         cache_dir_url = self.CacheDirToUrl(self.basedir)
         u = urllib.parse.urlparse(cache_dir_url)
         if u.netloc in self.BOOTSTRAP_BUCKET_HOSTS:
-            return 'chromium-git-cache'
+            return "chromium-git-cache"
         # Not recognized.
         return None
 
     @property
     def _gs_path(self):
-        return 'gs://%s/v2/%s' % (self.bootstrap_bucket, self.basedir)
+        return "gs://%s/v2/%s" % (self.bootstrap_bucket, self.basedir)
 
     @classmethod
     def FromPath(cls, path):
@@ -170,71 +173,80 @@ class Mirror(object):
         if os.path.isdir(url):
             # Ignore the drive letter in Windows
             url = os.path.splitdrive(url)[1]
-            return url.replace('-', '--').replace(os.sep, '-')
+            return url.replace("-", "--").replace(os.sep, "-")
 
         parsed = urllib.parse.urlparse(url)
         norm_url = parsed.netloc + parsed.path
-        if norm_url.endswith('.git'):
-            norm_url = norm_url[:-len('.git')]
+        if norm_url.endswith(".git"):
+            norm_url = norm_url[: -len(".git")]
 
         # Use the same dir for authenticated URLs and unauthenticated URLs.
-        norm_url = norm_url.replace('googlesource.com/a/', 'googlesource.com/')
+        norm_url = norm_url.replace("googlesource.com/a/", "googlesource.com/")
 
         norm_url = Mirror.URL_ALIASES.get(norm_url, norm_url)
 
-        norm_url = norm_url.replace(':', '__')
+        norm_url = norm_url.replace(":", "__")
 
-        return norm_url.replace('-', '--').replace('/', '-').lower()
+        return norm_url.replace("-", "--").replace("/", "-").lower()
 
     @staticmethod
     def CacheDirToUrl(path):
         """Convert a cache dir path to its corresponding url."""
-        netpath = re.sub(r'\b-\b', '/',
-                         os.path.basename(path)).replace('--', '-')
+        netpath = re.sub(r"\b-\b", "/", os.path.basename(path)).replace(
+            "--", "-"
+        )
 
-        netpath = netpath.replace('__', ':')
+        netpath = netpath.replace("__", ":")
 
-        if netpath.startswith('git@'):
+        if netpath.startswith("git@"):
             return netpath
 
-        return 'https://%s' % netpath
+        return "https://%s" % netpath
 
     @classmethod
     def SetCachePath(cls, cachepath):
         with cls.cachepath_lock:
-            setattr(cls, 'cachepath', cachepath)
+            setattr(cls, "cachepath", cachepath)
 
     @classmethod
     def GetCachePath(cls):
         with cls.cachepath_lock:
-            if not hasattr(cls, 'cachepath'):
+            if not hasattr(cls, "cachepath"):
                 try:
-                    cachepath = subprocess.check_output(
-                        [cls.git_exe, 'config'] + cls._GIT_CONFIG_LOCATION +
-                        ['--type', 'path', 'cache.cachepath']).decode(
-                            'utf-8', 'ignore').strip()
+                    cachepath = (
+                        subprocess.check_output(
+                            [cls.git_exe, "config"]
+                            + cls._GIT_CONFIG_LOCATION
+                            + ["--type", "path", "cache.cachepath"]
+                        )
+                        .decode("utf-8", "ignore")
+                        .strip()
+                    )
                 except subprocess.CalledProcessError:
-                    cachepath = os.environ.get('GIT_CACHE_PATH',
-                                               cls.UNSET_CACHEPATH)
-                setattr(cls, 'cachepath', cachepath)
+                    cachepath = os.environ.get(
+                        "GIT_CACHE_PATH", cls.UNSET_CACHEPATH
+                    )
+                setattr(cls, "cachepath", cachepath)
 
-            ret = getattr(cls, 'cachepath')
+            ret = getattr(cls, "cachepath")
             if ret is cls.UNSET_CACHEPATH:
-                raise RuntimeError('No cache.cachepath git configuration or '
-                                   '$GIT_CACHE_PATH is set.')
+                raise RuntimeError(
+                    "No cache.cachepath git configuration or "
+                    "$GIT_CACHE_PATH is set."
+                )
             return ret
 
     @staticmethod
     def _GetMostRecentCacheDirectory(ls_out_set):
-        ready_file_pattern = re.compile(r'.*/(\d+).ready$')
+        ready_file_pattern = re.compile(r".*/(\d+).ready$")
         ready_dirs = []
 
         for name in ls_out_set:
             m = ready_file_pattern.match(name)
             # Given <path>/<number>.ready,
             # we are interested in <path>/<number> directory
-            if m and (name[:-len('.ready')] + '/') in ls_out_set:
-                ready_dirs.append((int(m.group(1)), name[:-len('.ready')]))
+            if m and (name[: -len(".ready")] + "/") in ls_out_set:
+                ready_dirs.append((int(m.group(1)), name[: -len(".ready")]))
 
         if not ready_dirs:
             return None
@@ -245,31 +257,32 @@ class Mirror(object):
         # This is somehow racy on Windows.
         # Catching OSError because WindowsError isn't portable and
         # pylint complains.
-        gclient_utils.exponential_backoff_retry(lambda: os.rename(src, dst),
-                                                excs=(OSError, ),
-                                                name='rename [%s] => [%s]' %
-                                                (src, dst),
-                                                printerr=self.print)
+        gclient_utils.exponential_backoff_retry(
+            lambda: os.rename(src, dst),
+            excs=(OSError,),
+            name="rename [%s] => [%s]" % (src, dst),
+            printerr=self.print,
+        )
 
     def RunGit(self, cmd, print_stdout=True, **kwargs):
         """Run git in a subprocess."""
-        cwd = kwargs.setdefault('cwd', self.mirror_path)
+        cwd = kwargs.setdefault("cwd", self.mirror_path)
         if "--git-dir" not in cmd:
-            cmd = ['--git-dir', os.path.abspath(cwd)] + cmd
+            cmd = ["--git-dir", os.path.abspath(cwd)] + cmd
 
-        kwargs.setdefault('print_stdout', False)
+        kwargs.setdefault("print_stdout", False)
         if print_stdout:
-            kwargs.setdefault('filter_fn', self.print)
-        env = kwargs.get('env') or kwargs.setdefault('env', os.environ.copy())
-        env.setdefault('GIT_ASKPASS', 'true')
-        env.setdefault('SSH_ASKPASS', 'true')
-        self.print('running "git %s" in "%s"' % (' '.join(cmd), cwd))
+            kwargs.setdefault("filter_fn", self.print)
+        env = kwargs.get("env") or kwargs.setdefault("env", os.environ.copy())
+        env.setdefault("GIT_ASKPASS", "true")
+        env.setdefault("SSH_ASKPASS", "true")
+        self.print('running "git %s" in "%s"' % (" ".join(cmd), cwd))
         return gclient_utils.CheckCallAndFilter([self.git_exe] + cmd, **kwargs)
 
     def config(self, reset_fetch_config=False):
         if reset_fetch_config:
             try:
-                self.RunGit(['config', '--unset-all', 'remote.origin.fetch'])
+                self.RunGit(["config", "--unset-all", "remote.origin.fetch"])
             except subprocess.CalledProcessError as e:
                 # If exit code was 5, it means we attempted to unset a config
                 # that didn't exist. Ignore it.
@@ -279,7 +292,7 @@ class Mirror(object):
         # Don't run git-gc in a daemon.  Bad things can happen if it gets
         # killed.
         try:
-            self.RunGit(['config', 'gc.autodetach', '0'])
+            self.RunGit(["config", "gc.autodetach", "0"])
         except subprocess.CalledProcessError:
             # Hard error, need to clobber.
             raise ClobberNeeded()
@@ -288,25 +301,38 @@ class Mirror(object):
         # repositories, and there's no way to track progress and make sure it's
         # not stuck.
         if self.supported_project():
-            self.RunGit(['config', 'gc.autopacklimit', '0'])
+            self.RunGit(["config", "gc.autopacklimit", "0"])
 
         # Allocate more RAM for cache-ing delta chains, for better performance
         # of "Resolving deltas".
-        self.RunGit([
-            'config', 'core.deltaBaseCacheLimit',
-            gclient_utils.DefaultDeltaBaseCacheLimit()
-        ])
+        self.RunGit(
+            [
+                "config",
+                "core.deltaBaseCacheLimit",
+                gclient_utils.DefaultDeltaBaseCacheLimit(),
+            ]
+        )
 
-        self.RunGit(['config', 'remote.origin.url', self.url])
-        self.RunGit([
-            'config', '--replace-all', 'remote.origin.fetch',
-            '+refs/heads/*:refs/heads/*', r'\+refs/heads/\*:.*'
-        ])
+        self.RunGit(["config", "remote.origin.url", self.url])
+        self.RunGit(
+            [
+                "config",
+                "--replace-all",
+                "remote.origin.fetch",
+                "+refs/heads/*:refs/heads/*",
+                r"\+refs/heads/\*:.*",
+            ]
+        )
         for spec, value_regex in self.fetch_specs:
-            self.RunGit([
-                'config', '--replace-all', 'remote.origin.fetch', spec,
-                value_regex
-            ])
+            self.RunGit(
+                [
+                    "config",
+                    "--replace-all",
+                    "remote.origin.fetch",
+                    spec,
+                    value_regex,
+                ]
+            )
 
     def get_bootstrap_default_branch(self):
         """Return the default branch (e.g. 'main') from the latest bootstrap
@@ -316,17 +342,18 @@ class Mirror(object):
             return None
         try:
             gsutil = Gsutil(self.gsutil_exe, boto_path=None)
-            code, ls_out, _ = gsutil.check_call('ls', self._gs_path)
+            code, ls_out, _ = gsutil.check_call("ls", self._gs_path)
             if code:
                 return None
             latest = self._GetMostRecentCacheDirectory(
-                set(ls_out.strip().splitlines()))
+                set(ls_out.strip().splitlines())
+            )
             if not latest:
                 return None
-            code, head, _ = gsutil.check_call('cat', latest + '/HEAD')
+            code, head, _ = gsutil.check_call("cat", latest + "/HEAD")
             if code:
                 return None
-            m = re.match(r'ref:\s*refs/heads/(\S+)', head.strip())
+            m = re.match(r"ref:\s*refs/heads/(\S+)", head.strip())
             return m.group(1) if m else None
         except Exception:
             return None
@@ -346,33 +373,41 @@ class Mirror(object):
         # This is determined from the most recent version of a .ready file.
         # The .ready file is only uploaded when an entire directory has been
         # uploaded to GS.
-        _, ls_out, ls_err = gsutil.check_call('ls', self._gs_path)
+        _, ls_out, ls_err = gsutil.check_call("ls", self._gs_path)
         ls_out_set = set(ls_out.strip().splitlines())
         latest_dir = self._GetMostRecentCacheDirectory(ls_out_set)
 
         if not latest_dir:
-            self.print('No bootstrap file for %s found in %s, stderr:\n  %s' %
-                       (self.mirror_path, self.bootstrap_bucket, '  '.join(
-                           (ls_err or '').splitlines(True))))
+            self.print(
+                "No bootstrap file for %s found in %s, stderr:\n  %s"
+                % (
+                    self.mirror_path,
+                    self.bootstrap_bucket,
+                    "  ".join((ls_err or "").splitlines(True)),
+                )
+            )
             return False
 
         try:
             # create new temporary directory locally
-            tempdir = tempfile.mkdtemp(prefix='_cache_tmp',
-                                       dir=self.GetCachePath())
-            self.RunGit(['init', '-b', 'main', '--bare'], cwd=tempdir)
-            self.print('Downloading files in %s/* into %s.' %
-                       (latest_dir, tempdir))
-            with self.print_duration_of('download'):
+            tempdir = tempfile.mkdtemp(
+                prefix="_cache_tmp", dir=self.GetCachePath()
+            )
+            self.RunGit(["init", "-b", "main", "--bare"], cwd=tempdir)
+            self.print(
+                "Downloading files in %s/* into %s." % (latest_dir, tempdir)
+            )
+            with self.print_duration_of("download"):
                 with GSUTIL_CP_SEMAPHORE:
-                    code = gsutil.call('-m', 'cp', '-r', latest_dir + "/*",
-                                       tempdir)
+                    code = gsutil.call(
+                        "-m", "cp", "-r", latest_dir + "/*", tempdir
+                    )
             if code:
                 return False
             # A quick validation that all references are valid.
-            self.RunGit(['for-each-ref'], print_stdout=False, cwd=tempdir)
+            self.RunGit(["for-each-ref"], print_stdout=False, cwd=tempdir)
         except Exception as e:
-            self.print('Encountered error: %s' % str(e), file=sys.stderr)
+            self.print("Encountered error: %s" % str(e), file=sys.stderr)
             gclient_utils.rmtree(tempdir)
             return False
         # delete the old directory
@@ -395,24 +430,25 @@ class Mirror(object):
             if os.path.isfile(self._init_sentient_file):
                 return False
 
-        if sys.platform.startswith('win'):
+        if sys.platform.startswith("win"):
             # Windows .bat scripts use ^ as escape sequence, which means we have
             # to escape it with itself for every .bat invocation.
-            needle = '%s^^^^{commit}' % revision
+            needle = "%s^^^^{commit}" % revision
         else:
-            needle = '%s^{commit}' % revision
+            needle = "%s^{commit}" % revision
         try:
             # cat-file exits with 0 on success, that is git object of given hash
             # was found.
-            self.RunGit(['cat-file', '-e', needle])
+            self.RunGit(["cat-file", "-e", needle])
             return True
         except subprocess.CalledProcessError:
-            self.print('Commit with hash "%s" not found' % revision,
-                       file=sys.stderr)
+            self.print(
+                'Commit with hash "%s" not found' % revision, file=sys.stderr
+            )
             return False
 
     def exists(self):
-        return os.path.isfile(os.path.join(self.mirror_path, 'config'))
+        return os.path.isfile(os.path.join(self.mirror_path, "config"))
 
     def supported_project(self):
         """Returns true if this repo is known to have a bootstrap zip file.
@@ -424,7 +460,8 @@ class Mirror(object):
         the snapshot as an optional clone seed."""
         u = urllib.parse.urlparse(self.url)
         return u.netloc in [
-            'chromium.googlesource.com', 'chrome-internal.googlesource.com'
+            "chromium.googlesource.com",
+            "chrome-internal.googlesource.com",
         ]
 
     def _preserve_fetchspec(self):
@@ -435,50 +472,63 @@ class Mirror(object):
         if not self.exists():
             return
         try:
-            config_fetchspecs = subprocess.check_output([
-                self.git_exe, '--git-dir', self.mirror_path, 'config',
-                '--get-all', 'remote.origin.fetch'
-            ]).decode('utf-8', 'ignore')
+            config_fetchspecs = subprocess.check_output(
+                [
+                    self.git_exe,
+                    "--git-dir",
+                    self.mirror_path,
+                    "config",
+                    "--get-all",
+                    "remote.origin.fetch",
+                ]
+            ).decode("utf-8", "ignore")
             for fetchspec in config_fetchspecs.splitlines():
                 self.fetch_specs.add(self.parse_fetch_spec(fetchspec))
         except subprocess.CalledProcessError:
             logging.warning(
-                'Tried and failed to preserve remote.origin.fetch from the '
-                'existing cache directory.  You may need to manually edit '
-                '%s and "git cache fetch" again.' %
-                os.path.join(self.mirror_path, 'config'))
+                "Tried and failed to preserve remote.origin.fetch from the "
+                "existing cache directory.  You may need to manually edit "
+                '%s and "git cache fetch" again.'
+                % os.path.join(self.mirror_path, "config")
+            )
 
-    def _ensure_bootstrapped(self,
-                             depth,
-                             bootstrap,
-                             reset_fetch_config,
-                             force=False):
-        pack_dir = os.path.join(self.mirror_path, 'objects', 'pack')
+    def _ensure_bootstrapped(
+        self, depth, bootstrap, reset_fetch_config, force=False
+    ):
+        pack_dir = os.path.join(self.mirror_path, "objects", "pack")
         pack_files = []
         if os.path.isdir(pack_dir):
             pack_files = [
-                f for f in os.listdir(pack_dir) if f.endswith('.pack')
+                f for f in os.listdir(pack_dir) if f.endswith(".pack")
             ]
-            self.print('%s has %d .pack files, re-bootstrapping if >%d or ==0' %
-                       (self.mirror_path, len(pack_files), GC_AUTOPACKLIMIT))
+            self.print(
+                "%s has %d .pack files, re-bootstrapping if >%d or ==0"
+                % (self.mirror_path, len(pack_files), GC_AUTOPACKLIMIT)
+            )
 
         # master->main branch migration left the cache in some builders to have
         # its HEAD still pointing to refs/heads/master. This causes bot_update
         # to fail. If in this state, delete the cache and force bootstrap.
         try:
-            with open(os.path.join(self.mirror_path, 'HEAD')) as f:
+            with open(os.path.join(self.mirror_path, "HEAD")) as f:
                 head_ref = f.read()
         except FileNotFoundError:
-            head_ref = ''
+            head_ref = ""
 
         # Check only when HEAD points to master.
-        if 'master' in head_ref:
+        if "master" in head_ref:
             # Some repos could still have master so verify if the ref exists
             # first.
-            show_ref_master_cmd = subprocess.run([
-                Mirror.git_exe, '--git-dir', self.mirror_path, 'show-ref',
-                '--verify', 'refs/heads/master'
-            ])
+            show_ref_master_cmd = subprocess.run(
+                [
+                    Mirror.git_exe,
+                    "--git-dir",
+                    self.mirror_path,
+                    "show-ref",
+                    "--verify",
+                    "refs/heads/master",
+                ]
+            )
 
             if show_ref_master_cmd.returncode != 0:
                 # Remove mirror
@@ -487,15 +537,20 @@ class Mirror(object):
                 # force bootstrap
                 force = True
 
-        should_bootstrap = (force or not self.exists()
-                            or len(pack_files) > GC_AUTOPACKLIMIT
-                            or len(pack_files) == 0)
+        should_bootstrap = (
+            force
+            or not self.exists()
+            or len(pack_files) > GC_AUTOPACKLIMIT
+            or len(pack_files) == 0
+        )
 
         if not should_bootstrap:
             if depth and os.path.exists(
-                    os.path.join(self.mirror_path, 'shallow')):
+                os.path.join(self.mirror_path, "shallow")
+            ):
                 logging.warning(
-                    'Shallow fetch requested, but repo cache already exists.')
+                    "Shallow fetch requested, but repo cache already exists."
+                )
             return
 
         if not self.exists():
@@ -509,8 +564,9 @@ class Mirror(object):
             # Re-bootstrapping an existing mirror; preserve existing fetch spec.
             self._preserve_fetchspec()
 
-        bootstrapped = (not depth and bootstrap
-                        and self.bootstrap_repo(self.mirror_path))
+        bootstrapped = (
+            not depth and bootstrap and self.bootstrap_repo(self.mirror_path)
+        )
 
         if not bootstrapped:
             if not self.exists() or not self.supported_project():
@@ -518,103 +574,119 @@ class Mirror(object):
                 # 1. No previous cache.
                 # 2. Project doesn't have a bootstrap folder.
                 # Start with a bare git dir.
-                self.RunGit(['init', '--bare'])
-                with open(self._init_sentient_file, 'w'):
+                self.RunGit(["init", "--bare"])
+                with open(self._init_sentient_file, "w"):
                     # Create sentient file
                     pass
                 self._set_symbolic_ref()
             else:
                 # Bootstrap failed, previous cache exists; warn and continue.
                 logging.warning(
-                    'Git cache has a lot of pack files (%d). Tried to '
-                    're-bootstrap but failed. Continuing with non-optimized '
-                    'repository.' % len(pack_files))
+                    "Git cache has a lot of pack files (%d). Tried to "
+                    "re-bootstrap but failed. Continuing with non-optimized "
+                    "repository." % len(pack_files)
+                )
 
     def _set_symbolic_ref(self):
         remote_info = gclient_utils.exponential_backoff_retry(
-            lambda: subprocess.check_output([
-                self.git_exe, '--git-dir',
-                os.path.abspath(self.mirror_path), 'remote', 'show', self.url
-            ],
-                                            cwd=self.mirror_path).decode(
-                                                'utf-8', 'ignore').strip())
-        default_branch_regexp = re.compile(r'HEAD branch: (.*)')
+            lambda: (
+                subprocess.check_output(
+                    [
+                        self.git_exe,
+                        "--git-dir",
+                        os.path.abspath(self.mirror_path),
+                        "remote",
+                        "show",
+                        self.url,
+                    ],
+                    cwd=self.mirror_path,
+                )
+                .decode("utf-8", "ignore")
+                .strip()
+            )
+        )
+        default_branch_regexp = re.compile(r"HEAD branch: (.*)")
         m = default_branch_regexp.search(remote_info)
-        if m and m.groups()[0] != '(unknown)':
-            self.RunGit(['symbolic-ref', 'HEAD', 'refs/heads/' + m.groups()[0]])
+        if m and m.groups()[0] != "(unknown)":
+            self.RunGit(["symbolic-ref", "HEAD", "refs/heads/" + m.groups()[0]])
 
-
-    def _fetch(self,
-               verbose,
-               depth,
-               no_fetch_tags,
-               reset_fetch_config,
-               prune=True):
+    def _fetch(
+        self, verbose, depth, no_fetch_tags, reset_fetch_config, prune=True
+    ):
         self.config(reset_fetch_config)
 
-        fetch_cmd = ['fetch']
+        fetch_cmd = ["fetch"]
         if verbose:
-            fetch_cmd.extend(['-v', '--progress'])
+            fetch_cmd.extend(["-v", "--progress"])
         if depth:
-            fetch_cmd.extend(['--depth', str(depth)])
+            fetch_cmd.extend(["--depth", str(depth)])
         if no_fetch_tags:
-            fetch_cmd.append('--no-tags')
+            fetch_cmd.append("--no-tags")
         if prune:
-            fetch_cmd.append('--prune')
-        fetch_cmd.append('origin')
+            fetch_cmd.append("--prune")
+        fetch_cmd.append("origin")
 
-        fetch_specs = subprocess.check_output(
-            [
-                self.git_exe, '--git-dir',
-                os.path.abspath(self.mirror_path), 'config', '--get-all',
-                'remote.origin.fetch'
-            ],
-            cwd=self.mirror_path).decode('utf-8',
-                                         'ignore').strip().splitlines()
+        fetch_specs = (
+            subprocess.check_output(
+                [
+                    self.git_exe,
+                    "--git-dir",
+                    os.path.abspath(self.mirror_path),
+                    "config",
+                    "--get-all",
+                    "remote.origin.fetch",
+                ],
+                cwd=self.mirror_path,
+            )
+            .decode("utf-8", "ignore")
+            .strip()
+            .splitlines()
+        )
         for spec in fetch_specs:
             try:
-                self.print('Fetching %s' % spec)
-                with self.print_duration_of('fetch %s' % spec):
+                self.print("Fetching %s" % spec)
+                with self.print_duration_of("fetch %s" % spec):
                     self.RunGit(fetch_cmd + [spec], retry=True)
             except subprocess.CalledProcessError:
-                if spec == '+refs/heads/*:refs/heads/*':
+                if spec == "+refs/heads/*:refs/heads/*":
                     raise ClobberNeeded()  # Corrupted cache.
-                logging.warning('Fetch of %s failed' % spec)
+                logging.warning("Fetch of %s failed" % spec)
         for commit in self.fetch_commits:
-            self.print('Fetching %s' % commit)
+            self.print("Fetching %s" % commit)
             try:
-                with self.print_duration_of('fetch %s' % commit):
-                    self.RunGit(['fetch', 'origin', commit], retry=True)
+                with self.print_duration_of("fetch %s" % commit):
+                    self.RunGit(["fetch", "origin", commit], retry=True)
             except subprocess.CalledProcessError:
-                logging.warning('Fetch of %s failed' % commit)
+                logging.warning("Fetch of %s failed" % commit)
         if os.path.isfile(self._init_sentient_file):
             os.remove(self._init_sentient_file)
 
         # Since --prune is used, it's possible that HEAD no longer exists (e.g.
         # a repo uses new HEAD and old is removed). This ensures that HEAD still
         # points to a valid commit, otherwise gets a new HEAD.
-        out = self.RunGit(['rev-parse', 'HEAD'], print_stdout=False)
-        if out.startswith(b'HEAD'):
+        out = self.RunGit(["rev-parse", "HEAD"], print_stdout=False)
+        if out.startswith(b"HEAD"):
             self._set_symbolic_ref()
 
-    def populate(self,
-                 depth=None,
-                 no_fetch_tags=False,
-                 shallow=False,
-                 bootstrap=False,
-                 verbose=False,
-                 lock_timeout=0,
-                 reset_fetch_config=False):
+    def populate(
+        self,
+        depth=None,
+        no_fetch_tags=False,
+        shallow=False,
+        bootstrap=False,
+        verbose=False,
+        lock_timeout=0,
+        reset_fetch_config=False,
+    ):
         assert self.GetCachePath()
         if shallow and not depth:
             depth = 10000
         gclient_utils.safe_makedirs(self.GetCachePath())
 
         def bootstrap_cache(force=False):
-            self._ensure_bootstrapped(depth,
-                                      bootstrap,
-                                      reset_fetch_config,
-                                      force=force)
+            self._ensure_bootstrapped(
+                depth, bootstrap, reset_fetch_config, force=force
+            )
             self._fetch(verbose, depth, no_fetch_tags, reset_fetch_config)
 
         def wipe_cache():
@@ -643,31 +715,39 @@ class Mirror(object):
         # <host_url>-<repo>/<host_url>-<repo>/ on the bot. Check for recursed
         # files on the bot here and remove them if found before we upload to GS.
         # See crbug.com/1370443; keep this check until root cause is found.
-        recursed_dir = os.path.join(self.mirror_path,
-                                    self.mirror_path.split(os.path.sep)[-1])
+        recursed_dir = os.path.join(
+            self.mirror_path, self.mirror_path.split(os.path.sep)[-1]
+        )
         if os.path.exists(recursed_dir):
-            self.print('Deleting unexpected directory: %s' % recursed_dir)
+            self.print("Deleting unexpected directory: %s" % recursed_dir)
             gclient_utils.rmtree(recursed_dir)
 
         self.DeleteTmpPackFiles(self.mirror_path)
 
         # The folder is <git number>
         try:
-            gen_number = subprocess.check_output(
-                [self.git_exe, '--git-dir', self.mirror_path,
-                 'number']).decode('utf-8', 'ignore').strip()
+            gen_number = (
+                subprocess.check_output(
+                    [self.git_exe, "--git-dir", self.mirror_path, "number"]
+                )
+                .decode("utf-8", "ignore")
+                .strip()
+            )
         except subprocess.CalledProcessError:
-            self.print('Could not calculate generation number for HEAD; '
-                       'skipping bootstrap update.')
+            self.print(
+                "Could not calculate generation number for HEAD; "
+                "skipping bootstrap update."
+            )
             return
         gsutil = Gsutil(path=self.gsutil_exe, boto_path=None)
 
-        dest_prefix = '%s/%s' % (self._gs_path, gen_number)
+        dest_prefix = "%s/%s" % (self._gs_path, gen_number)
 
         # ls_out lists contents in the format: gs://blah/blah/123...
         self.print('running "gsutil ls %s":' % self._gs_path)
         ls_code, ls_out, ls_error = gsutil.check_call_with_retries(
-            'ls', self._gs_path)
+            "ls", self._gs_path
+        )
         if ls_code != 0:
             self.print(ls_error)
         else:
@@ -675,16 +755,18 @@ class Mirror(object):
 
         # Check to see if folder already exists in gs
         ls_out_set = set(ls_out.strip().splitlines())
-        if (dest_prefix + '/' in ls_out_set
-                and dest_prefix + '.ready' in ls_out_set):
-            print('Cache %s already exists.' % dest_prefix)
+        if (
+            dest_prefix + "/" in ls_out_set
+            and dest_prefix + ".ready" in ls_out_set
+        ):
+            print("Cache %s already exists." % dest_prefix)
             return
 
         # Reduce the number of individual files to download & write on disk.
-        self.RunGit(['pack-refs', '--all'])
+        self.RunGit(["pack-refs", "--all"])
 
         # Run Garbage Collect to compress packfile.
-        gc_args = ['gc', '--prune=all']
+        gc_args = ["gc", "--prune=all"]
         if gc_aggressive:
             # The default "gc --aggressive" is often too aggressive for some
             # machines, since it attempts to create as many threads as there are
@@ -695,18 +777,24 @@ class Mirror(object):
 
             # This might not be strictly necessary, but it's fast and is
             # normally run by 'gc --aggressive', so it shouldn't hurt.
-            self.RunGit(['reflog', 'expire', '--all'])
+            self.RunGit(["reflog", "expire", "--all"])
 
             # These are the default repack settings for 'gc --aggressive'.
             gc_args = [
-                'repack', '-d', '-l', '-f', '--depth=50', '--window=250', '-A',
-                '--unpack-unreachable=all'
+                "repack",
+                "-d",
+                "-l",
+                "-f",
+                "--depth=50",
+                "--window=250",
+                "-A",
+                "--unpack-unreachable=all",
             ]
             # A 1G memory limit seems to provide comparable pack results as the
             # default, even for our largest repos, while preventing runaway
             # memory (at least on current Chromium builders which have about 4G
             # RAM per core).
-            gc_args.append('--window-memory=1g')
+            gc_args.append("--window-memory=1g")
             # NOTE: It might also be possible to avoid thrashing with a larger
             # window (e.g. "--window-memory=2g") by limiting the number of
             # threads created (e.g. "--threads=[cores/2]"). Some limited testing
@@ -717,16 +805,20 @@ class Mirror(object):
 
         self.DeleteTmpPackFiles(self.mirror_path)
 
-        self.print('running "gsutil -m rsync -r -d %s %s"' %
-                   (self.mirror_path, dest_prefix))
-        gsutil.call('-m', 'rsync', '-r', '-d', self.mirror_path, dest_prefix)
+        self.print(
+            'running "gsutil -m rsync -r -d %s %s"'
+            % (self.mirror_path, dest_prefix)
+        )
+        gsutil.call("-m", "rsync", "-r", "-d", self.mirror_path, dest_prefix)
 
         # Create .ready file and upload
-        _, ready_file_name = tempfile.mkstemp(suffix='.ready')
+        _, ready_file_name = tempfile.mkstemp(suffix=".ready")
         try:
-            self.print('running "gsutil cp %s %s.ready"' %
-                       (ready_file_name, dest_prefix))
-            gsutil.call('cp', ready_file_name, '%s.ready' % (dest_prefix))
+            self.print(
+                'running "gsutil cp %s %s.ready"'
+                % (ready_file_name, dest_prefix)
+            )
+            gsutil.call("cp", ready_file_name, "%s.ready" % (dest_prefix))
         finally:
             os.remove(ready_file_name)
 
@@ -740,38 +832,39 @@ class Mirror(object):
         if not prev_dest_prefix:
             return
         for path in ls_out_set:
-            if path in (prev_dest_prefix + '/', prev_dest_prefix + '.ready'):
+            if path in (prev_dest_prefix + "/", prev_dest_prefix + ".ready"):
                 continue
-            if path.endswith('.ready'):
-                gsutil.call('rm', path)
+            if path.endswith(".ready"):
+                gsutil.call("rm", path)
                 continue
-            gsutil.call('-m', 'rm', '-r', path)
+            gsutil.call("-m", "rm", "-r", path)
 
     @staticmethod
     def DeleteTmpPackFiles(path):
-        pack_dir = os.path.join(path, 'objects', 'pack')
+        pack_dir = os.path.join(path, "objects", "pack")
         if not os.path.isdir(pack_dir):
             return
         pack_files = [
-            f for f in os.listdir(pack_dir)
-            if f.startswith('.tmp-') or f.startswith('tmp_pack_')
+            f
+            for f in os.listdir(pack_dir)
+            if f.startswith(".tmp-") or f.startswith("tmp_pack_")
         ]
         for f in pack_files:
             f = os.path.join(pack_dir, f)
             try:
                 os.remove(f)
-                logging.warning('Deleted stale temporary pack file %s' % f)
+                logging.warning("Deleted stale temporary pack file %s" % f)
             except OSError:
-                logging.warning('Unable to delete temporary pack file %s' % f)
+                logging.warning("Unable to delete temporary pack file %s" % f)
 
 
-@subcommand.usage('[url of repo to check for caching]')
-@metrics.collector.collect_metrics('git cache exists')
+@subcommand.usage("[url of repo to check for caching]")
+@metrics.collector.collect_metrics("git cache exists")
 def CMDexists(parser, args):
     """Check to see if there already is a cache of the given repo."""
     _, args = parser.parse_args(args)
     if not len(args) == 1:
-        parser.error('git cache exists only takes exactly one repo url.')
+        parser.error("git cache exists only takes exactly one repo url.")
     url = args[0]
     mirror = Mirror(url)
     if mirror.exists():
@@ -780,30 +873,39 @@ def CMDexists(parser, args):
     return 1
 
 
-@subcommand.usage('[url of repo to create a bootstrap zip file]')
-@metrics.collector.collect_metrics('git cache update-bootstrap')
+@subcommand.usage("[url of repo to create a bootstrap zip file]")
+@metrics.collector.collect_metrics("git cache update-bootstrap")
 def CMDupdate_bootstrap(parser, args):
     """Create and uploads a bootstrap tarball."""
     # Lets just assert we can't do this on Windows.
-    if sys.platform.startswith('win'):
-        print('Sorry, update bootstrap will not work on Windows.',
-              file=sys.stderr)
+    if sys.platform.startswith("win"):
+        print(
+            "Sorry, update bootstrap will not work on Windows.", file=sys.stderr
+        )
         return 1
 
     if gclient_utils.IsEnvCog():
-        print('updating bootstrap is not supported in non-git environment.',
-              file=sys.stderr)
+        print(
+            "updating bootstrap is not supported in non-git environment.",
+            file=sys.stderr,
+        )
         return 1
 
-    parser.add_option('--skip-populate',
-                      action='store_true',
-                      help='Skips "populate" step if mirror already exists.')
-    parser.add_option('--gc-aggressive',
-                      action='store_true',
-                      help='Run aggressive repacking of the repo.')
-    parser.add_option('--prune',
-                      action='store_true',
-                      help='Prune all other cached bundles of the same repo.')
+    parser.add_option(
+        "--skip-populate",
+        action="store_true",
+        help='Skips "populate" step if mirror already exists.',
+    )
+    parser.add_option(
+        "--gc-aggressive",
+        action="store_true",
+        help="Run aggressive repacking of the repo.",
+    )
+    parser.add_option(
+        "--prune",
+        action="store_true",
+        help="Prune all other cached bundles of the same repo.",
+    )
 
     populate_args = args[:]
     options, args = parser.parse_args(args)
@@ -812,7 +914,7 @@ def CMDupdate_bootstrap(parser, args):
     if not options.skip_populate or not mirror.exists():
         CMDpopulate(parser, populate_args)
     else:
-        print('Skipped populate step.')
+        print("Skipped populate step.")
 
     # Get the repo directory.
     _, args2 = parser.parse_args(args)
@@ -822,95 +924,116 @@ def CMDupdate_bootstrap(parser, args):
     return 0
 
 
-@subcommand.usage('[url of repo to add to or update in cache]')
-@metrics.collector.collect_metrics('git cache populate')
+@subcommand.usage("[url of repo to add to or update in cache]")
+@metrics.collector.collect_metrics("git cache populate")
 def CMDpopulate(parser, args):
     """Ensure that the cache has all up-to-date objects for the given repo."""
     if gclient_utils.IsEnvCog():
-        print('populating cache is not supported in non-git environment.',
-              file=sys.stderr)
+        print(
+            "populating cache is not supported in non-git environment.",
+            file=sys.stderr,
+        )
         return 1
 
-    parser.add_option('--depth',
-                      type='int',
-                      help='Only cache DEPTH commits of history')
     parser.add_option(
-        '--no-fetch-tags',
-        action='store_true',
-        help=('Don\'t fetch tags from the server. This can speed up '
-              'fetch considerably when there are many tags.'))
-    parser.add_option('--shallow',
-                      '-s',
-                      action='store_true',
-                      help='Only cache 10000 commits of history')
-    parser.add_option('--ref',
-                      action='append',
-                      help='Specify additional refs to be fetched')
-    parser.add_option('--commit',
-                      action='append',
-                      help='Specify additional commits to be fetched')
-    parser.add_option('--no_bootstrap',
-                      '--no-bootstrap',
-                      action='store_true',
-                      help='Don\'t bootstrap from Google Storage')
-    parser.add_option('--ignore_locks',
-                      '--ignore-locks',
-                      action='store_true',
-                      help='NOOP. This flag will be removed in the future.')
+        "--depth", type="int", help="Only cache DEPTH commits of history"
+    )
     parser.add_option(
-        '--break-locks',
-        action='store_true',
-        help='Break any existing lock instead of just ignoring it')
+        "--no-fetch-tags",
+        action="store_true",
+        help=(
+            "Don't fetch tags from the server. This can speed up "
+            "fetch considerably when there are many tags."
+        ),
+    )
     parser.add_option(
-        '--reset-fetch-config',
-        action='store_true',
+        "--shallow",
+        "-s",
+        action="store_true",
+        help="Only cache 10000 commits of history",
+    )
+    parser.add_option(
+        "--ref", action="append", help="Specify additional refs to be fetched"
+    )
+    parser.add_option(
+        "--commit",
+        action="append",
+        help="Specify additional commits to be fetched",
+    )
+    parser.add_option(
+        "--no_bootstrap",
+        "--no-bootstrap",
+        action="store_true",
+        help="Don't bootstrap from Google Storage",
+    )
+    parser.add_option(
+        "--ignore_locks",
+        "--ignore-locks",
+        action="store_true",
+        help="NOOP. This flag will be removed in the future.",
+    )
+    parser.add_option(
+        "--break-locks",
+        action="store_true",
+        help="Break any existing lock instead of just ignoring it",
+    )
+    parser.add_option(
+        "--reset-fetch-config",
+        action="store_true",
         default=False,
-        help='Reset the fetch config before populating the cache.')
+        help="Reset the fetch config before populating the cache.",
+    )
 
     options, args = parser.parse_args(args)
     if not len(args) == 1:
-        parser.error('git cache populate only takes exactly one repo url.')
+        parser.error("git cache populate only takes exactly one repo url.")
     if options.ignore_locks:
-        print('ignore_locks is no longer used. Please remove its usage.')
+        print("ignore_locks is no longer used. Please remove its usage.")
     if options.break_locks:
-        print('break_locks is no longer used. Please remove its usage.')
+        print("break_locks is no longer used. Please remove its usage.")
     url = args[0]
 
     mirror = Mirror(url, refs=options.ref, commits=options.commit)
     kwargs = {
-        'no_fetch_tags': options.no_fetch_tags,
-        'verbose': options.verbose,
-        'shallow': options.shallow,
-        'bootstrap': not options.no_bootstrap,
-        'lock_timeout': options.timeout,
-        'reset_fetch_config': options.reset_fetch_config,
+        "no_fetch_tags": options.no_fetch_tags,
+        "verbose": options.verbose,
+        "shallow": options.shallow,
+        "bootstrap": not options.no_bootstrap,
+        "lock_timeout": options.timeout,
+        "reset_fetch_config": options.reset_fetch_config,
     }
     if options.depth:
-        kwargs['depth'] = options.depth
+        kwargs["depth"] = options.depth
     mirror.populate(**kwargs)
 
 
-@subcommand.usage('Fetch new commits into cache and current checkout')
-@metrics.collector.collect_metrics('git cache fetch')
+@subcommand.usage("Fetch new commits into cache and current checkout")
+@metrics.collector.collect_metrics("git cache fetch")
 def CMDfetch(parser, args):
     """Update mirror, and fetch in cwd."""
     if gclient_utils.IsEnvCog():
         print(
-            'fetching new commits into cache is not supported in non-git '
-            'environment.',
-            file=sys.stderr)
+            "fetching new commits into cache is not supported in non-git "
+            "environment.",
+            file=sys.stderr,
+        )
         return 1
 
-    parser.add_option('--all', action='store_true', help='Fetch all remotes')
-    parser.add_option('--no_bootstrap',
-                      '--no-bootstrap',
-                      action='store_true',
-                      help='Don\'t (re)bootstrap from Google Storage')
+    parser.add_option("--all", action="store_true", help="Fetch all remotes")
     parser.add_option(
-        '--no-fetch-tags',
-        action='store_true',
-        help=('Don\'t fetch tags from the server. This can speed up '
-              'fetch considerably when there are many tags.'))
+        "--no_bootstrap",
+        "--no-bootstrap",
+        action="store_true",
+        help="Don't (re)bootstrap from Google Storage",
+    )
+    parser.add_option(
+        "--no-fetch-tags",
+        action="store_true",
+        help=(
+            "Don't fetch tags from the server. This can speed up "
+            "fetch considerably when there are many tags."
+        ),
+    )
     options, args = parser.parse_args(args)
 
     # Figure out which remotes to fetch.  This mimics the behavior of regular
@@ -919,76 +1042,92 @@ def CMDfetch(parser, args):
     # ultimate remote to update.
     remotes = []
     if options.all:
-        assert not args, 'fatal: fetch --all does not take repository argument'
-        remotes = subprocess.check_output([Mirror.git_exe, 'remote'])
-        remotes = remotes.decode('utf-8', 'ignore').splitlines()
+        assert not args, "fatal: fetch --all does not take repository argument"
+        remotes = subprocess.check_output([Mirror.git_exe, "remote"])
+        remotes = remotes.decode("utf-8", "ignore").splitlines()
     elif args:
         remotes = args
     else:
         current_branch = subprocess.check_output(
-            [Mirror.git_exe, 'rev-parse', '--abbrev-ref', 'HEAD'])
-        current_branch = current_branch.decode('utf-8', 'ignore').strip()
-        if current_branch != 'HEAD':
+            [Mirror.git_exe, "rev-parse", "--abbrev-ref", "HEAD"]
+        )
+        current_branch = current_branch.decode("utf-8", "ignore").strip()
+        if current_branch != "HEAD":
             upstream = subprocess.check_output(
-                [Mirror.git_exe, 'config',
-                 'branch.%s.remote' % current_branch])
-            upstream = upstream.decode('utf-8', 'ignore').strip()
-            if upstream and upstream != '.':
+                [Mirror.git_exe, "config", "branch.%s.remote" % current_branch]
+            )
+            upstream = upstream.decode("utf-8", "ignore").strip()
+            if upstream and upstream != ".":
                 remotes = [upstream]
     if not remotes:
-        remotes = ['origin']
+        remotes = ["origin"]
 
     cachepath = Mirror.GetCachePath()
     git_dir = os.path.abspath(
-        subprocess.check_output([Mirror.git_exe, 'rev-parse',
-                                 '--git-dir']).decode('utf-8', 'ignore'))
+        subprocess.check_output(
+            [Mirror.git_exe, "rev-parse", "--git-dir"]
+        ).decode("utf-8", "ignore")
+    )
     git_dir = os.path.abspath(git_dir)
     if git_dir.startswith(cachepath):
         mirror = Mirror.FromPath(git_dir)
-        mirror.populate(bootstrap=not options.no_bootstrap,
-                        no_fetch_tags=options.no_fetch_tags,
-                        lock_timeout=options.timeout)
+        mirror.populate(
+            bootstrap=not options.no_bootstrap,
+            no_fetch_tags=options.no_fetch_tags,
+            lock_timeout=options.timeout,
+        )
         return 0
     for remote in remotes:
         remote_url = subprocess.check_output(
-            [Mirror.git_exe, 'config',
-             'remote.%s.url' % remote])
-        remote_url = remote_url.decode('utf-8', 'ignore').strip()
+            [Mirror.git_exe, "config", "remote.%s.url" % remote]
+        )
+        remote_url = remote_url.decode("utf-8", "ignore").strip()
         if remote_url.startswith(cachepath):
             mirror = Mirror.FromPath(remote_url)
             mirror.print = lambda *args: None
-            print('Updating git cache...')
-            mirror.populate(bootstrap=not options.no_bootstrap,
-                            no_fetch_tags=options.no_fetch_tags,
-                            lock_timeout=options.timeout)
-        subprocess.check_call([Mirror.git_exe, 'fetch', remote])
+            print("Updating git cache...")
+            mirror.populate(
+                bootstrap=not options.no_bootstrap,
+                no_fetch_tags=options.no_fetch_tags,
+                lock_timeout=options.timeout,
+            )
+        subprocess.check_call([Mirror.git_exe, "fetch", remote])
     return 0
 
 
 class OptionParser(optparse.OptionParser):
     """Wrapper class for OptionParser to handle global options."""
+
     def __init__(self, *args, **kwargs):
-        optparse.OptionParser.__init__(self, *args, prog='git cache', **kwargs)
+        optparse.OptionParser.__init__(self, *args, prog="git cache", **kwargs)
         self.add_option(
-            '-c',
-            '--cache-dir',
-            help=('Path to the directory containing the caches. Normally '
-                  'deduced from git config cache.cachepath or '
-                  '$GIT_CACHE_PATH.'))
+            "-c",
+            "--cache-dir",
+            help=(
+                "Path to the directory containing the caches. Normally "
+                "deduced from git config cache.cachepath or "
+                "$GIT_CACHE_PATH."
+            ),
+        )
         self.add_option(
-            '-v',
-            '--verbose',
-            action='count',
+            "-v",
+            "--verbose",
+            action="count",
             default=1,
-            help='Increase verbosity (can be passed multiple times)')
-        self.add_option('-q',
-                        '--quiet',
-                        action='store_true',
-                        help='Suppress all extraneous output')
-        self.add_option('--timeout',
-                        type='int',
-                        default=0,
-                        help='Timeout for acquiring cache lock, in seconds')
+            help="Increase verbosity (can be passed multiple times)",
+        )
+        self.add_option(
+            "-q",
+            "--quiet",
+            action="store_true",
+            help="Suppress all extraneous output",
+        )
+        self.add_option(
+            "--timeout",
+            type="int",
+            default=0,
+            help="Timeout for acquiring cache lock, in seconds",
+        )
 
     def parse_args(self, args=None, values=None):
         # Create an optparse.Values object that will store only the actual
@@ -1002,7 +1141,7 @@ class OptionParser(optparse.OptionParser):
         # Store the options passed by the user in an _actual_options attribute.
         # We store only the keys, and not the values, since the values can
         # contain arbitrary information, which might be PII.
-        metrics.collector.add('arguments', list(actual_options.__dict__.keys()))
+        metrics.collector.add("arguments", list(actual_options.__dict__.keys()))
 
         if options.quiet:
             options.verbose = 0
@@ -1015,10 +1154,13 @@ class OptionParser(optparse.OptionParser):
         except RuntimeError:
             global_cache_dir = None
         if options.cache_dir:
-            if global_cache_dir and (os.path.abspath(options.cache_dir) !=
-                                     os.path.abspath(global_cache_dir)):
+            if global_cache_dir and (
+                os.path.abspath(options.cache_dir)
+                != os.path.abspath(global_cache_dir)
+            ):
                 logging.warning(
-                    'Overriding globally-configured cache directory.')
+                    "Overriding globally-configured cache directory."
+                )
             Mirror.SetCachePath(options.cache_dir)
 
         return options, args
@@ -1029,10 +1171,10 @@ def main(argv):
     return dispatcher.execute(OptionParser(), argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         with metrics.collector.print_notice_and_exit():
             sys.exit(main(sys.argv[1:]))
     except KeyboardInterrupt:
-        sys.stderr.write('interrupted\n')
+        sys.stderr.write("interrupted\n")
         sys.exit(1)

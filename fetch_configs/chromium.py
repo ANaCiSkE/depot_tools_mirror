@@ -12,40 +12,41 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class Chromium(config_util.Config):
     """Basic Config class for Chromium."""
+
     @staticmethod
     def fetch_spec(props):
-        url = 'https://chromium.googlesource.com/chromium/src.git'
+        url = "https://chromium.googlesource.com/chromium/src.git"
         solution = {
-            'name': 'src',
-            'url': url,
-            'custom_deps': {},
-            'custom_vars': {},
+            "name": "src",
+            "url": url,
+            "custom_deps": {},
+            "custom_vars": {},
         }
-        if props.get('webkit_revision', '') == 'ToT':
-            solution['custom_vars']['webkit_revision'] = ''
-        if ast.literal_eval(props.get('internal', 'False')):
-            solution['custom_vars']['checkout_src_internal'] = True
+        if props.get("webkit_revision", "") == "ToT":
+            solution["custom_vars"]["webkit_revision"] = ""
+        if ast.literal_eval(props.get("internal", "False")):
+            solution["custom_vars"]["checkout_src_internal"] = True
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
-        if props.get('target_os'):
-            spec['target_os'] = props['target_os'].split(',')
-        if props.get('target_os_only'):
-            spec['target_os_only'] = props['target_os_only']
+        if props.get("target_os"):
+            spec["target_os"] = props["target_os"].split(",")
+        if props.get("target_os_only"):
+            spec["target_os_only"] = props["target_os_only"]
 
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'src'
+        return "src"
 
 
 def main(argv=None):
     return Chromium().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

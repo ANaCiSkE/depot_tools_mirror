@@ -26,9 +26,13 @@ sys.path.insert(0, _METADATA_DIR)
 import restrictive_license_approval_pb2 as rla_pb2
 from google.protobuf import text_format
 
+
 def main():
     if len(sys.argv) != 2:
-        print("Usage: parse_restrictive_license_approval.py <path_to_textproto>", file=sys.stderr)
+        print(
+            "Usage: parse_restrictive_license_approval.py <path_to_textproto>",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     path = sys.argv[1]
@@ -44,12 +48,15 @@ def main():
     for approval in proto_msg.license_approval:
         # Approval requires a License ID and bug.
         if approval.id and approval.bug:
-            approvals.append({
-                "id": approval.id,
-                "bug": approval.bug,
-            })
+            approvals.append(
+                {
+                    "id": approval.id,
+                    "bug": approval.bug,
+                }
+            )
 
     print(json.dumps(approvals))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

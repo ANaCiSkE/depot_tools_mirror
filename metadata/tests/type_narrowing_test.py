@@ -20,6 +20,7 @@ import metadata.fields.known as fields
 from metadata.dependency_metadata import DependencyMetadata
 import metadata.fields.custom.update_mechanism
 
+
 class FieldValidationTest(unittest.TestCase):
     """Tests narrow_type() on fields we validate and extract structural data."""
 
@@ -49,8 +50,9 @@ class FieldValidationTest(unittest.TestCase):
     def test_url(self):
         expect = self._test_on_field(fields.URL)
         expect("", None, "treat empty string as None")
-        expect("https://example.com/", ["https://example.com/"],
-               "return valid url")
+        expect(
+            "https://example.com/", ["https://example.com/"], "return valid url"
+        )
         expect(
             "https://example.com/,\nhttps://example2.com/",
             ["https://example.com/", "https://example2.com/"],
@@ -62,8 +64,9 @@ class FieldValidationTest(unittest.TestCase):
             ["https://example.com"],
             "reject unsupported scheme",
         )
-        expect("HTTPS://example.com", ["https://example.com"],
-               "canonicalize url")
+        expect(
+            "HTTPS://example.com", ["https://example.com"], "canonicalize url"
+        )
         expect("http", [], "reject invalid url")
         expect(
             "This is the canonical repo.",
@@ -86,8 +89,9 @@ class FieldValidationTest(unittest.TestCase):
         expect("0", None, "treat invalid value as None")
         expect("varies", None, "treat invalid value as None")
         expect("2024-01-02", "2024-01-02", "accepts ISO 8601 date")
-        expect("2024-01-02T03:04:05Z", "2024-01-02",
-               "accepts ISO 8601 date time")
+        expect(
+            "2024-01-02T03:04:05Z", "2024-01-02", "accepts ISO 8601 date time"
+        )
         expect("Jan 2 2024", "2024-01-02", "accepts locale format")
         expect(
             "02/03/2000",
@@ -142,32 +146,36 @@ class FieldValidationTest(unittest.TestCase):
         expect("yes", True, "understand truthy value")
         expect("Yes", True, "understand truthy value")
         expect("no", False, "understand falsey value")
-        expect("No, because", False,
-               "understand falsey value, with description")
+        expect(
+            "No, because", False, "understand falsey value, with description"
+        )
 
     def test_shipped(self):
         expect = self._test_on_field(fields.SHIPPED)
         expect("yes", True, "understand truthy value")
         expect("Yes, but", True, "understand truthy value with extra comment")
         expect("no", False, "understand falsey value")
-        expect("no, because", False,
-               "understand falsey value, with extra comment")
+        expect(
+            "no, because", False, "understand falsey value, with extra comment"
+        )
 
     def test_shipped_in_chromium(self):
         expect = self._test_on_field(fields.SHIPPED_IN_CHROMIUM)
         expect("yes", True, "understand truthy value")
         expect("Yes", True, "understand truthy value")
         expect("no", False, "understand falsey value")
-        expect("no, because", False,
-               "understand falsey value, with extra comment")
+        expect(
+            "no, because", False, "understand falsey value, with extra comment"
+        )
 
     def test_license_android_compatible(self):
         expect = self._test_on_field(fields.LICENSE_ANDROID_COMPATIBLE)
         expect("yes", True, "understand truthy value")
         expect("Yes", True, "understand truthy value")
         expect("no", False, "understand falsey value")
-        expect("no, because", False,
-               "understand falsey value, with extra comment")
+        expect(
+            "no, because", False, "understand falsey value, with extra comment"
+        )
 
     def test_cpe_prefix(self):
         expect = self._test_on_field(fields.CPE_PREFIX)
@@ -216,48 +224,88 @@ class FieldValidationTest(unittest.TestCase):
         self.assertEqual(dm.url, None)
         self.assertEqual(dm.is_canonical, True)
 
-
     def test_update_mechanism(self):
         """Tests type narrowing for the Update Mechanism field."""
         expect = self._test_on_field(
-            metadata.fields.custom.update_mechanism.UpdateMechanismField())
+            metadata.fields.custom.update_mechanism.UpdateMechanismField()
+        )
 
         # Test cases that should successfully parse.
-        expect("Autoroll", ("Autoroll", None, None),
-               "parse a valid value with no bug")
-        expect("  Autoroll  ", ("Autoroll", None, None),
-               "parse a valid value and strip whitespace")
-        expect("Manual (https://crbug.com/12345)", ("Manual", None, "https://crbug.com/12345"),
-               "parse a valid value with https://crbug.com/ format")
-        expect("Manual", ("Manual", None, None),
-               "allow Manual with no bug (should still warn)")
-        expect("Static.HardFork (https://crbug.com/12345)",
-               ("Static", "HardFork", "https://crbug.com/12345"),
-               "parse a namespaced value with a bug")
+        expect(
+            "Autoroll",
+            ("Autoroll", None, None),
+            "parse a valid value with no bug",
+        )
+        expect(
+            "  Autoroll  ",
+            ("Autoroll", None, None),
+            "parse a valid value and strip whitespace",
+        )
+        expect(
+            "Manual (https://crbug.com/12345)",
+            ("Manual", None, "https://crbug.com/12345"),
+            "parse a valid value with https://crbug.com/ format",
+        )
+        expect(
+            "Manual",
+            ("Manual", None, None),
+            "allow Manual with no bug (should still warn)",
+        )
+        expect(
+            "Static.HardFork (https://crbug.com/12345)",
+            ("Static", "HardFork", "https://crbug.com/12345"),
+            "parse a namespaced value with a bug",
+        )
 
         # Test cases that are invalid and should not be parsed.
-        expect("Static", (None, None, None),
-               "Static with no bug to be an error")
+        expect(
+            "Static", (None, None, None), "Static with no bug to be an error"
+        )
         expect("", (None, None, None), "treat empty string as None")
         expect("  ", (None, None, None), "treat whitespace-only string as None")
-        expect("Invalid", (None, None, None),
-               "treat a syntactically invalid value as None")
-        expect("Custom (some-bug)", (None, None, None),
-               "treat an unknown mechanism as None")
-        expect("Static.HardFork (A bug link)", (None, None, None),
-               "parse a namespaced value with an invalid comment")
-        expect("Manual (b/12345)", (None, None, None),
-               "not parse a bug with b/")
-        expect("Autoroll (crbug.com/12345)", (None, None, None),
-               "not allow autoroll with a bug")
-        expect("Manual (crbug.com/12345 )", (None, None, None),
-               "not parse a bug with a trailing space")
-        expect("Manual (crbug.com/12345)", (None, None, None),
-               "not parse a value without https://")
-        expect("Manual (https://crbug/12345)", (None, None, None),
-               "not parse a value without .com")
-        expect("Manual (http://crbug.com/12345)", (None, None, None),
-               "not parse a value without https://")
+        expect(
+            "Invalid",
+            (None, None, None),
+            "treat a syntactically invalid value as None",
+        )
+        expect(
+            "Custom (some-bug)",
+            (None, None, None),
+            "treat an unknown mechanism as None",
+        )
+        expect(
+            "Static.HardFork (A bug link)",
+            (None, None, None),
+            "parse a namespaced value with an invalid comment",
+        )
+        expect(
+            "Manual (b/12345)", (None, None, None), "not parse a bug with b/"
+        )
+        expect(
+            "Autoroll (crbug.com/12345)",
+            (None, None, None),
+            "not allow autoroll with a bug",
+        )
+        expect(
+            "Manual (crbug.com/12345 )",
+            (None, None, None),
+            "not parse a bug with a trailing space",
+        )
+        expect(
+            "Manual (crbug.com/12345)",
+            (None, None, None),
+            "not parse a value without https://",
+        )
+        expect(
+            "Manual (https://crbug/12345)",
+            (None, None, None),
+            "not parse a value without .com",
+        )
+        expect(
+            "Manual (http://crbug.com/12345)",
+            (None, None, None),
+            "not parse a value without https://",
+        )
 
 
 if __name__ == "__main__":

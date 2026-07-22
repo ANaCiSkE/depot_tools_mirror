@@ -27,7 +27,7 @@ from . import detector
 from .proto import trace_span_pb2
 from .proto import clientanalytics_pb2
 
-_DEFAULT_ENDPOINT = 'https://play.googleapis.com/log'
+_DEFAULT_ENDPOINT = "https://play.googleapis.com/log"
 _DEFAULT_TIMEOUT = 15
 _DEFAULT_FLUSH_TIMEOUT_MILLIS = 30000
 _DEAULT_MAX_WAIT_SECS = 60
@@ -47,13 +47,15 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         timeout: int = _DEFAULT_TIMEOUT,
         max_wait_secs: int = _DEAULT_MAX_WAIT_SECS,
         max_queue_size: int = _DEFAULT_MAX_QUEUE_SIZE,
-        prefilter: Optional[Callable[[trace_span_pb2.TraceSpan],
-                                     trace_span_pb2.TraceSpan]] = None,
+        prefilter: Optional[
+            Callable[[trace_span_pb2.TraceSpan], trace_span_pb2.TraceSpan]
+        ] = None,
     ) -> None:
         self._endpoint = endpoint
         self._timeout = timeout
         self._prefilter = prefilter or anonymization.AnonymizingFilter(
-            anonymization.Anonymizer())
+            anonymization.Anonymizer()
+        )
         self._log_source = _LOG_SOURCE
         self._next_request_dt = datetime.datetime.now()
         self._max_wait_secs = max_wait_secs
@@ -67,34 +69,37 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         self._queue.extend(spans)
 
         if len(self._queue) >= self._max_queue_size:
-            return (otel_export.SpanExportResult.SUCCESS
-                    if self._export_batch() else
-                    otel_export.SpanExportResult.FAILURE)
+            return (
+                otel_export.SpanExportResult.SUCCESS
+                if self._export_batch()
+                else otel_export.SpanExportResult.FAILURE
+            )
 
         return otel_export.SpanExportResult.SUCCESS
 
     def shutdown(self) -> None:
         self.force_flush()
 
-    def force_flush(self,
-                    timeout_millis: int = _DEFAULT_FLUSH_TIMEOUT_MILLIS
-                    ) -> bool:
+    def force_flush(
+        self, timeout_millis: int = _DEFAULT_FLUSH_TIMEOUT_MILLIS
+    ) -> bool:
         if self._queue:
             return self._export_batch(timeout=timeout_millis / 1000)
 
         return True
 
     def _translate_context(
-            self, data: otel_trace_api.SpanContext
+        self, data: otel_trace_api.SpanContext
     ) -> trace_span_pb2.TraceSpan.Context:
         ctx = trace_span_pb2.TraceSpan.Context()
-        ctx.trace_id = f'0x{otel_trace_api.format_trace_id(data.trace_id)}'
-        ctx.span_id = f'0x{otel_trace_api.format_span_id(data.span_id)}'
+        ctx.trace_id = f"0x{otel_trace_api.format_trace_id(data.trace_id)}"
+        ctx.span_id = f"0x{otel_trace_api.format_span_id(data.span_id)}"
         ctx.trace_state = repr(data.trace_state)
         return ctx
 
-    def _translate_attributes(self,
-                              data: otel_types.Attributes) -> struct_pb2.Struct:
+    def _translate_attributes(
+        self, data: otel_types.Attributes
+    ) -> struct_pb2.Struct:
         patch = {}
         for key, value in data.items():
             if isinstance(value, tuple):
@@ -105,29 +110,31 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         try:
             struct.update(patch)
         except Exception as exception:
-            logging.debug('Set attribute failed: %s', exception)
+            logging.debug("Set attribute failed: %s", exception)
         return struct
 
     def _translate_span_attributes(
-            self, data: otel_trace_sdk.ReadableSpan) -> struct_pb2.Struct:
+        self, data: otel_trace_sdk.ReadableSpan
+    ) -> struct_pb2.Struct:
         return self._translate_attributes(data.attributes)
 
     def _translate_links(
-            self,
-            data: otel_trace_sdk.ReadableSpan) -> trace_span_pb2.TraceSpan.Link:
+        self, data: otel_trace_sdk.ReadableSpan
+    ) -> trace_span_pb2.TraceSpan.Link:
         links = []
 
         for link_data in data.links:
             link = trace_span_pb2.TraceSpan.Link()
             link.context.MergeFrom(self._translate_context(link_data.context))
             link.attributes.MergeFrom(
-                self._translate_attributes(link_data.attributes))
+                self._translate_attributes(link_data.attributes)
+            )
             links.append(link)
 
         return links
 
     def _translate_events(
-            self, data: otel_trace_sdk.ReadableSpan
+        self, data: otel_trace_sdk.ReadableSpan
     ) -> trace_span_pb2.TraceSpan.Event:
         events = []
         for event_data in data.events:
@@ -135,7 +142,8 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
             event.event_time_millis = int(event_data.timestamp / 1e6)
             event.name = event_data.name
             event.attributes.MergeFrom(
-                self._translate_attributes(event_data.attributes))
+                self._translate_attributes(event_data.attributes)
+            )
             events.append(event)
         return events
 
@@ -151,56 +159,68 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
     def _translate_env(self, data: Dict[str, str]) -> Dict[str, str]:
         environ = {}
         for key, value in data.items():
-            if key.startswith('process.env.'):
-                key = key.split('process.env.')[1]
+            if key.startswith("process.env."):
+                key = key.split("process.env.")[1]
                 environ[key] = value
         return environ
 
     def _translate_resource(
-            self, data: otel_trace_sdk.ReadableSpan
+        self, data: otel_trace_sdk.ReadableSpan
     ) -> trace_span_pb2.TraceSpan.Resource:
         attrs = dict(data.resource.attributes)
         resource = trace_span_pb2.TraceSpan.Resource()
-        resource.system.cpu = attrs.pop(detector.CPU_NAME, '')
-        resource.system.host_architecture = attrs.pop(detector.CPU_ARCHITECTURE,
-                                                      '')
-        resource.system.os_name = attrs.pop(detector.OS_NAME, '')
-        resource.system.os_version = attrs.pop(otel_resources.OS_DESCRIPTION,
-                                               '')
-        resource.system.os_type = attrs.pop(otel_resources.OS_TYPE, '')
-        resource.process.pid = str(attrs.pop(otel_resources.PROCESS_PID, ''))
+        resource.system.cpu = attrs.pop(detector.CPU_NAME, "")
+        resource.system.host_architecture = attrs.pop(
+            detector.CPU_ARCHITECTURE, ""
+        )
+        resource.system.os_name = attrs.pop(detector.OS_NAME, "")
+        resource.system.os_version = attrs.pop(
+            otel_resources.OS_DESCRIPTION, ""
+        )
+        resource.system.os_type = attrs.pop(otel_resources.OS_TYPE, "")
+        resource.process.pid = str(attrs.pop(otel_resources.PROCESS_PID, ""))
         resource.process.executable_name = attrs.pop(
-            otel_resources.PROCESS_EXECUTABLE_NAME, '')
+            otel_resources.PROCESS_EXECUTABLE_NAME, ""
+        )
         resource.process.executable_path = attrs.pop(
-            otel_resources.PROCESS_EXECUTABLE_PATH, '')
-        resource.process.command = attrs.pop(otel_resources.PROCESS_COMMAND, '')
+            otel_resources.PROCESS_EXECUTABLE_PATH, ""
+        )
+        resource.process.command = attrs.pop(otel_resources.PROCESS_COMMAND, "")
         resource.process.command_args.extend(
-            attrs.pop(otel_resources.PROCESS_COMMAND_ARGS, []))
-        resource.process.owner_is_root = (attrs.pop(
-            otel_resources.PROCESS_OWNER, 9999) == 0)
+            attrs.pop(otel_resources.PROCESS_COMMAND_ARGS, [])
+        )
+        resource.process.owner_is_root = (
+            attrs.pop(otel_resources.PROCESS_OWNER, 9999) == 0
+        )
         resource.process.runtime_name = attrs.pop(
-            otel_resources.PROCESS_RUNTIME_NAME, '')
+            otel_resources.PROCESS_RUNTIME_NAME, ""
+        )
         resource.process.runtime_version = attrs.pop(
-            otel_resources.PROCESS_RUNTIME_VERSION, '')
+            otel_resources.PROCESS_RUNTIME_VERSION, ""
+        )
         resource.process.runtime_description = attrs.pop(
-            otel_resources.PROCESS_RUNTIME_DESCRIPTION, '')
+            otel_resources.PROCESS_RUNTIME_DESCRIPTION, ""
+        )
         resource.process.api_version = str(
-            attrs.pop(detector.PROCESS_RUNTIME_API_VERSION, ''))
+            attrs.pop(detector.PROCESS_RUNTIME_API_VERSION, "")
+        )
         resource.process.env.update(self._translate_env(attrs))
         resource.attributes.MergeFrom(self._translate_attributes(attrs))
         return resource
 
     def _translate_status(
-            self, data: otel_trace_sdk.ReadableSpan
+        self, data: otel_trace_sdk.ReadableSpan
     ) -> trace_span_pb2.TraceSpan.Status:
         status = trace_span_pb2.TraceSpan.Status()
 
         if data.status.status_code == otel_trace_sdk.StatusCode.ERROR:
             status.status_code = (
-                trace_span_pb2.TraceSpan.Status.StatusCode.STATUS_CODE_ERROR)
+                trace_span_pb2.TraceSpan.Status.StatusCode.STATUS_CODE_ERROR
+            )
         else:
             status.status_code = (
-                trace_span_pb2.TraceSpan.Status.StatusCode.STATUS_CODE_OK)
+                trace_span_pb2.TraceSpan.Status.StatusCode.STATUS_CODE_OK
+            )
 
         if data.status.description:
             status.message = data.status.description
@@ -218,8 +238,8 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         return sdk
 
     def _translate_kind(
-            self,
-            data: otel_trace_api.SpanKind) -> trace_span_pb2.TraceSpan.SpanKind:
+        self, data: otel_trace_api.SpanKind
+    ) -> trace_span_pb2.TraceSpan.SpanKind:
         if data == otel_trace_api.SpanKind.INTERNAL:
             return trace_span_pb2.TraceSpan.SpanKind.SPAN_KIND_INTERNAL
         elif data == otel_trace_api.SpanKind.CLIENT:
@@ -229,8 +249,8 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         return trace_span_pb2.TraceSpan.SpanKind.SPAN_KIND_UNSPECIFIED
 
     def _translate_span(
-            self,
-            data: otel_trace_sdk.ReadableSpan) -> trace_span_pb2.TraceSpan:
+        self, data: otel_trace_sdk.ReadableSpan
+    ) -> trace_span_pb2.TraceSpan:
         span = trace_span_pb2.TraceSpan()
         span.name = data.name
         span.context.MergeFrom(self._translate_context(data.get_span_context()))
@@ -238,16 +258,19 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         if isinstance(data.parent, otel_trace_api.Span):
             ctx = data.parent.context
             span.parent_span_id = (
-                f'0x{otel_trace_api.format_span_id(ctx.span_id)}')
+                f"0x{otel_trace_api.format_span_id(ctx.span_id)}"
+            )
         elif isinstance(data.parent, otel_trace_api.SpanContext):
             span.parent_span_id = (
-                f'0x{otel_trace_api.format_span_id(data.parent.span_id)}')
+                f"0x{otel_trace_api.format_span_id(data.parent.span_id)}"
+            )
 
         span.start_time_millis = int(data.start_time / 1e6)
         span.end_time_millis = int(data.end_time / 1e6)
         span.span_kind = self._translate_kind(data.kind)
         span.instrumentation_scope.MergeFrom(
-            self._translate_instrumentation_scope(data))
+            self._translate_instrumentation_scope(data)
+        )
         span.events.extend(self._translate_events(data))
         span.links.extend(self._translate_links(data))
         span.attributes.MergeFrom(self._translate_span_attributes(data))
@@ -260,8 +283,8 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
     def _export_batch(self, timeout: Optional[int] = None) -> bool:
         """Export the spans to clearcut via http api."""
 
-        spans = self._queue[:self._max_queue_size]
-        self._queue = self._queue[self._max_queue_size:]
+        spans = self._queue[: self._max_queue_size]
+        self._queue = self._queue[self._max_queue_size :]
 
         wait_delta = self._next_request_dt - datetime.datetime.now()
         wait_time = wait_delta.total_seconds()
@@ -269,7 +292,7 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         # Drop the packets if wait time is more than threshold.
         if wait_time > self._max_wait_secs:
             logging.warning(
-                'dropping %d spans for large wait: %d',
+                "dropping %d spans for large wait: %d",
                 len(spans),
                 wait_time,
             )
@@ -283,25 +306,28 @@ class ClearcutSpanExporter(otel_export.SpanExporter):
         req = urllib.request.Request(
             self._endpoint,
             data=logrequest.SerializeToString(),
-            method='POST',
+            method="POST",
         )
         logresponse = clientanalytics_pb2.LogResponse()
 
         try:
-            with urllib.request.urlopen(req, timeout=timeout
-                                        or self._timeout) as f:
+            with urllib.request.urlopen(
+                req, timeout=timeout or self._timeout
+            ) as f:
                 logresponse.ParseFromString(f.read())
         except urllib.error.URLError as url_exception:
             logging.warning(url_exception)
             return False
         except proto_msg.DecodeError as decode_error:
-            logging.warning('could not decode data into proto: %s',
-                            decode_error)
+            logging.warning(
+                "could not decode data into proto: %s", decode_error
+            )
             return False
 
         now = datetime.datetime.now()
         delta = datetime.timedelta(
-            milliseconds=logresponse.next_request_wait_millis)
+            milliseconds=logresponse.next_request_wait_millis
+        )
         self._next_request_dt = now + delta
         return True
 

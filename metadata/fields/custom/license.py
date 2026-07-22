@@ -13,7 +13,9 @@ _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
 # Bad delimiter characters.
 BAD_DELIMITERS = ["/", ";", " and ", " or "]
-BAD_DELIMITERS_REGEX = re.compile("|".join(re.escape(delimiter) for delimiter in BAD_DELIMITERS))
+BAD_DELIMITERS_REGEX = re.compile(
+    "|".join(re.escape(delimiter) for delimiter in BAD_DELIMITERS)
+)
 
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
@@ -53,25 +55,31 @@ class LicenseField(field_types.SingleLineTextField):
             for atomic_value in value.split(self.VALUE_DELIMITER)
         ]
 
-    def all_licenses_allowed(self,
-                             license_field_value: str,
-                             is_open_source_project: bool,
-                             is_shipped: Optional[bool] = None) -> bool:
+    def all_licenses_allowed(
+        self,
+        license_field_value: str,
+        is_open_source_project: bool,
+        is_shipped: Optional[bool] = None,
+    ) -> bool:
         """Returns whether all licenses in the field are allowlisted.
 
         Assumes a non-empty license_field_value.
         """
         return all(
-            allowlist_util.is_license_allowed(license, is_open_source_project,
-                                              is_shipped)
-            for license in self._extract_licenses(license_field_value))
+            allowlist_util.is_license_allowed(
+                license, is_open_source_project, is_shipped
+            )
+            for license in self._extract_licenses(license_field_value)
+        )
 
-    def validate(self,
-                 value: str,
-                 source_file_dir: Optional[str] = None,
-                 is_open_source_project: bool = False,
-                 is_shipped: Optional[bool] = False,
-                 **kwargs) -> Optional[vr.ValidationResult]:
+    def validate(
+        self,
+        value: str,
+        source_file_dir: Optional[str] = None,
+        is_open_source_project: bool = False,
+        is_shipped: Optional[bool] = False,
+        **kwargs,
+    ) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of recognized license types.
 
         Note: this field supports multiple values.
@@ -81,7 +89,8 @@ class LicenseField(field_types.SingleLineTextField):
         for license in self._extract_licenses(value):
             if util.is_empty(license):
                 return vr.ValidationError(
-                    reason=f"{self._name} has an empty value.")
+                    reason=f"{self._name} has an empty value."
+                )
             if BAD_DELIMITERS_REGEX.search(license):
                 return vr.ValidationError(
                     reason=f"{self._name} contains a bad license separator. "
@@ -91,13 +100,17 @@ class LicenseField(field_types.SingleLineTextField):
                     additional=[
                         "When given a choice of licenses, choose the most "
                         "permissive one, do not list all options."
-                    ])
+                    ],
+                )
             if not allowlist_util.is_license_allowed(
-                    license,
-                    is_open_source_project=is_open_source_project,
-                    is_shipped=is_shipped):
-                if not is_open_source_project and allowlist_util.is_open_source_license(
-                        license):
+                license,
+                is_open_source_project=is_open_source_project,
+                is_shipped=is_shipped,
+            ):
+                if (
+                    not is_open_source_project
+                    and allowlist_util.is_open_source_license(license)
+                ):
                     reciprocal_not_allowed.append(license)
                 else:
                     not_allowlisted.append(license)
@@ -106,40 +119,50 @@ class LicenseField(field_types.SingleLineTextField):
         if reciprocal_not_allowed:
             warnings.append(
                 f"The following license{'s are' if len(reciprocal_not_allowed) > 1 else ' is'} only allowed in open source projects: "
-                f"{util.quoted(reciprocal_not_allowed)}.")
+                f"{util.quoted(reciprocal_not_allowed)}."
+            )
 
         if not_allowlisted:
             covered = set()
             if source_file_dir:
-                restricted_approval_filepath = os.path.join(source_file_dir, RESTRICTED_APPROVAL_FILENAME)
+                restricted_approval_filepath = os.path.join(
+                    source_file_dir, RESTRICTED_APPROVAL_FILENAME
+                )
                 if os.path.isfile(restricted_approval_filepath):
                     covered.update(
-                        allowlist_util.
-                        load_restrictive_license_approval_textproto(
-                            restricted_approval_filepath))
+                        allowlist_util.load_restrictive_license_approval_textproto(
+                            restricted_approval_filepath
+                        )
+                    )
 
-            missing = [lic for lic in not_allowlisted if lic.lower() not in covered]
+            missing = [
+                lic for lic in not_allowlisted if lic.lower() not in covered
+            ]
             if missing:
                 warnings.append(
-                    f"Licenses not allowlisted: {util.quoted(missing)}.")
+                    f"Licenses not allowlisted: {util.quoted(missing)}."
+                )
 
         if warnings:
             return vr.ValidationWarning(
                 reason="License not in the allowlist. "
                 "See Adding to Third Party: "
                 "https://chromium.googlesource.com/chromium/src/+/main/docs/adding_to_third_party.md#license-classifications",
-                additional=warnings)
+                additional=warnings,
+            )
 
         return None
 
     def filter_open_source_project_only_licenses(
-            self, license_field_value: str) -> List[str]:
+        self, license_field_value: str
+    ) -> List[str]:
         """Returns a list of licenses that are only allowed in open source projects."""
         return list(
             filter(
                 allowlist_util.is_open_source_license,
                 self._extract_licenses(license_field_value),
-            ))
+            )
+        )
 
     def narrow_type(self, value: str) -> Optional[List[str]]:
         if not value:

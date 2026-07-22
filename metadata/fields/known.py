@@ -36,7 +36,8 @@ SECURITY_CRITICAL = field_types.YesNoField("Security Critical")
 SHIPPED = field_types.YesNoField("Shipped")
 SHIPPED_IN_CHROMIUM = field_types.YesNoField("Shipped in Chromium")
 LICENSE_ANDROID_COMPATIBLE = field_types.YesNoField(
-    "License Android Compatible")
+    "License Android Compatible"
+)
 
 # Custom fields.
 CPE_PREFIX = metadata.fields.custom.cpe_prefix.CPEPrefixField()
@@ -46,10 +47,12 @@ LICENSE_FILE = metadata.fields.custom.license_file.LicenseFileField()
 URL = metadata.fields.custom.url.URLField()
 VERSION = metadata.fields.custom.version.VersionField()
 REVISION = metadata.fields.custom.revision.RevisionField()
-LOCAL_MODIFICATIONS = metadata.fields.custom.local_modifications.LocalModificationsField(
+LOCAL_MODIFICATIONS = (
+    metadata.fields.custom.local_modifications.LocalModificationsField()
 )
 MITIGATED = metadata.fields.custom.mitigated.MitigatedField()
-UPDATE_MECHANISM = metadata.fields.custom.update_mechanism.UpdateMechanismField(
+UPDATE_MECHANISM = (
+    metadata.fields.custom.update_mechanism.UpdateMechanismField()
 )
 
 ALL_FIELDS = (

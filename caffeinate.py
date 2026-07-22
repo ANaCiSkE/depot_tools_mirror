@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 
-_NO_CAFFEINATE_FLAG = '--no-caffeinate'
+_NO_CAFFEINATE_FLAG = "--no-caffeinate"
 
 _HELP_MESSAGE = f"""\
 caffeinate:
@@ -17,15 +17,15 @@ caffeinate:
 
 def call(args, **call_kwargs):
     """Runs a command (via subprocess.call) with `caffeinate` if it's on macOS."""
-    if sys.platform == 'darwin':
+    if sys.platform == "darwin":
         if isinstance(args, (str, bytes, os.PathLike)):
             args = [args]
-        if '-h' in args or '--help' in args:
+        if "-h" in args or "--help" in args:
             print(_HELP_MESSAGE, file=sys.stderr)
         if _NO_CAFFEINATE_FLAG in args:
             args.remove(_NO_CAFFEINATE_FLAG)
         else:
-            args = ['caffeinate'] + args
+            args = ["caffeinate"] + args
     return subprocess.call(args, **call_kwargs)
 
 
@@ -42,17 +42,19 @@ def scope(actually_caffeinate=True):
     runs `caffeinate` in a separate process, which is terminated when the
     context manager exits.
     """
-    if sys.platform != 'darwin' or not actually_caffeinate:
+    if sys.platform != "darwin" or not actually_caffeinate:
         # Behave like a no-op context manager.
         yield False
         return
 
-    cmd = ['caffeinate', '-i', '-w', str(os.getpid())]
+    cmd = ["caffeinate", "-i", "-w", str(os.getpid())]
 
-    proc = subprocess.Popen(cmd,
-                            stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     try:
         yield True
     finally:

@@ -22,7 +22,7 @@ from recipe_engine import recipe_api
 class WindowsSDKApi(recipe_api.RecipeApi):
   """API for using Windows SDK distributed via CIPD."""
 
-  SDKPaths = collections.namedtuple('SDKPaths', ['win_sdk', 'dia_sdk'])
+  SDKPaths = collections.namedtuple("SDKPaths", ["win_sdk", "dia_sdk"])
 
   def __init__(self, sdk_properties, *args, **kwargs):
     super(WindowsSDKApi, self).__init__(*args, **kwargs)
@@ -30,7 +30,7 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     self._sdk_properties = sdk_properties
 
   @contextmanager
-  def __call__(self, path=None, version=None, enabled=True, target_arch='x64'):
+  def __call__(self, path=None, version=None, enabled=True, target_arch="x64"):
     """Sets up the SDK environment when enabled.
 
     Args:
@@ -53,22 +53,23 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     """
     if enabled:
       sdk_dir = self._ensure_sdk(
-          path or self.m.path.cache_dir / 'windows_sdk',
-          version or self._sdk_properties['version'])
+        path or self.m.path.cache_dir / "windows_sdk",
+        version or self._sdk_properties["version"],
+      )
       try:
         with self.m.context(**self._sdk_env(sdk_dir, target_arch)):
-          yield WindowsSDKApi.SDKPaths(
-              sdk_dir / 'win_sdk',
-              sdk_dir / 'DIA SDK')
+          yield WindowsSDKApi.SDKPaths(sdk_dir / "win_sdk", sdk_dir / "DIA SDK")
       finally:
         # cl.exe automatically starts background mspdbsrv.exe daemon which
         # needs to be manually stopped so Swarming can tidy up after itself.
         #
         # Since mspdbsrv may not actually be running, don't fail if we can't
         # actually kill it.
-        self.m.step('taskkill mspdbsrv',
-                    ['taskkill.exe', '/f', '/t', '/im', 'mspdbsrv.exe'],
-                    ok_ret='any')
+        self.m.step(
+          "taskkill mspdbsrv",
+          ["taskkill.exe", "/f", "/t", "/im", "mspdbsrv.exe"],
+          ok_ret="any",
+        )
     else:
       yield
 
@@ -83,7 +84,7 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     """
     with self.m.context(infra_steps=True):
       pkgs = self.m.cipd.EnsureFile()
-      pkgs.add_package('chrome_internal/third_party/sdk/windows', sdk_version)
+      pkgs.add_package("chrome_internal/third_party/sdk/windows", sdk_version)
       self.m.cipd.ensure(sdk_dir, pkgs)
       return sdk_dir
 
@@ -99,25 +100,30 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     env = {}
     env_prefixes = {}
 
-    if target_arch not in ('x86', 'x64', 'arm64'):
-      raise ValueError('unknown architecture {!r}'.format(target_arch))
+    if target_arch not in ("x86", "x64", "arm64"):
+      raise ValueError("unknown architecture {!r}".format(target_arch))
 
-    data = self.m.step('read SetEnv json', [
-        'python3',
-        self.resource('find_env_json.py'),
-        '--sdk_root',
+    data = self.m.step(
+      "read SetEnv json",
+      [
+        "python3",
+        self.resource("find_env_json.py"),
+        "--sdk_root",
         sdk_dir,
-        '--target_arch',
+        "--target_arch",
         target_arch,
-        '--output_json',
+        "--output_json",
         self.m.json.output(),
-    ],
-                       step_test_data=lambda: self.m.json.test_api.output({
-                           'env': {
-                               'PATH': [['..', '..', 'win_sdk', 'bin', 'x64']],
-                               'VSINSTALLDIR': [['..', '..\\']],
-                           },
-                       })).json.output.get('env')
+      ],
+      step_test_data=lambda: self.m.json.test_api.output(
+        {
+          "env": {
+            "PATH": [["..", "..", "win_sdk", "bin", "x64"]],
+            "VSINSTALLDIR": [["..", "..\\"]],
+          },
+        }
+      ),
+    ).json.output.get("env")
     for key in data:
       # SDK cipd packages prior to 10.0.19041.0 contain entries like:
       #  "INCLUDE": [["..","..","win_sdk","Include","10.0.17134.0","um"], and
@@ -133,17 +139,17 @@ class WindowsSDKApi(recipe_api.RecipeApi):
       # we simply join paths there.
       results = []
       for value in data[key]:
-        if value[0] == '..' and (value[1] == '..' or value[1] == '..\\'):
-          results.append('%s' % sdk_dir.joinpath(*value[2:]))
+        if value[0] == ".." and (value[1] == ".." or value[1] == "..\\"):
+          results.append("%s" % sdk_dir.joinpath(*value[2:]))
         else:
-          results.append('%s' % sdk_dir.joinpath(*value))
+          results.append("%s" % sdk_dir.joinpath(*value))
 
       # PATH is special-cased because we don't want to overwrite other things
       # like C:\Windows\System32. Others are replacements because prepending
       # doesn't necessarily makes sense, like VSINSTALLDIR.
-      if key.lower() == 'path':
+      if key.lower() == "path":
         env_prefixes[key] = results
       else:
-        env[key] = ';'.join(results)
+        env[key] = ";".join(results)
 
-    return {'env': env, 'env_prefixes': env_prefixes}
+    return {"env": env, "env_prefixes": env_prefixes}

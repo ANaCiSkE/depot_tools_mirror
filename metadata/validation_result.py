@@ -7,12 +7,14 @@ import textwrap
 from typing import Dict, List, Optional, Tuple
 
 _CHROMIUM_METADATA_PRESCRIPT = "Third party metadata issue:"
-_CHROMIUM_METADATA_POSTSCRIPT = ("Check //third_party/README.chromium.template "
-                                 "for details.")
+_CHROMIUM_METADATA_POSTSCRIPT = (
+    "Check //third_party/README.chromium.template for details."
+)
 
 
 class ValidationResult:
     """Base class for validation issues."""
+
     def __init__(self, reason: str, fatal: bool, additional: List[str] = []):
         """Constructor for a validation issue.
 
@@ -32,7 +34,7 @@ class ValidationResult:
 
     def __str__(self) -> str:
         prefix = self.get_severity_prefix()
-        additional_text = ' '.join(self._additional)
+        additional_text = " ".join(self._additional)
         return f"{prefix} - {self._reason} {additional_text}"
 
     def __repr__(self) -> str:
@@ -85,14 +87,17 @@ class ValidationResult:
     def get_additional(self) -> List[str]:
         return self._additional
 
-    def get_message(self,
-                    prescript: str = _CHROMIUM_METADATA_PRESCRIPT,
-                    postscript: str = _CHROMIUM_METADATA_POSTSCRIPT,
-                    width: int = 0) -> str:
-        additional_text = ' '.join(self._additional)
+    def get_message(
+        self,
+        prescript: str = _CHROMIUM_METADATA_PRESCRIPT,
+        postscript: str = _CHROMIUM_METADATA_POSTSCRIPT,
+        width: int = 0,
+    ) -> str:
+        additional_text = " ".join(self._additional)
         components = [prescript, self._reason, additional_text, postscript]
         message = " ".join(
-            [component for component in components if len(component) > 0])
+            [component for component in components if len(component) > 0]
+        )
 
         if width > 0:
             return textwrap.fill(text=message, width=width)
@@ -108,11 +113,13 @@ class ValidationResult:
 
 class ValidationError(ValidationResult):
     """Fatal validation issue. Presubmit should fail."""
+
     def __init__(self, reason: str, additional: List[str] = []):
         super().__init__(reason=reason, fatal=True, additional=additional)
 
 
 class ValidationWarning(ValidationResult):
     """Non-fatal validation issue. Presubmit should pass."""
+
     def __init__(self, reason: str, additional: List[str] = []):
         super().__init__(reason=reason, fatal=False, additional=additional)

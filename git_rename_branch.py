@@ -17,22 +17,26 @@ import gclient_utils
 
 def main(args):
     if gclient_utils.IsEnvCog():
-        print('rename-branch command is not supported in non-git environment.',
-              file=sys.stderr)
+        print(
+            "rename-branch command is not supported in non-git environment.",
+            file=sys.stderr,
+        )
         return 1
     current = current_branch()
-    if current == 'HEAD':
+    if current == "HEAD":
         current = None
-    old_name_help = 'The old branch to rename.'
+    old_name_help = "The old branch to rename."
     if current:
-        old_name_help += ' (default %(default)r)'
+        old_name_help += " (default %(default)r)"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('old_name',
-                        nargs=('?' if current else 1),
-                        help=old_name_help,
-                        default=current)
-    parser.add_argument('new_name', help='The new branch name.')
+    parser.add_argument(
+        "old_name",
+        nargs=("?" if current else 1),
+        help=old_name_help,
+        default=current,
+    )
+    parser.add_argument("new_name", help="The new branch name.")
 
     opts = parser.parse_args(args)
 
@@ -41,24 +45,25 @@ def main(args):
         opts.old_name = opts.old_name[0]
 
     try:
-        run('branch', '-m', opts.old_name, opts.new_name)
+        run("branch", "-m", opts.old_name, opts.new_name)
 
         # update the downstreams
-        for branch, merge in branch_config_map('merge').items():
-            if merge == 'refs/heads/' + opts.old_name:
+        for branch, merge in branch_config_map("merge").items():
+            if merge == "refs/heads/" + opts.old_name:
                 # Only care about local branches
-                if branch_config(branch, 'remote') == '.':
-                    set_branch_config(branch, 'merge',
-                                      'refs/heads/' + opts.new_name)
+                if branch_config(branch, "remote") == ".":
+                    set_branch_config(
+                        branch, "merge", "refs/heads/" + opts.new_name
+                    )
     except subprocess2.CalledProcessError as cpe:
-        sys.stderr.write(cpe.stderr.decode('utf-8', 'replace'))
+        sys.stderr.write(cpe.stderr.decode("utf-8", "replace"))
         return 1
     return 0
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     try:
         sys.exit(main(sys.argv[1:]))
     except KeyboardInterrupt:
-        sys.stderr.write('interrupted\n')
+        sys.stderr.write("interrupted\n")
         sys.exit(1)

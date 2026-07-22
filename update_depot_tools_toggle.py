@@ -10,18 +10,18 @@ import os
 import sys
 
 DEPOT_TOOLS_ROOT = os.path.abspath(os.path.dirname(__file__))
-SENTINEL_PATH = os.path.join(DEPOT_TOOLS_ROOT, '.disable_auto_update')
+SENTINEL_PATH = os.path.join(DEPOT_TOOLS_ROOT, ".disable_auto_update")
 
 
 def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--enable',
-                       action='store_true',
-                       help='Enable auto-updating.')
-    group.add_argument('--disable',
-                       action='store_true',
-                       help='Disable auto-updating.')
+    group.add_argument(
+        "--enable", action="store_true", help="Enable auto-updating."
+    )
+    group.add_argument(
+        "--disable", action="store_true", help="Disable auto-updating."
+    )
     args = parser.parse_args()
 
     if args.enable:
@@ -29,11 +29,13 @@ def main():
             os.unlink(SENTINEL_PATH)
     if args.disable:
         if not os.path.exists(SENTINEL_PATH):
-            with open(SENTINEL_PATH, 'w') as fd:
-                fd.write('Disabled by %s at %s\n' %
-                         (__file__, datetime.datetime.now()))
+            with open(SENTINEL_PATH, "w") as fd:
+                fd.write(
+                    "Disabled by %s at %s\n"
+                    % (__file__, datetime.datetime.now())
+                )
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

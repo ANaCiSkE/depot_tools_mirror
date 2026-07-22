@@ -9,17 +9,17 @@ import os
 import requests
 
 # Constants describing TestStatus for ResultDB
-STATUS_PASS = 'PASS'
-STATUS_FAIL = 'FAIL'
-STATUS_CRASH = 'CRASH'
-STATUS_ABORT = 'ABORT'
-STATUS_SKIP = 'SKIP'
+STATUS_PASS = "PASS"
+STATUS_FAIL = "FAIL"
+STATUS_CRASH = "CRASH"
+STATUS_ABORT = "ABORT"
+STATUS_SKIP = "SKIP"
 
 # ResultDB limits failure reasons to 1024 characters.
 _FAILURE_REASON_LENGTH_LIMIT = 1024
 
 # Message to use at the end of a truncated failure reason.
-_FAILURE_REASON_TRUNCATE_TEXT = '\n...\nFailure reason was truncated.'
+_FAILURE_REASON_TRUNCATE_TEXT = "\n...\nFailure reason was truncated."
 
 
 class ResultSink(object):
@@ -40,25 +40,26 @@ class ResultSink(object):
         # Source comes from:
         # infra/go/src/go.chromium.org/luci/resultdb/sink/proto/v1/test_result.proto
         struct_test_dict = {
-            'coarseName': None,  # Not used for flat tests.
-            'fineName': None,  # Not used for flat tests.
-            'caseNameComponents': [str(function_name)],
+            "coarseName": None,  # Not used for flat tests.
+            "fineName": None,  # Not used for flat tests.
+            "caseNameComponents": [str(function_name)],
         }
         tr = {
-            'testId': self._prefix + function_name,
-            'status': status,
-            'expected': status == STATUS_PASS,
-            'duration': '{:.9f}s'.format(elapsed_time),
-            'testIdStructured': struct_test_dict,
+            "testId": self._prefix + function_name,
+            "status": status,
+            "expected": status == STATUS_PASS,
+            "duration": "{:.9f}s".format(elapsed_time),
+            "testIdStructured": struct_test_dict,
         }
         if failure_reason:
             if len(failure_reason) > _FAILURE_REASON_LENGTH_LIMIT:
-                failure_reason = failure_reason[:_FAILURE_REASON_LENGTH_LIMIT -
-                                                len(_FAILURE_REASON_TRUNCATE_TEXT
-                                                    )]
+                failure_reason = failure_reason[
+                    : _FAILURE_REASON_LENGTH_LIMIT
+                    - len(_FAILURE_REASON_TRUNCATE_TEXT)
+                ]
                 failure_reason += _FAILURE_REASON_TRUNCATE_TEXT
-            tr['failureReason'] = {'primaryErrorMessage': failure_reason}
-        self._session.post(self._url, json={'testResults': [tr]})
+            tr["failureReason"] = {"primaryErrorMessage": failure_reason}
+        self._session.post(self._url, json={"testResults": [tr]})
 
 
 @contextlib.contextmanager
@@ -79,24 +80,25 @@ def client(prefix):
         An instance of ResultSink() if the luci context is present. None,
         otherwise.
     """
-    luci_ctx = os.environ.get('LUCI_CONTEXT')
+    luci_ctx = os.environ.get("LUCI_CONTEXT")
     if not luci_ctx:
         yield None
         return
 
     sink_ctx = None
     with open(luci_ctx) as f:
-        sink_ctx = json.load(f).get('result_sink')
+        sink_ctx = json.load(f).get("result_sink")
         if not sink_ctx:
             yield None
             return
 
-    url = 'http://{0}/prpc/luci.resultsink.v1.Sink/ReportTestResults'.format(
-        sink_ctx['address'])
+    url = "http://{0}/prpc/luci.resultsink.v1.Sink/ReportTestResults".format(
+        sink_ctx["address"]
+    )
     with requests.Session() as s:
         s.headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': 'ResultSink {0}'.format(sink_ctx['auth_token'])
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": "ResultSink {0}".format(sink_ctx["auth_token"]),
         }
         yield ResultSink(s, url, prefix)

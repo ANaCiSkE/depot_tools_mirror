@@ -15,28 +15,30 @@ def first(iterable):
 
 
 class OwnersFinder(object):
-    COLOR_LINK = '\033[4m'
-    COLOR_BOLD = '\033[1;32m'
-    COLOR_GREY = '\033[0;37m'
-    COLOR_RESET = '\033[0m'
+    COLOR_LINK = "\033[4m"
+    COLOR_BOLD = "\033[1;32m"
+    COLOR_GREY = "\033[0;37m"
+    COLOR_RESET = "\033[0m"
 
     indentation = 0
 
-    def __init__(self,
-                 files,
-                 author,
-                 reviewers,
-                 owners_client,
-                 email_postfix='@chromium.org',
-                 disable_color=False,
-                 ignore_author=False):
+    def __init__(
+        self,
+        files,
+        author,
+        reviewers,
+        owners_client,
+        email_postfix="@chromium.org",
+        disable_color=False,
+        ignore_author=False,
+    ):
         self.email_postfix = email_postfix
 
-        if os.name == 'nt' or disable_color:
-            self.COLOR_LINK = ''
-            self.COLOR_BOLD = ''
-            self.COLOR_GREY = ''
-            self.COLOR_RESET = ''
+        if os.name == "nt" or disable_color:
+            self.COLOR_LINK = ""
+            self.COLOR_BOLD = ""
+            self.COLOR_GREY = ""
+            self.COLOR_RESET = ""
 
         self.author = author
 
@@ -49,9 +51,11 @@ class OwnersFinder(object):
         # Eliminate files that existing reviewers can review.
         self.owners_client = owners_client
         approval_status = self.owners_client.GetFilesApprovalStatus(
-            filtered_files, reviewers, [])
+            filtered_files, reviewers, []
+        )
         filtered_files = [
-            f for f in filtered_files
+            f
+            for f in filtered_files
             if approval_status[f] != self.owners_client.APPROVED
         ]
 
@@ -83,12 +87,15 @@ class OwnersFinder(object):
         while self.owners_queue and self.unreviewed_files:
             owner = self.owners_queue[0]
 
-            if (owner in self.selected_owners) or (owner
-                                                   in self.deselected_owners):
+            if (owner in self.selected_owners) or (
+                owner in self.deselected_owners
+            ):
                 continue
 
-            if not any((file_name in self.unreviewed_files)
-                       for file_name in self.owners_to_files[owner]):
+            if not any(
+                (file_name in self.unreviewed_files)
+                for file_name in self.owners_to_files[owner]
+            ):
                 self.deselect_owner(owner)
                 continue
 
@@ -96,39 +103,39 @@ class OwnersFinder(object):
 
             while True:
                 inp = self.input_command(owner)
-                if inp in ('y', 'yes'):
+                if inp in ("y", "yes"):
                     self.select_owner(owner)
                     break
 
-                if inp in ('n', 'no'):
+                if inp in ("n", "no"):
                     self.deselect_owner(owner)
                     break
 
-                if inp in ('', 'd', 'defer'):
+                if inp in ("", "d", "defer"):
                     self.owners_queue.append(self.owners_queue.pop(0))
                     break
 
-                if inp in ('f', 'files'):
+                if inp in ("f", "files"):
                     self.list_files()
                     break
 
-                if inp in ('o', 'owners'):
+                if inp in ("o", "owners"):
                     self.list_owners(self.owners_queue)
                     break
 
-                if inp in ('p', 'pick'):
-                    self.pick_owner(gclient_utils.AskForData('Pick an owner: '))
+                if inp in ("p", "pick"):
+                    self.pick_owner(gclient_utils.AskForData("Pick an owner: "))
                     break
 
-                if inp.startswith('p ') or inp.startswith('pick '):
-                    self.pick_owner(inp.split(' ', 2)[1].strip())
+                if inp.startswith("p ") or inp.startswith("pick "):
+                    self.pick_owner(inp.split(" ", 2)[1].strip())
                     break
 
-                if inp in ('r', 'restart'):
+                if inp in ("r", "restart"):
                     self.reset()
                     break
 
-                if inp in ('q', 'quit'):
+                if inp in ("q", "quit"):
                     # Exit with error
                     return 1
 
@@ -151,32 +158,40 @@ class OwnersFinder(object):
         # Randomize owners' names so that if many reviewers have identical
         # scores they will be randomly ordered to avoid bias.
         owners = list(
-            self.owners_client.ScoreOwners(self.files_to_owners.keys()))
+            self.owners_client.ScoreOwners(self.files_to_owners.keys())
+        )
         if self.author and self.author in owners:
             owners.remove(self.author)
         self.owners_queue = owners
         self.find_mandatory_owners()
 
     def select_owner(self, owner, findMandatoryOwners=True):
-        if owner in self.selected_owners or owner in self.deselected_owners\
-            or not (owner in self.owners_queue):
+        if (
+            owner in self.selected_owners
+            or owner in self.deselected_owners
+            or not (owner in self.owners_queue)
+        ):
             return
-        self.writeln('Selected: ' + owner)
+        self.writeln("Selected: " + owner)
         self.owners_queue.remove(owner)
         self.selected_owners.add(owner)
         for file_name in filter(
-                lambda file_name: file_name in self.unreviewed_files,
-                self.owners_to_files[owner]):
+            lambda file_name: file_name in self.unreviewed_files,
+            self.owners_to_files[owner],
+        ):
             self.unreviewed_files.remove(file_name)
             self.reviewed_by[file_name] = owner
         if findMandatoryOwners:
             self.find_mandatory_owners()
 
     def deselect_owner(self, owner, findMandatoryOwners=True):
-        if owner in self.selected_owners or owner in self.deselected_owners\
-            or not (owner in self.owners_queue):
+        if (
+            owner in self.selected_owners
+            or owner in self.deselected_owners
+            or not (owner in self.owners_queue)
+        ):
             return
-        self.writeln('Deselected: ' + owner)
+        self.writeln("Deselected: " + owner)
         self.owners_queue.remove(owner)
         self.deselected_owners.add(owner)
         for file_name in self.owners_to_files[owner] & self.unreviewed_files:
@@ -197,29 +212,38 @@ class OwnersFinder(object):
         while continues:
             continues = False
             for file_name in filter(
-                    lambda file_name: len(self.files_to_owners[file_name]) == 1,
-                    self.unreviewed_files):
+                lambda file_name: len(self.files_to_owners[file_name]) == 1,
+                self.unreviewed_files,
+            ):
                 owner = first(self.files_to_owners[file_name])
                 self.select_owner(owner, False)
                 continues = True
                 break
 
-    def print_file_info(self, file_name, except_owner=''):
+    def print_file_info(self, file_name, except_owner=""):
         if file_name not in self.unreviewed_files:
             self.writeln(
-                self.greyed(file_name + ' (by ' +
-                            self.bold_name(self.reviewed_by[file_name]) + ')'))
+                self.greyed(
+                    file_name
+                    + " (by "
+                    + self.bold_name(self.reviewed_by[file_name])
+                    + ")"
+                )
+            )
         else:
             if len(self.files_to_owners[file_name]) <= 3:
                 other_owners = []
                 for ow in self.files_to_owners[file_name]:
                     if ow != except_owner:
                         other_owners.append(self.bold_name(ow))
-                self.writeln(file_name + ' [' + (', '.join(other_owners)) + ']')
+                self.writeln(file_name + " [" + (", ".join(other_owners)) + "]")
             else:
                 self.writeln(
-                    file_name + ' [' +
-                    self.bold(str(len(self.files_to_owners[file_name]))) + ']')
+                    file_name
+                    + " ["
+                    + self.bold(str(len(self.files_to_owners[file_name])))
+                    + "]"
+                )
 
     def print_file_info_detailed(self, file_name):
         self.writeln(file_name)
@@ -237,8 +261,11 @@ class OwnersFinder(object):
         # Print owned files
         self.writeln(self.bold_name(owner))
         self.writeln(
-            self.bold_name(owner) + ' owns ' +
-            str(len(self.owners_to_files[owner])) + ' file(s):')
+            self.bold_name(owner)
+            + " owns "
+            + str(len(self.owners_to_files[owner]))
+            + " file(s):"
+        )
         self.indent()
         for file_name in sorted(self.owners_to_files[owner]):
             self.print_file_info(file_name, owner)
@@ -246,16 +273,23 @@ class OwnersFinder(object):
         self.writeln()
 
     def list_owners(self, owners_queue):
-        if (len(self.owners_to_files) - len(self.deselected_owners) -
-                len(self.selected_owners)) > 3:
+        if (
+            len(self.owners_to_files)
+            - len(self.deselected_owners)
+            - len(self.selected_owners)
+        ) > 3:
             for ow in owners_queue:
-                if (ow not in self.deselected_owners
-                        and ow not in self.selected_owners):
+                if (
+                    ow not in self.deselected_owners
+                    and ow not in self.selected_owners
+                ):
                     self.writeln(self.bold_name(ow))
         else:
             for ow in owners_queue:
-                if (ow not in self.deselected_owners
-                        and ow not in self.selected_owners):
+                if (
+                    ow not in self.deselected_owners
+                    and ow not in self.selected_owners
+                ):
                     self.writeln()
                     self.print_owned_files_for(ow)
 
@@ -277,18 +311,29 @@ class OwnersFinder(object):
 
         if ow not in self.owners_to_files:
             self.writeln(
-                'You cannot pick ' + self.bold_name(ow) + ' manually. ' +
-                'It\'s an invalid name or not related to the change list.')
+                "You cannot pick "
+                + self.bold_name(ow)
+                + " manually. "
+                + "It's an invalid name or not related to the change list."
+            )
             return False
 
         if ow in self.selected_owners:
-            self.writeln('You cannot pick ' + self.bold_name(ow) +
-                         ' manually. ' + 'It\'s already selected.')
+            self.writeln(
+                "You cannot pick "
+                + self.bold_name(ow)
+                + " manually. "
+                + "It's already selected."
+            )
             return False
 
         if ow in self.deselected_owners:
-            self.writeln('You cannot pick ' + self.bold_name(ow) +
-                         ' manually.' + 'It\'s already unselected.')
+            self.writeln(
+                "You cannot pick "
+                + self.bold_name(ow)
+                + " manually."
+                + "It's already unselected."
+            )
             return False
 
         self.select_owner(ow)
@@ -299,14 +344,15 @@ class OwnersFinder(object):
         self.writeln()
         self.writeln()
         if len(self.selected_owners) == 0:
-            self.writeln('This change list already has owner-reviewers for all '
-                         'files.')
-            self.writeln('Use --ignore-current if you want to ignore them.')
+            self.writeln(
+                "This change list already has owner-reviewers for all files."
+            )
+            self.writeln("Use --ignore-current if you want to ignore them.")
         else:
-            self.writeln('** You selected these owners **')
+            self.writeln("** You selected these owners **")
             self.writeln()
             for owner in self.selected_owners:
-                self.writeln(self.bold_name(owner) + ':')
+                self.writeln(self.bold_name(owner) + ":")
                 self.indent()
                 for file_name in sorted(self.owners_to_files[owner]):
                     self.writeln(file_name)
@@ -316,8 +362,11 @@ class OwnersFinder(object):
         return self.COLOR_BOLD + text + self.COLOR_RESET
 
     def bold_name(self, name):
-        return (self.COLOR_BOLD + name.replace(self.email_postfix, '') +
-                self.COLOR_RESET)
+        return (
+            self.COLOR_BOLD
+            + name.replace(self.email_postfix, "")
+            + self.COLOR_RESET
+        )
 
     def greyed(self, text):
         return self.COLOR_GREY + text + self.COLOR_RESET
@@ -329,21 +378,23 @@ class OwnersFinder(object):
         self.indentation -= 1
 
     def print_indent(self):
-        return '  ' * self.indentation
+        return "  " * self.indentation
 
-    def writeln(self, text=''):
+    def writeln(self, text=""):
         print(self.print_indent() + text)
 
     def hr(self):
-        self.writeln('=====================')
+        self.writeln("=====================")
 
     def print_info(self, owner):
         self.hr()
         self.writeln(
-            self.bold(str(len(self.unreviewed_files))) + ' file(s) left.')
+            self.bold(str(len(self.unreviewed_files))) + " file(s) left."
+        )
         self.print_owned_files_for(owner)
 
     def input_command(self, owner):
-        self.writeln('Add ' + self.bold_name(owner) + ' as your reviewer? ')
+        self.writeln("Add " + self.bold_name(owner) + " as your reviewer? ")
         return gclient_utils.AskForData(
-            '[yes/no/Defer/pick/files/owners/quit/restart]: ').lower()
+            "[yes/no/Defer/pick/files/owners/quit/restart]: "
+        ).lower()

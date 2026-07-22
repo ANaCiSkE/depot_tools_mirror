@@ -2,8 +2,7 @@
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-"""Wrapper around git blame that ignores certain commits.
-"""
+"""Wrapper around git blame that ignores certain commits."""
 
 import argparse
 import collections
@@ -22,6 +21,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 class Commit(object):
     """Info about a commit."""
+
     def __init__(self, commithash):
         self.commithash = commithash
         self.author = None
@@ -38,16 +38,17 @@ class Commit(object):
         self.filename = None
 
     def __repr__(self):  # pragma: no cover
-        return '<Commit %s>' % self.commithash
+        return "<Commit %s>" % self.commithash
 
 
 BlameLine = collections.namedtuple(
-    'BlameLine', 'commit context lineno_then lineno_now modified')
+    "BlameLine", "commit context lineno_then lineno_now modified"
+)
 
 
 def parse_blame(blameoutput):
     """Parses the output of git blame -p into a data structure."""
-    lines = blameoutput.split('\n')
+    lines = blameoutput.split("\n")
     i = 0
     commits = {}
 
@@ -72,15 +73,15 @@ def parse_blame(blameoutput):
         while i < len(lines):
             line = lines[i]
             i += 1
-            if line.startswith('\t'):
+            if line.startswith("\t"):
                 break
 
             try:
-                key, value = line.split(' ', 1)
+                key, value = line.split(" ", 1)
             except ValueError:
                 key = line
                 value = True
-            setattr(commit, key.replace('-', '_'), value)
+            setattr(commit, key.replace("-", "_"), value)
 
         context = line[1:]
 
@@ -107,15 +108,15 @@ def print_table(outbuf, table, align):
     for row in table:
         cells = []
         for i, cell in enumerate(row):
-            padding = ' ' * (colwidths[i] - len(cell))
-            if align[i] == 'r':
+            padding = " " * (colwidths[i] - len(cell))
+            if align[i] == "r":
                 cell = padding + cell
             elif i < len(row) - 1:
                 # Do not pad the final column if left-aligned.
                 cell += padding
-            cells.append(cell.encode('utf-8', 'replace'))
+            cells.append(cell.encode("utf-8", "replace"))
         try:
-            outbuf.write(b' '.join(cells) + b'\n')
+            outbuf.write(b" ".join(cells) + b"\n")
         except IOError:  # pragma: no cover
             # Can happen on Windows if the pipe is closed early.
             pass
@@ -126,20 +127,22 @@ def pretty_print(outbuf, parsedblame, show_filenames=False):
     table = []
     for line in parsedblame:
         author_time = git_dates.timestamp_offset_to_datetime(
-            line.commit.author_time, line.commit.author_tz)
+            line.commit.author_time, line.commit.author_tz
+        )
         row = [
-            line.commit.commithash[:8], '(' + line.commit.author,
+            line.commit.commithash[:8],
+            "(" + line.commit.author,
             git_dates.datetime_string(author_time),
-            str(line.lineno_now) + ('*' if line.modified else '') + ')',
-            line.context
+            str(line.lineno_now) + ("*" if line.modified else "") + ")",
+            line.context,
         ]
         if show_filenames:
             row.insert(1, line.commit.filename)
         table.append(row)
-    print_table(outbuf, table, align='llllrl' if show_filenames else 'lllrl')
+    print_table(outbuf, table, align="llllrl" if show_filenames else "lllrl")
 
 
-def get_parsed_blame(filename, revision='HEAD'):
+def get_parsed_blame(filename, revision="HEAD"):
     blame = git_common.blame(filename, revision=revision, porcelain=True)
     return list(parse_blame(blame))
 
@@ -157,7 +160,7 @@ def cache_diff_hunks(oldrev, newrev):
         s = s[1:]
         # Length is optional (defaults to 1).
         try:
-            start, length = s.split(',')
+            start, length = s.split(",")
         except ValueError:
             start = s
             length = 1
@@ -169,14 +172,14 @@ def cache_diff_hunks(oldrev, newrev):
         pass
 
     # Use -U0 to get the smallest possible hunks.
-    diff = git_common.diff(oldrev, newrev, '-U0')
+    diff = git_common.diff(oldrev, newrev, "-U0")
 
     # Get all the hunks.
     hunks = []
-    for line in diff.split('\n'):
-        if not line.startswith('@@'):
+    for line in diff.split("\n"):
+        if not line.startswith("@@"):
             continue
-        ranges = line.split(' ', 3)[1:3]
+        ranges = line.split(" ", 3)[1:3]
         ranges = tuple(parse_start_length(r) for r in ranges)
         hunks.append(ranges)
 
@@ -184,8 +187,9 @@ def cache_diff_hunks(oldrev, newrev):
     return hunks
 
 
-def approx_lineno_across_revs(filename, newfilename, revision, newrevision,
-                              lineno):
+def approx_lineno_across_revs(
+    filename, newfilename, revision, newrevision, lineno
+):
     """Computes the approximate movement of a line number between two revisions.
 
     Consider line |lineno| in |filename| at |revision|. This function computes
@@ -211,8 +215,8 @@ def approx_lineno_across_revs(filename, newfilename, revision, newrevision,
 
     # Use the <revision>:<filename> syntax to diff between two blobs. This is
     # the only way to diff a file that has been renamed.
-    old = '%s:%s' % (revision, filename)
-    new = '%s:%s' % (newrevision, newfilename)
+    old = "%s:%s" % (revision, filename)
+    new = "%s:%s" % (newrevision, newfilename)
     hunks = cache_diff_hunks(old, new)
 
     cumulative_offset = 0
@@ -283,7 +287,8 @@ def hyper_blame(outbuf, ignored, filename, revision):
                 break
 
             previouscommit, previousfilename = line.commit.previous.split(
-                ' ', 1)
+                " ", 1
+            )
             parent_blame = cache_blame_from(previousfilename, previouscommit)
 
             if len(parent_blame) == 0:
@@ -294,14 +299,20 @@ def hyper_blame(outbuf, ignored, filename, revision):
             # line.lineno_then is the line number in question at line.commit. We
             # need to translate that line number so that it refers to the
             # position of the same line on previouscommit.
-            lineno_previous = approx_lineno_across_revs(line.commit.filename,
-                                                        previousfilename,
-                                                        line.commit.commithash,
-                                                        previouscommit,
-                                                        line.lineno_then)
-            logging.debug('ignore commit %s on line p%d/t%d/n%d',
-                          line.commit.commithash, lineno_previous,
-                          line.lineno_then, line.lineno_now)
+            lineno_previous = approx_lineno_across_revs(
+                line.commit.filename,
+                previousfilename,
+                line.commit.commithash,
+                previouscommit,
+                line.lineno_then,
+            )
+            logging.debug(
+                "ignore commit %s on line p%d/t%d/n%d",
+                line.commit.commithash,
+                lineno_previous,
+                line.lineno_then,
+                line.lineno_now,
+            )
 
             # Get the line at lineno_previous in the parent commit.
             assert 1 <= lineno_previous <= len(parent_blame)
@@ -309,9 +320,14 @@ def hyper_blame(outbuf, ignored, filename, revision):
 
             # Replace the commit and lineno_then, but not the lineno_now or
             # context.
-            line = BlameLine(newline.commit, line.context, newline.lineno_then,
-                             line.lineno_now, True)
-            logging.debug('    replacing with %r', line)
+            line = BlameLine(
+                newline.commit,
+                line.context,
+                newline.lineno_then,
+                line.lineno_now,
+                True,
+            )
+            logging.debug("    replacing with %r", line)
 
         # If any line has a different filename to the file's current name, turn
         # on filename display for the entire blame output. Use normpath to make
@@ -328,40 +344,50 @@ def hyper_blame(outbuf, ignored, filename, revision):
 
 def parse_ignore_file(ignore_file):
     for line in ignore_file:
-        line = line.split('#', 1)[0].strip()
+        line = line.split("#", 1)[0].strip()
         if line:
             yield line
 
 
 def main(args, outbuf):
     if gclient_utils.IsEnvCog():
-        print('hyper-blame command is not supported in non-git environment.',
-              file=sys.stderr)
+        print(
+            "hyper-blame command is not supported in non-git environment.",
+            file=sys.stderr,
+        )
         return 1
     parser = argparse.ArgumentParser(
-        prog='git hyper-blame',
-        description='git blame with support for ignoring certain commits.')
-    parser.add_argument('-i',
-                        metavar='REVISION',
-                        action='append',
-                        dest='ignored',
-                        default=[],
-                        help='a revision to ignore')
-    parser.add_argument('--ignore-file',
-                        metavar='FILE',
-                        dest='ignore_file',
-                        help='a file containing a list of revisions to ignore')
+        prog="git hyper-blame",
+        description="git blame with support for ignoring certain commits.",
+    )
     parser.add_argument(
-        '--no-default-ignores',
-        dest='no_default_ignores',
-        action='store_true',
-        help='Do not ignore commits from .git-blame-ignore-revs.')
-    parser.add_argument('revision',
-                        nargs='?',
-                        default='HEAD',
-                        metavar='REVISION',
-                        help='revision to look at')
-    parser.add_argument('filename', metavar='FILE', help='filename to blame')
+        "-i",
+        metavar="REVISION",
+        action="append",
+        dest="ignored",
+        default=[],
+        help="a revision to ignore",
+    )
+    parser.add_argument(
+        "--ignore-file",
+        metavar="FILE",
+        dest="ignore_file",
+        help="a file containing a list of revisions to ignore",
+    )
+    parser.add_argument(
+        "--no-default-ignores",
+        dest="no_default_ignores",
+        action="store_true",
+        help="Do not ignore commits from .git-blame-ignore-revs.",
+    )
+    parser.add_argument(
+        "revision",
+        nargs="?",
+        default="HEAD",
+        metavar="REVISION",
+        help="revision to look at",
+    )
+    parser.add_argument("filename", metavar="FILE", help="filename to blame")
 
     args = parser.parse_args(args)
     try:
@@ -380,8 +406,9 @@ def main(args, outbuf):
     filename = os.path.normcase(filename)
 
     ignored_list = list(args.ignored)
-    if not args.no_default_ignores and \
-        os.path.exists(git_common.GIT_BLAME_IGNORE_REV_FILE):
+    if not args.no_default_ignores and os.path.exists(
+        git_common.GIT_BLAME_IGNORE_REV_FILE
+    ):
         with open(git_common.GIT_BLAME_IGNORE_REV_FILE) as ignore_file:
             ignored_list.extend(parse_ignore_file(ignore_file))
 
@@ -396,12 +423,12 @@ def main(args, outbuf):
         except subprocess2.CalledProcessError as e:
             # Custom warning string (the message from git-rev-parse is
             # inappropriate).
-            sys.stderr.write('warning: unknown revision \'%s\'.\n' % c)
+            sys.stderr.write("warning: unknown revision '%s'.\n" % c)
 
     return hyper_blame(outbuf, ignored, filename, args.revision)
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     setup_color.init()
     with git_common.less() as less_input:
         sys.exit(main(sys.argv[1:], less_input))

@@ -24,31 +24,38 @@ import metadata.fields.known
 
 # Common paths for tests.
 _SOURCE_FILE_DIR = os.path.join(_THIS_DIR, "data")
-_VALID_METADATA_FILEPATH = os.path.join(_THIS_DIR, "data",
-                                        "README.chromium.test.multi-valid")
-_INVALID_METADATA_FILEPATH = os.path.join(_THIS_DIR, "data",
-                                          "README.chromium.test.multi-invalid")
+_VALID_METADATA_FILEPATH = os.path.join(
+    _THIS_DIR, "data", "README.chromium.test.multi-valid"
+)
+_INVALID_METADATA_FILEPATH = os.path.join(
+    _THIS_DIR, "data", "README.chromium.test.multi-invalid"
+)
 
 
 class ScanTest(unittest.TestCase):
-
     def test_main_passes_is_open_source_flag(self):
-        with (unittest.mock.patch("metadata.discover.find_metadata_files",
-                                  return_value=["/path/to/README.chromium"]),
-              unittest.mock.patch("metadata.validate.validate_file",
-                                  return_value=[]) as mock_validate,
-              unittest.mock.patch("os.path.exists", return_value=True),
-              unittest.mock.patch("os.path.isdir", return_value=True)):
-
+        with (
+            unittest.mock.patch(
+                "metadata.discover.find_metadata_files",
+                return_value=["/path/to/README.chromium"],
+            ),
+            unittest.mock.patch(
+                "metadata.validate.validate_file", return_value=[]
+            ) as mock_validate,
+            unittest.mock.patch("os.path.exists", return_value=True),
+            unittest.mock.patch("os.path.isdir", return_value=True),
+        ):
             # Test with flag --is-open-source-project
             with unittest.mock.patch(
-                    "sys.argv",
-                ["scan.py", "--is-open-source-project", "/path/to/repo"]):
+                "sys.argv",
+                ["scan.py", "--is-open-source-project", "/path/to/repo"],
+            ):
                 metadata.scan.main()
                 mock_validate.assert_called_with(
                     "/path/to/README.chromium",
                     repo_root_dir=os.path.abspath("/path/to/repo"),
-                    is_open_source_project=True)
+                    is_open_source_project=True,
+                )
 
             # Test without flag
             with unittest.mock.patch("sys.argv", ["scan.py", "/path/to/repo"]):
@@ -56,12 +63,14 @@ class ScanTest(unittest.TestCase):
                 mock_validate.assert_called_with(
                     "/path/to/README.chromium",
                     repo_root_dir=os.path.abspath("/path/to/repo"),
-                    is_open_source_project=False)
+                    is_open_source_project=False,
+                )
 
     def test_main_generates_json_summary(self):
         # Mock results for validation: one invalid, one valid.
         mock_result = unittest.mock.MagicMock(
-            spec=metadata.validation_result.ValidationResult)
+            spec=metadata.validation_result.ValidationResult
+        )
         mock_result.get_severity_prefix.return_value = "ERROR"
         mock_result.get_reason.return_value = "Test reason"
         mock_result.is_fatal.return_value = True
@@ -76,20 +85,25 @@ class ScanTest(unittest.TestCase):
                 return [mock_result]
             return []
 
-        with (unittest.mock.patch(
+        with (
+            unittest.mock.patch(
                 "metadata.discover.find_metadata_files",
-                return_value=[metadata_file_1, metadata_file_2]),
-              unittest.mock.patch("metadata.validate.validate_file",
-                                  side_effect=mock_validate_file),
-              unittest.mock.patch("os.path.exists", return_value=True),
-              unittest.mock.patch("os.path.isdir", return_value=True),
-              unittest.mock.patch("metadata.scan.open",
-                                  unittest.mock.mock_open()) as mock_file):
-
+                return_value=[metadata_file_1, metadata_file_2],
+            ),
+            unittest.mock.patch(
+                "metadata.validate.validate_file",
+                side_effect=mock_validate_file,
+            ),
+            unittest.mock.patch("os.path.exists", return_value=True),
+            unittest.mock.patch("os.path.isdir", return_value=True),
+            unittest.mock.patch(
+                "metadata.scan.open", unittest.mock.mock_open()
+            ) as mock_file,
+        ):
             json_path = "/path/to/summary.json"
             with unittest.mock.patch(
-                    "sys.argv",
-                ["scan.py", "--json-summary", json_path, repo_path]):
+                "sys.argv", ["scan.py", "--json-summary", json_path, repo_path]
+            ):
                 metadata.scan.main()
 
                 # Check that the file was opened for writing.
@@ -97,29 +111,29 @@ class ScanTest(unittest.TestCase):
 
                 # Verify that the JSON content was written.
                 handle = mock_file()
-                written_data = "".join(call.args[0]
-                                       for call in handle.write.call_args_list)
+                written_data = "".join(
+                    call.args[0] for call in handle.write.call_args_list
+                )
                 parsed_data = json.loads(written_data)
                 self.assertDictEqual(
-                    parsed_data, {
-                        "summary": {
-                            "invalid_files": 1,
-                            "total_files": 2
-                        },
+                    parsed_data,
+                    {
+                        "summary": {"invalid_files": 1, "total_files": 2},
                         "files": {
-                            "README.chromium.1": [{
-                                "severity": "ERROR",
-                                "fatal": True,
-                                "message": "ERROR - Test reason",
-                                "reason": "Test reason",
-                            }]
+                            "README.chromium.1": [
+                                {
+                                    "severity": "ERROR",
+                                    "fatal": True,
+                                    "message": "ERROR - Test reason",
+                                    "reason": "Test reason",
+                                }
+                            ]
                         },
-                    })
-
+                    },
+                )
 
 
 class MetadataValidationTestCase(unittest.TestCase):
-
     def assertResultsContain(self, results, expected_results, result_type):
         """Helper to check for expected strings in a list of results."""
         unmatched_results = [r.replace("\n", " ") for r in results]
@@ -131,16 +145,20 @@ class MetadataValidationTestCase(unittest.TestCase):
                     unmatched_results.pop(i)
                     match_found = True
                     break
-            self.assertTrue(match_found,
-                            f"Expected {result_type} '{expected}' not found")
+            self.assertTrue(
+                match_found, f"Expected {result_type} '{expected}' not found"
+            )
 
         self.assertEqual(
-            unmatched_results, [],
-            f"Unexpected {result_type}s found: {unmatched_results}")
+            unmatched_results,
+            [],
+            f"Unexpected {result_type}s found: {unmatched_results}",
+        )
 
 
 class ValidateContentTest(MetadataValidationTestCase):
     """Tests for the validate_content function."""
+
     def test_empty(self):
         # Validate empty content (should result in a validation error).
         results = metadata.validate.validate_content(
@@ -176,20 +194,23 @@ class ValidateContentTest(MetadataValidationTestCase):
             "Required field 'License File' is missing.",
             "Required field 'License File' is missing.",
             "Required field 'Shipped' is missing.",
-            "There is a repeated field.", "URL is invalid."
+            "There is a repeated field.",
+            "URL is invalid.",
         ]
         self.assertResultsContain(errors, expected_errors, "error")
 
         expected_warnings = [
-            "License not in the allowlist.", "Version is '0'.",
+            "License not in the allowlist.",
+            "Version is '0'.",
             "Dependency metadata is insufficient for vulnerability scanning.",
-            "Dependency metadata is insufficient for vulnerability scanning."
+            "Dependency metadata is insufficient for vulnerability scanning.",
         ]
         self.assertResultsContain(warnings, expected_warnings, "warning")
 
 
 class ValidateFileTest(MetadataValidationTestCase):
     """Tests for the validate_file function."""
+
     def test_missing(self):
         # Validate a file that does not exist.
         results = metadata.validate.validate_file(
@@ -222,19 +243,22 @@ class ValidateFileTest(MetadataValidationTestCase):
             "Required field 'License File' is missing.",
             "Required field 'License File' is missing.",
             "Required field 'Shipped' is missing.",
-            "There is a repeated field.", "URL is invalid."
+            "There is a repeated field.",
+            "URL is invalid.",
         ]
         self.assertResultsContain(errors, expected_errors, "error")
         expected_warnings = [
-            "License not in the allowlist.", "Version is '0'.",
+            "License not in the allowlist.",
+            "Version is '0'.",
             "Dependency metadata is insufficient for vulnerability scanning.",
-            "Dependency metadata is insufficient for vulnerability scanning."
+            "Dependency metadata is insufficient for vulnerability scanning.",
         ]
         self.assertResultsContain(warnings, expected_warnings, "warning")
 
 
 class CheckFileTest(MetadataValidationTestCase):
     """Tests for the check_file function."""
+
     def test_missing(self):
         # Check a file that does not exist.
         errors, warnings = metadata.validate.check_file(
@@ -266,14 +290,15 @@ class CheckFileTest(MetadataValidationTestCase):
             "Required field 'License File' is missing.",
             "Required field 'Shipped' is missing.",
             "There is a repeated field. Repeated fields: URL (2)",
-            "URL is invalid."
+            "URL is invalid.",
         ]
         self.assertResultsContain(errors, expected_errors, "error")
 
         expected_warnings = [
-            "License not in the allowlist.", "Version is '0'.",
+            "License not in the allowlist.",
+            "Version is '0'.",
             "Dependency metadata is insufficient for vulnerability scanning.",
-            "Dependency metadata is insufficient for vulnerability scanning."
+            "Dependency metadata is insufficient for vulnerability scanning.",
         ]
         self.assertResultsContain(warnings, expected_warnings, "warning")
 
@@ -303,11 +328,15 @@ class ValidationResultTest(unittest.TestCase):
             ["message1", "message2"],
         )
         self.assertEqual(
-            ("Third party metadata issue: abc message1 message2 Check "
-             "//third_party/README.chromium.template for details."),
-            ve.get_message())
-        self.assertEqual("abc message1 message2",
-                         ve.get_message(prescript='', postscript=''))
+            (
+                "Third party metadata issue: abc message1 message2 Check "
+                "//third_party/README.chromium.template for details."
+            ),
+            ve.get_message(),
+        )
+        self.assertEqual(
+            "abc message1 message2", ve.get_message(prescript="", postscript="")
+        )
 
     def test_getters(self):
         ve = metadata.validation_result.ValidationError(
@@ -319,33 +348,36 @@ class ValidationResultTest(unittest.TestCase):
 
 
 class ValidationWithLineNumbers(unittest.TestCase):
-
     def test_reports_line_number(self):
         """Checks validate reports line number if available."""
-        filepath = os.path.join(_THIS_DIR, "data",
-                                "README.chromium.test.validation-line-number")
+        filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.validation-line-number"
+        )
         content = gclient_utils.FileRead(filepath)
         unittest.mock.patch(
-            'metadata.fields.known.LICENSE_FILE.validate_on_disk',
+            "metadata.fields.known.LICENSE_FILE.validate_on_disk",
             return_value=metadata.validation_result.ValidationError(
-                "File doesn't exist."))
+                "File doesn't exist."
+            ),
+        )
 
-        results = metadata.validate.validate_content(content,
-                                                     "chromium/src/test_dir",
-                                                     "chromium/src")
+        results = metadata.validate.validate_content(
+            content, "chromium/src/test_dir", "chromium/src"
+        )
 
         for r in results:
-            if r.get_reason() == 'License File is invalid.':
+            if r.get_reason() == "License File is invalid.":
                 self.assertEqual(r.get_lines(), [10])
-            elif r.get_reason(
-            ) == "Required field 'License Android Compatible' is missing.":
+            elif (
+                r.get_reason()
+                == "Required field 'License Android Compatible' is missing."
+            ):
                 # We can't add a line number to errors caused by missing fields.
                 self.assertEqual(r.get_lines(), [])
             elif r.get_reason() == "Versioning fields are insufficient.":
                 # We can't add a line number to errors caused by missing fields.
                 self.assertEqual(r.get_lines(), [])
-            elif r.get_reason(
-            ) == "License not in the allowlist.":
+            elif r.get_reason() == "License not in the allowlist.":
                 self.assertEqual(r.get_lines(), [9])
             elif r.get_reason() == "URL is invalid.":
                 self.assertEqual(r.get_lines(), [2, 3, 4])
@@ -355,16 +387,20 @@ class ValidationWithLineNumbers(unittest.TestCase):
 
 class ValidateReciprocalLicenseTest(unittest.TestCase):
     """Tests that validate_content handles allowing reciprocal licenses correctly."""
+
     def test_reciprocal_licenses(self):
         # Test content with a reciprocal license (MPL-2.0).
-        reciprocal_license_metadata_filepath = os.path.join(_THIS_DIR, "data",
-            "README.chromium.test.reciprocal-license")
+        reciprocal_license_metadata_filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.reciprocal-license"
+        )
         # Without is_open_source_project, should get a warning.
         results = metadata.validate.validate_content(
-            content=gclient_utils.FileRead(reciprocal_license_metadata_filepath),
+            content=gclient_utils.FileRead(
+                reciprocal_license_metadata_filepath
+            ),
             source_file_dir=_SOURCE_FILE_DIR,
             repo_root_dir=_THIS_DIR,
-            is_open_source_project=False
+            is_open_source_project=False,
         )
 
         license_errors = []
@@ -374,14 +410,20 @@ class ValidateReciprocalLicenseTest(unittest.TestCase):
             if not is_fatal and "License not in the allowlist" in reason:
                 license_errors.append(result)
 
-        self.assertEqual(len(license_errors), 1, "Should create an error when a reciprocal license is used in a non-open source project")
+        self.assertEqual(
+            len(license_errors),
+            1,
+            "Should create an error when a reciprocal license is used in a non-open source project",
+        )
 
         # With is_open_source_project=True, should be no warnings.
         results = metadata.validate.validate_content(
-            content=gclient_utils.FileRead(reciprocal_license_metadata_filepath),
+            content=gclient_utils.FileRead(
+                reciprocal_license_metadata_filepath
+            ),
             source_file_dir=_SOURCE_FILE_DIR,
             repo_root_dir=_THIS_DIR,
-            is_open_source_project=True
+            is_open_source_project=True,
         )
 
         license_errors = []
@@ -389,7 +431,11 @@ class ValidateReciprocalLicenseTest(unittest.TestCase):
             if "License not in the allowlist" in result.get_reason():
                 license_errors.append(result)
 
-        self.assertEqual(len(license_errors), 0, "Should not create an error when a reciprocal license is used in an open source project")
+        self.assertEqual(
+            len(license_errors),
+            0,
+            "Should not create an error when a reciprocal license is used in an open source project",
+        )
 
 
 class ValidateRestrictedLicenseTest(unittest.TestCase):
@@ -398,24 +444,31 @@ class ValidateRestrictedLicenseTest(unittest.TestCase):
     # TODO(b/388620886): Warn when changing to a restricted license.
     def test_restricted_licenses(self):
         # Test content with a restricted license (GPL-2.0).
-        restricted_license_metadata_filepath = os.path.join(_THIS_DIR, "data",
-            "README.chromium.test.restricted-license")
+        restricted_license_metadata_filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.restricted-license"
+        )
         results = metadata.validate.validate_content(
-            content=gclient_utils.FileRead(restricted_license_metadata_filepath),
+            content=gclient_utils.FileRead(
+                restricted_license_metadata_filepath
+            ),
             source_file_dir=_SOURCE_FILE_DIR,
             repo_root_dir=_THIS_DIR,
-            is_open_source_project=False
+            is_open_source_project=False,
         )
 
         license_errors = []
         for result in results:
-            if ("License has a license not in the allowlist"
-                    in result.get_reason()):
+            if (
+                "License has a license not in the allowlist"
+                in result.get_reason()
+            ):
                 license_errors.append(result)
 
         self.assertEqual(
-            len(license_errors), 0,
-            "Should not create an error when a restricted license is used")
+            len(license_errors),
+            0,
+            "Should not create an error when a restricted license is used",
+        )
 
     def test_gpl_license_not_shipped_allowed(self):
         # Test content with a GPL license and Shipped: no.
@@ -435,14 +488,19 @@ Test GPL no shipped.
             content=content,
             source_file_dir=_SOURCE_FILE_DIR,
             repo_root_dir=_THIS_DIR,
-            is_open_source_project=False)
+            is_open_source_project=False,
+        )
         license_warnings = [
-            r for r in results if not r.is_fatal()
+            r
+            for r in results
+            if not r.is_fatal()
             and "License not in the allowlist" in r.get_reason()
         ]
         self.assertEqual(
-            len(license_warnings), 0,
-            "Should not create a warning when GPL is used and not shipped")
+            len(license_warnings),
+            0,
+            "Should not create a warning when GPL is used and not shipped",
+        )
 
     def test_gpl_license_shipped_warns(self):
         # Test content with a GPL license and Shipped: yes.
@@ -462,14 +520,20 @@ Test GPL shipped.
             content=content,
             source_file_dir=_SOURCE_FILE_DIR,
             repo_root_dir=_THIS_DIR,
-            is_open_source_project=False)
+            is_open_source_project=False,
+        )
         license_warnings = [
-            r for r in results if not r.is_fatal()
+            r
+            for r in results
+            if not r.is_fatal()
             and "License not in the allowlist" in r.get_reason()
         ]
         self.assertEqual(
-            len(license_warnings), 1,
-            "Should create a warning when GPL is used and shipped")
+            len(license_warnings),
+            1,
+            "Should create a warning when GPL is used and shipped",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

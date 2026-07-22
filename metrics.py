@@ -20,17 +20,19 @@ import subprocess2
 import utils
 
 DEPOT_TOOLS = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = utils.depot_tools_config_path('metrics.cfg')
-UPLOAD_SCRIPT = os.path.join(DEPOT_TOOLS, 'upload_metrics.py')
+CONFIG_FILE = utils.depot_tools_config_path("metrics.cfg")
+UPLOAD_SCRIPT = os.path.join(DEPOT_TOOLS, "upload_metrics.py")
 
 DEFAULT_COUNTDOWN = 10
 
 INVALID_CONFIG_WARNING = (
-    'WARNING: Your metrics.cfg file was invalid or nonexistent. A new one will '
-    'be created.')
+    "WARNING: Your metrics.cfg file was invalid or nonexistent. A new one will "
+    "be created."
+)
 PERMISSION_DENIED_WARNING = (
-    'Could not write the metrics collection config:\n\t%s\n'
-    'Metrics collection will be disabled.')
+    "Could not write the metrics collection config:\n\t%s\n"
+    "Metrics collection will be disabled."
+)
 
 
 class _Config(object):
@@ -45,10 +47,10 @@ class _Config(object):
         # Metrics collection is disabled, so don't collect any metrics.
         if not metrics_utils.COLLECT_METRICS:
             self._config = {
-                'is-googler': False,
-                'countdown': 0,
-                'opt-in': False,
-                'version': metrics_utils.CURRENT_VERSION,
+                "is-googler": False,
+                "countdown": 0,
+                "opt-in": False,
+                "version": metrics_utils.CURRENT_VERSION,
             }
             self._initialized = True
             return
@@ -56,10 +58,10 @@ class _Config(object):
         # We are running on a bot. Ignore config and collect metrics.
         if metrics_utils.REPORT_BUILD:
             self._config = {
-                'is-googler': True,
-                'countdown': 0,
-                'opt-in': True,
-                'version': metrics_utils.CURRENT_VERSION,
+                "is-googler": True,
+                "countdown": 0,
+                "opt-in": True,
+                "version": metrics_utils.CURRENT_VERSION,
             }
             self._initialized = True
             return
@@ -71,22 +73,23 @@ class _Config(object):
 
         self._config = config.copy()
 
-        if 'is-googler' not in self._config:
+        if "is-googler" not in self._config:
             # /should-upload is only accessible from Google IPs, so we only need
             # to check if we can reach the page. An external developer would get
             # access denied.
             try:
-                req = urllib.request.urlopen(metrics_utils.APP_URL +
-                                             '/should-upload')
-                self._config['is-googler'] = req.getcode() == 200
+                req = urllib.request.urlopen(
+                    metrics_utils.APP_URL + "/should-upload"
+                )
+                self._config["is-googler"] = req.getcode() == 200
             except (urllib.request.URLError, urllib.request.HTTPError):
-                self._config['is-googler'] = False
+                self._config["is-googler"] = False
 
         # Make sure the config variables we need are present, and initialize
         # them to safe values otherwise.
-        self._config.setdefault('countdown', DEFAULT_COUNTDOWN)
-        self._config.setdefault('opt-in', None)
-        self._config.setdefault('version', metrics_utils.CURRENT_VERSION)
+        self._config.setdefault("countdown", DEFAULT_COUNTDOWN)
+        self._config.setdefault("opt-in", None)
+        self._config.setdefault("version", metrics_utils.CURRENT_VERSION)
 
         if config != self._config:
             print(INVALID_CONFIG_WARNING, file=sys.stderr)
@@ -99,34 +102,34 @@ class _Config(object):
             gclient_utils.FileWrite(CONFIG_FILE, json.dumps(self._config))
         except IOError as e:
             print(PERMISSION_DENIED_WARNING % e, file=sys.stderr)
-            self._config['opt-in'] = False
+            self._config["opt-in"] = False
 
     @property
     def version(self):
         self._ensure_initialized()
-        return self._config['version']
+        return self._config["version"]
 
     @property
     def is_googler(self):
         self._ensure_initialized()
-        return self._config['is-googler']
+        return self._config["is-googler"]
 
     @property
     def opted_in(self):
         self._ensure_initialized()
-        return self._config['opt-in']
+        return self._config["opt-in"]
 
     @opted_in.setter
     def opted_in(self, value):
         self._ensure_initialized()
-        self._config['opt-in'] = value
-        self._config['version'] = metrics_utils.CURRENT_VERSION
+        self._config["opt-in"] = value
+        self._config["version"] = metrics_utils.CURRENT_VERSION
         self._write_config()
 
     @property
     def countdown(self):
         self._ensure_initialized()
-        return self._config['countdown']
+        return self._config["countdown"]
 
     @property
     def should_collect_metrics(self):
@@ -145,17 +148,17 @@ class _Config(object):
         self._ensure_initialized()
         if self.countdown == 0:
             return
-        self._config['countdown'] -= 1
+        self._config["countdown"] -= 1
         if self.countdown == 0:
-            self._config['version'] = metrics_utils.CURRENT_VERSION
+            self._config["version"] = metrics_utils.CURRENT_VERSION
         self._write_config()
 
     def reset_config(self):
         # Only reset countdown if we're already collecting metrics.
         if self.should_collect_metrics:
             self._ensure_initialized()
-            self._config['countdown'] = DEFAULT_COUNTDOWN
-            self._config['opt-in'] = None
+            self._config["countdown"] = DEFAULT_COUNTDOWN
+            self._config["opt-in"] = None
 
 
 class MetricsCollector(object):
@@ -195,12 +198,13 @@ class MetricsCollector(object):
 
     def _upload_metrics_data(self):
         """Upload the metrics data to the AppEngine app."""
-        p = subprocess2.Popen(['vpython3', UPLOAD_SCRIPT],
-                              stdin=subprocess2.PIPE)
+        p = subprocess2.Popen(
+            ["vpython3", UPLOAD_SCRIPT], stdin=subprocess2.PIPE
+        )
         # We invoke a subprocess, and use stdin.write instead of communicate(),
         # so that we are able to return immediately, leaving the upload running
         # in the background.
-        p.stdin.write(json.dumps(self._reported_metrics).encode('utf-8'))
+        p.stdin.write(json.dumps(self._reported_metrics).encode("utf-8"))
         # ... but if we're running on a bot, wait until upload has completed.
         if metrics_utils.REPORT_BUILD:
             p.communicate()
@@ -217,8 +221,8 @@ class MetricsCollector(object):
                 return func(*args, **kwargs)
 
         self._collecting_metrics = True
-        self.add('metrics_version', metrics_utils.CURRENT_VERSION)
-        self.add('command', command_name)
+        self.add("metrics_version", metrics_utils.CURRENT_VERSION)
+        self.add("command", command_name)
 
         try:
             start = time.time()
@@ -228,50 +232,52 @@ class MetricsCollector(object):
         except:
             exception = sys.exc_info()
         finally:
-            self.add('execution_time', time.time() - start)
+            self.add("execution_time", time.time() - start)
 
         exit_code = metrics_utils.return_code_from_exception(exception)
-        self.add('exit_code', exit_code)
+        self.add("exit_code", exit_code)
 
         # Add metrics regarding environment information.
-        self.add('timestamp', int(time.time()))
-        self.add('python_version', metrics_utils.get_python_version())
-        self.add('host_os', gclient_utils.GetOperatingSystem())
-        self.add('host_arch', detect_host_arch.HostArch())
+        self.add("timestamp", int(time.time()))
+        self.add("python_version", metrics_utils.get_python_version())
+        self.add("host_os", gclient_utils.GetOperatingSystem())
+        self.add("host_arch", detect_host_arch.HostArch())
         state = metrics_utils.get_edit_monitor_state()
         if state:
-            self.add_repeated('env_vars', {
-                'name': 'EDIT_MONITOR_STATE',
-                'value': state
-            })
+            self.add_repeated(
+                "env_vars", {"name": "EDIT_MONITOR_STATE", "value": state}
+            )
 
         is_cog = gclient_utils.IsEnvCog()
         if is_cog:
-            self.add_repeated('env_vars', {'name': 'IS_COG', 'value': 'true'})
+            self.add_repeated("env_vars", {"name": "IS_COG", "value": "true"})
 
         depot_tools_age = metrics_utils.get_repo_timestamp(DEPOT_TOOLS)
         if depot_tools_age is not None:
-            self.add('depot_tools_age', int(depot_tools_age))
+            self.add("depot_tools_age", int(depot_tools_age))
 
         git_version = metrics_utils.get_git_version()
         if git_version:
-            self.add('git_version', git_version)
+            self.add("git_version", git_version)
 
         bot_metrics = metrics_utils.get_bot_metrics()
         if bot_metrics:
-            self.add('bot_metrics', bot_metrics)
+            self.add("bot_metrics", bot_metrics)
 
         # TODO(b/347085702): Remove this variable when dogfood is over.
-        new_auth_enabled = 'DEFAULT'
+        new_auth_enabled = "DEFAULT"
         if newauth.Enabled():
-            new_auth_enabled = 'TRUE'
+            new_auth_enabled = "TRUE"
         elif newauth.ExplicitlyDisabled():
-            new_auth_enabled = 'FALSE'
-        if new_auth_enabled != 'DEFAULT':
-            self.add_repeated('env_vars', {
-                'name': 'DOGFOOD_NEW_AUTH',
-                'value': new_auth_enabled,
-            })
+            new_auth_enabled = "FALSE"
+        if new_auth_enabled != "DEFAULT":
+            self.add_repeated(
+                "env_vars",
+                {
+                    "name": "DOGFOOD_NEW_AUTH",
+                    "value": new_auth_enabled,
+                },
+            )
 
         self._upload_metrics_data()
         if exception:
@@ -284,14 +290,17 @@ class MetricsCollector(object):
         This decorator executes the function and collects metrics about the
         system environment and the function performance.
         """
+
         def _decorator(func):
             if not self.config.should_collect_metrics:
                 return func
+
             # Needed to preserve the __name__ and __doc__ attributes of func.
             @functools.wraps(func)
             def _inner(*args, **kwargs):
-                return self._collect_metrics(func, command_name, *args,
-                                             **kwargs)
+                return self._collect_metrics(
+                    func, command_name, *args, **kwargs
+                )
 
             return _inner
 
@@ -319,13 +328,16 @@ class MetricsCollector(object):
         # clearly visible even if gclient fails.
         if exception:
             if isinstance(exception[1], KeyboardInterrupt):
-                sys.stderr.write('Interrupted\n')
+                sys.stderr.write("Interrupted\n")
             elif not isinstance(exception[1], SystemExit):
                 traceback.print_exception(*exception)
 
         # Check if the version has changed
-        if (self.config.is_googler and self.config.opted_in is not False
-                and self.config.version != metrics_utils.CURRENT_VERSION):
+        if (
+            self.config.is_googler
+            and self.config.opted_in is not False
+            and self.config.version != metrics_utils.CURRENT_VERSION
+        ):
             metrics_utils.print_version_change(self.config.version)
             self.config.reset_config()
 

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Tools for interacting with buildbucket"""
+
 import json
 import urllib.parse
 
@@ -10,7 +11,7 @@ import telemetry
 
 import common
 
-BUILDBUCKET_SERVER = 'cr-buildbucket.appspot.com'
+BUILDBUCKET_SERVER = "cr-buildbucket.appspot.com"
 
 tracer = telemetry.get_tracer(__name__)
 
@@ -26,13 +27,16 @@ async def get_build_status(
     Return:
       The status of the build as a string
     """
-    with tracer.start_as_current_span('chromium.mcp.get_build_status'):
-        await ctx.info(f'Received request {build_id}')
-        request = {'id': build_id}
+    with tracer.start_as_current_span("chromium.mcp.get_build_status"):
+        await ctx.info(f"Received request {build_id}")
+        request = {"id": build_id}
         response = await common.run_prpc_call(
-            ctx, BUILDBUCKET_SERVER, 'buildbucket.v2.Builds.GetBuildStatus',
-            request)
-        return json.loads(response)['status']
+            ctx,
+            BUILDBUCKET_SERVER,
+            "buildbucket.v2.Builds.GetBuildStatus",
+            request,
+        )
+        return json.loads(response)["status"]
 
 
 async def get_build_from_id(
@@ -56,11 +60,11 @@ async def get_build_from_id(
       The build in json format including the requested fields. See:
       https://chromium.googlesource.com/infra/luci/recipes-py/+/main/recipe_proto/go.chromium.org/luci/buildbucket/proto/build.proto
     """
-    with tracer.start_as_current_span('chromium.mcp.get_build_from_id'):
-        request = {'id': build_id, 'mask': {'fields': ','.join(fields)}}
-        response = await common.run_prpc_call(ctx, BUILDBUCKET_SERVER,
-                                              'buildbucket.v2.Builds.GetBuild',
-                                              request)
+    with tracer.start_as_current_span("chromium.mcp.get_build_from_id"):
+        request = {"id": build_id, "mask": {"fields": ",".join(fields)}}
+        response = await common.run_prpc_call(
+            ctx, BUILDBUCKET_SERVER, "buildbucket.v2.Builds.GetBuild", request
+        )
         return response
 
 
@@ -92,21 +96,20 @@ async def get_build_from_build_number(
       https://chromium.googlesource.com/infra/luci/recipes-py/+/main/recipe_proto/go.chromium.org/luci/buildbucket/proto/build.proto
     """
     with tracer.start_as_current_span(
-            'chromium.mcp.get_build_from_build_number'):
+        "chromium.mcp.get_build_from_build_number"
+    ):
         request = {
-            'buildNumber': build_number,
-            'builder': {
-                'builder': builder_name,
-                'bucket': builder_bucket,
-                'project': builder_project
+            "buildNumber": build_number,
+            "builder": {
+                "builder": builder_name,
+                "bucket": builder_bucket,
+                "project": builder_project,
             },
-            'mask': {
-                'fields': ','.join(fields)
-            }
+            "mask": {"fields": ",".join(fields)},
         }
-        response = await common.run_prpc_call(ctx, BUILDBUCKET_SERVER,
-                                              'buildbucket.v2.Builds.GetBuild',
-                                              request)
+        response = await common.run_prpc_call(
+            ctx, BUILDBUCKET_SERVER, "buildbucket.v2.Builds.GetBuild", request
+        )
         return response
 
 
@@ -161,11 +164,11 @@ async def get_build(
       https://chromium.googlesource.com/infra/luci/recipes-py/+/main/recipe_proto/go.chromium.org/luci/buildbucket/proto/build.proto
       for more details.
     """
-    with tracer.start_as_current_span('chromium.mcp.get_build'):
-        await ctx.info(f'Received request {request}')
-        response = await common.run_prpc_call(ctx, BUILDBUCKET_SERVER,
-                                              'buildbucket.v2.Builds.GetBuild',
-                                              request)
+    with tracer.start_as_current_span("chromium.mcp.get_build"):
+        await ctx.info(f"Received request {request}")
+        response = await common.run_prpc_call(
+            ctx, BUILDBUCKET_SERVER, "buildbucket.v2.Builds.GetBuild", request
+        )
         return response
 
 
@@ -199,7 +202,7 @@ async def get_recent_builds(
         https://source.chromium.org/chromium/infra/infra_superproject/+/main:infra/go/src/go.chromium.org/luci/buildbucket/proto/builds_service.proto
         for more details.
     """
-    with tracer.start_as_current_span('chromium.mcp.get_recent_builds'):
+    with tracer.start_as_current_span("chromium.mcp.get_recent_builds"):
         return await _get_recent_builds(
             ctx,
             builder_name,
@@ -240,7 +243,7 @@ async def get_recent_failed_builds(
         https://source.chromium.org/chromium/infra/infra_superproject/+/main:infra/go/src/go.chromium.org/luci/buildbucket/proto/builds_service.proto
         for more details.
     """
-    with tracer.start_as_current_span('chromium.mcp.get_recent_failed_builds'):
+    with tracer.start_as_current_span("chromium.mcp.get_recent_failed_builds"):
         return await _get_recent_builds(
             ctx,
             builder_name,
@@ -276,19 +279,19 @@ async def _get_recent_builds(
         Same as caller.
     """
     if num_builds < 1:
-        raise ValueError(f'Provided num_builds {num_builds} is not positive')
+        raise ValueError(f"Provided num_builds {num_builds} is not positive")
     request = {
-        'predicate': {
-            'builder': {
-                'project': builder_project,
-                'bucket': builder_bucket,
-                'builder': urllib.parse.unquote(builder_name),
+        "predicate": {
+            "builder": {
+                "project": builder_project,
+                "bucket": builder_bucket,
+                "builder": urllib.parse.unquote(builder_name),
             },
-            'status': 'FAILURE' if failed_builds_only else 'ENDED_MASK',
+            "status": "FAILURE" if failed_builds_only else "ENDED_MASK",
         },
-        'page_size': f'{num_builds}'
+        "page_size": f"{num_builds}",
     }
-    response = await common.run_prpc_call(ctx, BUILDBUCKET_SERVER,
-                                          'buildbucket.v2.Builds.SearchBuilds',
-                                          request)
+    response = await common.run_prpc_call(
+        ctx, BUILDBUCKET_SERVER, "buildbucket.v2.Builds.SearchBuilds", request
+    )
     return response

@@ -14,29 +14,29 @@ class Crossbench(config_util.Config):
 
     @staticmethod
     def fetch_spec(props):
-        url = 'https://chromium.googlesource.com/crossbench.git'
+        url = "https://chromium.googlesource.com/crossbench.git"
         solution = {
-            'name': 'crossbench',
-            'url': url,
-            'deps_file': 'DEPS',
-            'custom_deps': {},
+            "name": "crossbench",
+            "url": url,
+            "deps_file": "DEPS",
+            "custom_deps": {},
         }
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'crossbench'
+        return "crossbench"
 
 
 def main(argv=None):
     return Crossbench().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

@@ -28,18 +28,18 @@ def run_bb(args):
     """Runs a bb command and returns the output."""
     cmd = ["bb"] + args
     try:
-        result = subprocess.run(cmd,
-                                capture_output=True,
-                                text=True,
-                                check=True,
-                                timeout=60)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=True, timeout=60
+        )
         return result.stdout
     except subprocess.CalledProcessError as e:
         raise BuildbucketError(
-            f"Error running bb command: {e}\nStderr: {e.stderr}")
+            f"Error running bb command: {e}\nStderr: {e.stderr}"
+        )
     except subprocess.TimeoutExpired as e:
         raise BuildbucketError(
-            f"Error: bb command timed out after 60 seconds: {' '.join(cmd)}")
+            f"Error: bb command timed out after 60 seconds: {' '.join(cmd)}"
+        )
 
 
 def get_latest_build(builder_path):
@@ -47,7 +47,8 @@ def get_latest_build(builder_path):
     output = run_bb(["ls", "-n", "1", "-json", builder_path])
     try:
         builds = [
-            json.loads(line) for line in output.strip().split("\n")
+            json.loads(line)
+            for line in output.strip().split("\n")
             if line.strip()
         ]
         if not builds:
@@ -69,8 +70,10 @@ def list_steps(build_id):
         return
 
     builder_name = build.get("builder", {}).get("builder")
-    print(f"Build: {builder_name} Number: {build.get('number')} "
-          f"ID: {build.get('id')}")
+    print(
+        f"Build: {builder_name} Number: {build.get('number')} "
+        f"ID: {build.get('id')}"
+    )
     print(f"Status: {build.get('status')}")
     print("-" * 40)
 
@@ -92,16 +95,19 @@ def list_steps(build_id):
 
 def get_log(build_id, step_name, log_name, output_file):
     """Fetches a log and saves it to a file."""
-    print(f"Fetching log '{log_name}' for step '{step_name}'\n"
-          f"    of build {build_id}...")
+    print(
+        f"Fetching log '{log_name}' for step '{step_name}'\n"
+        f"    of build {build_id}..."
+    )
     output = run_bb(["log", "-nocolor", build_id, step_name, log_name])
 
     try:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(output)
     except IOError as e:
-        print(f"Error writing log output to {output_file}: {e}",
-              file=sys.stderr)
+        print(
+            f"Error writing log output to {output_file}: {e}", file=sys.stderr
+        )
         sys.exit(1)
 
     print(f"Log saved to {output_file}")
@@ -125,8 +131,9 @@ def parse_gerrit_url(url, explicit_patchset=None, project="chromium/src"):
             host = url.split("://")[1].split("/")[0]
     else:
         if "review.git.corp.google.com" in url:
-            public_url = url.replace("review.git.corp.google.com",
-                                     "review.googlesource.com")
+            public_url = url.replace(
+                "review.git.corp.google.com", "review.googlesource.com"
+            )
             parsed = git_cl.ParseIssueNumberArgument(public_url)
             if parsed.valid:
                 host = url.split("://")[1].split("/")[0]
@@ -146,22 +153,27 @@ def get_patchsets(host, project, change):
     """Finds available patchsets for a CL using Gerrit API via gerrit_util."""
     try:
         data = gerrit_util.CallGerritApi(
-            host, f"changes/{change}/detail?o=ALL_REVISIONS")
+            host, f"changes/{change}/detail?o=ALL_REVISIONS"
+        )
         revisions = data.get("revisions", {})
         if revisions:
             return sorted([rev.get("_number", 1) for rev in revisions.values()])
     except Exception as e:
-        print(f"Warning: Failed to get patchsets from Gerrit: {e}",
-              file=sys.stderr)
+        print(
+            f"Warning: Failed to get patchsets from Gerrit: {e}",
+            file=sys.stderr,
+        )
     return []
 
 
-def list_cl_builds(cl_url,
-                   patchset=None,
-                   show_all=False,
-                   verbose=False,
-                   show_logs=False,
-                   project="chromium/src"):
+def list_cl_builds(
+    cl_url,
+    patchset=None,
+    show_all=False,
+    verbose=False,
+    show_logs=False,
+    project="chromium/src",
+):
     """Lists builds for a CL."""
     host, change, ps, project = parse_gerrit_url(cl_url, patchset, project)
     if not host or not change:
@@ -179,8 +191,10 @@ def list_cl_builds(cl_url,
             )
             sys.exit(1)
         if show_all:
-            print(f"No patchset specified, fetching builds for ALL "
-                  f"patchsets ({min(all_ps)} to {max(all_ps)})...")
+            print(
+                f"No patchset specified, fetching builds for ALL "
+                f"patchsets ({min(all_ps)} to {max(all_ps)})..."
+            )
         else:
             ps = str(max(all_ps))
             print(f"No patchset specified, using latest: {ps}")
@@ -188,23 +202,32 @@ def list_cl_builds(cl_url,
     if ps and not (show_all and not patchset):
         print(f"Fetching builds for {host} change {change} patchset {ps}...")
         predicates = [
-            json.dumps({
-                "tags": [{
-                    "key": "buildset",
-                    "value": f"patch/gerrit/{host}/{change}/{ps}",
-                }]
-            })
+            json.dumps(
+                {
+                    "tags": [
+                        {
+                            "key": "buildset",
+                            "value": f"patch/gerrit/{host}/{change}/{ps}",
+                        }
+                    ]
+                }
+            )
         ]
     else:
         if not all_ps:
             all_ps = get_patchsets(host, project, change)
         predicates = [
-            json.dumps({
-                "tags": [{
-                    "key": "buildset",
-                    "value": f"patch/gerrit/{host}/{change}/{p}",
-                }]
-            }) for p in all_ps
+            json.dumps(
+                {
+                    "tags": [
+                        {
+                            "key": "buildset",
+                            "value": f"patch/gerrit/{host}/{change}/{p}",
+                        }
+                    ]
+                }
+            )
+            for p in all_ps
         ]
 
     cmd = [
@@ -220,11 +243,9 @@ def list_cl_builds(cl_url,
         cmd.extend(["-predicate", p])
 
     try:
-        output = subprocess.run(cmd,
-                                capture_output=True,
-                                text=True,
-                                timeout=60,
-                                check=False)
+        output = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, check=False
+        )
     except subprocess.TimeoutExpired:
         print("Error: bb command timed out after 60 seconds", file=sys.stderr)
         return
@@ -235,7 +256,8 @@ def list_cl_builds(cl_url,
 
     try:
         builds = [
-            json.loads(line) for line in output.stdout.strip().split("\n")
+            json.loads(line)
+            for line in output.stdout.strip().split("\n")
             if line.strip()
         ]
     except json.JSONDecodeError as e:
@@ -293,11 +315,14 @@ def list_cl_builds(cl_url,
             for b in other_builds:
                 s = b.get("status")
                 counts[s] = counts.get(s, 0) + 1
-            sorted_statuses = sorted(counts.keys(),
-                                     key=lambda s: status_priority.get(s, 10))
+            sorted_statuses = sorted(
+                counts.keys(), key=lambda s: status_priority.get(s, 10)
+            )
             counts_str = ", ".join(f"{counts[s]} {s}" for s in sorted_statuses)
-            print(f"Other builders: {counts_str} "
-                  f"(use --all to show all builds/builders)")
+            print(
+                f"Other builders: {counts_str} "
+                f"(use --all to show all builds/builders)"
+            )
 
 
 def _print_build_details(b, show_logs, verbose):
@@ -389,17 +414,21 @@ def _fetch_and_print_log(build_id, step):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Helper wrapper for buildbucket (bb) tool.")
+        description="Helper wrapper for buildbucket (bb) tool."
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     latest_parser = subparsers.add_parser(
-        "latest", help="Get latest build info for a builder")
+        "latest", help="Get latest build info for a builder"
+    )
     latest_parser.add_argument(
-        "builder", help="Builder path (e.g., chromium/ci/Linux Builder)")
+        "builder", help="Builder path (e.g., chromium/ci/Linux Builder)"
+    )
 
     steps_parser = subparsers.add_parser("steps", help="List steps of a build")
     steps_parser.add_argument(
-        "build_id", help="Build ID or Number (if used with builder path)")
+        "build_id", help="Build ID or Number (if used with builder path)"
+    )
 
     logs_parser = subparsers.add_parser("logs", help="Fetch logs for a step")
     logs_parser.add_argument("build_id", help="Build ID")
@@ -457,7 +486,8 @@ def main():
             safe_step = args.step_name.replace(" ", "_").replace("/", "_")
             safe_log = args.log_name.replace(" ", "_").replace("/", "_")
             args.out = os.path.join(
-                "/tmp", f"bb_{args.build_id}_{safe_step}_{safe_log}.log")
+                "/tmp", f"bb_{args.build_id}_{safe_step}_{safe_log}.log"
+            )
 
         get_log(args.build_id, args.step_name, args.log_name, args.out)
 

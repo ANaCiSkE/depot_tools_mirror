@@ -22,73 +22,85 @@ import git_common
 
 
 def parse_options():
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         print(
-            'ERROR: This script cannot run on Windows because it uses symlinks.'
+            "ERROR: This script cannot run on Windows because it uses symlinks."
         )
         sys.exit(1)
     if gclient_utils.IsEnvCog():
-        print('ERROR: This script cannot run in non-git environment.')
+        print("ERROR: This script cannot run in non-git environment.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description='''Clone an existing '''
-    '''gclient workspace, taking care of all sub-repositories.''')
-    parser.add_argument('repository',
-                        type=os.path.abspath,
-                        help='should contain a .gclient file')
-    parser.add_argument('new_workdir', help='must not exist')
+    parser = argparse.ArgumentParser(
+        description="""Clone an existing """
+        """gclient workspace, taking care of all sub-repositories."""
+    )
     parser.add_argument(
-        '--use-git-worktree',
-        action='store_true',
+        "repository",
+        type=os.path.abspath,
+        help="should contain a .gclient file",
+    )
+    parser.add_argument("new_workdir", help="must not exist")
+    parser.add_argument(
+        "--use-git-worktree",
+        action="store_true",
         default=True,
-        help=
-        '''Use git worktree instead of using symlinks for .git folders (default).''',
+        help="""Use git worktree instead of using symlinks for .git folders (default).""",
     )
     parser.add_argument(
-        '--use-git-symlinks',
-        action='store_false',
-        dest='use_git_worktree',
-        help='''Use symlinks for .git folders instead of using git worktree.''',
+        "--use-git-symlinks",
+        action="store_false",
+        dest="use_git_worktree",
+        help="""Use symlinks for .git folders instead of using git worktree.""",
     )
     parser.add_argument(
-        '--copy-on-write',
+        "--copy-on-write",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help='''Force use of a copy-on-write flag when copying for better '''
-        '''performance and disk utilization. This is the default behavior on '''
-        '''supported copy-on-write FS like btrfs, ZFS, or APFS.''')
-    parser.add_argument('--reflink',
-                        action=argparse.BooleanOptionalAction,
-                        dest='copy_on_write',
-                        help=argparse.SUPPRESS)
+        help="""Force use of a copy-on-write flag when copying for better """
+        """performance and disk utilization. This is the default behavior on """
+        """supported copy-on-write FS like btrfs, ZFS, or APFS.""",
+    )
     parser.add_argument(
-        '--max-depth',
+        "--reflink",
+        action=argparse.BooleanOptionalAction,
+        dest="copy_on_write",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--max-depth",
         type=int,
         default=None,
-        help='''Maximum depth to link git repositories. A value of 0 '''
-        '''corresponds to the gclient workspace, a value of 1 corresponds to '''
-        '''sub-directories of the workspace, and so on. A value of -1 means '''
-        '''there is no limit. The default is 1 if copy-on-write is used, '''
-        '''otherwise the default is -1.''')
+        help="""Maximum depth to link git repositories. A value of 0 """
+        """corresponds to the gclient workspace, a value of 1 corresponds to """
+        """sub-directories of the workspace, and so on. A value of -1 means """
+        """there is no limit. The default is 1 if copy-on-write is used, """
+        """otherwise the default is -1.""",
+    )
     args = parser.parse_args()
 
-    if '--use-git-worktree' not in sys.argv and '--use-git-symlinks' not in sys.argv:
+    if (
+        "--use-git-worktree" not in sys.argv
+        and "--use-git-symlinks" not in sys.argv
+    ):
         print(
-            'Warning: --use-git-worktree is now the default. If you experience\n'
-            'issues, you can use --use-git-symlinks and please file a bug:\n'
-            'https://issues.chromium.org/u/0/issues/new?component=1456102',
-            file=sys.stderr)
+            "Warning: --use-git-worktree is now the default. If you experience\n"
+            "issues, you can use --use-git-symlinks and please file a bug:\n"
+            "https://issues.chromium.org/u/0/issues/new?component=1456102",
+            file=sys.stderr,
+        )
 
-    if '--reflink' in sys.argv or '--no-reflink' in sys.argv:
+    if "--reflink" in sys.argv or "--no-reflink" in sys.argv:
         print(
-            'Warning: --reflink and --no-reflink are deprecated. Use '
-            '--copy-on-write or --no-copy-on-write instead.',
-            file=sys.stderr)
+            "Warning: --reflink and --no-reflink are deprecated. Use "
+            "--copy-on-write or --no-copy-on-write instead.",
+            file=sys.stderr,
+        )
 
     if not os.path.exists(args.repository):
         parser.error('Repository "%s" does not exist.' % args.repository)
 
-    gclient = os.path.join(args.repository, '.gclient')
+    gclient = os.path.join(args.repository, ".gclient")
     if not os.path.exists(gclient):
         parser.error('No .gclient file at "%s".' % gclient)
 
@@ -104,10 +116,12 @@ _libc = None
 def clonefile_darwin(src, dst):
     global _libc
     if _libc is None:
-        libc_path = ctypes.util.find_library('c')
+        libc_path = ctypes.util.find_library("c")
         _libc = ctypes.CDLL(libc_path, use_errno=True)
         _libc.clonefile.argtypes = [
-            ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_int,
         ]
         _libc.clonefile.restype = ctypes.c_int
     # CLONE_NOFOLLOW (0x0001) | CLONE_ACL (0x0004) = 5
@@ -119,21 +133,22 @@ def clonefile_darwin(src, dst):
 
 def copy_on_write(src, dest):
     """Copies a file or directory using copy-on-write, if possible."""
-    if sys.platform == 'darwin':
+    if sys.platform == "darwin":
         clonefile_darwin(src, dest)
     else:
-        subprocess.check_call(['cp', '-a', '--reflink', src, dest])
+        subprocess.check_call(["cp", "-a", "--reflink", src, dest])
 
 
 def support_copy_on_write(src, dest):
     # Use of a copy-on-write flag always succeeds when 'src' is a symlink or a directory
     assert os.path.isfile(src) and not os.path.islink(src)
     try:
-        if sys.platform == 'darwin':
+        if sys.platform == "darwin":
             clonefile_darwin(src, dest)
         else:
-            subprocess.check_output(['cp', '-a', '--reflink', src, dest],
-                                    stderr=subprocess.STDOUT)
+            subprocess.check_output(
+                ["cp", "-a", "--reflink", src, dest], stderr=subprocess.STDOUT
+            )
     except OSError:
         # clonefile_darwin failed
         return False
@@ -150,8 +165,9 @@ def btrfs_subvol_snapshot(src, dest):
     """Creates a Btrfs snapshot of src at dest.
     Fails hard with detailed diagnostics if it fails."""
     try:
-        subprocess.check_call(['btrfs', 'subvol', 'snapshot', src, dest],
-                              stderr=subprocess.STDOUT)
+        subprocess.check_call(
+            ["btrfs", "subvol", "snapshot", src, dest], stderr=subprocess.STDOUT
+        )
     except (subprocess.CalledProcessError, OSError):
         print(f"Error: Failed to create Btrfs snapshot of '{src}'.")
 
@@ -193,10 +209,15 @@ def is_btrfs_subvolume(path):
     """Returns True if the path is a valid Btrfs subvolume (root)."""
     try:
         # Check if filesystem is btrfs
-        fstype = subprocess.check_output(
-            ['findmnt', '-no', 'FSTYPE', '--target', path],
-            stderr=subprocess.DEVNULL).decode().strip()
-        if fstype != 'btrfs':
+        fstype = (
+            subprocess.check_output(
+                ["findmnt", "-no", "FSTYPE", "--target", path],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+        if fstype != "btrfs":
             return False
         # In Btrfs, the root of a subvolume always has inode 256.
         return os.stat(path).st_ino == 256
@@ -207,7 +228,7 @@ def is_btrfs_subvolume(path):
 def real_git_dir(repo_path):
     relative_git_dir = (
         subprocess.check_output(
-            ['git', 'rev-parse', '--git-dir'], cwd=repo_path
+            ["git", "rev-parse", "--git-dir"], cwd=repo_path
         )
         .decode()
         .strip()
@@ -216,21 +237,21 @@ def real_git_dir(repo_path):
 
 
 def link_git_repo(src, dest, use_copy_on_write):
-    print('Linking: %s/.git' % src)
+    print("Linking: %s/.git" % src)
     src_git_dir = real_git_dir(src)
-    dest_git_dir = os.path.join(dest, '.git')
+    dest_git_dir = os.path.join(dest, ".git")
     git_common.make_workdir(src_git_dir, dest_git_dir)
     if use_copy_on_write:
-        src_index = os.path.join(src_git_dir, 'index')
-        dest_index = os.path.join(dest_git_dir, 'index')
+        src_index = os.path.join(src_git_dir, "index")
+        dest_index = os.path.join(dest_git_dir, "index")
         copy_on_write(src_index, dest_index)
         # Detach the HEAD ref without checking out files or updating the index.
         subprocess.check_call(
-            ['git', 'update-ref', '--no-deref', 'HEAD', 'HEAD'], cwd=dest
+            ["git", "update-ref", "--no-deref", "HEAD", "HEAD"], cwd=dest
         )
     else:
-        print('Running: git checkout --detach -f %s' % dest)
-        subprocess.check_call(['git', 'checkout', '--detach', '-f'], cwd=dest)
+        print("Running: git checkout --detach -f %s" % dest)
+        subprocess.check_call(["git", "checkout", "--detach", "-f"], cwd=dest)
 
 
 def adopt_git_worktree(src, dest):
@@ -243,31 +264,31 @@ def adopt_git_worktree(src, dest):
     # worktree directory already exists even with the `--force` flag.
     tmp_dest = os.path.join(
         os.path.dirname(dest),
-        'tmp-' + os.path.basename(dest) + '-' + '%08x' % random.getrandbits(32),
+        "tmp-" + os.path.basename(dest) + "-" + "%08x" % random.getrandbits(32),
     )
     os.rename(dest, tmp_dest)
     # Run `git worktree add --no-checkout` to create the worktree without
     # touching any files in the worktree.
-    print('Running: git worktree add %s --no-checkout -d -f' % dest)
+    print("Running: git worktree add %s --no-checkout -d -f" % dest)
     subprocess.check_call(
-        ['git', 'worktree', 'add', dest, '--no-checkout', '-d', '-f'], cwd=src
+        ["git", "worktree", "add", dest, "--no-checkout", "-d", "-f"], cwd=src
     )
     # Move the .git file from the worktree to the temporary directory and move
     # the temporary directory back to the worktree directory. Note that the .git
     # file is different from the worktree's real .git directory used below.
-    shutil.move(os.path.join(dest, '.git'), tmp_dest)
+    shutil.move(os.path.join(dest, ".git"), tmp_dest)
     shutil.rmtree(dest)
     os.rename(tmp_dest, dest)
     # Copy the index so that the worktree is aware of files in the repository.
-    src_index = os.path.join(real_git_dir(src), 'index')
-    dest_index = os.path.join(real_git_dir(dest), 'index')
+    src_index = os.path.join(real_git_dir(src), "index")
+    dest_index = os.path.join(real_git_dir(dest), "index")
     copy_on_write(src_index, dest_index)
 
 
 def create_git_worktree(src, workdir):
-    print('Running: git worktree add %s -d -f' % workdir)
+    print("Running: git worktree add %s -d -f" % workdir)
     subprocess.check_call(
-        ['git', 'worktree', 'add', workdir, '-d', '-f'], cwd=src
+        ["git", "worktree", "add", workdir, "-d", "-f"], cwd=src
     )
 
 
@@ -288,14 +309,15 @@ def main():
 
     # If any of the operations below fail, we want to clean up the new workdir.
     try:
-        gclient = os.path.join(args.repository, '.gclient')
-        new_gclient = os.path.join(args.new_workdir, '.gclient')
+        gclient = os.path.join(args.repository, ".gclient")
+        new_gclient = os.path.join(args.new_workdir, ".gclient")
 
         if args.copy_on_write is None:
             args.copy_on_write = support_copy_on_write(
-                os.path.realpath(gclient), new_gclient)
+                os.path.realpath(gclient), new_gclient
+            )
             if args.copy_on_write:
-                print('Copy-on-write support is detected.')
+                print("Copy-on-write support is detected.")
 
         if not os.path.exists(new_gclient):
             os.symlink(gclient, new_gclient)
@@ -317,16 +339,16 @@ def main():
             visited_dirs.add(root)
 
             rel_path = os.path.relpath(root, args.repository)
-            if rel_path == '.':
+            if rel_path == ".":
                 current_depth = 0
             else:
                 current_depth = rel_path.count(os.sep) + 1
 
             # Check if there's a .git directory before modifying dirs.
-            has_git = os.path.exists(os.path.join(root, '.git'))
+            has_git = os.path.exists(os.path.join(root, ".git"))
             # Don't descend into the .git directory.
-            if '.git' in dirs:
-                dirs.remove('.git')
+            if ".git" in dirs:
+                dirs.remove(".git")
 
             # If we've reached the max depth, remove all directories from the
             # list so that os.walk doesn't descend into them.
@@ -337,16 +359,16 @@ def main():
             if not has_git:
                 continue
 
-            if rel_path == '.':
+            if rel_path == ".":
                 workdir = args.new_workdir
             else:
                 workdir = os.path.join(args.new_workdir, rel_path)
 
             if args.copy_on_write:
                 if not os.path.exists(workdir):
-                    print('Copying: %s' % workdir)
+                    print("Copying: %s" % workdir)
                     copy_on_write(root, workdir)
-                workdir_git = os.path.join(workdir, '.git')
+                workdir_git = os.path.join(workdir, ".git")
                 if os.path.exists(workdir_git):
                     if os.path.isdir(workdir_git):
                         shutil.rmtree(workdir_git)
@@ -363,42 +385,46 @@ def main():
                     # check them out as separate worktrees.
                     real_workdir = os.path.realpath(workdir)
                     if real_workdir != args.new_workdir and os.path.exists(
-                            real_workdir):
+                        real_workdir
+                    ):
                         # Ensure workdir is strictly inside the new workspace
                         # and is not the root itself
-                        if os.path.commonpath([args.new_workdir, real_workdir
-                                               ]) != args.new_workdir:
+                        if (
+                            os.path.commonpath([args.new_workdir, real_workdir])
+                            != args.new_workdir
+                        ):
                             raise ValueError(
-                                f'Target workdir {real_workdir} is not inside '
-                                f'the new workspace {args.new_workdir}.')
+                                f"Target workdir {real_workdir} is not inside "
+                                f"the new workspace {args.new_workdir}."
+                            )
 
                         # Only delete the directory if it contains a .git
                         # file/directory.
-                        if os.path.exists(os.path.join(real_workdir, '.git')):
+                        if os.path.exists(os.path.join(real_workdir, ".git")):
                             shutil.rmtree(real_workdir)
                     create_git_worktree(root, workdir)
             else:
-                link_git_repo(root,
-                              workdir,
-                              use_copy_on_write=args.copy_on_write)
+                link_git_repo(
+                    root, workdir, use_copy_on_write=args.copy_on_write
+                )
 
         if args.copy_on_write:
             print(
                 textwrap.dedent(
-                    '''\
+                    """\
         The repo was copied using copy-on-write, and the artifacts were retained.
         More details on http://crbug.com/721585.
 
         Depending on your usage pattern, you might want to do "gn gen"
-        on the output directories. More details: http://crbug.com/723856.'''
+        on the output directories. More details: http://crbug.com/723856."""
                 )
             )
     except Exception as e:
-        print(f'Error: {e}')
-        print(f'Cleaning up {args.new_workdir}')
+        print(f"Error: {e}")
+        print(f"Cleaning up {args.new_workdir}")
         if is_btrfs_subvolume(args.new_workdir):
             subprocess.check_call(
-                ['btrfs', 'subvol', 'delete', args.new_workdir]
+                ["btrfs", "subvol", "delete", args.new_workdir]
             )
         else:
             shutil.rmtree(args.new_workdir, ignore_errors=True)
@@ -407,5 +433,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

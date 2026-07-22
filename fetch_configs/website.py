@@ -11,30 +11,31 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class Website(config_util.Config):
     """Basic Config class for Chromium."""
+
     @staticmethod
     def fetch_spec(props):
-        url = 'https://chromium.googlesource.com/website.git'
+        url = "https://chromium.googlesource.com/website.git"
         solution = {
-            'name': 'website',
-            'url': url,
-            'custom_deps': {},
+            "name": "website",
+            "url": url,
+            "custom_deps": {},
         }
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'website'
+        return "website"
 
 
 def main(argv=None):
     return Website().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

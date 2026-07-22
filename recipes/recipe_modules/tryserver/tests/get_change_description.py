@@ -2,14 +2,18 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from recipe_engine.post_process import (DropExpectation, StatusSuccess, MustRun,
-                                        DoesNotRun)
+from recipe_engine.post_process import (
+  DropExpectation,
+  StatusSuccess,
+  MustRun,
+  DoesNotRun,
+)
 
 
 DEPS = [
-    'tryserver',
-    'recipe_engine/buildbucket',
-    'recipe_engine/step',
+  "tryserver",
+  "recipe_engine/buildbucket",
+  "recipe_engine/step",
 ]
 
 
@@ -20,10 +24,10 @@ def RunSteps(api):
 
 def GenTests(api):
   yield api.test(
-      'basic',
-      api.buildbucket.try_build(),
-      api.post_process(MustRun, 'gerrit changes'),
-      api.post_process(DoesNotRun, 'gerrit changes (2)'),
-      api.post_process(StatusSuccess),
-      api.post_process(DropExpectation),
+    "basic",
+    api.buildbucket.try_build(),
+    api.post_process(MustRun, "gerrit changes"),
+    api.post_process(DoesNotRun, "gerrit changes (2)"),
+    api.post_process(StatusSuccess),
+    api.post_process(DropExpectation),
   )

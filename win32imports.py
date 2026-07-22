@@ -15,12 +15,15 @@ LOCKFILE_FAIL_IMMEDIATELY = 0x00000001
 
 class Overlapped(ctypes.Structure):
     """Overlapped is required and used in LockFileEx and UnlockFileEx."""
-    _fields_ = [('Internal', ctypes.wintypes.LPVOID),
-                ('InternalHigh', ctypes.wintypes.LPVOID),
-                ('Offset', ctypes.wintypes.DWORD),
-                ('OffsetHigh', ctypes.wintypes.DWORD),
-                ('Pointer', ctypes.wintypes.LPVOID),
-                ('hEvent', ctypes.wintypes.HANDLE)]
+
+    _fields_ = [
+        ("Internal", ctypes.wintypes.LPVOID),
+        ("InternalHigh", ctypes.wintypes.LPVOID),
+        ("Offset", ctypes.wintypes.DWORD),
+        ("OffsetHigh", ctypes.wintypes.DWORD),
+        ("Pointer", ctypes.wintypes.LPVOID),
+        ("hEvent", ctypes.wintypes.HANDLE),
+    ]
 
 
 # https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew

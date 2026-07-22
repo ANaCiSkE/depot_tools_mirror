@@ -11,6 +11,7 @@ from opentelemetry import trace as otel_trace_api
 from opentelemetry.sdk import trace as otel_trace_sdk
 from opentelemetry.util import types as otel_types
 
+
 @contextlib.contextmanager
 def use_span(
     span: otel_trace_api.Span,
@@ -24,7 +25,8 @@ def use_span(
         token = otel_context_api.attach(
             # This is needed since the key needs to be the same as
             # used in the rest of opentelemetry code.
-            otel_context_api.set_value(otel_trace_api._SPAN_KEY, span))
+            otel_context_api.set_value(otel_trace_api._SPAN_KEY, span)
+        )
         try:
             yield span
         finally:
@@ -50,7 +52,8 @@ def use_span(
                     otel_trace_api.Status(
                         status_code=otel_trace_api.StatusCode.ERROR,
                         description=f"{type(exc).__name__}: {exc}",
-                    ))
+                    )
+                )
         raise
 
     finally:
@@ -110,10 +113,10 @@ class Tracer(otel_trace_api.Tracer):
             set_status_on_exception=set_status_on_exception,
         )
         with use_span(
-                span,
-                end_on_exit=end_on_exit,
-                record_exception=record_exception,
-                set_status_on_exception=set_status_on_exception,
+            span,
+            end_on_exit=end_on_exit,
+            record_exception=record_exception,
+            set_status_on_exception=set_status_on_exception,
         ) as span_context:
             yield span_context
 

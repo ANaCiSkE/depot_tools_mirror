@@ -11,30 +11,31 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class Gn(config_util.Config):
     """Basic Config class for Gn."""
+
     @staticmethod
     def fetch_spec(props):
-        url = 'https://gn.googlesource.com/gn.git'
+        url = "https://gn.googlesource.com/gn.git"
         solution = {
-            'name': 'gn',
-            'url': url,
-            'deps_file': 'DEPS',
+            "name": "gn",
+            "url": url,
+            "deps_file": "DEPS",
         }
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'gn'
+        return "gn"
 
 
 def main(argv=None):
     return Gn().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

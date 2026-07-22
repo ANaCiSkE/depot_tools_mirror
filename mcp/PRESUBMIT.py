@@ -7,10 +7,11 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts for
 details on the presubmit API built into depot_tools.
 """
 
-PRESUBMIT_VERSION = '2.0.0'
+PRESUBMIT_VERSION = "2.0.0"
 
 
 def CheckRunUnittests(input_api, output_api):
     tests = input_api.canned_checks.GetUnitTestsInDirectory(
-        input_api, output_api, '.', files_to_check=[r'.*test\.py$'])
+        input_api, output_api, ".", files_to_check=[r".*test\.py$"]
+    )
     return input_api.RunTests(tests)

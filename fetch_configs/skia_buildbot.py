@@ -11,27 +11,28 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class SkiaBuildbot(config_util.Config):
     """Basic Config class for the Skia Buildbot repository."""
+
     @staticmethod
     def fetch_spec(_props):
         solution = {
-            'name': 'buildbot',
-            'url': 'https://skia.googlesource.com/buildbot.git',
-            'deps_file': 'DEPS',
+            "name": "buildbot",
+            "url": "https://skia.googlesource.com/buildbot.git",
+            "deps_file": "DEPS",
         }
-        spec = {'solutions': [solution]}
+        spec = {"solutions": [solution]}
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'buildbot'
+        return "buildbot"
 
 
 def main(argv=None):
     return SkiaBuildbot().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

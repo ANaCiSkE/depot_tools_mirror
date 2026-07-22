@@ -4,10 +4,10 @@
 
 
 DEPS = [
-  'recipe_engine/cipd',
-  'recipe_engine/context',
-  'recipe_engine/platform',
-  'recipe_engine/runtime',
+  "recipe_engine/cipd",
+  "recipe_engine/context",
+  "recipe_engine/platform",
+  "recipe_engine/runtime",
 ]
 
 from .api import DepotToolsApi as API

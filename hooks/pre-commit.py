@@ -16,25 +16,26 @@ sys.path.insert(0, ROOT_DIR)
 import git_common
 from gclient_eval import SYNC
 
-SKIP_VAR = 'SKIP_GITLINK_PRECOMMIT'
-TESTING_ANSWER = 'TESTING_ANSWER'
+SKIP_VAR = "SKIP_GITLINK_PRECOMMIT"
+TESTING_ANSWER = "TESTING_ANSWER"
 
 
 def main():
-    if os.getenv(SKIP_VAR) == '1':
-        print(f'{SKIP_VAR} is set. Committing gitlinks, if any.')
+    if os.getenv(SKIP_VAR) == "1":
+        print(f"{SKIP_VAR} is set. Committing gitlinks, if any.")
         exit(0)
 
     has_deps_diff = False
     staged_gitlinks = []
-    diff = git_common.run('diff-index', '--cached', '--ignore-submodules=dirty',
-                          'HEAD')
+    diff = git_common.run(
+        "diff-index", "--cached", "--ignore-submodules=dirty", "HEAD"
+    )
     for line in diff.splitlines():
         path = line.split()[-1]
-        if path == 'DEPS':
+        if path == "DEPS":
             has_deps_diff = True
             continue
-        if line.startswith(':160000 160000'):
+        if line.startswith(":160000 160000"):
             staged_gitlinks.append(path)
 
     if not staged_gitlinks or has_deps_diff:
@@ -44,10 +45,10 @@ def main():
     # migration state in DEPS.
     state = None
     try:
-        with open('DEPS', 'r') as f:
+        with open("DEPS", "r") as f:
             for l in f.readlines():
-                if l.startswith('git_dependencies'):
-                    state = l.split()[-1].strip(' "\'')
+                if l.startswith("git_dependencies"):
+                    state = l.split()[-1].strip(" \"'")
                     break
     except OSError:
         # Don't abort the commit if DEPS wasn't found.
@@ -58,9 +59,10 @@ def main():
         exit(0)
 
     prompt = (
-        f'Found no change to DEPS, but found staged gitlink(s) in diff:\n{diff}\n'
+        f"Found no change to DEPS, but found staged gitlink(s) in diff:\n{diff}\n"
         'Press Enter/Return if you intended to include them or "n" to unstage '
-        '(exclude from commit) the gitlink(s): ')
+        "(exclude from commit) the gitlink(s): "
+    )
     print(prompt)
 
     if os.getenv(TESTING_ANSWER) is not None:
@@ -70,23 +72,24 @@ def main():
             sys.stdin = open("/dev/tty", "r")
         except (FileNotFoundError, OSError):
             try:
-                sys.stdin = open('CON')
+                sys.stdin = open("CON")
             except:
                 print(
-                    'Unable to acquire input handle, proceeding without modifications'
+                    "Unable to acquire input handle, proceeding without modifications"
                 )
                 exit(0)
         answer = input()
 
-    disable_msg = f'To disable this hook, set {SKIP_VAR}=1'
-    if answer.lower() == 'n':
+    disable_msg = f"To disable this hook, set {SKIP_VAR}=1"
+    if answer.lower() == "n":
         print(
-            f'\nUnstaging {len(staged_gitlinks)} staged gitlink(s) found in diff'
+            f"\nUnstaging {len(staged_gitlinks)} staged gitlink(s) found in diff"
         )
-        git_common.run('restore', '--staged', '--', *staged_gitlinks)
+        git_common.run("restore", "--staged", "--", *staged_gitlinks)
         if len(staged_gitlinks) == len(diff.splitlines()):
             print(
-                '\nFound no changes after unstaging gitlinks, aborting commit.')
+                "\nFound no changes after unstaging gitlinks, aborting commit."
+            )
             print(disable_msg)
             exit(1)
 

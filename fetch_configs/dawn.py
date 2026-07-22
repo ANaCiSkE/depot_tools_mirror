@@ -14,29 +14,29 @@ class Dawn(config_util.Config):
 
     @staticmethod
     def fetch_spec(props):
-        url = 'https://dawn.googlesource.com/dawn.git'
+        url = "https://dawn.googlesource.com/dawn.git"
         solution = {
-            'name': 'dawn',
-            'url': url,
-            'deps_file': 'DEPS',
-            'custom_deps': {},
+            "name": "dawn",
+            "url": url,
+            "deps_file": "DEPS",
+            "custom_deps": {},
         }
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'dawn'
+        return "dawn"
 
 
 def main(argv=None):
     return Dawn().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

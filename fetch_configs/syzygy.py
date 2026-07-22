@@ -11,27 +11,30 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class Syzygy(config_util.Config):
     """Basic Config class for Syzygy."""
+
     @staticmethod
     def fetch_spec(_props):
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': {
-                'solutions': [{
-                    'name': 'src',
-                    'url': 'https://chromium.googlesource.com/syzygy',
-                    'deps_file': 'DEPS',
-                }],
+            "type": "gclient_git",
+            "gclient_git_spec": {
+                "solutions": [
+                    {
+                        "name": "src",
+                        "url": "https://chromium.googlesource.com/syzygy",
+                        "deps_file": "DEPS",
+                    }
+                ],
             },
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'src'
+        return "src"
 
 
 def main(argv=None):
     return Syzygy().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

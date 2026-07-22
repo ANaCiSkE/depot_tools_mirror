@@ -18,48 +18,52 @@ import sys
 import tempfile
 
 THIS_DIR = os.path.abspath(os.path.dirname(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(THIS_DIR, '..'))
+ROOT_DIR = os.path.abspath(os.path.join(THIS_DIR, ".."))
 
-DEVNULL = open(os.devnull, 'w')
+DEVNULL = open(os.devnull, "w")
 
-IS_WIN = sys.platform.startswith('win')
-BAT_EXT = '.bat' if IS_WIN else ''
+IS_WIN = sys.platform.startswith("win")
+BAT_EXT = ".bat" if IS_WIN else ""
 
 # Top-level stub filenames that may be generated. Each stub wraps an executable
 # from the discovered Git installation; the absolute exe path for each stub is
 # resolved per-installation by `search_win_git_directory`.
-WIN_GIT_STUB_NAMES = ('git.bat', 'gitk.bat', 'ssh.bat', 'ssh-keygen.bat')
+WIN_GIT_STUB_NAMES = ("git.bat", "gitk.bat", "ssh.bat", "ssh-keygen.bat")
 
 # Subdirectories under an MSYS2 root that may contain a native git.exe at
 # "<subsystem>\bin\git.exe". Only the modern UCRT and Clang environments are
 # supported; mingw64/mingw32 (MSVCRT-based) and usr (MSYS POSIX emulation) are
 # intentionally excluded.
-_MSYS2_SUBSYSTEMS = ('ucrt64', 'clang64', 'clangarm64')
+_MSYS2_SUBSYSTEMS = ("ucrt64", "clang64", "clangarm64")
 
 # The global git config which should be applied by |git_postprocess|.
 GIT_GLOBAL_CONFIG = {
-    'core.autocrlf': 'false',
-    'core.filemode': 'false',
-    'core.preloadindex': 'true',
-    'core.fscache': 'true',
+    "core.autocrlf": "false",
+    "core.filemode": "false",
+    "core.preloadindex": "true",
+    "core.fscache": "true",
 }
 
 
 # Accumulated template parameters for generated stubs.
 class Template(
-        collections.namedtuple('Template', (
-            'PYTHON3_BIN_RELDIR',
-            'PYTHON3_BIN_RELDIR_UNIX',
-            'GIT_PROGRAM',
-            'GIT_PATH_PREPEND',
-            'GIT_BASH_EXE',
-            'GIT_BASH_LAUNCHER',
-        ))):
+    collections.namedtuple(
+        "Template",
+        (
+            "PYTHON3_BIN_RELDIR",
+            "PYTHON3_BIN_RELDIR_UNIX",
+            "GIT_PROGRAM",
+            "GIT_PATH_PREPEND",
+            "GIT_BASH_EXE",
+            "GIT_BASH_LAUNCHER",
+        ),
+    )
+):
     @classmethod
     def empty(cls):
         # Use empty strings (not None) so any field referenced by a template
         # but left unset substitutes cleanly instead of becoming "None".
-        return cls(**{k: '' for k in cls._fields})
+        return cls(**{k: "" for k in cls._fields})
 
     def maybe_install(self, name, dst_path):
         """Installs template |name| to |dst_path| if it has changed.
@@ -74,7 +78,7 @@ class Template(
         Returns (bool): True if |dst_path| was updated, False otherwise.
         """
         template_path = os.path.join(THIS_DIR, name)
-        with open(template_path, 'r', encoding='utf8') as fd:
+        with open(template_path, "r", encoding="utf8") as fd:
             t = string.Template(fd.read())
         return maybe_update(t.safe_substitute(self._asdict()), dst_path)
 
@@ -96,12 +100,12 @@ def maybe_update(content, dst_path):
     # If the path already exists and matches the new content, refrain from
     # writing a new one.
     if os.path.exists(dst_path):
-        with open(dst_path, 'r', encoding='utf-8') as fd:
+        with open(dst_path, "r", encoding="utf-8") as fd:
             if fd.read() == content:
                 return False
 
-    logging.debug('Updating %r', dst_path)
-    with open(dst_path, 'w', encoding='utf-8') as fd:
+    logging.debug("Updating %r", dst_path)
+    with open(dst_path, "w", encoding="utf-8") as fd:
         fd.write(content)
     os.chmod(dst_path, 0o755)
     return True
@@ -118,7 +122,7 @@ def maybe_copy(src_path, dst_path):
 
     Returns (bool): True if |dst_path| was updated, False otherwise.
     """
-    with open(src_path, 'r', encoding='utf-8') as fd:
+    with open(src_path, "r", encoding="utf-8") as fd:
         content = fd.read()
     return maybe_update(content, dst_path)
 
@@ -144,14 +148,14 @@ def call_if_outdated(stamp_path, stamp_version, fn):
 
     stamp_version = stamp_version.strip()
     if os.path.isfile(stamp_path):
-        with open(stamp_path, 'r', encoding='utf-8') as fd:
+        with open(stamp_path, "r", encoding="utf-8") as fd:
             current_version = fd.read().strip()
         if current_version == stamp_version:
             return False
 
     fn()
 
-    with open(stamp_path, 'w', encoding='utf-8') as fd:
+    with open(stamp_path, "w", encoding="utf-8") as fd:
         fd.write(stamp_version)
     return True
 
@@ -167,31 +171,30 @@ def _in_use(path):
     Returns (bool): True if the file was in use, False if not.
     """
     try:
-        with open(path, 'r+'):
+        with open(path, "r+"):
             return False
     except IOError:
         return True
 
 
 def _toolchain_in_use(toolchain_path):
-    """Returns (bool): True if a toolchain rooted at |path| is in use.
-    """
+    """Returns (bool): True if a toolchain rooted at |path| is in use."""
     # Look for Python files that may be in use.
     for python_dir in (
-            os.path.join(toolchain_path, 'python', 'bin'),  # CIPD
-            toolchain_path,  # Legacy ZIP distributions.
+        os.path.join(toolchain_path, "python", "bin"),  # CIPD
+        toolchain_path,  # Legacy ZIP distributions.
     ):
         for component in (
-                os.path.join(python_dir, 'python.exe'),
-                os.path.join(python_dir, 'DLLs', 'unicodedata.pyd'),
+            os.path.join(python_dir, "python.exe"),
+            os.path.join(python_dir, "DLLs", "unicodedata.pyd"),
         ):
             if os.path.isfile(component) and _in_use(component):
                 return True
     # Look for Pytho:n 3 files that may be in use.
-    python_dir = os.path.join(toolchain_path, 'python3', 'bin')
+    python_dir = os.path.join(toolchain_path, "python3", "bin")
     for component in (
-            os.path.join(python_dir, 'python3.exe'),
-            os.path.join(python_dir, 'DLLs', 'unicodedata.pyd'),
+        os.path.join(python_dir, "python3.exe"),
+        os.path.join(python_dir, "DLLs", "unicodedata.pyd"),
     ):
         if os.path.isfile(component) and _in_use(component):
             return True
@@ -200,9 +203,9 @@ def _toolchain_in_use(toolchain_path):
 
 def _check_call(argv, stdin_input=None, **kwargs):
     """Wrapper for subprocess.Popen that adds logging."""
-    logging.info('running %r', argv)
+    logging.info("running %r", argv)
     if stdin_input is not None:
-        kwargs['stdin'] = subprocess.PIPE
+        kwargs["stdin"] = subprocess.PIPE
     proc = subprocess.Popen(argv, **kwargs)
     stdout, stderr = proc.communicate(input=stdin_input)
     if proc.returncode:
@@ -228,7 +231,7 @@ def _safe_rmtree(path):
 
     def _on_error(function, path, excinfo):
         if not _make_writable_and_remove(path):
-            logging.warning('Failed to %s: %s (%s)', function, path, excinfo)
+            logging.warning("Failed to %s: %s (%s)", function, path, excinfo)
 
     shutil.rmtree(path, onerror=_on_error)
 
@@ -242,18 +245,22 @@ def clean_up_old_installations(skip_dir):
     software that is using the bootstrapped Python!
     """
     root_contents = os.listdir(ROOT_DIR)
-    for f in ('win_tools-*_bin', 'python27*_bin', 'git-*_bin',
-              'bootstrap-*_bin'):
+    for f in (
+        "win_tools-*_bin",
+        "python27*_bin",
+        "git-*_bin",
+        "bootstrap-*_bin",
+    ):
         for entry in fnmatch.filter(root_contents, f):
             full_entry = os.path.join(ROOT_DIR, entry)
             if full_entry == skip_dir or not os.path.isdir(full_entry):
                 continue
 
-            logging.info('Cleaning up old installation %r', entry)
+            logging.info("Cleaning up old installation %r", entry)
             if not _toolchain_in_use(full_entry):
                 _safe_rmtree(full_entry)
             else:
-                logging.info('Toolchain at %r is in-use; skipping', full_entry)
+                logging.info("Toolchain at %r is in-use; skipping", full_entry)
 
 
 def _within_depot_tools(path):
@@ -277,7 +284,7 @@ def _traverse_to_git_root(abspath):
     """
     head, tail = os.path.split(abspath)
     while tail:
-        if tail.lower() == 'git':
+        if tail.lower() == "git":
             return os.path.join(head, tail)
         head, tail = os.path.split(head)
     return None
@@ -288,7 +295,8 @@ def _traverse_to_git_root(abspath):
 # `stubs` maps each stub filename to the absolute path of the executable it
 # should invoke; stubs are only generated for executables that actually exist.
 GitInstallation = collections.namedtuple(
-    'GitInstallation', ('path_prepend', 'stubs', 'bash_exe', 'bash_launcher'))
+    "GitInstallation", ("path_prepend", "stubs", "bash_exe", "bash_launcher")
+)
 
 
 def _build_stubs(*candidates):
@@ -303,19 +311,21 @@ def _build_stubs(*candidates):
 def _detect_git_for_windows(git_root):
     """Builds a GitInstallation for a Git for Windows install at `git_root`."""
     stubs = _build_stubs(
-        ('git.bat', os.path.join(git_root, 'cmd', 'git.exe')),
-        ('gitk.bat', os.path.join(git_root, 'cmd', 'gitk.exe')),
-        ('ssh.bat', os.path.join(git_root, 'usr', 'bin', 'ssh.exe')),
-        ('ssh-keygen.bat', os.path.join(git_root, 'usr', 'bin',
-                                        'ssh-keygen.exe')),
+        ("git.bat", os.path.join(git_root, "cmd", "git.exe")),
+        ("gitk.bat", os.path.join(git_root, "cmd", "gitk.exe")),
+        ("ssh.bat", os.path.join(git_root, "usr", "bin", "ssh.exe")),
+        (
+            "ssh-keygen.bat",
+            os.path.join(git_root, "usr", "bin", "ssh-keygen.exe"),
+        ),
     )
-    bash_exe = os.path.join(git_root, 'bin', 'bash.exe')
-    bash_launcher = os.path.join(git_root, 'git-bash.exe')
+    bash_exe = os.path.join(git_root, "bin", "bash.exe")
+    bash_launcher = os.path.join(git_root, "git-bash.exe")
     return GitInstallation(
-        path_prepend=os.path.join(git_root, 'cmd'),
+        path_prepend=os.path.join(git_root, "cmd"),
         stubs=stubs,
-        bash_exe=bash_exe if os.path.isfile(bash_exe) else '',
-        bash_launcher=bash_launcher if os.path.isfile(bash_launcher) else '',
+        bash_exe=bash_exe if os.path.isfile(bash_exe) else "",
+        bash_launcher=bash_launcher if os.path.isfile(bash_launcher) else "",
     )
 
 
@@ -327,34 +337,36 @@ def _detect_msys2(git_exe_dir):
     bash always lives at `<root>\\usr\\bin\\bash.exe` regardless of the
     subsystem, and is used to confirm the layout.
     """
-    if os.path.basename(git_exe_dir).lower() != 'bin':
+    if os.path.basename(git_exe_dir).lower() != "bin":
         return None
     subsystem_dir = os.path.dirname(git_exe_dir)
     if os.path.basename(subsystem_dir).lower() not in _MSYS2_SUBSYSTEMS:
         return None
     root = os.path.dirname(subsystem_dir)
-    msys2_bash = os.path.join(root, 'usr', 'bin', 'bash.exe')
+    msys2_bash = os.path.join(root, "usr", "bin", "bash.exe")
     if not os.path.isfile(msys2_bash):
         return None
 
     # ssh lives in the MSYS2 POSIX layer (usr\bin), not under the subsystem.
     stubs = _build_stubs(
-        ('git.bat', os.path.join(git_exe_dir, 'git.exe')),
-        ('gitk.bat', os.path.join(git_exe_dir, 'gitk.exe')),
-        ('ssh.bat', os.path.join(root, 'usr', 'bin', 'ssh.exe')),
-        ('ssh-keygen.bat', os.path.join(root, 'usr', 'bin', 'ssh-keygen.exe')),
+        ("git.bat", os.path.join(git_exe_dir, "git.exe")),
+        ("gitk.bat", os.path.join(git_exe_dir, "gitk.exe")),
+        ("ssh.bat", os.path.join(root, "usr", "bin", "ssh.exe")),
+        ("ssh-keygen.bat", os.path.join(root, "usr", "bin", "ssh-keygen.exe")),
     )
 
     # Prefer the matching subsystem's own GUI launcher if present
     # (e.g. ucrt64.exe), otherwise fall back to msys2_shell.cmd.
     subsystem_name = os.path.basename(subsystem_dir).lower()
-    for candidate in (os.path.join(root, subsystem_name + '.exe'),
-                      os.path.join(root, 'msys2_shell.cmd')):
+    for candidate in (
+        os.path.join(root, subsystem_name + ".exe"),
+        os.path.join(root, "msys2_shell.cmd"),
+    ):
         if os.path.isfile(candidate):
             bash_launcher = candidate
             break
     else:
-        bash_launcher = ''
+        bash_launcher = ""
 
     return GitInstallation(
         path_prepend=git_exe_dir,
@@ -370,10 +382,10 @@ def search_win_git_directory():
     Recognizes both Git for Windows and MSYS2 (UCRT64 / Clang64 / ClangARM64).
     Returns the first matching `GitInstallation`, or None if none is found.
     """
-    for p in os.environ.get('PATH', '').split(os.pathsep):
+    for p in os.environ.get("PATH", "").split(os.pathsep):
         if _within_depot_tools(p):
             continue
-        for cmd in ('git.exe', 'git.bat'):
+        for cmd in ("git.exe", "git.bat"):
             if not os.path.isfile(os.path.join(p, cmd)):
                 continue
             git_root = _traverse_to_git_root(p)
@@ -384,22 +396,22 @@ def search_win_git_directory():
                 return install
 
     logging.warning(
-        'Git was not found in PATH. To use depot_tools, please install Git\n'
-        'directly. See\n'
-        'https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md#Install-git\n'
-        '\n'
-        'depot_tools also recognizes the modern MSYS2 environments\n'
-        '(ucrt64, clang64, clangarm64).\n'
-        '\n'
-        'For other issues, file a bug at:\n'
-        'https://issues.chromium.org/issues/new?component=1456702&template=2045785\n'
+        "Git was not found in PATH. To use depot_tools, please install Git\n"
+        "directly. See\n"
+        "https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md#Install-git\n"
+        "\n"
+        "depot_tools also recognizes the modern MSYS2 environments\n"
+        "(ucrt64, clang64, clangarm64).\n"
+        "\n"
+        "For other issues, file a bug at:\n"
+        "https://issues.chromium.org/issues/new?component=1456702&template=2045785\n"
     )
     return None
 
 
 def git_get_mingw_dir(git_directory):
     """Returns (str) The "mingw" directory in a Git installation, or None."""
-    for candidate in ('mingw64', 'mingw32'):
+    for candidate in ("mingw64", "mingw32"):
         mingw_dir = os.path.join(git_directory, candidate)
         if os.path.isdir(mingw_dir):
             return mingw_dir
@@ -414,7 +426,7 @@ class GitConfigDict(collections.UserDict):
 
     @staticmethod
     def _to_case_compliant_key(config_key):
-        parts = config_key.split('.')
+        parts = config_key.split(".")
         if len(parts) < 2:
             # The config key does not conform to the expected format.
             # Leave as-is.
@@ -429,7 +441,7 @@ class GitConfigDict(collections.UserDict):
         # lookup consistency.
         name = parts[-1].lower()
 
-        return '.'.join([section] + subsection_parts + [name])
+        return ".".join([section] + subsection_parts + [name])
 
     def __setitem__(self, key, value):
         self.data[self._to_case_compliant_key(key)] = value
@@ -455,17 +467,18 @@ def get_git_global_config(git_path):
         # See docs at:
         # https://git-scm.com/docs/git-config#Documentation/git-config.txt--z
         stdout, _ = _check_call(
-            [git_path, 'config', '--list', '--global', '-z'],
+            [git_path, "config", "--list", "--global", "-z"],
             stdout=subprocess.PIPE,
-            encoding='utf-8')
+            encoding="utf-8",
+        )
     except subprocess.CalledProcessError as e:
-        logging.warning(f'Failed to read your global Git config:\n{e}\n')
+        logging.warning(f"Failed to read your global Git config:\n{e}\n")
         return GitConfigDict({})
 
     # Process all entries in the config.
     config = {}
-    for line in stdout.split('\0'):
-        entry = line.split('\n', 1)
+    for line in stdout.split("\0"):
+        entry = line.split("\n", 1)
         if len(entry) != 2:
             continue
         config[entry[0]] = entry[1]
@@ -483,7 +496,7 @@ def _win_git_bootstrap_config():
     warning, run:
         git config --global depot-tools.allowGlobalGitConfig false
     """
-    git_bat_path = os.path.join(ROOT_DIR, 'git.bat')
+    git_bat_path = os.path.join(ROOT_DIR, "git.bat")
 
     # Read the current global git config in its entirety.
     current_config = get_git_global_config(git_bat_path)
@@ -501,54 +514,60 @@ def _win_git_bootstrap_config():
 
     # Check whether the user has authorized depot_tools to update their global
     # git config.
-    allow_global_key = 'depot-tools.allowGlobalGitConfig'
-    allow_global = current_config.get(allow_global_key, '').lower()
+    allow_global_key = "depot-tools.allowGlobalGitConfig"
+    allow_global = current_config.get(allow_global_key, "").lower()
 
-    if allow_global in ('false', '0', 'no', 'off'):
+    if allow_global in ("false", "0", "no", "off"):
         # The user has explicitly disabled this.
         return
 
-    if allow_global not in ('true', '1', 'yes', 'on'):
-        lines = [
-            'depot_tools recommends setting the following for',
-            'optimal Chromium development:',
-            '',
-        ] + [
-            f'$ git config --global {k} {GIT_GLOBAL_CONFIG.get(k)}'
-            for k in mismatching_keys
-        ] + [
-            '',
-            'You can silence this message by setting these recommended values.',
-            '',
-            'You can allow depot_tools to automatically update your global',
-            'Git config to recommended settings by running:',
-            f'$ git config --global {allow_global_key} true',
-            '',
-            'To suppress this warning and silence future recommendations, run:',
-            f'$ git config --global {allow_global_key} false',
-        ]
+    if allow_global not in ("true", "1", "yes", "on"):
+        lines = (
+            [
+                "depot_tools recommends setting the following for",
+                "optimal Chromium development:",
+                "",
+            ]
+            + [
+                f"$ git config --global {k} {GIT_GLOBAL_CONFIG.get(k)}"
+                for k in mismatching_keys
+            ]
+            + [
+                "",
+                "You can silence this message by setting these recommended values.",
+                "",
+                "You can allow depot_tools to automatically update your global",
+                "Git config to recommended settings by running:",
+                f"$ git config --global {allow_global_key} true",
+                "",
+                "To suppress this warning and silence future recommendations, run:",
+                f"$ git config --global {allow_global_key} false",
+            ]
+        )
 
-        logging.warning('\n'.join(lines))
+        logging.warning("\n".join(lines))
         return
 
     # Global git config changes have been authorized - do the necessary updates.
     for k in mismatching_keys:
         desired = GIT_GLOBAL_CONFIG.get(k)
-        _check_call([git_bat_path, 'config', '--global', k, desired])
+        _check_call([git_bat_path, "config", "--global", k, desired])
 
     # Clean up deprecated setting depot-tools.gitPostprocessVersion.
-    postprocess_key = 'depot-tools.gitPostprocessVersion'
+    postprocess_key = "depot-tools.gitPostprocessVersion"
     if current_config.get(postprocess_key) != None:
         _check_call(
-            [git_bat_path, 'config', '--unset', '--global', postprocess_key])
+            [git_bat_path, "config", "--unset", "--global", postprocess_key]
+        )
 
 
 def git_postprocess(template, install):
     # Generate a stub for each discovered executable.
     for stub_name, abs_path in install.stubs.items():
         stub_template = template._replace(GIT_PROGRAM=abs_path)
-        stub_template.maybe_install('git.template.bat',
-                                    os.path.join(ROOT_DIR, stub_name))
+        stub_template.maybe_install(
+            "git.template.bat", os.path.join(ROOT_DIR, stub_name)
+        )
 
     # Remove any stale stubs from a previous installation (for example, an old
     # gitk.bat if the user switched to an MSYS2 install without gitk).
@@ -560,8 +579,9 @@ def git_postprocess(template, install):
             try:
                 os.remove(stub_path)
             except OSError as e:
-                logging.warning('Failed to remove stale stub %r: %s', stub_path,
-                                e)
+                logging.warning(
+                    "Failed to remove stale stub %r: %s", stub_path, e
+                )
 
     # Bootstrap the git global config.
     _win_git_bootstrap_config()
@@ -569,18 +589,22 @@ def git_postprocess(template, install):
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--verbose', action='store_true')
-    parser.add_argument('--bootstrap-name',
-                        required=True,
-                        help='The directory of the Python installation.')
+    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--bootstrap-name",
+        required=True,
+        help="The directory of the Python installation.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARN)
 
     template = Template.empty()._replace(
-        PYTHON3_BIN_RELDIR=os.path.join(args.bootstrap_name, 'python3', 'bin'),
-        PYTHON3_BIN_RELDIR_UNIX=posixpath.join(args.bootstrap_name, 'python3',
-                                               'bin'))
+        PYTHON3_BIN_RELDIR=os.path.join(args.bootstrap_name, "python3", "bin"),
+        PYTHON3_BIN_RELDIR_UNIX=posixpath.join(
+            args.bootstrap_name, "python3", "bin"
+        ),
+    )
 
     bootstrap_dir = os.path.join(ROOT_DIR, args.bootstrap_name)
 
@@ -591,13 +615,17 @@ def main(argv):
         # Search for a Git installation.
         install = search_win_git_directory()
         if not install:
-            logging.error('Failed to bootstrap depot_tools.\n'
-                          'Git was not found in PATH. Have you installed it?')
+            logging.error(
+                "Failed to bootstrap depot_tools.\n"
+                "Git was not found in PATH. Have you installed it?"
+            )
             return 1
-        if 'git.bat' not in install.stubs:
-            logging.error('Failed to bootstrap depot_tools.\n'
-                          'Found a Git installation but could not locate '
-                          'git.exe within it.')
+        if "git.bat" not in install.stubs:
+            logging.error(
+                "Failed to bootstrap depot_tools.\n"
+                "Found a Git installation but could not locate "
+                "git.exe within it."
+            )
             return 1
 
         template = template._replace(
@@ -607,8 +635,8 @@ def main(argv):
         )
         git_postprocess(template, install)
         templates = [
-            ('git-bash.template.sh', 'git-bash', ROOT_DIR),
-            ('python3.bat', 'python3.bat', ROOT_DIR),
+            ("git-bash.template.sh", "git-bash", ROOT_DIR),
+            ("python3.bat", "python3.bat", ROOT_DIR),
         ]
         for src_name, dst_name, dst_dir in templates:
             # Re-evaluate and regenerate our root templated files.
@@ -626,11 +654,13 @@ def main(argv):
     # The intention is that the batch file itself never needs to change when
     # switching Python versions.
 
-    maybe_update(template.PYTHON3_BIN_RELDIR,
-                 os.path.join(ROOT_DIR, 'python3_bin_reldir.txt'))
+    maybe_update(
+        template.PYTHON3_BIN_RELDIR,
+        os.path.join(ROOT_DIR, "python3_bin_reldir.txt"),
+    )
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

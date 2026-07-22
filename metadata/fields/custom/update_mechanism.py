@@ -34,7 +34,9 @@ UPDATE_MECHANISM_REGEX = re.compile(
     )?          # Indicates 'bug_link' is optional.
 
     $           # End of the string.
-    """, re.VERBOSE)
+    """,
+    re.VERBOSE,
+)
 
 
 # Regex for validating the format of the bug link and capturing the bug ID.
@@ -51,7 +53,8 @@ ALLOWED_MECHANISMS = {
 
 
 def parse_update_mechanism(
-        value: str) -> Tuple[str, Optional[str], Optional[str]]:
+    value: str,
+) -> Tuple[str, Optional[str], Optional[str]]:
     """
     Parses the Update Mechanism field value using a regular expression.
     Values are expected to be in the form Primary.Secondary (bug link)
@@ -88,8 +91,9 @@ class UpdateMechanismField(field_types.SingleLineTextField):
                 reason=f"{self._name} field cannot be empty.",
                 additional=[
                     f"Must be one of {util.quoted(sorted(ALLOWED_MECHANISMS))}.",
-                    "Example: 'Autoroll' or 'Manual (https://crbug.com/12345)'"
-                ])
+                    "Example: 'Autoroll' or 'Manual (https://crbug.com/12345)'",
+                ],
+            )
 
         primary, secondary, bug_link = parse_update_mechanism(value)
         # First, check if the value matches the general format.
@@ -100,7 +104,8 @@ class UpdateMechanismField(field_types.SingleLineTextField):
                     "Expected format: Mechanism[.SubMechanism] [(bug)]",
                     f"Allowed mechanisms: {util.quoted(sorted(ALLOWED_MECHANISMS))}.",
                     "Example: 'Static.HardFork (https://crbug.com/12345)'",
-                ])
+                ],
+            )
 
         mechanism = primary
         if secondary:
@@ -111,7 +116,8 @@ class UpdateMechanismField(field_types.SingleLineTextField):
                 reason=f"{self._name} has invalid mechanism '{mechanism}'.",
                 additional=[
                     f"Must be one of {util.quoted(sorted(ALLOWED_MECHANISMS))}.",
-                ])
+                ],
+            )
 
         # If it's not Autorolled, it SHOULD have a bug link.
         # Only warn for Static, for now.
@@ -120,8 +126,9 @@ class UpdateMechanismField(field_types.SingleLineTextField):
                 reason=f"{self._name} has no link to autoroll exception.",
                 additional=[
                     "Please add a link if an exception bug has been filed.",
-                    f"Example: '{mechanism} (https://crbug.com/12345)'"
-                ])
+                    f"Example: '{mechanism} (https://crbug.com/12345)'",
+                ],
+            )
 
         # Autoroll must not have a bug link.
         if primary == "Autoroll" and bug_link:
@@ -131,7 +138,8 @@ class UpdateMechanismField(field_types.SingleLineTextField):
                     f"Please remove the unnecessary bug link {bug_link}.",
                     "If this bug is still relevant then maybe Autoroll isn't the right choice",
                     "You could move it to the description.",
-                ])
+                ],
+            )
 
         # Validate the bug link format if present.
         if bug_link:
@@ -142,21 +150,22 @@ class UpdateMechanismField(field_types.SingleLineTextField):
                 if bug_num.isdigit():
                     return vr.ValidationError(
                         reason=f"{self._name} bug link should be `({canonical_bug_link})`.",
-                        additional=[
-                            f"{bug_link} is not a valid crbug link."
-                        ])
+                        additional=[f"{bug_link} is not a valid crbug link."],
+                    )
                 # Does not match the expected crbug link format at all.
                 return vr.ValidationError(
                     reason=f"{self._name} has invalid bug link format '{bug_link}'.",
                     additional=[
                         "Bug links must be of the form (https://crbug.com/12345).",
                         f"Example: '{mechanism} (https://crbug.com/12345)'",
-                    ])
+                    ],
+                )
 
         return None
 
-    def narrow_type(self,
-                    value: str) -> Tuple[str, Optional[str], Optional[str]]:
+    def narrow_type(
+        self, value: str
+    ) -> Tuple[str, Optional[str], Optional[str]]:
         """
         Parses the field value into its components if it is valid.
 

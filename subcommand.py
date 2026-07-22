@@ -52,6 +52,7 @@ CommandFunction = Callable[[optparse.OptionParser, list[str]], int]
 
 def usage(more: str) -> Callable[[CommandFunction], CommandFunction]:
     """Adds a 'usage_more' property to a CMD function."""
+
     def hook(fn):
         fn.usage_more = more
         return fn
@@ -64,6 +65,7 @@ def epilog(text: str) -> Callable[[CommandFunction], CommandFunction]:
 
     It will be shown in the epilog. Usually useful for examples.
     """
+
     def hook(fn):
         fn.epilog = text
         return fn
@@ -75,8 +77,8 @@ def CMDhelp(parser: optparse.OptionParser, args: list[str]) -> NoReturn:
     """Prints list of commands or help for a specific command."""
     # This is the default help implementation. It can be disabled or overridden
     # if wanted.
-    if not any(i in ('-h', '--help') for i in args):
-        args = args + ['--help']
+    if not any(i in ("-h", "--help") for i in args):
+        args = args + ["--help"]
     parser.parse_args(args)
     # Never gets there.
     assert False
@@ -89,22 +91,23 @@ def _get_color_module():
     """
     try:
         import from_third_party
-        mod = from_third_party.get('colorama')
+
+        mod = from_third_party.get("colorama")
         if mod:
             return mod
     except ImportError:
         pass
-    return sys.modules.get('colorama') or sys.modules.get(
-        'third_party.colorama')
+    return sys.modules.get("colorama") or sys.modules.get(
+        "third_party.colorama"
+    )
 
 
 def _function_to_name(name: str) -> str:
     """Returns the name of a CMD function."""
-    return name[3:].replace('_', '-')
+    return name[3:].replace("_", "-")
 
 
 class CommandDispatcher(object):
-
     def __init__(self, module: str):
         """module is the name of the main python module where to look for
         commands.
@@ -133,9 +136,12 @@ class CommandDispatcher(object):
         None, e.g.:
             CMDhelp = None
         """
-        cmds = dict((_function_to_name(name), getattr(self.module, name))
-                    for name in dir(self.module) if name.startswith('CMD'))
-        cmds.setdefault('help', CMDhelp)
+        cmds = dict(
+            (_function_to_name(name), getattr(self.module, name))
+            for name in dir(self.module)
+            if name.startswith("CMD")
+        )
+        cmds.setdefault("help", CMDhelp)
         return cmds
 
     def find_nearest_command(self, name_asked: str) -> CommandFunction | None:
@@ -145,7 +151,7 @@ class CommandDispatcher(object):
         and/or incomplete names.
         """
         commands = self.enumerate_commands()
-        name_to_dash = name_asked.replace('_', '-')
+        name_to_dash = name_asked.replace("_", "-")
         if name_to_dash in commands:
             return commands[name_to_dash]
 
@@ -160,7 +166,8 @@ class CommandDispatcher(object):
             return difflib.SequenceMatcher(a=a, b=b).ratio()
 
         hamming_commands = sorted(
-            ((close_enough(c, name_asked), c) for c in commands), reverse=True)
+            ((close_enough(c, name_asked), c) for c in commands), reverse=True
+        )
         if (hamming_commands[0][0] - hamming_commands[1][0]) < 0.3:
             # Too ambiguous.
             return None
@@ -176,7 +183,8 @@ class CommandDispatcher(object):
         commands = self.enumerate_commands()
         docs = sorted(
             (cmd_name, self._create_command_summary(cmd_name, handler))
-            for cmd_name, handler in commands.items())
+            for cmd_name, handler in commands.items()
+        )
         # Skip commands without a docstring.
         docs = [i for i in docs if i[1]]
         # Then calculate maximum length for alignment:
@@ -184,46 +192,47 @@ class CommandDispatcher(object):
 
         # Look if color is supported.
         colors = _get_color_module()
-        green = reset = ''
+        green = reset = ""
         if colors:
             green = colors.Fore.GREEN
             reset = colors.Fore.RESET
-        return ('Commands are:\n' +
-                ''.join('  %s%-*s%s %s\n' %
-                        (green, length, cmd_name, reset, doc)
-                        for cmd_name, doc in docs))
+        return "Commands are:\n" + "".join(
+            "  %s%-*s%s %s\n" % (green, length, cmd_name, reset, doc)
+            for cmd_name, doc in docs
+        )
 
-    def _add_command_usage(self, parser: optparse.OptionParser,
-                           command: CommandFunction) -> None:
+    def _add_command_usage(
+        self, parser: optparse.OptionParser, command: CommandFunction
+    ) -> None:
         """Modifies an OptionParser object with the function's documentation."""
         cmd_name = _function_to_name(command.__name__)
-        if cmd_name == 'help':
-            cmd_name = '<command>'
+        if cmd_name == "help":
+            cmd_name = "<command>"
             # Use the module's docstring as the description for the 'help'
             # command if available.
-            parser.description = (self.module.__doc__ or '').rstrip()
+            parser.description = (self.module.__doc__ or "").rstrip()
             if parser.description:
-                parser.description += '\n\n'
+                parser.description += "\n\n"
             parser.description += self._gen_commands_list()
             # Do not touch epilog.
         else:
             # Use the command's docstring if available. For commands, unlike
             # module docstring, realign.
-            lines = (command.__doc__ or '').rstrip().splitlines()
+            lines = (command.__doc__ or "").rstrip().splitlines()
             if lines[:1]:
-                rest = textwrap.dedent('\n'.join(lines[1:]))
-                parser.description = '\n'.join((lines[0], rest))
+                rest = textwrap.dedent("\n".join(lines[1:]))
+                parser.description = "\n".join((lines[0], rest))
             else:
-                parser.description = lines[0] if lines else ''
+                parser.description = lines[0] if lines else ""
             if parser.description:
-                parser.description += '\n'
-            parser.epilog = getattr(command, 'epilog', None)
+                parser.description += "\n"
+            parser.epilog = getattr(command, "epilog", None)
             if parser.epilog:
-                parser.epilog = '\n' + parser.epilog.strip() + '\n'
+                parser.epilog = "\n" + parser.epilog.strip() + "\n"
 
-        more = getattr(command, 'usage_more', '')
-        extra = '' if not more else ' ' + more
-        parser.set_usage('usage: %%prog %s [options]%s' % (cmd_name, extra))
+        more = getattr(command, "usage_more", "")
+        extra = "" if not more else " " + more
+        parser.set_usage("usage: %%prog %s [options]%s" % (cmd_name, extra))
 
     @staticmethod
     def _create_command_summary(cmd_name: str, command: CommandFunction) -> str:
@@ -231,9 +240,9 @@ class CommandDispatcher(object):
         if cmd_name != _function_to_name(command.__name__):
             # Skip aliases. For example using at module level:
             # CMDfoo = CMDbar
-            return ''
-        doc = command.__doc__ or ''
-        line = doc.split('\n', 1)[0].rstrip('.')
+            return ""
+        doc = command.__doc__ or ""
+        line = doc.split("\n", 1)[0].rstrip(".")
         if not line:
             return line
         return (line[0].lower() + line[1:]).strip()
@@ -246,21 +255,21 @@ class CommandDispatcher(object):
         # Unconditionally disable format_description() and format_epilog().
         # Technically, a formatter should be used but it's not worth (yet) the
         # trouble.
-        parser.format_description = lambda formatter: parser.description or ''
-        parser.format_epilog = lambda formatter: parser.epilog or ''
+        parser.format_description = lambda formatter: parser.description or ""
+        parser.format_epilog = lambda formatter: parser.epilog or ""
 
         if args:
-            if args[0] in ('-h', '--help') and len(args) > 1:
+            if args[0] in ("-h", "--help") and len(args) > 1:
                 # Reverse the argument order so 'tool --help cmd' is rewritten
                 # to 'tool cmd --help'.
                 args = [args[1], args[0]] + args[2:]
             command = self.find_nearest_command(args[0])
             if command:
-                if command.__name__ == 'CMDhelp' and len(args) > 1:
+                if command.__name__ == "CMDhelp" and len(args) > 1:
                     # Reverse the argument order so 'tool help cmd' is rewritten
                     # to 'tool cmd --help'. Do it here since we want 'tool help
                     # cmd' to work too.
-                    args = [args[1], '--help'] + args[2:]
+                    args = [args[1], "--help"] + args[2:]
                     command = self.find_nearest_command(args[0]) or command
 
                 # "fix" the usage and the description now that we know the
@@ -268,7 +277,7 @@ class CommandDispatcher(object):
                 self._add_command_usage(parser, command)
                 return command(parser, args[1:])
 
-        cmdhelp = self.enumerate_commands().get('help')
+        cmdhelp = self.enumerate_commands().get("help")
         if cmdhelp:
             # Not a known command. Default to help.
             self._add_command_usage(parser, cmdhelp)

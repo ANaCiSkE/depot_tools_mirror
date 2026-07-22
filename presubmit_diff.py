@@ -6,6 +6,7 @@
 
 This is intended as a preprocessor for presubmit_support.py.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,8 +17,11 @@ import platform
 import sys
 
 import gclient_utils
-from gerrit_util import (CreateHttpConn, ReadHttpResponse,
-                         MAX_CONCURRENT_CONNECTION)
+from gerrit_util import (
+    CreateHttpConn,
+    ReadHttpResponse,
+    MAX_CONCURRENT_CONNECTION,
+)
 import subprocess2
 
 DEV_NULL = "/dev/null"
@@ -39,15 +43,16 @@ def fetch_content(host: str, repo: str, ref: str, file: str) -> bytes:
         Bytes of the file at the commit or an empty bytes object if the file
         does not exist at the commit.
     """
-    conn = CreateHttpConn(f"{host}.googlesource.com",
-                          f"{repo}/+show/{ref}/{file}?format=text")
+    conn = CreateHttpConn(
+        f"{host}.googlesource.com", f"{repo}/+show/{ref}/{file}?format=text"
+    )
     response = ReadHttpResponse(conn, accept_statuses=[200, 404])
     return base64.b64decode(response.read())
 
 
-def git_diff(src: str | None,
-             dest: str | None,
-             unified: int | None = None) -> str:
+def git_diff(
+    src: str | None, dest: str | None, unified: int | None = None
+) -> str:
     """Returns the result of `git diff --no-index` between two paths.
 
     If a path is not specified, the diff is against /dev/null. At least one of
@@ -110,8 +115,9 @@ def _process_diff(diff: str, src_root: str, dst_root: str) -> str:
     return header
 
 
-def _create_diff(host: str, repo: str, ref: str, root: str, file: str,
-                 unified: int | None) -> str:
+def _create_diff(
+    host: str, repo: str, ref: str, root: str, file: str, unified: int | None
+) -> str:
     new_file = os.path.join(root, file)
     if not os.path.exists(new_file):
         new_file = None
@@ -126,19 +132,23 @@ def _create_diff(host: str, repo: str, ref: str, root: str, file: str,
                 f.write(old_content)
 
         if not old_file and not new_file:
-            raise RuntimeError(f"Could not access file {file} from {root} "
-                               f"or from {host}/{repo}:{ref}.")
+            raise RuntimeError(
+                f"Could not access file {file} from {root} "
+                f"or from {host}/{repo}:{ref}."
+            )
 
         diff = git_diff(old_file, new_file, unified)
         return _process_diff(diff, tmp_root, root)
 
 
-def create_diffs(host: str,
-                 repo: str,
-                 ref: str,
-                 root: str,
-                 files: list[str],
-                 unified: int | None = None) -> dict[str, str]:
+def create_diffs(
+    host: str,
+    repo: str,
+    ref: str,
+    root: str,
+    files: list[str],
+    unified: int | None = None,
+) -> dict[str, str]:
     """Calculates diffs of files in a directory against a commit.
 
     Args:
@@ -158,10 +168,12 @@ def create_diffs(host: str,
     """
     diffs = {}
     with concurrent.futures.ThreadPoolExecutor(
-            max_workers=MAX_CONCURRENT_CONNECTION) as executor:
+        max_workers=MAX_CONCURRENT_CONNECTION
+    ) as executor:
         futures_to_file = {
-            executor.submit(_create_diff, host, repo, ref, root, file, unified):
-            file
+            executor.submit(
+                _create_diff, host, repo, ref, root, file, unified
+            ): file
             for file in files
         }
         for future in concurrent.futures.as_completed(futures_to_file):
@@ -178,18 +190,20 @@ def main(argv):
     parser.add_argument("--output", help="File to write the diff to.")
     parser.add_argument("--host", required=True, help="Gerrit host.")
     parser.add_argument("--repo", required=True, help="Gerrit repo.")
-    parser.add_argument("--ref",
-                        required=True,
-                        help="Gerrit ref to diff against.")
-    parser.add_argument("--root",
-                        required=True,
-                        help="Folder containing modified files.")
-    parser.add_argument("-U",
-                        "--unified",
-                        required=False,
-                        type=int,
-                        help="generate diffs with <n> lines context",
-                        metavar='<n>')
+    parser.add_argument(
+        "--ref", required=True, help="Gerrit ref to diff against."
+    )
+    parser.add_argument(
+        "--root", required=True, help="Folder containing modified files."
+    )
+    parser.add_argument(
+        "-U",
+        "--unified",
+        required=False,
+        type=int,
+        help="generate diffs with <n> lines context",
+        metavar="<n>",
+    )
     parser.add_argument(
         "files",
         nargs="+",
@@ -197,8 +211,14 @@ def main(argv):
     )
     options = parser.parse_args(argv)
 
-    diffs = create_diffs(options.host, options.repo, options.ref, options.root,
-                         options.files, options.unified)
+    diffs = create_diffs(
+        options.host,
+        options.repo,
+        options.ref,
+        options.root,
+        options.files,
+        options.unified,
+    )
 
     unified_diff = "\n".join([d for d in diffs.values() if d])
     if options.output:

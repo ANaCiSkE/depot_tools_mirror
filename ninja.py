@@ -54,11 +54,13 @@ def check_out_dir(tool, out_dir):
         return
     siso_marker = os.path.join(out_dir, ".siso_deps")
     if os.path.exists(siso_marker):
-        print("depot_tools/ninja.py: %s contains Siso state file.\n"
-              "Use `autoninja` to choose appropriate build tool,\n"
-              "or run `gn clean %s` to switch from siso to ninja\n" %
-              (out_dir, out_dir),
-              file=sys.stderr)
+        print(
+            "depot_tools/ninja.py: %s contains Siso state file.\n"
+            "Use `autoninja` to choose appropriate build tool,\n"
+            "or run `gn clean %s` to switch from siso to ninja\n"
+            % (out_dir, out_dir),
+            file=sys.stderr,
+        )
         sys.exit(1)
     if os.environ.get("AUTONINJA_BUILD_ID"):
         # autoninja sets AUTONINJA_BUILD_ID
@@ -68,7 +70,8 @@ def check_out_dir(tool, out_dir):
             print(
                 "depot_tools/ninja.py: detect use_remoteexec=true\n"
                 "Use `autoninja` to choose appropriate build tool\n",
-                file=sys.stderr)
+                file=sys.stderr,
+            )
             sys.exit(1)
 
 
@@ -119,7 +122,8 @@ def main(args):
         gclient_src_root_path = os.path.join(gclient_root_path, "src")
 
     for base_path in set(
-        [primary_solution_path, gclient_root_path, gclient_src_root_path]):
+        [primary_solution_path, gclient_root_path, gclient_src_root_path]
+    ):
         if not base_path:
             continue
         ninja_path = os.path.join(

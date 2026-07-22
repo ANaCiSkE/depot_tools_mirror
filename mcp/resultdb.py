@@ -15,7 +15,7 @@ import common
 
 tracer = telemetry.get_tracer(__name__)
 
-RESULTDB_SERVER = 'results.api.luci.app'
+RESULTDB_SERVER = "results.api.luci.app"
 
 
 async def get_non_exonerated_unexpected_results_from_build(
@@ -38,24 +38,31 @@ async def get_non_exonerated_unexpected_results_from_build(
         for more details.
     """
     with tracer.start_as_current_span(
-            'chromium.mcp.get_non_exonerated_unexpected_results_from_build'):
+        "chromium.mcp.get_non_exonerated_unexpected_results_from_build"
+    ):
         if not build_id.isnumeric():
             raise ValueError(
-                f'Provided build_id {build_id} contains non-numeric characters')
+                f"Provided build_id {build_id} contains non-numeric characters"
+            )
         request = {
-            'invocations': [
-                f'invocations/build-{build_id}',
+            "invocations": [
+                f"invocations/build-{build_id}",
             ],
-            'predicate': {
-                'expectancy': 'VARIANTS_WITH_UNEXPECTED_RESULTS',
-                'exclude_exonerated': True,
+            "predicate": {
+                "expectancy": "VARIANTS_WITH_UNEXPECTED_RESULTS",
+                "exclude_exonerated": True,
             },
-            'read_mask': ('name,resultId,variant,status,statusV2,duration,'
-                          'failureReason,summary_html'),
+            "read_mask": (
+                "name,resultId,variant,status,statusV2,duration,"
+                "failureReason,summary_html"
+            ),
         }
         response = await common.run_prpc_call(
-            ctx, RESULTDB_SERVER, 'luci.resultdb.v1.ResultDB.QueryTestResults',
-            request)
+            ctx,
+            RESULTDB_SERVER,
+            "luci.resultdb.v1.ResultDB.QueryTestResults",
+            request,
+        )
         return response
 
 
@@ -82,14 +89,15 @@ async def expand_summary_html(
         A copy of |summary_html| with any `text-artifact` tags replaced with
         the contents of the artifacts they reference.
     """
-    with tracer.start_as_current_span('chromium.mcp.expand_summary_html'):
-        soup = bs4.BeautifulSoup(summary_html, 'html.parser')
-        for tag in soup.find_all('text-artifact'):
-            artifact_id = tag.get('artifact-id')
+    with tracer.start_as_current_span("chromium.mcp.expand_summary_html"):
+        soup = bs4.BeautifulSoup(summary_html, "html.parser")
+        for tag in soup.find_all("text-artifact"):
+            artifact_id = tag.get("artifact-id")
             if not artifact_id:
                 continue
             artifact_content = await get_test_level_text_artifact(
-                ctx, result_name, artifact_id)
+                ctx, result_name, artifact_id
+            )
             tag.replace_with(artifact_content)
         return str(soup)
 
@@ -119,21 +127,26 @@ async def get_test_level_text_artifact(
         A string containing the contents of the specified artifact.
     """
     with tracer.start_as_current_span(
-            'chromium.mcp.get_test_level_text_artifact'):
-        artifact_name = posixpath.join(result_name, 'artifacts', artifact_id)
+        "chromium.mcp.get_test_level_text_artifact"
+    ):
+        artifact_name = posixpath.join(result_name, "artifacts", artifact_id)
         request = {
-            'name': artifact_name,
+            "name": artifact_name,
         }
         prpc_response = await common.run_prpc_call(
-            ctx, RESULTDB_SERVER, 'luci.resultdb.v1.ResultDB.GetArtifact',
-            request)
+            ctx,
+            RESULTDB_SERVER,
+            "luci.resultdb.v1.ResultDB.GetArtifact",
+            request,
+        )
         response = json.loads(prpc_response)
 
-        content_type = response['contentType']
-        if 'text/plain' not in content_type:
+        content_type = response["contentType"]
+        if "text/plain" not in content_type:
             raise ValueError(
-                f'Expected text artifact, got content type {content_type}')
+                f"Expected text artifact, got content type {content_type}"
+            )
 
-        r = requests.get(response['fetchUrl'])
+        r = requests.get(response["fetchUrl"])
         r.raise_for_status()
         return r.text

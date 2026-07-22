@@ -11,44 +11,53 @@ import os
 import sys
 
 POSSIBLE_BASE_LOCATIONS = [
-    # Older SDKs just used the raw 'bin' directory
-    os.path.join("win_sdk", "bin"),
-
-    # SDK versions after 19041
-    os.path.join("Windows Kits", "10", "bin"),
+  # Older SDKs just used the raw 'bin' directory
+  os.path.join("win_sdk", "bin"),
+  # SDK versions after 19041
+  os.path.join("Windows Kits", "10", "bin"),
 ]
 
-SDK_ARCHITECTURES = frozenset([
+SDK_ARCHITECTURES = frozenset(
+  [
     "x86",
     "x64",
     "arm64",
-])
+  ]
+)
 
 
 def main():
   parser = argparse.ArgumentParser(
-      description='Find the SetEnv from a windows SDK')
-  parser.add_argument('--sdk_root',
-                      metavar='PATH',
-                      required=True,
-                      help='The absolute path to the root of the unpacked SDK')
-  parser.add_argument('--target_arch',
-                      choices=SDK_ARCHITECTURES,
-                      required=True,
-                      help='The target architecture')
-  parser.add_argument('--output_json',
-                      required=True,
-                      help='The absolute path to an output json file')
+    description="Find the SetEnv from a windows SDK"
+  )
+  parser.add_argument(
+    "--sdk_root",
+    metavar="PATH",
+    required=True,
+    help="The absolute path to the root of the unpacked SDK",
+  )
+  parser.add_argument(
+    "--target_arch",
+    choices=SDK_ARCHITECTURES,
+    required=True,
+    help="The target architecture",
+  )
+  parser.add_argument(
+    "--output_json",
+    required=True,
+    help="The absolute path to an output json file",
+  )
   args = parser.parse_args()
 
   if not os.path.isabs(args.sdk_root):
     parser.error("sdk_root must be absolute, got {!r}".format(args.sdk_root))
 
   if not os.path.isabs(args.output_json):
-    parser.error("output_json must be absolute, got {!r}".format(
-        args.output_json))
+    parser.error(
+      "output_json must be absolute, got {!r}".format(args.output_json)
+    )
 
-  with open(args.output_json, 'w', encoding="utf-8") as outf:
+  with open(args.output_json, "w", encoding="utf-8") as outf:
     tail = "SetEnv.{}.json".format(args.target_arch)
     for loc in POSSIBLE_BASE_LOCATIONS:
       full = os.path.join(args.sdk_root, loc, tail)
@@ -66,5 +75,5 @@ def main():
   sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   main()

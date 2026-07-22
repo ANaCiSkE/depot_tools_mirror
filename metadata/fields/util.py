@@ -27,8 +27,9 @@ _PATTERN_STARTS_WITH_YES = re.compile(r"^yes", re.IGNORECASE)
 _PATTERN_STARTS_WITH_NO = re.compile(r"^no", re.IGNORECASE)
 
 # Variants of N/A (Not Applicable).
-_PATTERN_NOT_APPLICABLE = re.compile(r"^(N ?\/ ?A)\.?|na\.?|not applicable\.?$",
-                                     re.IGNORECASE)
+_PATTERN_NOT_APPLICABLE = re.compile(
+    r"^(N ?\/ ?A)\.?|na\.?|not applicable\.?$", re.IGNORECASE
+)
 
 # A collection of values that provides little information.
 # Use lower-case for easier comparison.
@@ -67,9 +68,9 @@ def quoted(values: List[str]) -> str:
 
 def infer_as_boolean(value: str, default: bool = True) -> bool:
     """Attempts to infer the value as a boolean, where:
-        - "yes"-ish values return True;
-        - "no"-ish values return False; and
-        - default is returned otherwise.
+    - "yes"-ish values return True;
+    - "no"-ish values return False; and
+    - default is returned otherwise.
     """
     if matches(_PATTERN_STARTS_WITH_YES, value):
         return True
@@ -81,7 +82,7 @@ def infer_as_boolean(value: str, default: bool = True) -> bool:
 
 def is_known_invalid_value(value: str):
     """Returns whether `value` is among the known bad values that provides
-       little machine readable information.
+    little machine readable information.
     """
     if not value:
         return False

@@ -96,8 +96,9 @@ def test_otel_span_translation_with_anonymization(monkeypatch) -> None:
 
     anonymizer = anonymization.Anonymizer([(re.escape("user4321"), "<user>")])
     f = anonymization.AnonymizingFilter(anonymizer)
-    e = clearcut_span_exporter.ClearcutSpanExporter(prefilter=f,
-                                                    max_queue_size=1)
+    e = clearcut_span_exporter.ClearcutSpanExporter(
+        prefilter=f, max_queue_size=1
+    )
 
     assert e.export([span]) == export.SpanExportResult.SUCCESS
     req, _ = requests[0]
@@ -129,9 +130,9 @@ def test_export_to_http_api(monkeypatch) -> None:
     span.end()
     endpoint = "http://domain.com/path"
 
-    e = clearcut_span_exporter.ClearcutSpanExporter(endpoint=endpoint,
-                                                    timeout=7,
-                                                    max_queue_size=1)
+    e = clearcut_span_exporter.ClearcutSpanExporter(
+        endpoint=endpoint, timeout=7, max_queue_size=1
+    )
 
     assert e.export([span])
     req, timeout = requests[0]

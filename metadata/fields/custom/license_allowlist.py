@@ -65,205 +65,220 @@ STATUS_UNKNOWN = "UNKNOWN"
 STATUS_RECIPROCAL_NOT_ALLOWED = "RECIPROCAL_NOT_ALLOWED"
 STATUS_NOT_ALLOWED_SHIPPED = "NOT_ALLOWED_SHIPPED"
 
-_ALLOWED_SPDX_LICENSES = frozenset([
-    # unencumbered.
-    # go/keep-sorted start case=no
-    "blessing",
-    "CC0-1.0",
-    "LZMA-SDK-9.22",
-    "Unlicense",
-    # go/keep-sorted end
-    # permissive.
-    # go/keep-sorted start case=no
-    "0BSD",
-    "bcrypt-Solar-Designer",
-    "FSFUL",
-    "GPL-2.0-with-autoconf-exception",
-    "GPL-2.0-with-classpath-exception",
-    "GPL-3.0-with-autoconf-exception",
-    "MIT-0",
-    # go/keep-sorted end
-    # notice.
-    # go/keep-sorted start case=no
-    "AML",
-    "Apache-2.0",
-    "Artistic-1.0-Perl",
-    "Artistic-2.0",
-    "Beerware",
-    "Bitstream-Charter",
-    "Bitstream-Vera",
-    "BSD-2-Clause",
-    "BSD-2-Clause-FreeBSD",
-    "BSD-3-Clause",
-    "BSD-3-Clause-Attribution",
-    "BSD-3-Clause-flex",
-    "BSD-3-Clause-Open-MPI",
-    "BSD-4-Clause",
-    "BSD-4-Clause-UC",
-    "BSD-4.3RENO",
-    "BSD-4.3TAHOE",
-    "BSD-Source-Code",
-    "BSL-1.0",
-    "CC-BY-3.0",
-    "CC-BY-4.0",
-    "CMU-Mach",
-    "curl",
-    "dtoa",
-    "FSFAP",
-    "FSFULLR",
-    "FTL",
-    "HPND",
-    "HPND-sell-variant",
-    "ICU",
-    "IJG",
-    "ISC",
-    "JSON",
-    "Libpng",
-    "libpng-2.0",
-    "libtiff",
-    "Martin-Birgmeier",
-    "Minpack",
-    "MIT",
-    "MIT-Khronos-old",
-    "MIT-Modern-Variant",
-    "MS-PL",
-    "NAIST-2003",
-    "NCSA",
-    "OFL-1.1",
-    "OpenSSL",
-    "Python-2.0",
-    "SGI-B-2.0",
-    "Spencer-86",
-    "SunPro",
-    "TU-Berlin-1.0",
-    "Unicode-3.0",
-    "Unicode-DFS-2015",
-    "Unicode-DFS-2016",
-    "Unicode-TOU",
-    "X11",
-    "Zlib",
-    # go/keep-sorted end
-])
+_ALLOWED_SPDX_LICENSES = frozenset(
+    [
+        # unencumbered.
+        # go/keep-sorted start case=no
+        "blessing",
+        "CC0-1.0",
+        "LZMA-SDK-9.22",
+        "Unlicense",
+        # go/keep-sorted end
+        # permissive.
+        # go/keep-sorted start case=no
+        "0BSD",
+        "bcrypt-Solar-Designer",
+        "FSFUL",
+        "GPL-2.0-with-autoconf-exception",
+        "GPL-2.0-with-classpath-exception",
+        "GPL-3.0-with-autoconf-exception",
+        "MIT-0",
+        # go/keep-sorted end
+        # notice.
+        # go/keep-sorted start case=no
+        "AML",
+        "Apache-2.0",
+        "Artistic-1.0-Perl",
+        "Artistic-2.0",
+        "Beerware",
+        "Bitstream-Charter",
+        "Bitstream-Vera",
+        "BSD-2-Clause",
+        "BSD-2-Clause-FreeBSD",
+        "BSD-3-Clause",
+        "BSD-3-Clause-Attribution",
+        "BSD-3-Clause-flex",
+        "BSD-3-Clause-Open-MPI",
+        "BSD-4-Clause",
+        "BSD-4-Clause-UC",
+        "BSD-4.3RENO",
+        "BSD-4.3TAHOE",
+        "BSD-Source-Code",
+        "BSL-1.0",
+        "CC-BY-3.0",
+        "CC-BY-4.0",
+        "CMU-Mach",
+        "curl",
+        "dtoa",
+        "FSFAP",
+        "FSFULLR",
+        "FTL",
+        "HPND",
+        "HPND-sell-variant",
+        "ICU",
+        "IJG",
+        "ISC",
+        "JSON",
+        "Libpng",
+        "libpng-2.0",
+        "libtiff",
+        "Martin-Birgmeier",
+        "Minpack",
+        "MIT",
+        "MIT-Khronos-old",
+        "MIT-Modern-Variant",
+        "MS-PL",
+        "NAIST-2003",
+        "NCSA",
+        "OFL-1.1",
+        "OpenSSL",
+        "Python-2.0",
+        "SGI-B-2.0",
+        "Spencer-86",
+        "SunPro",
+        "TU-Berlin-1.0",
+        "Unicode-3.0",
+        "Unicode-DFS-2015",
+        "Unicode-DFS-2016",
+        "Unicode-TOU",
+        "X11",
+        "Zlib",
+        # go/keep-sorted end
+    ]
+)
 
 # These are licenses that are not in the SPDX license list, but are identified
 # by the license classifier.
-_EXTENDED_LICENSE_CLASSIFIERS = frozenset([
-    # unencumbered.
-    # go/keep-sorted start case=no
-    "AhemFont",
-    "Android-SDK",
-    "LZMA",
-    "Public Domain",
-    "Public-Domain-ftglue",
-    "Public-Domain-Gutenberg",
-    "public-domain-md5",
-    "Public-Domain-Ross-Williams",
-    "Public-Domain-Sigslot",
-    "Public-Domain-SpanDSP",
-    "SPL-SQRT-FLOOR",
-    # go/keep-sorted end
-    # permissive.
-    # go/keep-sorted start case=no
-    "AMSFonts-2.2",
-    "ietf",
-    "RFC",
-    "SolarDesigner",
-    "test_fonts",
-    # go/keep-sorted end
-    # notice.
-    # go/keep-sorted start case=no
-    "Apache-with-LLVM-Exception",
-    "Apache-with-Runtime-Exception",
-    "base64",
-    "base64-cpp",
-    "Bitstream",
-    "BLAS",
-    "BSD-2-Clause-Flex",
-    "BSD-3-Clause-OpenMPI",
-    "BSD-4-Clause-Wasabi",
-    "Caffe",
-    "CERN",
-    "dso",
-    "Entenssa",
-    "FFT2D",
-    "getopt",
-    "GIF-Encoder",
-    "GNU-All-permissive-Copying-License",
-    "IBM-DHCP",
-    "JsonCPP",
-    "Khronos",
-    "Libpng-2.0",
-    "OpenGLUT",
-    "opensift",
-    "pffft",
-    "PngSuite",
-    "Punycode",
-    "Scala",
-    "SSLeay",
-    "takuya-ooura",
-    "unicode_org",
-    "WebM-Project-Patent",
-    "X11-Lucent",
-    "zxing",
-    # go/keep-sorted end
-
-    # The Android Software Development Kit License is a special case.
-    # It can introduce licensing complexities due to the potentially extensive
-    # transitive dependency chain. Developers should carefully review the
-    # licenses of all dependencies.
-    "Android Software Development Kit License",
-])
+_EXTENDED_LICENSE_CLASSIFIERS = frozenset(
+    [
+        # unencumbered.
+        # go/keep-sorted start case=no
+        "AhemFont",
+        "Android-SDK",
+        "LZMA",
+        "Public Domain",
+        "Public-Domain-ftglue",
+        "Public-Domain-Gutenberg",
+        "public-domain-md5",
+        "Public-Domain-Ross-Williams",
+        "Public-Domain-Sigslot",
+        "Public-Domain-SpanDSP",
+        "SPL-SQRT-FLOOR",
+        # go/keep-sorted end
+        # permissive.
+        # go/keep-sorted start case=no
+        "AMSFonts-2.2",
+        "ietf",
+        "RFC",
+        "SolarDesigner",
+        "test_fonts",
+        # go/keep-sorted end
+        # notice.
+        # go/keep-sorted start case=no
+        "Apache-with-LLVM-Exception",
+        "Apache-with-Runtime-Exception",
+        "base64",
+        "base64-cpp",
+        "Bitstream",
+        "BLAS",
+        "BSD-2-Clause-Flex",
+        "BSD-3-Clause-OpenMPI",
+        "BSD-4-Clause-Wasabi",
+        "Caffe",
+        "CERN",
+        "dso",
+        "Entenssa",
+        "FFT2D",
+        "getopt",
+        "GIF-Encoder",
+        "GNU-All-permissive-Copying-License",
+        "IBM-DHCP",
+        "JsonCPP",
+        "Khronos",
+        "Libpng-2.0",
+        "OpenGLUT",
+        "opensift",
+        "pffft",
+        "PngSuite",
+        "Punycode",
+        "Scala",
+        "SSLeay",
+        "takuya-ooura",
+        "unicode_org",
+        "WebM-Project-Patent",
+        "X11-Lucent",
+        "zxing",
+        # go/keep-sorted end
+        # The Android Software Development Kit License is a special case.
+        # It can introduce licensing complexities due to the potentially extensive
+        # transitive dependency chain. Developers should carefully review the
+        # licenses of all dependencies.
+        "Android Software Development Kit License",
+    ]
+)
 
 # These licenses are only allowed in open source projects due to their
 # reciprocal requirements.
-_OPEN_SOURCE_SPDX_LICENSES = frozenset([
-    # reciprocal.
-    # go/keep-sorted start case=no
-    "APSL-2.0",
-    "CDDL-1.0",
-    "CDDL-1.1",
-    "CPL-1.0",
-    "EPL-1.0",
-    "EPL-2.0",
-    "MPL-1.1",
-    "MPL-2.0",
-    # go/keep-sorted end
-])
+_OPEN_SOURCE_SPDX_LICENSES = frozenset(
+    [
+        # reciprocal.
+        # go/keep-sorted start case=no
+        "APSL-2.0",
+        "CDDL-1.0",
+        "CDDL-1.1",
+        "CPL-1.0",
+        "EPL-1.0",
+        "EPL-2.0",
+        "MPL-1.1",
+        "MPL-2.0",
+        # go/keep-sorted end
+    ]
+)
 
-_ONLY_ALLOWED_NOT_SHIPPED = frozenset([
-    "GPL-2.0",
-    "GPL-3.0",
-])
+_ONLY_ALLOWED_NOT_SHIPPED = frozenset(
+    [
+        "GPL-2.0",
+        "GPL-3.0",
+    ]
+)
 
-_WITH_PERMISSION_ONLY = frozenset([
-    # restricted.
-    # go/keep-sorted start case=no
-    "CC-BY-SA-3.0",
-    "LGPL-2.0",
-    "LGPL-2.1",
-    "LGPL-3.0",
-    "NPL-1.1",
-    # go/keep-sorted end
-    # by_exception_only.
-    # go/keep-sorted start case=no
-    # TODO(b/515619353) remove once approved.
-    "Opus-Patent-BSD-3-Clause",
-    # TODO(b/514906247) remove once approved.
-    "Unity-Companion-License-1.3",
-    # go/keep-sorted end
-])
+_WITH_PERMISSION_ONLY = frozenset(
+    [
+        # restricted.
+        # go/keep-sorted start case=no
+        "CC-BY-SA-3.0",
+        "LGPL-2.0",
+        "LGPL-2.1",
+        "LGPL-3.0",
+        "NPL-1.1",
+        # go/keep-sorted end
+        # by_exception_only.
+        # go/keep-sorted start case=no
+        # TODO(b/515619353) remove once approved.
+        "Opus-Patent-BSD-3-Clause",
+        # TODO(b/514906247) remove once approved.
+        "Unity-Companion-License-1.3",
+        # go/keep-sorted end
+    ]
+)
 
 # These are references to files that are not licenses, but are allowed to be
 # included in the LICENSE field.
-_ALLOWED_REFERENCES = frozenset([
-    "Refer to additional_readme_paths.json",
-])
+_ALLOWED_REFERENCES = frozenset(
+    [
+        "Refer to additional_readme_paths.json",
+    ]
+)
 
-_ALLOWED_LICENSES = (_ALLOWED_SPDX_LICENSES
-                     | _EXTENDED_LICENSE_CLASSIFIERS
-                     | _ALLOWED_REFERENCES)
+_ALLOWED_LICENSES = (
+    _ALLOWED_SPDX_LICENSES | _EXTENDED_LICENSE_CLASSIFIERS | _ALLOWED_REFERENCES
+)
 _ALLOWED_OPEN_SOURCE_LICENSES = _ALLOWED_LICENSES | _OPEN_SOURCE_SPDX_LICENSES
-_ALL_LICENSES = _ALLOWED_OPEN_SOURCE_LICENSES | _WITH_PERMISSION_ONLY | _ONLY_ALLOWED_NOT_SHIPPED
+_ALL_LICENSES = (
+    _ALLOWED_OPEN_SOURCE_LICENSES
+    | _WITH_PERMISSION_ONLY
+    | _ONLY_ALLOWED_NOT_SHIPPED
+)
 
 
 # TODO(https://crbug.com/452151523): Remove this after migrating downstream
@@ -275,16 +290,14 @@ WITH_PERMISSION_ONLY = _WITH_PERMISSION_ONLY
 
 
 def normalize_value(value: str) -> str:
-    """Removes unnecessary prefixes/suffixes.
-    """
+    """Removes unnecessary prefixes/suffixes."""
     # Do not convert to lower case here, as we want to preserve the original
     # casing for warning messages.
     return value.strip().removeprefix("LicenseRef-")
 
 
 def _license_in_list(value: str, allow_list: frozenset[str]) -> bool:
-    """Normalizes and does a case insensitive check if value is in allow_list.
-    """
+    """Normalizes and does a case insensitive check if value is in allow_list."""
     return normalize_value(value).lower() in map(str.lower, allow_list)
 
 
@@ -316,9 +329,11 @@ def is_only_allowed_not_shipped(value: str) -> bool:
     return _license_in_list(value, _ONLY_ALLOWED_NOT_SHIPPED)
 
 
-def is_license_allowed(value: str,
-                       is_open_source_project: bool = False,
-                       is_shipped: Optional[bool] = False) -> bool:
+def is_license_allowed(
+    value: str,
+    is_open_source_project: bool = False,
+    is_shipped: Optional[bool] = False,
+) -> bool:
     """Returns whether the value is in the allowlist for license
     types.
     """
@@ -339,10 +354,15 @@ def is_license_allowed(value: str,
 def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
     """Loads a restrictive_license_approval.textproto file and returns a mapping of license IDs to bug IDs."""
     covered = {}
-    script_path = os.path.join(_ROOT_DIR, "metadata", "scripts",
-                               "parse_restrictive_license_approval.py")
-    stdout = subprocess.check_output(["vpython3", script_path,
-                                      path]).decode("utf-8")
+    script_path = os.path.join(
+        _ROOT_DIR,
+        "metadata",
+        "scripts",
+        "parse_restrictive_license_approval.py",
+    )
+    stdout = subprocess.check_output(["vpython3", script_path, path]).decode(
+        "utf-8"
+    )
     approvals = json.loads(stdout)
     for approval in approvals:
         license_id = approval.get("id")
@@ -355,11 +375,13 @@ def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
     return covered
 
 
-def get_license_validation_status(license_value: str,
-                                  source_file_dir: Optional[str] = None,
-                                  is_open_source_project: bool = True,
-                                  android_compatible: Optional[str] = None,
-                                  is_shipped: Optional[bool] = False) -> str:
+def get_license_validation_status(
+    license_value: str,
+    source_file_dir: Optional[str] = None,
+    is_open_source_project: bool = True,
+    android_compatible: Optional[str] = None,
+    is_shipped: Optional[bool] = False,
+) -> str:
     """Evaluates the validation status of a license value.
 
     Returns 'ALLOWED' if all licenses are allowed, or a combination of:
@@ -397,8 +419,10 @@ def get_license_validation_status(license_value: str,
         # reciprocal obligations of the license.
         is_reciprocal = is_open_source_license(license)
         if is_reciprocal:
-            if (not android_compatible
-                    or android_compatible.lower().strip() != "yes"):
+            if (
+                not android_compatible
+                or android_compatible.lower().strip() != "yes"
+            ):
                 reciprocal_not_allowed_licenses.append(license)
             continue
 
@@ -414,10 +438,12 @@ def get_license_validation_status(license_value: str,
         if approvals is None:
             approvals = {}
             restricted_approval_filepath = os.path.join(
-                source_file_dir, RESTRICTED_APPROVAL_FILENAME)
+                source_file_dir, RESTRICTED_APPROVAL_FILENAME
+            )
             if os.path.isfile(restricted_approval_filepath):
                 approvals = load_restrictive_license_approval_textproto(
-                    restricted_approval_filepath)
+                    restricted_approval_filepath
+                )
 
         lic_norm = normalize_value(license).lower()
 
@@ -437,9 +463,12 @@ def get_license_validation_status(license_value: str,
                 unknown_licenses.append(license)
 
     # Construct status string.
-    if (not unknown_licenses and not approved_licenses
-            and not reciprocal_not_allowed_licenses
-            and not not_allowed_shipped_licenses):
+    if (
+        not unknown_licenses
+        and not approved_licenses
+        and not reciprocal_not_allowed_licenses
+        and not not_allowed_shipped_licenses
+    ):
         return STATUS_ALLOWED
 
     parts = []

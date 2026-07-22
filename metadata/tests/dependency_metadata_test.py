@@ -25,10 +25,12 @@ class DependencyValidationTest(unittest.TestCase):
         field.
         """
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test repeated field")
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test repeated field"
+        )
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
@@ -47,10 +49,12 @@ class DependencyValidationTest(unittest.TestCase):
     def test_only_alias_field(self):
         """Check that an alias field can be used for a main field."""
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test alias field used")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test alias field used"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
@@ -69,10 +73,12 @@ class DependencyValidationTest(unittest.TestCase):
         field) is still validated.
         """
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test alias field overwrite")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test alias field overwrite"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
@@ -92,15 +98,18 @@ class DependencyValidationTest(unittest.TestCase):
         to that alias field.
         """
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test alias field error attributed")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test alias field error attributed"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-        dependency.add_entry(known_fields.SHIPPED_IN_CHROMIUM.get_name(),
-                             "test")
+        dependency.add_entry(
+            known_fields.SHIPPED_IN_CHROMIUM.get_name(), "test"
+        )
         dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
 
@@ -109,24 +118,30 @@ class DependencyValidationTest(unittest.TestCase):
             repo_root_dir=_THIS_DIR,
         )
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].get_reason(),
-                         "Shipped in Chromium is invalid.")
+        self.assertEqual(
+            results[0].get_reason(), "Shipped in Chromium is invalid."
+        )
 
     def test_versioning_field(self):
         """Check that a validation error is returned for insufficient
         versioning info."""
         with self.subTest(msg="Insufficient versioning info"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test metadata missing versioning info")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(),
+                "Test metadata missing versioning info",
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             results = dependency.validate(
@@ -135,21 +150,26 @@ class DependencyValidationTest(unittest.TestCase):
             )
             self.assertEqual(len(results), 1)
             self.assertTrue(isinstance(results[0], vr.ValidationError))
-            self.assertEqual(results[0].get_reason(),
-                             "Versioning fields are insufficient.")
+            self.assertEqual(
+                results[0].get_reason(), "Versioning fields are insufficient."
+            )
 
         with self.subTest(
-                msg="Google Internal URL skips versioning requirement"):
+            msg="Google Internal URL skips versioning requirement"
+        ):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test Google Internal URL")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test Google Internal URL"
+            )
             dependency.add_entry(known_fields.URL.get_name(), "Google Internal")
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "yes")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
 
             results = dependency.validate(
@@ -161,98 +181,129 @@ class DependencyValidationTest(unittest.TestCase):
         with self.subTest(msg="CPEPrefix without version, N/A Version"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Test")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://example.com"
+            )
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
-            dependency.add_entry(known_fields.REVISION.get_name(), "1234abcdef1234")
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
+            dependency.add_entry(
+                known_fields.REVISION.get_name(), "1234abcdef1234"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
-            dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
-                                 "cpe:/a:vendor:product")
+            dependency.add_entry(
+                known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product"
+            )
             results = dependency.validate(
                 source_file_dir=os.path.join(_THIS_DIR, "data"),
-                repo_root_dir=_THIS_DIR)
+                repo_root_dir=_THIS_DIR,
+            )
             self.assertEqual(len(results), 1)
             reasons = {r.get_reason() for r in results}
             self.assertIn(
                 "CPEPrefix is missing a version, and no Version is specified.",
-                reasons)
+                reasons,
+            )
 
         with self.subTest(msg="CPEPrefix without version, with Version"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Test")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://example.com"
+            )
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
-            dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
-                                 "cpe:/a:vendor:product")
+            dependency.add_entry(
+                known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0")
             results = dependency.validate(
                 source_file_dir=os.path.join(_THIS_DIR, "data"),
-                repo_root_dir=_THIS_DIR)
+                repo_root_dir=_THIS_DIR,
+            )
             self.assertEqual(len(results), 0)
 
         with self.subTest(msg="CPEPrefix with version, N/A Version"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Test")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://example.com"
+            )
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
-            dependency.add_entry(known_fields.REVISION.get_name(), "1234abcdef1234")
+            dependency.add_entry(
+                known_fields.REVISION.get_name(), "1234abcdef1234"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
-            dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
-                                 "cpe:/a:vendor:product:1.0")
+            dependency.add_entry(
+                known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product:1.0"
+            )
             results = dependency.validate(
                 source_file_dir=os.path.join(_THIS_DIR, "data"),
-                repo_root_dir=_THIS_DIR)
+                repo_root_dir=_THIS_DIR,
+            )
             self.assertEqual(len(results), 0)
 
         with self.subTest(msg="CPEPrefix unknown, N/A Version"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Test")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://example.com"
+            )
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
-            dependency.add_entry(known_fields.REVISION.get_name(), "1234abcdef1234")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.REVISION.get_name(), "1234abcdef1234"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
             dependency.add_entry(known_fields.CPE_PREFIX.get_name(), "unknown")
             results = dependency.validate(
                 source_file_dir=os.path.join(_THIS_DIR, "data"),
-                repo_root_dir=_THIS_DIR)
+                repo_root_dir=_THIS_DIR,
+            )
             self.assertEqual(len(results), 0)
 
         with self.subTest(msg="Insufficient versioning with invalid revision"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test metadata missing versioning info")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(),
+                "Test metadata missing versioning info",
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
             dependency.add_entry(known_fields.REVISION.get_name(), "N/A")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             results = dependency.validate(
@@ -262,25 +313,33 @@ class DependencyValidationTest(unittest.TestCase):
             self.assertEqual(len(results), 2)
             self.assertTrue(isinstance(results[0], vr.ValidationError))
             self.assertTrue(isinstance(results[1], vr.ValidationError))
-            self.assertEqual(results[0].get_reason(),
-                             "Revision is not a valid hexadecimal revision.")
-            self.assertEqual(results[1].get_reason(),
-                             "Versioning fields are insufficient.")
+            self.assertEqual(
+                results[0].get_reason(),
+                "Revision is not a valid hexadecimal revision.",
+            )
+            self.assertEqual(
+                results[1].get_reason(), "Versioning fields are insufficient."
+            )
 
         with self.subTest(msg="Invalid revision format"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Invalid Revision")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Invalid Revision"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
-            dependency.add_entry(known_fields.REVISION.get_name(),
-                                 "invalid_revision")
+            dependency.add_entry(
+                known_fields.REVISION.get_name(), "invalid_revision"
+            )
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             results = dependency.validate(
@@ -297,14 +356,17 @@ class DependencyValidationTest(unittest.TestCase):
         with self.subTest(msg="Valid revision format"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Valid Revision")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             # Expect an insufficient versioning error since version is N/A.
@@ -325,15 +387,18 @@ class DependencyValidationTest(unittest.TestCase):
         with self.subTest(msg="Revision: DEPS is acceptable"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Dependency")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
             dependency.add_entry(known_fields.REVISION.get_name(), "DEPS")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             results = dependency.validate(
@@ -343,20 +408,24 @@ class DependencyValidationTest(unittest.TestCase):
             self.assertEqual(len(results), 0)
 
         with self.subTest(
-                msg=
-                "Check versioning information isn't required for dependencies where"
-                "Chromium is the canonical repository."):
+            msg="Check versioning information isn't required for dependencies where"
+            "Chromium is the canonical repository."
+        ):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test valid metadata")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "This is the canonical repository")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test valid metadata"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "This is the canonical repository"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "yes")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
 
             results = dependency.validate(
@@ -382,14 +451,16 @@ class DependencyValidationTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 1)
         self.assertTrue(isinstance(results[0], vr.ValidationError))
-        self.assertEqual(results[0].get_reason(),
-                         "Required field 'URL' is missing.")
+        self.assertEqual(
+            results[0].get_reason(), "Required field 'URL' is missing."
+        )
 
     def test_invalid_field(self):
         """Check field validation issues are returned."""
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
         dependency.add_entry(known_fields.NAME.get_name(), "Test invalid field")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
@@ -403,20 +474,24 @@ class DependencyValidationTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 1)
         self.assertTrue(isinstance(results[0], vr.ValidationError))
-        self.assertEqual(results[0].get_reason(),
-                         "Security Critical is invalid.")
+        self.assertEqual(
+            results[0].get_reason(), "Security Critical is invalid."
+        )
 
     def test_invalid_license_file_path(self):
         """Check license file path validation issues are returned."""
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test license file path")
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test license file path"
+        )
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-        dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                             "MISSING-LICENSE")
+        dependency.add_entry(
+            known_fields.LICENSE_FILE.get_name(), "MISSING-LICENSE"
+        )
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
@@ -431,13 +506,15 @@ class DependencyValidationTest(unittest.TestCase):
     def test_multiple_validation_issues(self):
         """Check all validation issues are returned."""
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test multiple errors")
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test multiple errors"
+        )
         # Leave URL field unspecified.
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-        dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                             "MISSING-LICENSE")
+        dependency.add_entry(
+            known_fields.LICENSE_FILE.get_name(), "MISSING-LICENSE"
+        )
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "test")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
         dependency.add_entry(known_fields.NAME.get_name(), "again")
@@ -456,10 +533,12 @@ class DependencyValidationTest(unittest.TestCase):
     def test_valid_metadata(self):
         """Check valid metadata returns no validation issues."""
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test valid metadata")
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test valid metadata"
+        )
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
@@ -494,32 +573,38 @@ class DependencyValidationTest(unittest.TestCase):
 
         # Allowed-not-shipped licenses (e.g. GPL) are allowed only when NOT shipped.
         self.assertTrue(
-            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=False))
+            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=False)
+        )
         self.assertFalse(
-            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=True))
+            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=True)
+        )
         self.assertFalse(
-            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=None))
-
+            lic.all_licenses_allowed("GPL-2.0", False, is_shipped=None)
+        )
 
     def test_only_open_source_licenses(self):
         """Test that only open source licenses are returned."""
         lic = known_fields.LICENSE
         self.assertEqual(lic.filter_open_source_project_only_licenses(""), [])
-        self.assertEqual(lic.filter_open_source_project_only_licenses("MIT"),
-                         [])
         self.assertEqual(
-            lic.filter_open_source_project_only_licenses("GPL-2.0"), [])
+            lic.filter_open_source_project_only_licenses("MIT"), []
+        )
         self.assertEqual(
-            lic.filter_open_source_project_only_licenses("MPL-2.0"),
-            ["MPL-2.0"])
+            lic.filter_open_source_project_only_licenses("GPL-2.0"), []
+        )
+        self.assertEqual(
+            lic.filter_open_source_project_only_licenses("MPL-2.0"), ["MPL-2.0"]
+        )
         result = lic.filter_open_source_project_only_licenses("MIT, MPL-2.0")
         self.assertEqual(result, ["MPL-2.0"])
         result = lic.filter_open_source_project_only_licenses(
-            "MPL-2.0, APSL-2.0")
+            "MPL-2.0, APSL-2.0"
+        )
         self.assertEqual(set(result), {"MPL-2.0", "APSL-2.0"})
         # Test with mix of invalid and valid licenses
         result = lic.filter_open_source_project_only_licenses(
-            "InvalidLicense, MPL-2.0")
+            "InvalidLicense, MPL-2.0"
+        )
         self.assertEqual(result, ["MPL-2.0"])
 
     def test_mitigated_validation(self):
@@ -545,14 +630,17 @@ class DependencyValidationTest(unittest.TestCase):
         # present.
         self.assertGreater(len(results), 0)
         self.assertTrue(isinstance(results[0], vr.ValidationWarning))
-        self.assertEqual(results[0].get_reason(),
-                         "Found descriptions for unlisted vulnerability IDs")
-        self.assertIn("CVE-2024-1234",results[0].get_additional()[0])
-        self.assertIn("CVE-2024-9999",results[0].get_additional()[0])
+        self.assertEqual(
+            results[0].get_reason(),
+            "Found descriptions for unlisted vulnerability IDs",
+        )
+        self.assertIn("CVE-2024-1234", results[0].get_additional()[0])
+        self.assertIn("CVE-2024-9999", results[0].get_additional()[0])
 
         # Add Mitigated field with two CVEs.
-        dependency.add_entry(known_fields.MITIGATED.get_name(),
-                             "CVE-2024-1234, CVE-2024-5678")
+        dependency.add_entry(
+            known_fields.MITIGATED.get_name(), "CVE-2024-1234, CVE-2024-5678"
+        )
 
         results = dependency.validate(
             source_file_dir=os.path.join(_THIS_DIR, "data"),
@@ -564,60 +652,70 @@ class DependencyValidationTest(unittest.TestCase):
         # 2. Extra description for CVE-2024-9999
         # Separate warnings to test independently of order.
         missing_desc_warnings = [
-            r for r in results
+            r
+            for r in results
             if r.get_reason() == "Missing descriptions for vulnerability IDs"
         ]
         extra_desc_warnings = [
-            r for r in results if r.get_reason() ==
-            "Found descriptions for unlisted vulnerability IDs"
+            r
+            for r in results
+            if r.get_reason()
+            == "Found descriptions for unlisted vulnerability IDs"
         ]
 
         self.assertEqual(len(missing_desc_warnings), 1)
-        self.assertIn("CVE-2024-5678",
-                      missing_desc_warnings[0].get_additional()[0])
+        self.assertIn(
+            "CVE-2024-5678", missing_desc_warnings[0].get_additional()[0]
+        )
 
         self.assertEqual(len(extra_desc_warnings), 1)
-        self.assertIn("CVE-2024-9999",
-                      extra_desc_warnings[0].get_additional()[0])
-
+        self.assertIn(
+            "CVE-2024-9999", extra_desc_warnings[0].get_additional()[0]
+        )
 
     def test_vuln_scan_sufficiency(self):
         """Tests the vuln_scan_sufficiency property."""
         # Test case: insufficient CPE without version.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
-                             "cpe:/a:vendor:product")
+        dependency.add_entry(
+            known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product"
+        )
         self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Test case: sufficient:CPE.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
-                             "cpe:/a:vendor:product")
+        dependency.add_entry(
+            known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.2.3")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:CPE")
+        self.assertEqual(dependency.vuln_scan_sufficiency, "sufficient:CPE")
 
         # Test case: insufficient URL and Revision if url is not clonable.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://not_clonable.com")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://not_clonable.com"
+        )
         dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
         self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Test case: sufficient:URL and Revision, url must be git clonable.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://git.clonable.com")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://git.clonable.com"
+        )
         dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:URL and Revision")
+        self.assertEqual(
+            dependency.vuln_scan_sufficiency, "sufficient:URL and Revision"
+        )
 
         # Test case: sufficient:URL and Revision[DEPS], given 'Revision:DEPS'.
         dependency = dm.DependencyMetadata()
         dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
         dependency.add_entry(known_fields.REVISION.get_name(), "DEPS")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:URL and Revision[DEPS]")
+        self.assertEqual(
+            dependency.vuln_scan_sufficiency,
+            "sufficient:URL and Revision[DEPS]",
+        )
 
         # A generic URL and Version is insufficient.
         dependency = dm.DependencyMetadata()
@@ -627,106 +725,124 @@ class DependencyValidationTest(unittest.TestCase):
 
         # Git URL and Version.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://git.example.com/repo.git")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://git.example.com/repo.git"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.2.3")
         self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Package Manager URL and Version.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.npmjs.com/package/react")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.npmjs.com/package/react"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "18.2.0")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:Package Manager URL and Version")
+        self.assertEqual(
+            dependency.vuln_scan_sufficiency,
+            "sufficient:Package Manager URL and Version",
+        )
 
         # Test case: insufficient package manager URL with no package name.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://crates.io/crates/")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://crates.io/crates/"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Test case: ignore:Static (because of update mechanism).
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static (https://crbug.com/12345)")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "ignore:Static")
+        dependency.add_entry(
+            known_fields.UPDATE_MECHANISM.get_name(),
+            "Static (https://crbug.com/12345)",
+        )
+        self.assertEqual(dependency.vuln_scan_sufficiency, "ignore:Static")
 
         # Test case: ignore:GoogleManaged (because of update mechanism).
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(),
-                             "Autoroll.GoogleManaged")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "ignore:GoogleManaged")
+        dependency.add_entry(
+            known_fields.UPDATE_MECHANISM.get_name(), "Autoroll.GoogleManaged"
+        )
+        self.assertEqual(
+            dependency.vuln_scan_sufficiency, "ignore:GoogleManaged"
+        )
 
         # Test case: ignore:Canonical (only URL).
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(), "This is the canonical public repository")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "ignore:Canonical")
+        dependency.add_entry(
+            known_fields.URL.get_name(),
+            "This is the canonical public repository",
+        )
+        self.assertEqual(dependency.vuln_scan_sufficiency, "ignore:Canonical")
 
         # Test case: ignore:Internal (only URL).
         dependency = dm.DependencyMetadata()
         dependency.add_entry(known_fields.URL.get_name(), "Google internal")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "ignore:Internal")
+        self.assertEqual(dependency.vuln_scan_sufficiency, "ignore:Internal")
 
         # Test case: ignore:Internal takes precedence over ignore:Static.
         dependency = dm.DependencyMetadata()
         dependency.add_entry(known_fields.URL.get_name(), "Google Internal.")
-        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static.HardFork")
+        dependency.add_entry(
+            known_fields.UPDATE_MECHANISM.get_name(), "Static.HardFork"
+        )
         self.assertEqual(dependency.vuln_scan_sufficiency, "ignore:Internal")
 
         # Test case: insufficient (bad bug link).
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Manual (bad_bug_link)")
+        dependency.add_entry(
+            known_fields.UPDATE_MECHANISM.get_name(), "Manual (bad_bug_link)"
+        )
         self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Test case: insufficient (no relevant fields, shipped defaults to None).
         dependency = dm.DependencyMetadata()
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                          "insufficient")
+        self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Test case: insufficient (only URL).
         dependency = dm.DependencyMetadata()
         dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "insufficient")
+        self.assertEqual(dependency.vuln_scan_sufficiency, "insufficient")
 
         # Test case: CPE takes precedence over URL/Revision.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
-                             "cpe:/a:vendor:product")
+        dependency.add_entry(
+            known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product"
+        )
         dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
         dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.2.3")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:CPE")
+        self.assertEqual(dependency.vuln_scan_sufficiency, "sufficient:CPE")
 
         # Test case: URL/Revision takes precedence over static update mechanism.
         dependency = dm.DependencyMetadata()
         dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static")
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://example.com.git")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://example.com.git"
+        )
         dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
-        self.assertEqual(dependency.vuln_scan_sufficiency,
-                         "sufficient:URL and Revision")
+        self.assertEqual(
+            dependency.vuln_scan_sufficiency, "sufficient:URL and Revision"
+        )
 
     def test_vuln_scan_sufficiency_validation(self):
         """Tests that a warning is returned for insufficient metadata."""
         with self.subTest(msg="Insufficient metadata, should warn"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test insufficency")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test insufficency"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "yes")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
 
             results = dependency.validate(
@@ -737,22 +853,27 @@ class DependencyValidationTest(unittest.TestCase):
             self.assertTrue(isinstance(results[0], vr.ValidationWarning))
             self.assertEqual(
                 results[0].get_reason(),
-                "Dependency metadata is insufficient for vulnerability scanning."
+                "Dependency metadata is insufficient for vulnerability scanning.",
             )
 
         with self.subTest(msg="Sufficient metadata, should not warn"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test sufficency")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://github.com/example/repo.git")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test sufficency"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(),
+                "https://github.com/example/repo.git",
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
             dependency.add_entry(known_fields.REVISION.get_name(), "abcdef1234")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "yes")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
 
             results = dependency.validate(
@@ -763,16 +884,20 @@ class DependencyValidationTest(unittest.TestCase):
 
         with self.subTest(msg="Insufficient metadata, not security critical"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test insufficency")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test insufficency"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
 
             results = dependency.validate(
@@ -783,16 +908,20 @@ class DependencyValidationTest(unittest.TestCase):
 
         with self.subTest(msg="Insufficient metadata, not shipped"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test insufficency")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test insufficency"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "yes")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             results = dependency.validate(
@@ -803,20 +932,25 @@ class DependencyValidationTest(unittest.TestCase):
 
         with self.subTest(msg="Insufficient metadata, has update mechanism"):
             dependency = dm.DependencyMetadata()
-            dependency.add_entry(known_fields.NAME.get_name(),
-                                 "Test insufficency")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.github.com")
+            dependency.add_entry(
+                known_fields.NAME.get_name(), "Test insufficency"
+            )
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.github.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
             dependency.add_entry(known_fields.REVISION.get_name(), "abcdef1234")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "yes")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
-            dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(),
-                                 "Autoroll")
+            dependency.add_entry(
+                known_fields.UPDATE_MECHANISM.get_name(), "Autoroll"
+            )
 
             results = dependency.validate(
                 source_file_dir=os.path.join(_THIS_DIR, "data"),
@@ -835,20 +969,31 @@ def test_update_mechanism_validation(self):
         "Valid Static": ("Static (crbug.com/456)", None),
         "Valid Static.HardFork": ("Static.HardFork (crbug.com/789)", None),
         "Valid with extra whitespace": ("  Manual (crbug.com/123)  ", None),
-
         # --- Invalid Cases ---
-        "Invalid format":
-        ("Invalid Value", "Invalid format for Update Mechanism field."),
-        "Unknown mechanism":
-        ("Custom (crbug.com/123)", "Invalid mechanism 'Custom'."),
-        "Autoroll with bug link": ("Autoroll (crbug.com/123)",
-                                   "A bug link is not allowed for 'Autoroll'."),
-        "Manual without bug link":
-        ("Manual", "A bug link is required for 'Manual'."),
-        "Static without bug link": ("Static",
-                                    "A bug link is required for 'Static'."),
-        "Static.HardFork without bug link":
-        ("Static.HardFork", "A bug link is required for 'Static.HardFork'."),
+        "Invalid format": (
+            "Invalid Value",
+            "Invalid format for Update Mechanism field.",
+        ),
+        "Unknown mechanism": (
+            "Custom (crbug.com/123)",
+            "Invalid mechanism 'Custom'.",
+        ),
+        "Autoroll with bug link": (
+            "Autoroll (crbug.com/123)",
+            "A bug link is not allowed for 'Autoroll'.",
+        ),
+        "Manual without bug link": (
+            "Manual",
+            "A bug link is required for 'Manual'.",
+        ),
+        "Static without bug link": (
+            "Static",
+            "A bug link is required for 'Static'.",
+        ),
+        "Static.HardFork without bug link": (
+            "Static.HardFork",
+            "A bug link is required for 'Static.HardFork'.",
+        ),
     }
 
     for name, (value, expected_error) in test_cases.items():
@@ -856,14 +1001,17 @@ def test_update_mechanism_validation(self):
             dependency = dm.DependencyMetadata()
             # Populate with other valid, required fields to isolate the test
             dependency.add_entry(known_fields.NAME.get_name(), f"Test {name}")
-            dependency.add_entry(known_fields.URL.get_name(),
-                                 "https://www.example.com")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://www.example.com"
+            )
             dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
             dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
-            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
-                                 "LICENSE")
-            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
-                                 "no")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "no"
+            )
             dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
 
             # Add the Update Mechanism field to test
@@ -875,21 +1023,25 @@ def test_update_mechanism_validation(self):
             )
 
             if expected_error is None:
-                self.assertEqual(len(results), 0,
-                                 f"Expected no errors for value: '{value}'")
+                self.assertEqual(
+                    len(results), 0, f"Expected no errors for value: '{value}'"
+                )
             else:
-                self.assertEqual(len(results), 1,
-                                 f"Expected one error for value: '{value}'")
+                self.assertEqual(
+                    len(results), 1, f"Expected one error for value: '{value}'"
+                )
                 self.assertTrue(isinstance(results[0], vr.ValidationError))
                 self.assertEqual(results[0].get_reason(), expected_error)
 
     # Test case for a missing Update Mechanism field, assuming it's required.
     with self.subTest(msg="Missing field"):
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.NAME.get_name(),
-                             "Test Missing Update Mechanism")
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.example.com")
+        dependency.add_entry(
+            known_fields.NAME.get_name(), "Test Missing Update Mechanism"
+        )
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.example.com"
+        )
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
@@ -906,36 +1058,40 @@ def test_update_mechanism_validation(self):
         # If so, the validation framework should catch its absence.
         error_found = any(
             "Required field 'Update Mechanism' is missing." in r.get_reason()
-            for r in results)
+            for r in results
+        )
         self.assertTrue(
-            error_found,
-            "Expected an error for missing Update Mechanism field.")
+            error_found, "Expected an error for missing Update Mechanism field."
+        )
 
     def test_url_is_package_manager(self):
         """Tests the url_is_package_manager property."""
         # Test case: valid package manager URL.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://www.npmjs.com/package/react")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://www.npmjs.com/package/react"
+        )
         self.assertTrue(dependency.url_is_package_manager)
 
         # Test case: valid package manager URL with trailing slash.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://crates.io/crates/serde/")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://crates.io/crates/serde/"
+        )
         self.assertTrue(dependency.url_is_package_manager)
 
         # Test case: invalid package manager URL with no package name.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://crates.io/crates/")
+        dependency.add_entry(
+            known_fields.URL.get_name(), "https://crates.io/crates/"
+        )
         self.assertFalse(dependency.url_is_package_manager)
 
         # Test case: non-package manager URL.
         dependency = dm.DependencyMetadata()
-        dependency.add_entry(known_fields.URL.get_name(),
-                             "https://example.com")
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
         self.assertFalse(dependency.url_is_package_manager)
+
 
 if __name__ == "__main__":
     unittest.main()

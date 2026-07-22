@@ -11,23 +11,24 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class IOS(config_util.Config):
     """Basic Config alias for iOS -> Chromium."""
+
     @staticmethod
     def fetch_spec(props):
         return {
-            'alias': {
-                'config': 'chromium',
-                'props': ['--target_os=ios', '--target_os_only=True'],
+            "alias": {
+                "config": "chromium",
+                "props": ["--target_os=ios", "--target_os_only=True"],
             },
         }
 
     @staticmethod
     def expected_root(_props):
-        return ''
+        return ""
 
 
 def main(argv=None):
     return IOS().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

@@ -22,7 +22,6 @@ VERSION = 1
 
 
 class Config:
-
     def __init__(self, config_path, countdown):
         self._config_path = config_path
         self._notice_displayed = False
@@ -107,7 +106,8 @@ class Config:
             *** NOTICE ***
             Google-internal telemetry (including build logs, username, and hostname) is collected on corp machines to diagnose performance and fix build issues. This reminder will be shown {remaining} more times. See http://go/chrome-build-telemetry for details. Hide this notice or opt out by running: build_telemetry [opt-in] [opt-out]
             *** END NOTICE ***
-            """))
+            """)
+        )
 
     def opt_in(self):
         self._config["status"] = "opt-in"
@@ -146,6 +146,7 @@ def check_auth():
         logging.error(e)
         return {}
 
+
 def enabled():
     """Checks whether the build can upload build telemetry."""
     cfg = load_config()
@@ -165,9 +166,9 @@ def print_status(cfg):
 
 def main():
     parser = argparse.ArgumentParser(prog="build_telemetry")
-    parser.add_argument('status',
-                        nargs='?',
-                        choices=["opt-in", "opt-out", "status"])
+    parser.add_argument(
+        "status", nargs="?", choices=["opt-in", "opt-out", "status"]
+    )
     args = parser.parse_args()
 
     cfg = load_config()

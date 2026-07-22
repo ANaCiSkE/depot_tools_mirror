@@ -9,8 +9,9 @@ import subprocess
 from mcp.server import fastmcp
 
 
-async def run_prpc_call(ctx: fastmcp.Context, server: str, service: str,
-                        message: dict) -> str:
+async def run_prpc_call(
+    ctx: fastmcp.Context, server: str, service: str, message: dict
+) -> str:
     """Runs 'prpc call' with the given parameters.
 
     Args:
@@ -22,8 +23,8 @@ async def run_prpc_call(ctx: fastmcp.Context, server: str, service: str,
         A string containing the JSON response of the call.
     """
     command = [
-        'prpc',
-        'call',
+        "prpc",
+        "call",
         server,
         service,
     ]

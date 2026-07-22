@@ -11,23 +11,24 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class WebRTCIOS(config_util.Config):
     """Basic Config alias for iOS -> WebRTC."""
+
     @staticmethod
     def fetch_spec(props):
         return {
-            'alias': {
-                'config': 'webrtc',
-                'props': ['--target_os=ios,mac'],
+            "alias": {
+                "config": "webrtc",
+                "props": ["--target_os=ios,mac"],
             },
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'src'
+        return "src"
 
 
 def main(argv=None):
     return WebRTCIOS().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

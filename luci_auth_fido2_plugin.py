@@ -41,14 +41,17 @@ from fido2.client import DefaultClientDataCollector
 from fido2.client import Fido2Client, UserInteraction, WebAuthnClient
 from fido2.hid import CtapHidDevice
 from fido2.webauthn import AuthenticationResponse
-from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement
+from fido2.webauthn import (
+    PublicKeyCredentialRequestOptions,
+    UserVerificationRequirement,
+)
 
 try:
     from fido2.client.windows import WindowsClient
 except ImportError:
     WindowsClient = None
 
-_PLUGIN_ENDIANNESS = 'little'
+_PLUGIN_ENDIANNESS = "little"
 _PLUGIN_HEADER_SIZE = 4
 
 # Exit codes.
@@ -56,6 +59,7 @@ _EXIT_NO_FIDO2_DEVICES = 11
 _EXIT_ALL_ASSERTIONS_FAILED = 12
 _EXIT_NO_MATCHING_CRED = 13
 _EXIT_PINENTRY_FAILED = 14
+
 
 def read_full(r: BinaryIO, size: int) -> bytes:
     """Read an exact amount of data.
@@ -98,9 +102,9 @@ def plugin_write(w: BinaryIO, b: bytes):
     this amount bytes of binary data.
     """
     length = len(b)
-    header = length.to_bytes(_PLUGIN_HEADER_SIZE,
-                             _PLUGIN_ENDIANNESS,
-                             signed=False)
+    header = length.to_bytes(
+        _PLUGIN_HEADER_SIZE, _PLUGIN_ENDIANNESS, signed=False
+    )
     write_full(w, header)
     write_full(w, b)
 
@@ -123,10 +127,8 @@ def parse_plugin_request(b: bytes) -> PluginRequest:
         rp_id=req.rp_id,
         allow_credentials=req.allow_credentials,
         hints=req.hints,
-
         # Default to 30s timeout.
         timeout=req.timeout or 30_000,
-
         # Discourage UV.
         #
         # ReAuth flow is triggered for user who's already logged in, so
@@ -135,7 +137,6 @@ def parse_plugin_request(b: bytes) -> PluginRequest:
         # Here we only want to test for user presence and ownership of
         # the private key.
         user_verification=UserVerificationRequirement.DISCOURAGED,
-
         # Don't support extensions for now.
         extensions=None,
     )
@@ -148,11 +149,13 @@ def parse_plugin_request(b: bytes) -> PluginRequest:
 
 def encode_plugin_response(a: AuthenticationResponse) -> bytes:
     """Encode a plugin response to JSON."""
-    return json.dumps({
-        "type": "getResponse",
-        "responseData": dict(a),
-        "error": None,
-    }).encode('utf-8')
+    return json.dumps(
+        {
+            "type": "getResponse",
+            "responseData": dict(a),
+            "error": None,
+        }
+    ).encode("utf-8")
 
 
 def request_pin_pinentry() -> Optional[str]:
@@ -160,12 +163,14 @@ def request_pin_pinentry() -> Optional[str]:
     try:
         # Using pinentry to ask for PIN.
         # https://www.gnupg.org/documentation/manuals/assuan/Client-requests.html
-        pinentry_path = os.environ.get('LUCI_AUTH_PINENTRY', 'pinentry')
-        proc = subprocess.Popen([pinentry_path],
-                                stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                text=True)
+        pinentry_path = os.environ.get("LUCI_AUTH_PINENTRY", "pinentry")
+        proc = subprocess.Popen(
+            [pinentry_path],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
     except FileNotFoundError as e:
         traceback.print_exception(e, file=sys.stderr)
         logging.error("PIN requested, but can't find a pinentry program.")
@@ -184,31 +189,33 @@ GETPIN
     stdout, stderr = proc.communicate(pinentry_input)
 
     if proc.returncode != 0:
-        logging.error('pinentry failed: %s', stderr)
+        logging.error("pinentry failed: %s", stderr)
         sys.exit(_EXIT_PINENTRY_FAILED)
 
     for line in stdout.splitlines():
-        if line.startswith('D '):
+        if line.startswith("D "):
             return line[2:].strip()
 
     logging.warning(
-        'An empty PIN was entered. Security key assertion may fail.')
+        "An empty PIN was entered. Security key assertion may fail."
+    )
     return None
 
 
 def request_pin_mac() -> Optional[str]:
     """Request a PIN entry with macOS's built-in `osascript` utility."""
     osascript_command = (
-        'text returned of ('
-        'display'
+        "text returned of ("
+        "display"
         '  dialog "Enter security key PIN.\\n\\nThen touch your security key to continue."'
         '  default answer ""'
-        '  with hidden answer'
+        "  with hidden answer"
         '  with title "Chromium Infra Auth"'
-        ')')
+        ")"
+    )
 
     result = subprocess.run(
-        ['osascript', '-e', osascript_command],
+        ["osascript", "-e", osascript_command],
         capture_output=True,
         text=True,
     )
@@ -234,10 +241,10 @@ class PinEntryInteraction(UserInteraction):
     def request_pin(self, permissions, rp_id):
         """Ask for PIN entry with a GUI dialog by using a system tool.
 
-           We only handle Linux and MacOS here. We use Windows WebAuthn API
-           directly, which handles PIN entry if necessary.
+        We only handle Linux and MacOS here. We use Windows WebAuthn API
+        directly, which handles PIN entry if necessary.
         """
-        if sys.platform == 'darwin':
+        if sys.platform == "darwin":
             return request_pin_mac()
         return request_pin_pinentry()
 
@@ -266,24 +273,33 @@ def get_clients(origin: str) -> list[tuple[WebAuthnClient, str]]:
     clients = []
     for dev in CtapHidDevice.list_devices():
         desc = dev.descriptor
-        desc_str = (f'CtapHidDevice {desc.product_name}'
-                    f' (VID 0x{desc.vid:04x},'
-                    f' PID 0x{desc.pid:04x}) at {desc.path}')
+        desc_str = (
+            f"CtapHidDevice {desc.product_name}"
+            f" (VID 0x{desc.vid:04x},"
+            f" PID 0x{desc.pid:04x}) at {desc.path}"
+        )
         logging.debug("Found %s", desc_str)
-        clients.append((
-            Fido2Client(
-                dev,
-                client_data_collector=client_data_collector,
-                user_interaction=user_interaction,
-            ),
-            desc_str,
-        ))
+        clients.append(
+            (
+                Fido2Client(
+                    dev,
+                    client_data_collector=client_data_collector,
+                    user_interaction=user_interaction,
+                ),
+                desc_str,
+            )
+        )
 
     return clients
 
 
-def assert_on_client(*, client: WebAuthnClient, client_desc: str,
-                     request: PublicKeyCredentialRequestOptions, cancel: Event):
+def assert_on_client(
+    *,
+    client: WebAuthnClient,
+    client_desc: str,
+    request: PublicKeyCredentialRequestOptions,
+    cancel: Event,
+):
     try:
         return client.get_assertion(request, cancel)
     except Exception as e:
@@ -310,17 +326,17 @@ def set_event_on_signal(signum: int, event: Event):
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=
-        "A LUCI Auth plugin to perform FIDO2 security key assertions", )
+        description="A LUCI Auth plugin to perform FIDO2 security key assertions",
+    )
     parser.add_argument(
         "-l",
         "--list-devices",
         action="store_true",
         default=False,
-        help=
-        "If set, detects FIDO devices, then print their information to stderr, "
+        help="If set, detects FIDO devices, then print their information to stderr, "
         "then exit this program. Useful for troubleshoot udev rules and "
-        "permission issues on Linux.")
+        "permission issues on Linux.",
+    )
     return parser
 
 
@@ -352,15 +368,20 @@ def main():
     # Race and retrieve the first successful assertion.
     outcome = None
     cancel = Event()
-    with set_event_on_signal(signal.SIGINT, cancel), set_event_on_signal(
-            signal.SIGTERM,
-            cancel), ThreadPoolExecutor(max_workers=len(clients)) as executor:
+    with (
+        set_event_on_signal(signal.SIGINT, cancel),
+        set_event_on_signal(signal.SIGTERM, cancel),
+        ThreadPoolExecutor(max_workers=len(clients)) as executor,
+    ):
         futures = [
-            executor.submit(assert_on_client,
-                            client=client,
-                            client_desc=desc,
-                            request=plugin_req.public_key_credential_request,
-                            cancel=cancel) for client, desc in clients
+            executor.submit(
+                assert_on_client,
+                client=client,
+                client_desc=desc,
+                request=plugin_req.public_key_credential_request,
+                cancel=cancel,
+            )
+            for client, desc in clients
         ]
         for future in as_completed(futures):
             if result := future.result():
@@ -379,11 +400,13 @@ def main():
     elif len(assertions) > 1:
         logging.warning(
             "Multiple assertions returned for rp_id %s, selecting the first one.",
-            plugin_req.public_key_credential_request.rp_id)
+            plugin_req.public_key_credential_request.rp_id,
+        )
 
     # Write the first completed assertion.
-    plugin_write(sys.stdout.buffer,
-                 encode_plugin_response(outcome.get_response(0)))
+    plugin_write(
+        sys.stdout.buffer, encode_plugin_response(outcome.get_response(0))
+    )
 
 
 if __name__ == "__main__":

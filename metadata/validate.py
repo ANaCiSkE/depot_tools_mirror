@@ -22,13 +22,16 @@ import metadata.validation_result as vr
 _TRANSITION_PRESCRIPT = (
     "The following issue should be addressed now, as it will become a "
     "presubmit error (instead of warning) once third party metadata "
-    "validation is enforced.\nThird party metadata issue:")
+    "validation is enforced.\nThird party metadata issue:"
+)
 
 
-def validate_content(content: str,
-                     source_file_dir: str,
-                     repo_root_dir: str,
-                     is_open_source_project: bool = False) -> List[vr.ValidationResult]:
+def validate_content(
+    content: str,
+    source_file_dir: str,
+    repo_root_dir: str,
+    is_open_source_project: bool = False,
+) -> List[vr.ValidationResult]:
     """Validate the content as a metadata file.
 
     Args:
@@ -66,7 +69,8 @@ def _construct_file_read_error(filepath: str, cause: str) -> vr.ValidationError:
     """
     result = vr.ValidationError(
         reason="Cannot read metadata file.",
-        additional=[f"Attempted to read '{filepath}' but {cause}."])
+        additional=[f"Attempted to read '{filepath}' but {cause}."],
+    )
     return result
 
 
@@ -111,10 +115,12 @@ def validate_file(
 
         # Get the directory the metadata file is in.
         source_file_dir = os.path.dirname(filepath)
-        return validate_content(content=content,
-                                source_file_dir=source_file_dir,
-                                repo_root_dir=repo_root_dir,
-                                is_open_source_project=is_open_source_project)
+        return validate_content(
+            content=content,
+            source_file_dir=source_file_dir,
+            repo_root_dir=repo_root_dir,
+            is_open_source_project=is_open_source_project,
+        )
 
 
 def check_file(
@@ -142,10 +148,12 @@ def check_file(
         warning_messages: the non-fatal validation issues present in the
                           file; i.e. presubmit should still pass.
     """
-    results = validate_file(filepath=filepath,
-                            repo_root_dir=repo_root_dir,
-                            reader=reader,
-                            is_open_source_project=is_open_source_project)
+    results = validate_file(
+        filepath=filepath,
+        repo_root_dir=repo_root_dir,
+        reader=reader,
+        is_open_source_project=is_open_source_project,
+    )
 
     error_messages = []
     warning_messages = []

@@ -27,6 +27,7 @@ _PATTERN_YES_OR_NO = re.compile(r"^(yes|no)$", re.IGNORECASE)
 # case-insensitive. e.g. "No (test only)", "Yes?"
 _PATTERN_STARTS_WITH_YES_OR_NO = re.compile(r"^(yes|no)", re.IGNORECASE)
 
+
 class MetadataField:
     """Base class for all metadata fields."""
 
@@ -50,8 +51,7 @@ class MetadataField:
         return self._name
 
     def should_terminate_field(self, field_value) -> bool:
-        """Whether this field should be terminated based on the given `field_value`.
-        """
+        """Whether this field should be terminated based on the given `field_value`."""
         return False
 
     def is_structured(self):
@@ -75,12 +75,13 @@ class MetadataField:
 
     def narrow_type(self, value):
         """Returns a narrowly typed (e.g. bool) value for this field for
-           downstream consumption.
+        downstream consumption.
 
-           The alternative being the downstream parses the string again.
+        The alternative being the downstream parses the string again.
         """
         raise NotImplementedError(
-            f"{self._name} field value coersion not defined.")
+            f"{self._name} field value coersion not defined."
+        )
 
 
 class FreeformTextField(MetadataField):
@@ -99,6 +100,7 @@ class FreeformTextField(MetadataField):
         assert value is not None
         return value
 
+
 class SingleLineTextField(FreeformTextField):
     """Field where the field as a whole is a single line of text."""
 
@@ -116,6 +118,7 @@ class SingleLineTextField(FreeformTextField):
 
 class YesNoField(SingleLineTextField):
     """Field where the value must be yes or no."""
+
     def __init__(self, name: str):
         super().__init__(name=name)
 
@@ -130,14 +133,16 @@ class YesNoField(SingleLineTextField):
                 additional=[
                     f"This field should be only {util.YES} or {util.NO}.",
                     f"Current value is '{value}'.",
-                ])
+                ],
+            )
 
         return vr.ValidationError(
             reason=f"{self._name} is invalid.",
             additional=[
                 f"This field must be {util.YES} or {util.NO}.",
                 f"Current value is '{value}'.",
-            ])
+            ],
+        )
 
     def narrow_type(self, value) -> Optional[bool]:
         return util.infer_as_boolean(super().narrow_type(value))

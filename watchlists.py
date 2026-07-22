@@ -63,7 +63,7 @@ class Watchlists(object):
             return contents
         except IOError as e:
             logging.error("Cannot read %s: %s" % (self._GetRulesFilePath(), e))
-            return ''
+            return ""
 
     def _LoadWatchlistRules(self):
         """Load watchlists from WATCHLISTS file. Does nothing if not present."""
@@ -80,13 +80,16 @@ class Watchlists(object):
 
         defns = watchlists_data.get("WATCHLIST_DEFINITIONS")
         if not defns:
-            logging.error("WATCHLIST_DEFINITIONS not defined in %s" %
-                          self._GetRulesFilePath())
+            logging.error(
+                "WATCHLIST_DEFINITIONS not defined in %s"
+                % self._GetRulesFilePath()
+            )
             return
         watchlists = watchlists_data.get("WATCHLISTS")
         if not watchlists:
-            logging.error("WATCHLISTS not defined in %s" %
-                          self._GetRulesFilePath())
+            logging.error(
+                "WATCHLISTS not defined in %s" % self._GetRulesFilePath()
+            )
             return
         self._defns = defns
         self._watchlists = watchlists
@@ -95,7 +98,7 @@ class Watchlists(object):
         # on-the-fly multiple times per file.
         self._path_regexps = {}
         for name, rule in defns.items():
-            filepath = rule.get('filepath')
+            filepath = rule.get("filepath")
             if not filepath:
                 continue
             self._path_regexps[name] = re.compile(filepath)
@@ -103,8 +106,9 @@ class Watchlists(object):
         # Verify that all watchlist names are defined
         for name in watchlists:
             if name not in defns:
-                logging.error("%s not defined in %s" %
-                              (name, self._GetRulesFilePath()))
+                logging.error(
+                    "%s not defined in %s" % (name, self._GetRulesFilePath())
+                )
 
     def GetWatchersForPaths(self, paths):
         """Fetch the list of watchers for |paths|
@@ -117,7 +121,7 @@ class Watchlists(object):
         """
         watchers = set()  # A set, to avoid duplicates
         for path in paths:
-            path = path.replace(os.sep, '/')
+            path = path.replace(os.sep, "/")
             for name, rule in self._path_regexps.items():
                 if name not in self._watchlists:
                     continue
@@ -138,5 +142,5 @@ def main(argv):
     print(watchers)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(sys.argv)

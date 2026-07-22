@@ -13,8 +13,9 @@ import time
 from typing import Literal
 import uuid
 
-DEFAULT_CONFIG_FILE = Path(Path.home(),
-                           '.config/chrome_infra/telemetry/telemetry.cfg')
+DEFAULT_CONFIG_FILE = Path(
+    Path.home(), ".config/chrome_infra/telemetry/telemetry.cfg"
+)
 
 ROOT_SECTION_KEY = "root"
 NOTICE_COUNTDOWN_KEY = "notice_countdown"
@@ -22,9 +23,7 @@ ENABLED_KEY = "enabled"
 ENABLED_REASON_KEY = "enabled_reason"
 TRACE_SECTION_KEY = "trace"
 DEFAULT_CONFIG = {
-    ROOT_SECTION_KEY: {
-        NOTICE_COUNTDOWN_KEY: 9
-    },
+    ROOT_SECTION_KEY: {NOTICE_COUNTDOWN_KEY: 9},
     TRACE_SECTION_KEY: {},
 }
 BATCH_PUBLISHING_ENABLED_KEY = "batch_publishing"
@@ -46,8 +45,9 @@ class TraceConfig:
         if not self.has_enabled() or self.enabled:
             self.id_regenerated = self.gen_id()
 
-    def update(self, enabled: bool, reason: Literal["AUTO", "USER",
-                                                    "BOT_USER"]) -> None:
+    def update(
+        self, enabled: bool, reason: Literal["AUTO", "USER", "BOT_USER"]
+    ) -> None:
         """Update the config."""
         self._config[TRACE_SECTION_KEY][ENABLED_KEY] = str(enabled)
         self._config[TRACE_SECTION_KEY][ENABLED_REASON_KEY] = reason
@@ -57,7 +57,8 @@ class TraceConfig:
         if regen or self._uuid_stale():
             self._config[TRACE_SECTION_KEY][KEY_USER_UUID] = str(uuid.uuid4())
             self._config[TRACE_SECTION_KEY][KEY_USER_UUID_TIMESTAMP] = str(
-                int(time.time()))
+                int(time.time())
+            )
             return True
         return False
 
@@ -65,28 +66,31 @@ class TraceConfig:
     def batch(self) -> bool:
         """Check if batch uploads are configured."""
         return self._config[TRACE_SECTION_KEY].getboolean(
-            BATCH_PUBLISHING_ENABLED_KEY, False)
+            BATCH_PUBLISHING_ENABLED_KEY, False
+        )
 
     @batch.setter
     def batch(self, enabled: bool) -> None:
         """Set or delete the batch flag."""
         self._config[TRACE_SECTION_KEY][BATCH_PUBLISHING_ENABLED_KEY] = str(
-            enabled)
+            enabled
+        )
 
     def _uuid_stale(self):
         """Check if the UUID is stale or doesn't exist."""
-        if (KEY_USER_UUID not in self._config[TRACE_SECTION_KEY] or
-                KEY_USER_UUID_TIMESTAMP not in self._config[TRACE_SECTION_KEY]):
+        if (
+            KEY_USER_UUID not in self._config[TRACE_SECTION_KEY]
+            or KEY_USER_UUID_TIMESTAMP not in self._config[TRACE_SECTION_KEY]
+        ):
             return True
 
         # Regen the UUID once per week. Regen every Monday so the work week is
         # captured under a single ID.
         regen_ts = int(self._config[TRACE_SECTION_KEY][KEY_USER_UUID_TIMESTAMP])
         regen_dt = datetime.datetime.fromtimestamp(regen_ts)
-        today = datetime.datetime.now().replace(hour=0,
-                                                minute=0,
-                                                second=0,
-                                                microsecond=0)
+        today = datetime.datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         monday = today - datetime.timedelta(days=today.weekday())
         return regen_dt < monday
 
@@ -135,7 +139,8 @@ class RootConfig:
     def update(self, notice_countdown: int) -> None:
         """Update the config."""
         self._config[ROOT_SECTION_KEY][NOTICE_COUNTDOWN_KEY] = str(
-            notice_countdown)
+            notice_countdown
+        )
 
     @property
     def notice_countdown(self) -> int:
@@ -166,7 +171,7 @@ class Config:
         """Flushes the current config to config file."""
 
         tmpDir = tempfile.mkdtemp()
-        tmpfile = Path.joinpath(Path(tmpDir), 'telemetry.cfg')
+        tmpfile = Path.joinpath(Path(tmpDir), "telemetry.cfg")
         with open(tmpfile, "w", encoding="utf-8") as configfile:
             self._config.write(configfile)
 

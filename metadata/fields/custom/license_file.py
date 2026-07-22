@@ -28,6 +28,7 @@ _NOT_SHIPPED = "NOT_SHIPPED"
 
 class LicenseFileField(field_types.SingleLineTextField):
     """Custom field for the paths to the package's license file(s)."""
+
     def __init__(self):
         super().__init__(name="License File")
 
@@ -46,13 +47,15 @@ class LicenseFileField(field_types.SingleLineTextField):
                 reason=f"{self._name} uses deprecated value '{_NOT_SHIPPED}'.",
                 additional=[
                     f"Remove this field and use 'Shipped: {util.NO}' instead.",
-                ])
+                ],
+            )
 
         invalid_values = []
         for path in value.split(self.VALUE_DELIMITER):
             path = path.strip()
-            if util.is_empty(path) or util.matches(_PATTERN_PATH_BACKWARD,
-                                                   path):
+            if util.is_empty(path) or util.matches(
+                _PATTERN_PATH_BACKWARD, path
+            ):
                 invalid_values.append(path)
 
         if invalid_values:
@@ -60,10 +63,10 @@ class LicenseFileField(field_types.SingleLineTextField):
                 reason=f"{self._name} is invalid.",
                 additional=[
                     "File paths cannot be empty, or include '../'.",
-                    "Separate license files using a "
-                    f"'{self.VALUE_DELIMITER}'.",
+                    f"Separate license files using a '{self.VALUE_DELIMITER}'.",
                     f"Invalid values: {util.quoted(invalid_values)}.",
-                ])
+                ],
+            )
 
         return None
 
@@ -96,7 +99,8 @@ class LicenseFileField(field_types.SingleLineTextField):
                 reason=f"{self._name} uses deprecated value '{_NOT_SHIPPED}'.",
                 additional=[
                     f"Remove this field and use 'Shipped: {util.NO}' instead.",
-                ])
+                ],
+            )
 
         invalid_values = []
         for license_filename in value.split(self.VALUE_DELIMITER):
@@ -104,10 +108,12 @@ class LicenseFileField(field_types.SingleLineTextField):
             if license_filename.startswith("/"):
                 license_filepath = os.path.join(
                     repo_root_dir,
-                    os.path.normpath(license_filename.lstrip("/")))
+                    os.path.normpath(license_filename.lstrip("/")),
+                )
             else:
                 license_filepath = os.path.join(
-                    source_file_dir, os.path.normpath(license_filename))
+                    source_file_dir, os.path.normpath(license_filename)
+                )
 
             if not os.path.exists(license_filepath):
                 rel_filepath = os.path.relpath(license_filepath, repo_root_dir)
@@ -120,6 +126,7 @@ class LicenseFileField(field_types.SingleLineTextField):
                 additional=[
                     "Failed to find all license files on local disk.",
                     f"Missing files: {missing}.",
-                ])
+                ],
+            )
 
         return None

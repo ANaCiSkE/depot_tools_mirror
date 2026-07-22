@@ -25,8 +25,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     repo_root_dir = parser.add_argument(
         "repo_root_dir",
-        help=("The path to the repository's root directory, which will be "
-              "scanned for Chromium metadata files, e.g. '~/chromium/src'."),
+        help=(
+            "The path to the repository's root directory, which will be "
+            "scanned for Chromium metadata files, e.g. '~/chromium/src'."
+        ),
     )
     parser.add_argument(
         "--is-open-source-project",
@@ -71,7 +73,7 @@ def main() -> None:
         "summary": {
             "total_files": file_count,
             "invalid_files": 0,
-        }
+        },
     }
 
     # Key is constructed from the result severity and reason;
@@ -83,7 +85,8 @@ def main() -> None:
         file_results = metadata.validate.validate_file(
             filepath,
             repo_root_dir=src_dir,
-            is_open_source_project=config.is_open_source_project)
+            is_open_source_project=config.is_open_source_project,
+        )
         invalid = False
         relpath = os.path.relpath(filepath, start=src_dir)
 
@@ -98,20 +101,19 @@ def main() -> None:
                     print(f"    {result}")
 
                 # Add to JSON structure
-                json_output["files"][relpath].append({
-                    "severity":
-                    result.get_severity_prefix(),
-                    "reason":
-                    result.get_reason(),
-                    "message":
-                    str(result),
-                    "fatal":
-                    result.is_fatal(),
-                })
+                json_output["files"][relpath].append(
+                    {
+                        "severity": result.get_severity_prefix(),
+                        "reason": result.get_reason(),
+                        "message": str(result),
+                        "fatal": result.is_fatal(),
+                    }
+                )
 
                 summary_key = "{severity} - {reason}".format(
                     severity=result.get_severity_prefix(),
-                    reason=result.get_reason())
+                    reason=result.get_reason(),
+                )
                 all_reasons[summary_key]["files"].append(relpath)
                 all_reasons[summary_key]["results"].add(str(result))
                 if result.is_fatal():
@@ -123,7 +125,7 @@ def main() -> None:
     json_output["summary"]["invalid_files"] = invalid_file_count
 
     if config.json_summary:
-        with open(config.json_summary, 'w') as f:
+        with open(config.json_summary, "w") as f:
             json.dump(json_output, f, indent=2)
         return
 
@@ -147,8 +149,10 @@ def main() -> None:
         for result in sorted(results):
             print(f"    {result}")
 
-    print(f"\n\n{invalid_file_count} / {file_count} metadata files are "
-          "invalid, i.e. the file has at least one fatal validation issue.")
+    print(
+        f"\n\n{invalid_file_count} / {file_count} metadata files are "
+        "invalid, i.e. the file has at least one fatal validation issue."
+    )
 
 
 if __name__ == "__main__":

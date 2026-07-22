@@ -24,24 +24,29 @@ import metadata.fields.custom.update_mechanism
 import metadata.fields.custom.license
 import metadata.fields.custom.license_allowlist
 
+
 class FieldValidationTest(unittest.TestCase):
-    def _run_field_validation(self,
-                              field: field_types.MetadataField,
-                              valid_values: List[str],
-                              error_values: List[str],
-                              warning_values: List[str] = [],
-                              **kwargs):
+    def _run_field_validation(
+        self,
+        field: field_types.MetadataField,
+        valid_values: List[str],
+        error_values: List[str],
+        warning_values: List[str] = [],
+        **kwargs,
+    ):
         """Helper to run a field's validation for different values."""
         for value in valid_values:
             self.assertIsNone(field.validate(value, **kwargs), value)
 
         for value in error_values:
-            self.assertIsInstance(field.validate(value, **kwargs),
-                                  vr.ValidationError, value)
+            self.assertIsInstance(
+                field.validate(value, **kwargs), vr.ValidationError, value
+            )
 
         for value in warning_values:
-            self.assertIsInstance(field.validate(value, **kwargs),
-                                  vr.ValidationWarning, value)
+            self.assertIsInstance(
+                field.validate(value, **kwargs), vr.ValidationWarning, value
+            )
 
     def test_freeform_text_validation(self):
         # Check validation of a freeform text field that should be on
@@ -80,21 +85,30 @@ class FieldValidationTest(unittest.TestCase):
         # CPE 2.3 Formatted String
         self.assertTrue(
             cpe_prefix_util.has_version_component(
-                "cpe:2.3:a:vendor:product:1.2.3:*:*:*:*:*:*:*"))
+                "cpe:2.3:a:vendor:product:1.2.3:*:*:*:*:*:*:*"
+            )
+        )
         self.assertFalse(
             cpe_prefix_util.has_version_component(
-                "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*"))
+                "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*"
+            )
+        )
         self.assertFalse(
             cpe_prefix_util.has_version_component(
-                "cpe:2.3:a:vendor:product:-:*:*:*:*:*:*:*"))
+                "cpe:2.3:a:vendor:product:-:*:*:*:*:*:*:*"
+            )
+        )
         self.assertFalse(
-            cpe_prefix_util.has_version_component("cpe:2.3:a:vendor:product"))
+            cpe_prefix_util.has_version_component("cpe:2.3:a:vendor:product")
+        )
 
         # CPE 2.2 URN
         self.assertTrue(
-            cpe_prefix_util.has_version_component("cpe:/a:vendor:product:1.2.3"))
+            cpe_prefix_util.has_version_component("cpe:/a:vendor:product:1.2.3")
+        )
         self.assertFalse(
-            cpe_prefix_util.has_version_component("cpe:/a:vendor:product"))
+            cpe_prefix_util.has_version_component("cpe:/a:vendor:product")
+        )
         self.assertFalse(cpe_prefix_util.has_version_component("cpe:/a:vendor"))
         self.assertFalse(cpe_prefix_util.has_version_component("cpe:/a"))
         self.assertFalse(cpe_prefix_util.has_version_component("cpe:/"))
@@ -136,10 +150,15 @@ class FieldValidationTest(unittest.TestCase):
                 "04/03/2012",  # Ambiguous month and day.
             ],
             warning_values=[
-                "2012-03-04 UTC", "2012-03-04 UTC+10:00",
-                "2012/03/04 UTC+10:00", "20120304", "April 3, 2012",
-                "3 Apr 2012", "30/12/2000", "20-03-2020",
-                "Tue Apr 3 05:06:07 2012 +0800"
+                "2012-03-04 UTC",
+                "2012-03-04 UTC+10:00",
+                "2012/03/04 UTC+10:00",
+                "20120304",
+                "April 3, 2012",
+                "3 Apr 2012",
+                "30/12/2000",
+                "20-03-2020",
+                "Tue Apr 3 05:06:07 2012 +0800",
             ],
         )
 
@@ -190,9 +209,10 @@ class FieldValidationTest(unittest.TestCase):
         self._run_field_validation(
             field=known_fields.LICENSE_FILE,
             valid_values=[
-                "LICENSE", "src/LICENSE.txt",
+                "LICENSE",
+                "src/LICENSE.txt",
                 "LICENSE, //third_party_test/LICENSE-TEST",
-                "src/MISSING_LICENSE"
+                "src/MISSING_LICENSE",
             ],
             error_values=["", "\n", ","],
             warning_values=["NOT_SHIPPED"],
@@ -271,11 +291,17 @@ class FieldValidationTest(unittest.TestCase):
     def test_local_modifications(self):
         # Checks local modifications field early terminates when we can reasonably infer there's no modification.
         _NO_MODIFICATION_VALUES = [
-            "None", "None.", "N/A.", "(none).", "No modification", "\nNone."
+            "None",
+            "None.",
+            "N/A.",
+            "(none).",
+            "No modification",
+            "\nNone.",
         ]
         for value in _NO_MODIFICATION_VALUES:
             self.assertTrue(
-                known_fields.LOCAL_MODIFICATIONS.should_terminate_field(value))
+                known_fields.LOCAL_MODIFICATIONS.should_terminate_field(value)
+            )
 
         # Checks ambiguous values won't early terminate the field.
         _MAY_CONTAIN_MODIFICATION_VALUES = [
@@ -284,7 +310,8 @@ class FieldValidationTest(unittest.TestCase):
         ]
         for value in _MAY_CONTAIN_MODIFICATION_VALUES:
             self.assertFalse(
-                known_fields.LOCAL_MODIFICATIONS.should_terminate_field(value))
+                known_fields.LOCAL_MODIFICATIONS.should_terminate_field(value)
+            )
 
     def test_vulnerability_ids(self):
         valid_ids = [
@@ -307,8 +334,11 @@ class FieldValidationTest(unittest.TestCase):
         ]
 
         test_ids = valid_ids + invalid_ids
-        valid_result, invalid_result = metadata.fields.custom.mitigated.validate_vuln_ids(
-            ",".join(test_ids))
+        valid_result, invalid_result = (
+            metadata.fields.custom.mitigated.validate_vuln_ids(
+                ",".join(test_ids)
+            )
+        )
 
         self.assertListEqual(sorted(valid_result), sorted(valid_ids))
         self.assertListEqual(sorted(invalid_result), sorted(invalid_ids))
@@ -344,11 +374,13 @@ class FieldValidationTest(unittest.TestCase):
             ],
         )
 
-
     def test_load_restrictive_license_approval_proto(self):
-        path = os.path.join(_THIS_DIR, "data", "restrictive_license_approval.textproto")
+        path = os.path.join(
+            _THIS_DIR, "data", "restrictive_license_approval.textproto"
+        )
         result = metadata.fields.custom.license_allowlist.load_restrictive_license_approval_textproto(
-            path)
+            path
+        )
         self.assertIn("testing-restrictive-license", result)
 
     def test_license_validation_with_rla(self):
@@ -360,7 +392,9 @@ class FieldValidationTest(unittest.TestCase):
         self.assertIsInstance(res_without, vr.ValidationWarning)
 
         # Validate WITH the rla textproto: should return None (approved / valid).
-        res_with = field.validate(test_license, source_file_dir=os.path.join(_THIS_DIR, "data"))
+        res_with = field.validate(
+            test_license, source_file_dir=os.path.join(_THIS_DIR, "data")
+        )
         self.assertIsNone(res_with)
 
     def test_get_license_validation_status(self):
@@ -374,51 +408,70 @@ class FieldValidationTest(unittest.TestCase):
 
         # 2. Restricted but approved
         self.assertEqual(
-            get_status("LicenseRef-GUST-Font-License",
-                       source_file_dir=data_dir),
-            "APPROVED[(GUST-Font-License, b/987654321)]")
+            get_status(
+                "LicenseRef-GUST-Font-License", source_file_dir=data_dir
+            ),
+            "APPROVED[(GUST-Font-License, b/987654321)]",
+        )
         self.assertEqual(
-            get_status("MIT, LicenseRef-GUST-Font-License",
-                       source_file_dir=data_dir),
-            "APPROVED[(GUST-Font-License, b/987654321)]")
+            get_status(
+                "MIT, LicenseRef-GUST-Font-License", source_file_dir=data_dir
+            ),
+            "APPROVED[(GUST-Font-License, b/987654321)]",
+        )
 
         # 3. Allowed-not-shipped (GPL-2.0)
         self.assertEqual(get_status("GPL-2.0", is_shipped=False), "ALLOWED")
-        self.assertEqual(get_status("GPL-2.0", is_shipped=True),
-                         "NOT_ALLOWED_SHIPPED[GPL-2.0]")
+        self.assertEqual(
+            get_status("GPL-2.0", is_shipped=True),
+            "NOT_ALLOWED_SHIPPED[GPL-2.0]",
+        )
         self.assertEqual(get_status("GPL-2.0"), "ALLOWED")
         self.assertEqual(
             get_status("GPL-2.0", source_file_dir=data_dir, is_shipped=False),
-            "ALLOWED")
+            "ALLOWED",
+        )
         self.assertEqual(
-            get_status("MIT, GPL-2.0",
-                       source_file_dir=data_dir,
-                       is_shipped=False), "ALLOWED")
+            get_status(
+                "MIT, GPL-2.0", source_file_dir=data_dir, is_shipped=False
+            ),
+            "ALLOWED",
+        )
         self.assertEqual(
-            get_status("LicenseRef-GUST-Font-License, GPL-2.0",
-                       source_file_dir=data_dir,
-                       is_shipped=False),
-            "APPROVED[(GUST-Font-License, b/987654321)]")
+            get_status(
+                "LicenseRef-GUST-Font-License, GPL-2.0",
+                source_file_dir=data_dir,
+                is_shipped=False,
+            ),
+            "APPROVED[(GUST-Font-License, b/987654321)]",
+        )
         self.assertEqual(
-            get_status("LicenseRef-GUST-Font-License, GPL-2.0",
-                       source_file_dir=data_dir,
-                       is_shipped=True),
-            "NOT_ALLOWED_SHIPPED[GPL-2.0], APPROVED[(GUST-Font-License, b/987654321)]"
+            get_status(
+                "LicenseRef-GUST-Font-License, GPL-2.0",
+                source_file_dir=data_dir,
+                is_shipped=True,
+            ),
+            "NOT_ALLOWED_SHIPPED[GPL-2.0], APPROVED[(GUST-Font-License, b/987654321)]",
         )
 
         # 3b. Unknown and NOT approved
-        self.assertEqual(get_status("My-Custom-License"),
-                         "UNKNOWN[My-Custom-License]")
+        self.assertEqual(
+            get_status("My-Custom-License"), "UNKNOWN[My-Custom-License]"
+        )
         self.assertEqual(
             get_status("My-Custom-License", source_file_dir=data_dir),
-            "UNKNOWN[My-Custom-License]")
+            "UNKNOWN[My-Custom-License]",
+        )
         self.assertEqual(
             get_status("MIT, My-Custom-License", source_file_dir=data_dir),
-            "UNKNOWN[My-Custom-License]")
+            "UNKNOWN[My-Custom-License]",
+        )
         self.assertEqual(
-            get_status("LicenseRef-GUST-Font-License, My-Custom-License",
-                       source_file_dir=data_dir),
-            "UNKNOWN[My-Custom-License], APPROVED[(GUST-Font-License, b/987654321)]"
+            get_status(
+                "LicenseRef-GUST-Font-License, My-Custom-License",
+                source_file_dir=data_dir,
+            ),
+            "UNKNOWN[My-Custom-License], APPROVED[(GUST-Font-License, b/987654321)]",
         )
 
         # 4. Empty or None
@@ -427,37 +480,51 @@ class FieldValidationTest(unittest.TestCase):
 
         # 5. Reciprocal licenses (only allowed in open source)
         self.assertEqual(get_status("CDDL-1.0"), "ALLOWED")
-        self.assertEqual(get_status("CDDL-1.0", is_open_source_project=True),
-                         "ALLOWED")
-        self.assertEqual(get_status("CDDL-1.0", is_open_source_project=False),
-                         "RECIPROCAL_NOT_ALLOWED[CDDL-1.0]")
+        self.assertEqual(
+            get_status("CDDL-1.0", is_open_source_project=True), "ALLOWED"
+        )
+        self.assertEqual(
+            get_status("CDDL-1.0", is_open_source_project=False),
+            "RECIPROCAL_NOT_ALLOWED[CDDL-1.0]",
+        )
 
     def test_get_license_validation_status_with_android_compatibility(self):
         get_status = metadata.fields.custom.license_allowlist.get_license_validation_status
         data_dir = os.path.join(_THIS_DIR, "data")
 
-        self.assertEqual(get_status("MPL-2.0", is_open_source_project=True),
-                         "ALLOWED")
+        self.assertEqual(
+            get_status("MPL-2.0", is_open_source_project=True), "ALLOWED"
+        )
 
         self.assertEqual(
-            get_status("MPL-2.0",
-                       is_open_source_project=False,
-                       android_compatible="yes"), "ALLOWED")
-
-        self.assertEqual(get_status("MPL-2.0", is_open_source_project=False),
-                         "RECIPROCAL_NOT_ALLOWED[MPL-2.0]")
-
-        self.assertEqual(
-            get_status("MPL-2.0",
-                       is_open_source_project=False,
-                       android_compatible="no"),
-            "RECIPROCAL_NOT_ALLOWED[MPL-2.0]")
+            get_status(
+                "MPL-2.0",
+                is_open_source_project=False,
+                android_compatible="yes",
+            ),
+            "ALLOWED",
+        )
 
         self.assertEqual(
-            get_status("MPL-2.0",
-                       is_open_source_project=False,
-                       source_file_dir=data_dir),
-            "RECIPROCAL_NOT_ALLOWED[MPL-2.0]")
+            get_status("MPL-2.0", is_open_source_project=False),
+            "RECIPROCAL_NOT_ALLOWED[MPL-2.0]",
+        )
+
+        self.assertEqual(
+            get_status(
+                "MPL-2.0", is_open_source_project=False, android_compatible="no"
+            ),
+            "RECIPROCAL_NOT_ALLOWED[MPL-2.0]",
+        )
+
+        self.assertEqual(
+            get_status(
+                "MPL-2.0",
+                is_open_source_project=False,
+                source_file_dir=data_dir,
+            ),
+            "RECIPROCAL_NOT_ALLOWED[MPL-2.0]",
+        )
 
 
 if __name__ == "__main__":

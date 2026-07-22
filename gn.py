@@ -19,18 +19,21 @@ import sys
 
 def PruneVirtualEnv():
     # Set by VirtualEnv, no need to keep it.
-    os.environ.pop('VIRTUAL_ENV', None)
+    os.environ.pop("VIRTUAL_ENV", None)
 
     # Set by VPython, if scripts want it back they have to set it explicitly.
-    os.environ.pop('PYTHONNOUSERSITE', None)
+    os.environ.pop("PYTHONNOUSERSITE", None)
 
     # Look for "activate_this.py" in this path, which is installed by
     # VirtualEnv. This mechanism is used by vpython as well to sanitize
     # VirtualEnvs from $PATH.
-    os.environ['PATH'] = os.pathsep.join([
-        p for p in os.environ.get('PATH', '').split(os.pathsep)
-        if not os.path.isfile(os.path.join(p, 'activate_this.py'))
-    ])
+    os.environ["PATH"] = os.pathsep.join(
+        [
+            p
+            for p in os.environ.get("PATH", "").split(os.pathsep)
+            if not os.path.isfile(os.path.join(p, "activate_this.py"))
+        ]
+    )
 
 
 def FindGnTool():
@@ -38,8 +41,12 @@ def FindGnTool():
     # downloaded by cipd in the projects DEPS.
     primary_solution_path = gclient_paths.GetPrimarySolutionPath()
     if primary_solution_path:
-        gn_path = os.path.join(primary_solution_path, 'third_party', 'gn',
-                               'gn' + gclient_paths.GetExeSuffix())
+        gn_path = os.path.join(
+            primary_solution_path,
+            "third_party",
+            "gn",
+            "gn" + gclient_paths.GetExeSuffix(),
+        )
         if os.path.exists(gn_path):
             return gn_path
 
@@ -47,33 +54,37 @@ def FindGnTool():
     # inside of buildtools.
     bin_path = gclient_paths.GetBuildtoolsPlatformBinaryPath()
     if not bin_path:
-        gn_path = gclient_paths.FindInPath('gn')
+        gn_path = gclient_paths.FindInPath("gn")
         if gn_path:
             return gn_path
-        print('gn.py: Unable to find gn in your $PATH', file=sys.stderr)
-        print('Hint: `which -a gn` should output two entries', file=sys.stderr)
+        print("gn.py: Unable to find gn in your $PATH", file=sys.stderr)
+        print("Hint: `which -a gn` should output two entries", file=sys.stderr)
         return None
-    if os.environ.get('CHROMIUM_BUILDTOOLS_PATH'):
-        print('Using $CHROMIUM_BUILDTOOLS_PATH to find gn. ' +
-              'CHROMIUM_BUILDTOOLS_PATH is highly unsupported ' +
-              'and may break gn.',
-              file=sys.stderr)
+    if os.environ.get("CHROMIUM_BUILDTOOLS_PATH"):
+        print(
+            "Using $CHROMIUM_BUILDTOOLS_PATH to find gn. "
+            + "CHROMIUM_BUILDTOOLS_PATH is highly unsupported "
+            + "and may break gn.",
+            file=sys.stderr,
+        )
 
     # TODO(b/328065301): Once chromium/src CL has landed to migrate
     # buildtools/<platform>/gn to buildtools/<platform>/gn/gn, only return
     # gn/gn path.
-    old_gn_path = os.path.join(bin_path, 'gn' + gclient_paths.GetExeSuffix())
-    new_gn_path = os.path.join(bin_path, 'gn',
-                               'gn' + gclient_paths.GetExeSuffix())
+    old_gn_path = os.path.join(bin_path, "gn" + gclient_paths.GetExeSuffix())
+    new_gn_path = os.path.join(
+        bin_path, "gn", "gn" + gclient_paths.GetExeSuffix()
+    )
     paths = [new_gn_path, old_gn_path]
     for path in paths:
         if os.path.isfile(path):
             return path
-    print('gn.py: Could not find gn executable at: %s' % paths, file=sys.stderr)
+    print("gn.py: Could not find gn executable at: %s" % paths, file=sys.stderr)
     print(
-        "Either GN isn't installed on your system, or you're not running in " +
-        "a checkout with a preinstalled gn binary.",
-        file=sys.stderr)
+        "Either GN isn't installed on your system, or you're not running in "
+        + "a checkout with a preinstalled gn binary.",
+        file=sys.stderr,
+    )
 
 
 def main(args):
@@ -91,9 +102,9 @@ def main(args):
     return 2
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))
     except KeyboardInterrupt:
-        sys.stderr.write('interrupted\n')
+        sys.stderr.write("interrupted\n")
         sys.exit(1)

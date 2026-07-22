@@ -11,17 +11,17 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PYLINT = os.path.join(HERE, 'pylint_main.py')
-RC_FILE = os.path.join(HERE, 'pylintrc')
+PYLINT = os.path.join(HERE, "pylint_main.py")
+RC_FILE = os.path.join(HERE, "pylintrc")
 
-ARGS_ON_STDIN = '--args-on-stdin'
+ARGS_ON_STDIN = "--args-on-stdin"
 
 
 def find_rcfile() -> str:
     """Locate the config file for this wrapper."""
     arg0 = os.path.basename(sys.argv[0])
-    if arg0.startswith('pylint-'):
-        rc_file = RC_FILE + '-' + arg0.split('-', 1)[1]
+    if arg0.startswith("pylint-"):
+        rc_file = RC_FILE + "-" + arg0.split("-", 1)[1]
         if os.path.exists(rc_file):
             return rc_file
     return RC_FILE
@@ -53,13 +53,14 @@ def main(argv):
     # their own PYLINTRC, or set an empty PYLINTRC to use pylint's normal config
     # file resolution, which would include the "more global" options that are
     # normally overridden by the depot_tools config.
-    os.environ.setdefault('PYLINTRC', rc_file)
+    os.environ.setdefault("PYLINTRC", rc_file)
 
     # This import has to happen after PYLINTRC is set because the module tries
     # to resolve the config file location on load.
     from pylint import lint  # pylint: disable=bad-option-value,import-outside-toplevel
+
     lint.Run(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

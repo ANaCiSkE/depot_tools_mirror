@@ -29,7 +29,7 @@ def find_metadata_files(root: str) -> List[str]:
     """
     metadata_files = []
 
-    for (dirpath, _, filenames) in os.walk(root, followlinks=True):
+    for dirpath, _, filenames in os.walk(root, followlinks=True):
         for filename in filenames:
             if is_metadata_file(filename):
                 full_path = os.path.join(root, dirpath, filename)

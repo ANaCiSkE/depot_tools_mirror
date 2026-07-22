@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Tools for interacting with git cl"""
+
 import subprocess
 
 from mcp.server import fastmcp
@@ -29,7 +30,7 @@ async def try_builder_results(
       A json list of builds that either ran or are still running on the provided
       CL or current branch.
     """
-    with tracer.start_as_current_span('chromium.mcp.try_builder_results'):
+    with tracer.start_as_current_span("chromium.mcp.try_builder_results"):
         command = [
             "git",
             "cl",
@@ -37,7 +38,7 @@ async def try_builder_results(
             "--json=-",
         ]
         if change_list_issue:
-            command.extend(['-i', str(change_list_issue)])
+            command.extend(["-i", str(change_list_issue)])
         result = subprocess.run(
             command,
             capture_output=True,
@@ -45,8 +46,8 @@ async def try_builder_results(
             text=True,
             cwd=checkout,
         )
-        await ctx.info(f'stdout {result.stdout}')
-        await ctx.info(f'stderr {result.stderr}')
+        await ctx.info(f"stdout {result.stdout}")
+        await ctx.info(f"stderr {result.stderr}")
         return result.stdout
 
 
@@ -62,7 +63,7 @@ async def get_current_changes(
     Returns:
       A diff of the current checkout and the last upload.
     """
-    with tracer.start_as_current_span('chromium.mcp.get_current_changes'):
+    with tracer.start_as_current_span("chromium.mcp.get_current_changes"):
         command = [
             "git",
             "cl",
@@ -75,8 +76,8 @@ async def get_current_changes(
             text=True,
             cwd=checkout,
         )
-        await ctx.info(f'stdout {result.stdout}')
-        await ctx.info(f'stderr {result.stderr}')
+        await ctx.info(f"stdout {result.stdout}")
+        await ctx.info(f"stderr {result.stderr}")
         return result.stdout
 
 
@@ -95,7 +96,7 @@ async def format_checkout(
     Returns:
       None
     """
-    with tracer.start_as_current_span('chromium.mcp.format'):
+    with tracer.start_as_current_span("chromium.mcp.format"):
         command = [
             "git",
             "cl",
@@ -108,8 +109,8 @@ async def format_checkout(
             text=True,
             cwd=checkout,
         )
-        await ctx.info(f'stdout {result.stdout}')
-        await ctx.info(f'stderr {result.stderr}')
+        await ctx.info(f"stdout {result.stdout}")
+        await ctx.info(f"stderr {result.stderr}")
         return result.stdout
 
 
@@ -138,6 +139,6 @@ async def upload_change_list(
         text=True,
         cwd=checkout,
     )
-    await ctx.info(f'stdout {result.stdout}')
-    await ctx.info(f'stderr {result.stderr}')
+    await ctx.info(f"stdout {result.stdout}")
+    await ctx.info(f"stderr {result.stderr}")
     return result.stdout

@@ -7,13 +7,13 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts for
 details on the presubmit API built into depot_tools.
 """
 
-PRESUBMIT_VERSION = '2.0.0'
+PRESUBMIT_VERSION = "2.0.0"
 
 import fnmatch
 import sys
 
 # CIPD ensure manifest for checking CIPD client itself.
-CIPD_CLIENT_ENSURE_FILE_TEMPLATE = r'''
+CIPD_CLIENT_ENSURE_FILE_TEMPLATE = r"""
 # Full supported.
 $VerifiedPlatform linux-amd64 mac-amd64 windows-amd64 windows-386
 # Best effort support.
@@ -22,7 +22,7 @@ $VerifiedPlatform linux-arm64 linux-armv6l
 $VerifiedPlatform linux-mips64 linux-mips64le linux-mipsle
 
 %s %s
-'''
+"""
 
 # Timeout for a test to be executed.
 TEST_TIMEOUT_S = 450  # 7m 30s
@@ -31,70 +31,66 @@ TEST_TIMEOUT_S = 450  # 7m 30s
 def CheckPylint(input_api, output_api):
     """Run Pylint 3.X on supported python files."""
     files_to_check = [
-        r'^mcp/.*\.py$',
-        r'^[^/]*\.py$',
-        r'^testing_support/[^/]*\.py$',
-        r'^tests/[^/]*\.py$',
-        r'^recipe_modules/.*\.py$',  # Allow recursive search in recipe modules.
+        r"^mcp/.*\.py$",
+        r"^[^/]*\.py$",
+        r"^testing_support/[^/]*\.py$",
+        r"^tests/[^/]*\.py$",
+        r"^recipe_modules/.*\.py$",  # Allow recursive search in recipe modules.
     ]
     disabled_warnings = [
-        'anomalous-backslash-in-string',
-        'arguments-differ',
-        'bad-indentation',
-        'bad-super-call',
-        'cell-var-from-loop',
-        'consider-using-dict-items',
-        'consider-using-enumerate',
-        'consider-using-from-import',
-        'consider-using-generator',
-        'consider-using-max-builtin',
-        'consider-using-with',
-        'cyclic-import',
-        'deprecated-method',
-        'deprecated-module',
-        'duplicate-code',  # Tends to flag false positives.
-        'eval-used',
-        'exec-used',
-        'format-string-without-interpolation',
-        'function-redefined',
-        'implicit-str-concat',
-        'import-outside-toplevel',
-        'inconsistent-return-statements',
-        'line-too-long',
-        'logging-not-lazy',
-        'method-cache-max-size-none',
-        'missing-module-docstring',
-        'multiple-imports',
-        'no-member',
-        'no-self-argument',
-        'no-value-for-parameter',
-        'not-an-iterable',
-        'not-callable',
-        'pointless-exception-statement',
-        'possibly-used-before-assignment',
-        'protected-access',
-        'raise-missing-from',
-        'redundant-u-string-prefix',
-        'singleton-comparison',
-        'stop-iteration-return',
-        'subprocess-run-check',
-        'superfluous-parens',
-        'undefined-variable',
-        'unnecessary-dunder-call',
-        'unnecessary-lambda-assignment',
-        'unnecessary-negation',
-        'unspecified-encoding',
-        'unsubscriptable-object',
-        'unused-argument',
-        'unused-import',
-        'unused-variable',
-        'use-dict-literal',
-        'use-implicit-booleaness-not-comparison',
-        'use-maxsplit-arg',
-        'use-yield-from',
-        'used-before-assignment',
-        'useless-object-inheritance',
-        'useless-option-value',
+        "anomalous-backslash-in-string",
+        "arguments-differ",
+        "bad-super-call",
+        "cell-var-from-loop",
+        "consider-using-dict-items",
+        "consider-using-enumerate",
+        "consider-using-from-import",
+        "consider-using-generator",
+        "consider-using-max-builtin",
+        "consider-using-with",
+        "cyclic-import",
+        "deprecated-method",
+        "deprecated-module",
+        "duplicate-code",  # Tends to flag false positives.
+        "eval-used",
+        "exec-used",
+        "format-string-without-interpolation",
+        "function-redefined",
+        "import-outside-toplevel",
+        "inconsistent-return-statements",
+        "line-too-long",
+        "logging-not-lazy",
+        "method-cache-max-size-none",
+        "missing-module-docstring",
+        "multiple-imports",
+        "no-self-argument",
+        "no-value-for-parameter",
+        "not-an-iterable",
+        "not-callable",
+        "pointless-exception-statement",
+        "possibly-used-before-assignment",
+        "protected-access",
+        "raise-missing-from",
+        "singleton-comparison",
+        "stop-iteration-return",
+        "subprocess-run-check",
+        "superfluous-parens",
+        "undefined-variable",
+        "unnecessary-dunder-call",
+        "unnecessary-lambda-assignment",
+        "unnecessary-negation",
+        "unspecified-encoding",
+        "unsubscriptable-object",
+        "unused-argument",
+        "unused-import",
+        "unused-variable",
+        "use-dict-literal",
+        "use-implicit-booleaness-not-comparison",
+        "use-maxsplit-arg",
+        "use-yield-from",
+        "used-before-assignment",
+        "useless-object-inheritance",
+        "useless-option-value",
     ]
     return input_api.RunTests(
         input_api.canned_checks.GetPylint(
@@ -103,33 +99,41 @@ def CheckPylint(input_api, output_api):
             files_to_check=files_to_check,
             files_to_skip=_GetPylintFilesToSkip(input_api),
             disabled_warnings=disabled_warnings,
-            version='3.2'))
+            version="3.2",
+        )
+    )
 
 
 def _GetPylintFilesToSkip(input_api):
     files_to_skip = list(input_api.DEFAULT_FILES_TO_SKIP)
-    if input_api.os_path.exists('.gitignore'):
-        with open('.gitignore', encoding='utf-8') as fh:
+    if input_api.os_path.exists(".gitignore"):
+        with open(".gitignore", encoding="utf-8") as fh:
             lines = [l.strip() for l in fh.readlines()]
-            files_to_skip.extend([
-                fnmatch.translate(l) for l in lines
-                if l and not l.startswith('#')
-            ])
-    if input_api.os_path.exists('.git/info/exclude'):
-        with open('.git/info/exclude', encoding='utf-8') as fh:
+            files_to_skip.extend(
+                [
+                    fnmatch.translate(l)
+                    for l in lines
+                    if l and not l.startswith("#")
+                ]
+            )
+    if input_api.os_path.exists(".git/info/exclude"):
+        with open(".git/info/exclude", encoding="utf-8") as fh:
             lines = [l.strip() for l in fh.readlines()]
-            files_to_skip.extend([
-                fnmatch.translate(l) for l in lines
-                if l and not l.startswith('#')
-            ])
+            files_to_skip.extend(
+                [
+                    fnmatch.translate(l)
+                    for l in lines
+                    if l and not l.startswith("#")
+                ]
+            )
     return files_to_skip
 
 
 def CheckRecipes(input_api, output_api):
-    file_filter = lambda x: x.LocalPath() == 'infra/config/recipes.cfg'
-    return input_api.canned_checks.CheckJsonParses(input_api,
-                                                   output_api,
-                                                   file_filter=file_filter)
+    file_filter = lambda x: x.LocalPath() == "infra/config/recipes.cfg"
+    return input_api.canned_checks.CheckJsonParses(
+        input_api, output_api, file_filter=file_filter
+    )
 
 
 def CheckUsePython3(input_api, output_api):
@@ -138,7 +142,9 @@ def CheckUsePython3(input_api, output_api):
     if sys.version_info.major != 3:
         results.append(
             output_api.PresubmitError(
-                'Did not use Python3 for //tests/PRESUBMIT.py.'))
+                "Did not use Python3 for //tests/PRESUBMIT.py."
+            )
+        )
 
     return results
 
@@ -153,25 +159,28 @@ def CheckUnitTestsOnCommit(input_api, output_api):
     input_api.SetTimeout(TEST_TIMEOUT_S)
 
     # Run only selected tests on Windows.
-    test_to_run_list = [r'.*test\.py$']
+    test_to_run_list = [r".*test\.py$"]
     tests_to_skip_list = []
-    if input_api.platform.startswith(('cygwin', 'win32')):
-        print('Warning: skipping most unit tests on Windows')
-        tests_to_skip_list.extend([
-            r'.*auth_test\.py$',
-            r'.*git_common_test\.py$',
-            r'.*git_hyper_blame_test\.py$',
-            r'.*git_map_test\.py$',
-            r'.*ninjalog_uploader_test\.py$',
-            r'.*recipes_test\.py$',
-        ])
+    if input_api.platform.startswith(("cygwin", "win32")):
+        print("Warning: skipping most unit tests on Windows")
+        tests_to_skip_list.extend(
+            [
+                r".*auth_test\.py$",
+                r".*git_common_test\.py$",
+                r".*git_hyper_blame_test\.py$",
+                r".*git_map_test\.py$",
+                r".*ninjalog_uploader_test\.py$",
+                r".*recipes_test\.py$",
+            ]
+        )
 
     tests = input_api.canned_checks.GetUnitTestsInDirectory(
         input_api,
         output_api,
-        'tests',
+        "tests",
         files_to_check=test_to_run_list,
-        files_to_skip=tests_to_skip_list)
+        files_to_skip=tests_to_skip_list,
+    )
 
     return input_api.RunTests(tests)
 
@@ -179,41 +188,49 @@ def CheckUnitTestsOnCommit(input_api, output_api):
 def CheckCIPDManifest(input_api, output_api):
     # Validate CIPD manifests.
     root = input_api.os_path.normpath(
-        input_api.os_path.abspath(input_api.PresubmitLocalPath()))
+        input_api.os_path.abspath(input_api.PresubmitLocalPath())
+    )
     rel_file = lambda rel: input_api.os_path.join(root, rel)
     cipd_manifests = set(
-        rel_file(input_api.os_path.join(*x)) for x in (
-            ('cipd_manifest.txt', ),
-            ('bootstrap', 'manifest.txt'),
-            ('bootstrap', 'manifest_bleeding_edge.txt'),
-
+        rel_file(input_api.os_path.join(*x))
+        for x in (
+            ("cipd_manifest.txt",),
+            ("bootstrap", "manifest.txt"),
+            ("bootstrap", "manifest_bleeding_edge.txt"),
             # Also generate a file for the cipd client itself.
-            (
-                'cipd_client_version', ),
-        ))
+            ("cipd_client_version",),
+        )
+    )
     affected_manifests = input_api.AffectedFiles(
         include_deletes=False,
-        file_filter=lambda x: input_api.os_path.normpath(x.AbsoluteLocalPath()
-                                                         ) in cipd_manifests)
+        file_filter=lambda x: (
+            input_api.os_path.normpath(x.AbsoluteLocalPath()) in cipd_manifests
+        ),
+    )
     tests = []
     for path in affected_manifests:
         path = path.AbsoluteLocalPath()
-        if path.endswith('.txt'):
+        if path.endswith(".txt"):
             tests.append(
-                input_api.canned_checks.CheckCIPDManifest(input_api,
-                                                          output_api,
-                                                          path=path))
+                input_api.canned_checks.CheckCIPDManifest(
+                    input_api, output_api, path=path
+                )
+            )
         else:
-            pkg = 'infra/tools/cipd/${platform}'
+            pkg = "infra/tools/cipd/${platform}"
             ver = input_api.ReadFile(path)
             tests.append(
                 input_api.canned_checks.CheckCIPDManifest(
                     input_api,
                     output_api,
-                    content=CIPD_CLIENT_ENSURE_FILE_TEMPLATE % (pkg, ver)))
+                    content=CIPD_CLIENT_ENSURE_FILE_TEMPLATE % (pkg, ver),
+                )
+            )
             tests.append(
                 input_api.canned_checks.CheckCIPDClientDigests(
-                    input_api, output_api, client_version_file=path))
+                    input_api, output_api, client_version_file=path
+                )
+            )
 
     return input_api.RunTests(tests)
 
@@ -223,9 +240,9 @@ def CheckOwnersFormat(input_api, output_api):
 
 
 def CheckOwnersOnUpload(input_api, output_api):
-    return input_api.canned_checks.CheckOwners(input_api,
-                                               output_api,
-                                               allow_tbr=False)
+    return input_api.canned_checks.CheckOwners(
+        input_api, output_api, allow_tbr=False
+    )
 
 
 def CheckDoNotSubmitOnCommit(input_api, output_api):
@@ -236,9 +253,9 @@ def CheckPatchFormatted(input_api, output_api):
     # TODO(https://crbug.com/979330) If clang-format is fixed for non-chromium
     # repos, remove check_clang_format=False so that proto files can be
     # formatted
-    return input_api.canned_checks.CheckPatchFormatted(input_api,
-                                                       output_api,
-                                                       check_clang_format=False)
+    return input_api.canned_checks.CheckPatchFormatted(
+        input_api, output_api, check_clang_format=False
+    )
 
 
 def CheckFreezeOnCommit(input_api, output_api):
@@ -259,7 +276,9 @@ def CheckSkillValidatorTestsOnCommit(input_api, output_api):
     tests = input_api.canned_checks.GetUnitTestsInDirectory(
         input_api,
         output_api,
-        input_api.os_path.join('agents', 'skills', 'skill-validator',
-                               'scripts'),
-        files_to_check=[r'.*test\.py$'])
+        input_api.os_path.join(
+            "agents", "skills", "skill-validator", "scripts"
+        ),
+        files_to_check=[r".*test\.py$"],
+    )
     return input_api.RunTests(tests)

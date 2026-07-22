@@ -18,12 +18,12 @@ from bb_wrapper import (
 
 
 class TestBBWrapper(unittest.TestCase):
-
     def test_parse_gerrit_url(self):
         # Standard URL
         host, change, ps, project = parse_gerrit_url(
             "https://chromium-review.googlesource.com"
-            "/c/chromium/src/+/6072788/24")
+            "/c/chromium/src/+/6072788/24"
+        )
         self.assertEqual(host, "chromium-review.googlesource.com")
         self.assertEqual(change, "6072788")
         self.assertEqual(ps, "24")
@@ -31,14 +31,16 @@ class TestBBWrapper(unittest.TestCase):
 
         # Without patchset in URL
         host, change, ps, project = parse_gerrit_url(
-            "https://chromium-review.googlesource.com/c/chromium/src/+/6072788")
+            "https://chromium-review.googlesource.com/c/chromium/src/+/6072788"
+        )
         self.assertEqual(host, "chromium-review.googlesource.com")
         self.assertEqual(change, "6072788")
         self.assertIsNone(ps)
 
         # Short crrev URL
         host, change, ps, project = parse_gerrit_url(
-            "https://crrev.com/c/6072788/24")
+            "https://crrev.com/c/6072788/24"
+        )
         self.assertEqual(host, "chromium-review.googlesource.com")
         self.assertEqual(change, "6072788")
         self.assertEqual(ps, "24")
@@ -70,25 +72,20 @@ class TestBBWrapper(unittest.TestCase):
     @unittest.mock.patch("bb_wrapper.gerrit_util.CallGerritApi")
     def test_get_patchsets_gerrit_api(self, mock_call_gerrit_api):
         mock_call_gerrit_api.return_value = {
-            "revisions": {
-                "rev1": {
-                    "_number": 1
-                },
-                "rev2": {
-                    "_number": 2
-                }
-            }
+            "revisions": {"rev1": {"_number": 1}, "rev2": {"_number": 2}}
         }
 
-        patchsets = get_patchsets("chromium-review.googlesource.com",
-                                  "chromium/src", "6072788")
+        patchsets = get_patchsets(
+            "chromium-review.googlesource.com", "chromium/src", "6072788"
+        )
         self.assertEqual(patchsets, [1, 2])
 
     @unittest.mock.patch("bb_wrapper.run_bb")
     def test_get_latest_build(self, mock_run_bb):
         mock_run_bb.return_value = (
             '{"id": "8765432109", "number": 1234, "status": "SUCCESS", '
-            '"createTime": "2024-01-01T00:00:00Z"}\n')
+            '"createTime": "2024-01-01T00:00:00Z"}\n'
+        )
         build = get_latest_build("chromium/try/linux-rel")
         self.assertEqual(build["id"], "8765432109")
         self.assertEqual(build["number"], 1234)
@@ -96,37 +93,35 @@ class TestBBWrapper(unittest.TestCase):
 
     @unittest.mock.patch("bb_wrapper.run_bb")
     def test_list_steps(self, mock_run_bb):
-        mock_run_bb.return_value = json.dumps({
-            "builder": {
-                "builder": "linux-rel"
-            },
-            "number":
-            1234,
-            "id":
-            "8765432109",
-            "status":
-            "FAILURE",
-            "steps": [{
-                "name": "compile",
-                "status": "SUCCESS",
-                "logs": [{
-                    "name": "stdout"
-                }]
-            }, {
-                "name": "browser_tests",
+        mock_run_bb.return_value = json.dumps(
+            {
+                "builder": {"builder": "linux-rel"},
+                "number": 1234,
+                "id": "8765432109",
                 "status": "FAILURE",
-                "logs": [{
-                    "name": "failure_summary"
-                }]
-            }]
-        })
+                "steps": [
+                    {
+                        "name": "compile",
+                        "status": "SUCCESS",
+                        "logs": [{"name": "stdout"}],
+                    },
+                    {
+                        "name": "browser_tests",
+                        "status": "FAILURE",
+                        "logs": [{"name": "failure_summary"}],
+                    },
+                ],
+            }
+        )
 
-        with unittest.mock.patch('sys.stdout',
-                                 new=io.StringIO()) as fake_stdout:
+        with unittest.mock.patch(
+            "sys.stdout", new=io.StringIO()
+        ) as fake_stdout:
             list_steps("8765432109")
             output = fake_stdout.getvalue()
-            self.assertIn("Build: linux-rel Number: 1234 ID: 8765432109",
-                          output)
+            self.assertIn(
+                "Build: linux-rel Number: 1234 ID: 8765432109", output
+            )
             self.assertIn("compile", output)
             self.assertIn("browser_tests", output)
             self.assertIn("*** FAILURE ***", output)
@@ -139,9 +134,9 @@ class TestBBWrapper(unittest.TestCase):
         get_log("8765432109", "compile", "stdout", "/tmp/bb_log.log")
 
         # Verify file was opened correctly
-        mock_open.assert_called_once_with("/tmp/bb_log.log",
-                                          "w",
-                                          encoding="utf-8")
+        mock_open.assert_called_once_with(
+            "/tmp/bb_log.log", "w", encoding="utf-8"
+        )
 
         # Verify content was written
         mock_open().write.assert_called_once_with("line1\nline2\n")

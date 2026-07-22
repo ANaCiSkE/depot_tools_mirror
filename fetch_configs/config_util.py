@@ -14,6 +14,7 @@ class Config(object):
     command-line interface used in depot_tools to the unified python interface
     defined here.
     """
+
     @staticmethod
     def fetch_spec(_props):
         """Returns instructions to check out the project based on |props|."""
@@ -26,21 +27,21 @@ class Config(object):
 
     def handle_args(self, argv):
         """Passes command-line arguments through to the appropriate method."""
-        methods = {'fetch': self.fetch_spec, 'root': self.expected_root}
+        methods = {"fetch": self.fetch_spec, "root": self.expected_root}
         if len(argv) <= 1 or argv[1] not in methods:
-            print('Must specify a a fetch/root action')
+            print("Must specify a a fetch/root action")
             return 1
 
         def looks_like_arg(arg):
-            return arg.startswith('--') and arg.count('=') == 1
+            return arg.startswith("--") and arg.count("=") == 1
 
         bad_parms = [x for x in argv[2:] if not looks_like_arg(x)]
         if bad_parms:
-            print('Got bad arguments %s' % bad_parms)
+            print("Got bad arguments %s" % bad_parms)
             return 1
 
         method = methods[argv[1]]
-        props = dict(x.split('=', 1) for x in (y.lstrip('-') for y in argv[2:]))
+        props = dict(x.split("=", 1) for x in (y.lstrip("-") for y in argv[2:]))
 
         self.output(method(props))
 

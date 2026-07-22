@@ -27,11 +27,11 @@ import gclient_utils
 import scm
 import subprocess2
 
-DEFAULT_BRANCH = 'main'
+DEFAULT_BRANCH = "main"
 
 
 def write(path, content):
-    f = open(path, 'wb')
+    f = open(path, "wb")
     f.write(content.encode())
     f.close()
 
@@ -43,15 +43,15 @@ def read_tree(tree_root):
     """Returns a dict of all the files in a tree. Defaults to self.root_dir."""
     tree = {}
     for root, dirs, files in os.walk(tree_root):
-        for d in filter(lambda x: x.startswith('.'), dirs):
+        for d in filter(lambda x: x.startswith("."), dirs):
             dirs.remove(d)
-        for f in [join(root, f) for f in files if not f.startswith('.')]:
-            filepath = f[len(tree_root) + 1:].replace(os.sep, '/')
+        for f in [join(root, f) for f in files if not f.startswith(".")]:
+            filepath = f[len(tree_root) + 1 :].replace(os.sep, "/")
             assert len(filepath) > 0, f
             if tarfile.is_tarfile(join(root, f)):
-                tree[filepath] = 'tarfile'
+                tree[filepath] = "tarfile"
                 continue
-            with io.open(join(root, f), encoding='utf-8') as f:
+            with io.open(join(root, f), encoding="utf-8") as f:
                 tree[filepath] = f.read()
     return tree
 
@@ -71,13 +71,15 @@ def dict_diff(dict1, dict2):
 
 def commit_git(repo):
     """Commits the changes and returns the new hash."""
-    subprocess2.check_call(['git', 'add', '-A', '-f'], cwd=repo)
-    subprocess2.check_call(['git', 'commit', '-q', '--message', 'foo'],
-                           cwd=repo)
-    rev = subprocess2.check_output(['git', 'show-ref', '--head', 'HEAD'],
-                                   cwd=repo).split(b' ', 1)[0]
-    rev = rev.decode('utf-8')
-    logging.debug('At revision %s' % rev)
+    subprocess2.check_call(["git", "add", "-A", "-f"], cwd=repo)
+    subprocess2.check_call(
+        ["git", "commit", "-q", "--message", "foo"], cwd=repo
+    )
+    rev = subprocess2.check_output(
+        ["git", "show-ref", "--head", "HEAD"], cwd=repo
+    ).split(b" ", 1)[0]
+    rev = rev.decode("utf-8")
+    logging.debug("At revision %s" % rev)
     return rev
 
 
@@ -91,16 +93,17 @@ class FakeReposBase(object):
 
     populateGit() needs to be implemented by the subclass.
     """
+
     # Hostname
     NB_GIT_REPOS = 1
     USERS = [
-        ('user1@example.com', 'foo Fuß'),
-        ('user2@example.com', 'bar'),
+        ("user1@example.com", "foo Fuß"),
+        ("user2@example.com", "bar"),
     ]
 
     def __init__(self, host=None):
-        self.trial = trial_dir.TrialDir('repos')
-        self.host = host or '127.0.0.1'
+        self.trial = trial_dir.TrialDir("repos")
+        self.host = host or "127.0.0.1"
         # Format is { repo: [ None, (hash, tree), (hash, tree), ... ], ... }
         # so reference looks like self.git_hashes[repo][rev][0] for hash and
         # self.git_hashes[repo][rev][1] for it's tree snapshot.
@@ -120,7 +123,7 @@ class FakeReposBase(object):
             try:
                 # self.root_dir is not set before this call.
                 self.trial.set_up()
-                self.git_base = join(self.root_dir, 'git') + os.sep
+                self.git_base = join(self.root_dir, "git") + os.sep
             finally:
                 # Registers cleanup.
                 atexit.register(self.tear_down)
@@ -135,7 +138,7 @@ class FakeReposBase(object):
     def tear_down_git(self):
         if self.trial.SHOULD_LEAK:
             return False
-        logging.debug('Removing %s' % self.git_base)
+        logging.debug("Removing %s" % self.git_base)
         gclient_utils.rmtree(self.git_base)
         return True
 
@@ -144,8 +147,8 @@ class FakeReposBase(object):
         """For a dictionary of file contents, generate a filesystem."""
         if not os.path.isdir(root):
             os.makedirs(root)
-        for (k, v) in tree_dict.items():
-            k_os = k.replace('/', os.sep)
+        for k, v in tree_dict.items():
+            k_os = k.replace("/", os.sep)
             k_arr = k_os.split(os.sep)
             if len(k_arr) > 1:
                 p = os.sep.join([root] + k_arr[:-1])
@@ -162,45 +165,57 @@ class FakeReposBase(object):
         if self.initialized:
             return True
         try:
-            subprocess2.check_output(['git', '--version'])
+            subprocess2.check_output(["git", "--version"])
         except (OSError, subprocess2.CalledProcessError):
             return False
-        for repo in ['repo_%d' % r for r in range(1, self.NB_GIT_REPOS + 1)]:
-            subprocess2.check_call([
-                'git', 'init', '-b', DEFAULT_BRANCH, '-q',
-                join(self.git_base, repo)
-            ])
-            subprocess2.check_call([
-                'git',
-                '-C',
-                join(self.git_base, repo),
-                'config',
-                'user.name',
-                'Hina Hoshino',
-            ])
-            subprocess2.check_call([
-                'git',
-                '-C',
-                join(self.git_base, repo),
-                'config',
-                'user.email',
-                'testing@example.com',
-            ])
+        for repo in ["repo_%d" % r for r in range(1, self.NB_GIT_REPOS + 1)]:
+            subprocess2.check_call(
+                [
+                    "git",
+                    "init",
+                    "-b",
+                    DEFAULT_BRANCH,
+                    "-q",
+                    join(self.git_base, repo),
+                ]
+            )
+            subprocess2.check_call(
+                [
+                    "git",
+                    "-C",
+                    join(self.git_base, repo),
+                    "config",
+                    "user.name",
+                    "Hina Hoshino",
+                ]
+            )
+            subprocess2.check_call(
+                [
+                    "git",
+                    "-C",
+                    join(self.git_base, repo),
+                    "config",
+                    "user.email",
+                    "testing@example.com",
+                ]
+            )
             self.git_hashes[repo] = [(None, None)]
         self.populateGit()
         self.initialized = True
         return True
 
     def _git_rev_parse(self, path):
-        return subprocess2.check_output(['git', 'rev-parse', 'HEAD'],
-                                        cwd=path).strip()
+        return subprocess2.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=path
+        ).strip()
 
     def _commit_git(self, repo, tree, base=None):
         repo_root = join(self.git_base, repo)
         if base:
             base_commit = self.git_hashes[repo][base][0]
-            subprocess2.check_call(['git', 'checkout', base_commit],
-                                   cwd=repo_root)
+            subprocess2.check_call(
+                ["git", "checkout", base_commit], cwd=repo_root
+            )
         self._genTree(repo_root, tree)
         commit_hash = commit_git(repo_root)
         base = base or -1
@@ -214,15 +229,18 @@ class FakeReposBase(object):
     def _create_ref(self, repo, ref, revision):
         repo_root = join(self.git_base, repo)
         subprocess2.check_call(
-            ['git', 'update-ref', ref, self.git_hashes[repo][revision][0]],
-            cwd=repo_root)
+            ["git", "update-ref", ref, self.git_hashes[repo][revision][0]],
+            cwd=repo_root,
+        )
 
     def _fast_import_git(self, repo, data):
         repo_root = join(self.git_base, repo)
-        logging.debug('%s: fast-import %s', repo, data)
-        subprocess2.check_call(['git', 'fast-import', '--quiet'],
-                               cwd=repo_root,
-                               stdin=data.encode())
+        logging.debug("%s: fast-import %s", repo, data)
+        subprocess2.check_call(
+            ["git", "fast-import", "--quiet"],
+            cwd=repo_root,
+            stdin=data.encode(),
+        )
 
     def populateGit(self):
         raise NotImplementedError()
@@ -230,6 +248,7 @@ class FakeReposBase(object):
 
 class FakeRepos(FakeReposBase):
     """Implements populateGit()."""
+
     NB_GIT_REPOS = 24
 
     def populateGit(self):
@@ -243,18 +262,24 @@ class FakeRepos(FakeReposBase):
         # - hooks
         # TODO(maruel):
         # - use_relative_paths
-        self._commit_git('repo_3', {
-            'origin': 'git/repo_3@1\n',
-        })
-
-        self._commit_git('repo_3', {
-            'origin': 'git/repo_3@2\n',
-        })
+        self._commit_git(
+            "repo_3",
+            {
+                "origin": "git/repo_3@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_1',
+            "repo_3",
             {
-                'DEPS': """
+                "origin": "git/repo_3@2\n",
+            },
+        )
+
+        self._commit_git(
+            "repo_1",
+            {
+                "DEPS": """
 vars = {
   'DummyVariable': 'repo',
   'false_var': False,
@@ -291,24 +316,25 @@ deps_os = {
   'mac': {
     'src/repo4': '/repo_4',
   },
-}""" % {
-                    'git_base': self.git_base,
+}"""
+                % {
+                    "git_base": self.git_base,
                     # See self.__init__() for the format. Grab's the hash of the
                     # first commit in repo_2. Only keep the first 7 character
                     # because of: TODO(maruel): http://crosbug.com/3591 We need
                     # to strip the hash..  duh.
-                    'hash3': self.git_hashes['repo_3'][1][0][:7]
+                    "hash3": self.git_hashes["repo_3"][1][0][:7],
                 },
-                'origin': 'git/repo_1@1\n',
-                'foo bar': 'some file with a space',
-            })
+                "origin": "git/repo_1@1\n",
+                "foo bar": "some file with a space",
+            },
+        )
 
         self._commit_git(
-            'repo_2', {
-                'origin':
-                'git/repo_2@1\n',
-                'DEPS':
-                """
+            "repo_2",
+            {
+                "origin": "git/repo_2@1\n",
+                "DEPS": """
 vars = {
   'repo2_false_var': 'False',
 }
@@ -320,24 +346,34 @@ deps = {
   }
 }
 """,
-            })
-
-        self._commit_git('repo_2', {
-            'origin': 'git/repo_2@2\n',
-        })
-
-        self._commit_git('repo_4', {
-            'origin': 'git/repo_4@1\n',
-        })
-
-        self._commit_git('repo_4', {
-            'origin': 'git/repo_4@2\n',
-        })
+            },
+        )
 
         self._commit_git(
-            'repo_1',
+            "repo_2",
             {
-                'DEPS': """
+                "origin": "git/repo_2@2\n",
+            },
+        )
+
+        self._commit_git(
+            "repo_4",
+            {
+                "origin": "git/repo_4@1\n",
+            },
+        )
+
+        self._commit_git(
+            "repo_4",
+            {
+                "origin": "git/repo_4@2\n",
+            },
+        )
+
+        self._commit_git(
+            "repo_1",
+            {
+                "DEPS": """
 deps = {
   'src/repo2': %(git_base)r + 'repo_2@%(hash)s',
   'src/repo2/repo_renamed': '/repo_3',
@@ -361,21 +397,24 @@ hooks = [
                'open(\\'src/git_hooked2\\', \\'w\\').write(\\'git_hooked2\\')'],
   },
 ]
-""" % {
-                    'git_base': self.git_base,
+"""
+                % {
+                    "git_base": self.git_base,
                     # See self.__init__() for the format. Grab's the hash of the
                     # first commit in repo_2. Only keep the first 7 character
                     # because of: TODO(maruel): http://crosbug.com/3591 We need
                     # to strip the hash.. duh.
-                    'hash': self.git_hashes['repo_2'][1][0][:7]
+                    "hash": self.git_hashes["repo_2"][1][0][:7],
                 },
-                'origin': 'git/repo_1@2\n',
-            })
+                "origin": "git/repo_1@2\n",
+            },
+        )
 
-        self._commit_git('repo_5', {'origin': 'git/repo_5@1\n'})
+        self._commit_git("repo_5", {"origin": "git/repo_5@1\n"})
         self._commit_git(
-            'repo_5', {
-                'DEPS': """
+            "repo_5",
+            {
+                "DEPS": """
 deps = {
   'src/repo1': %(git_base)r + 'repo_1@%(hash1)s',
   'src/repo2': %(git_base)r + 'repo_2@%(hash2)s',
@@ -389,16 +428,19 @@ pre_deps_hooks = [
                'print("pre-deps hook"); open(\\'src/git_pre_deps_hooked\\', \\'w\\').write(\\'git_pre_deps_hooked\\')'],
   }
 ]
-""" % {
-                    'git_base': self.git_base,
-                    'hash1': self.git_hashes['repo_1'][2][0][:7],
-                    'hash2': self.git_hashes['repo_2'][1][0][:7],
+"""
+                % {
+                    "git_base": self.git_base,
+                    "hash1": self.git_hashes["repo_1"][2][0][:7],
+                    "hash2": self.git_hashes["repo_2"][1][0][:7],
                 },
-                'origin': 'git/repo_5@2\n',
-            })
+                "origin": "git/repo_5@2\n",
+            },
+        )
         self._commit_git(
-            'repo_5', {
-                'DEPS': """
+            "repo_5",
+            {
+                "DEPS": """
 deps = {
   'src/repo1': %(git_base)r + 'repo_1@%(hash1)s',
   'src/repo2': %(git_base)r + 'repo_2@%(hash2)s',
@@ -415,17 +457,20 @@ pre_deps_hooks = [
     'action': ['python3', '-c', 'import sys; sys.exit(1)'],
   }
 ]
-""" % {
-                    'git_base': self.git_base,
-                    'hash1': self.git_hashes['repo_1'][2][0][:7],
-                    'hash2': self.git_hashes['repo_2'][1][0][:7],
+"""
+                % {
+                    "git_base": self.git_base,
+                    "hash1": self.git_hashes["repo_1"][2][0][:7],
+                    "hash2": self.git_hashes["repo_2"][1][0][:7],
                 },
-                'origin': 'git/repo_5@3\n',
-            })
+                "origin": "git/repo_5@3\n",
+            },
+        )
 
         self._commit_git(
-            'repo_6', {
-                'DEPS': """
+            "repo_6",
+            {
+                "DEPS": """
 vars = {
   'DummyVariable': 'repo',
   'git_base': %(git_base)r,
@@ -518,16 +563,19 @@ recursedeps = [
   'src/repo8',
   'src/repo15',
   'src/repo16',
-]""" % {
-                    'git_base': self.git_base,
-                    'hash': self.git_hashes['repo_2'][1][0][:7]
+]"""
+                % {
+                    "git_base": self.git_base,
+                    "hash": self.git_hashes["repo_2"][1][0][:7],
                 },
-                'origin': 'git/repo_6@1\n',
-            })
+                "origin": "git/repo_6@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_7', {
-                'DEPS': """
+            "repo_7",
+            {
+                "DEPS": """
 vars = {
   'true_var': 'True',
   'false_var': 'true_var and False',
@@ -544,12 +592,14 @@ hooks = [
     'condition': 'false_var',
   },
 ]""",
-                'origin': 'git/repo_7@1\n',
-            })
+                "origin": "git/repo_7@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_8', {
-                'DEPS': """
+            "repo_8",
+            {
+                "DEPS": """
 deps_os ={
   'mac': {
     'src/recursed_os_repo': '/repo_5',
@@ -558,12 +608,14 @@ deps_os ={
     'src/recursed_os_repo': '/repo_5',
   },
 }""",
-                'origin': 'git/repo_8@1\n',
-            })
+                "origin": "git/repo_8@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_9', {
-                'DEPS': """
+            "repo_9",
+            {
+                "DEPS": """
 vars = {
   'str_var': 'xyz',
 }
@@ -590,12 +642,14 @@ recursedeps = [
   'src/repo4',
   'src/repo8',
 ]""",
-                'origin': 'git/repo_9@1\n',
-            })
+                "origin": "git/repo_9@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_10', {
-                'DEPS': """
+            "repo_10",
+            {
+                "DEPS": """
 gclient_gn_args_from = 'src/repo9'
 deps = {
   'src/repo9': '/repo_9',
@@ -617,24 +671,31 @@ recursedeps = [
   'src/repo9',
   'src/repo11',
 ]""",
-                'origin': 'git/repo_10@1\n',
-            })
+                "origin": "git/repo_10@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_11', {
-                'DEPS': """
+            "repo_11",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': '/repo_12',
 }""",
-                'origin': 'git/repo_11@1\n',
-            })
+                "origin": "git/repo_11@1\n",
+            },
+        )
 
-        self._commit_git('repo_12', {
-            'origin': 'git/repo_12@1\n',
-        })
+        self._commit_git(
+            "repo_12",
+            {
+                "origin": "git/repo_12@1\n",
+            },
+        )
 
         self._fast_import_git(
-            'repo_12', """blob
+            "repo_12",
+            """blob
 mark :1
 data 6
 Hello
@@ -653,30 +714,36 @@ data 8
 A and B
 M 100644 :1 a
 M 100644 :2 b
-""")
+""",
+        )
 
         self._commit_git(
-            'repo_13', {
-                'DEPS': """
+            "repo_13",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': '/repo_12',
 }""",
-                'origin': 'git/repo_13@1\n',
-            })
+                "origin": "git/repo_13@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_13', {
-                'DEPS': """
+            "repo_13",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': '/repo_12@refs/changes/1212',
 }""",
-                'origin': 'git/repo_13@2\n',
-            })
+                "origin": "git/repo_13@2\n",
+            },
+        )
 
         # src/repo12 is now a CIPD dependency.
         self._commit_git(
-            'repo_13', {
-                'DEPS': """
+            "repo_13",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': {
     'packages': [
@@ -693,13 +760,14 @@ hooks = [{
   'action': ['python3', '-c', 'with open("src/repo12/_cipd"): pass'],
 }]
 """,
-                'origin': 'git/repo_13@3\n'
-            })
+                "origin": "git/repo_13@3\n",
+            },
+        )
 
         self._commit_git(
-            'repo_14', {
-                'DEPS':
-                textwrap.dedent("""\
+            "repo_14",
+            {
+                "DEPS": textwrap.dedent("""\
         vars = {}
         deps = {
           'src/cipd_dep': {
@@ -734,44 +802,43 @@ hooks = [{
             'dep_type': 'cipd',
           },
         }"""),
-                'origin':
-                'git/repo_14@2\n'
-            })
+                "origin": "git/repo_14@2\n",
+            },
+        )
 
         # A repo with a hook to be recursed in, without use_relative_paths
         self._commit_git(
-            'repo_15', {
-                'DEPS':
-                textwrap.dedent("""\
+            "repo_15",
+            {
+                "DEPS": textwrap.dedent("""\
         hooks = [{
           "name": "absolute_cwd",
           "pattern": ".",
           "action": ["python3", "-c", "pass"]
         }]"""),
-                'origin':
-                'git/repo_15@2\n'
-            })
+                "origin": "git/repo_15@2\n",
+            },
+        )
         # A repo with a hook to be recursed in, with use_relative_paths
         self._commit_git(
-            'repo_16', {
-                'DEPS':
-                textwrap.dedent("""\
+            "repo_16",
+            {
+                "DEPS": textwrap.dedent("""\
         use_relative_paths=True
         hooks = [{
           "name": "relative_cwd",
           "pattern": ".",
           "action": ["python3", "relative.py"]
         }]"""),
-                'relative.py':
-                'pass',
-                'origin':
-                'git/repo_16@2\n'
-            })
+                "relative.py": "pass",
+                "origin": "git/repo_16@2\n",
+            },
+        )
         # A repo with a gclient_gn_args_file and use_relative_paths
         self._commit_git(
-            'repo_17', {
-                'DEPS':
-                textwrap.dedent("""\
+            "repo_17",
+            {
+                "DEPS": textwrap.dedent("""\
         use_relative_paths=True
         vars = {
           'toto': 'tata',
@@ -780,14 +847,14 @@ hooks = [{
         gclient_gn_args = [
           'toto',
         ]"""),
-                'origin':
-                'git/repo_17@2\n'
-            })
+                "origin": "git/repo_17@2\n",
+            },
+        )
 
         self._commit_git(
-            'repo_18', {
-                'DEPS':
-                textwrap.dedent("""\
+            "repo_18",
+            {
+                "DEPS": textwrap.dedent("""\
         deps = {
           'src/cipd_dep': {
             'packages': [
@@ -807,14 +874,15 @@ hooks = [{
             'dep_type': 'cipd',
           },
         }"""),
-                'origin':
-                'git/repo_18@2\n'
-            })
+                "origin": "git/repo_18@2\n",
+            },
+        )
 
         # a relative path repo
         self._commit_git(
-            'repo_19', {
-                'DEPS': """
+            "repo_19",
+            {
+                "DEPS": """
 
 git_dependencies = "SUBMODULES"
 use_relative_paths = True
@@ -843,16 +911,19 @@ deps = {
 
 recursedeps = [
   'chicken/dickens',
-]""" % {
-                    'hash_2': self.git_hashes['repo_2'][1][0],
-                    'hash_3': self.git_hashes['repo_3'][1][0],
+]"""
+                % {
+                    "hash_2": self.git_hashes["repo_2"][1][0],
+                    "hash_3": self.git_hashes["repo_3"][1][0],
                 },
-            })
+            },
+        )
 
         # a non-relative_path repo
         self._commit_git(
-            'repo_20', {
-                'DEPS': """
+            "repo_20",
+            {
+                "DEPS": """
 
 git_dependencies = "SUBMODULES"
 vars = {
@@ -881,39 +952,40 @@ deps = {
 recursedeps = [
   'foo/chicken/dickens',
 ]
-""" % {
-                    'hash_2': self.git_hashes['repo_2'][1][0],
-                    'hash_3': self.git_hashes['repo_3'][1][0],
+"""
+                % {
+                    "hash_2": self.git_hashes["repo_2"][1][0],
+                    "hash_3": self.git_hashes["repo_3"][1][0],
                 },
-            })
+            },
+        )
 
         # gitmodules already present, test migration, .git suffix
         self._commit_git(
-            'repo_21',
+            "repo_21",
             {
-                'DEPS':
-                """
+                "DEPS": """
 use_relative_paths = True
 git_dependencies = "SYNC"
 deps = {
   "bar": {
     "url": 'https://example.googlesource.com/repo.git@%(hash)s',
   },
-}""" % {
-                    'hash': self.git_hashes['repo_2'][1][0],
+}"""
+                % {
+                    "hash": self.git_hashes["repo_2"][1][0],
                 },
-                '.gitmodules':
-                """
+                ".gitmodules": """
 [submodule "bar"]
 	path = bar
-	url = invalid/repo_url.git"""
+	url = invalid/repo_url.git""",
             },
         )
 
         self._commit_git(
-            'repo_22', {
-                'DEPS':
-                textwrap.dedent("""\
+            "repo_22",
+            {
+                "DEPS": textwrap.dedent("""\
         vars = {}
         deps = {
           'src/gcs_dep': {
@@ -969,32 +1041,37 @@ deps = {
             }]
           },
         }"""),
-                'origin':
-                'git/repo_22@1\n'
-            })
+                "origin": "git/repo_22@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_23', {
-                'DEPS': """
+            "repo_23",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': '/repo_12',
 }""",
-                'origin': 'git/repo_23@1\n',
-            })
+                "origin": "git/repo_23@1\n",
+            },
+        )
 
         self._commit_git(
-            'repo_23', {
-                'DEPS': """
+            "repo_23",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': '/repo_12@refs/changes/1212',
 }""",
-                'origin': 'git/repo_23@2\n',
-            })
+                "origin": "git/repo_23@2\n",
+            },
+        )
 
         # src/repo12 is now a GCS dependency.
         self._commit_git(
-            'repo_23', {
-                'DEPS': """
+            "repo_23",
+            {
+                "DEPS": """
 deps = {
   'src/repo12': {
     'bucket': 'bucket123',
@@ -1008,15 +1085,15 @@ deps = {
   },
 }
 """,
-                'origin': 'git/repo_23@3\n'
-            })
+                "origin": "git/repo_23@3\n",
+            },
+        )
 
         # gitmodules already present, test migration, gclient-recursedeps
         self._commit_git(
-            'repo_24',
+            "repo_24",
             {
-                'DEPS':
-                """
+                "DEPS": """
 use_relative_paths = True
 git_dependencies = "SYNC"
 deps = {
@@ -1027,14 +1104,14 @@ deps = {
 
 recursedeps = [
   'bar',
-]""" % {
-                    'hash': self.git_hashes['repo_2'][1][0],
+]"""
+                % {
+                    "hash": self.git_hashes["repo_2"][1][0],
                 },
-                '.gitmodules':
-                """
+                ".gitmodules": """
 [submodule "bar"]
 	path = bar
-	url = https://example.googlesource.com/repo"""
+	url = https://example.googlesource.com/repo""",
             },
         )  # Update `NB_GIT_REPOS` if you add more repos.
 
@@ -1057,41 +1134,48 @@ class FakeRepoSkiaDEPS(FakeReposBase):
     def populateGit(self):
         # Skia repo.
         self._commit_git(
-            'repo_1', {
-                'skia_base_file': 'root-level file.',
-                'gyp/gyp_file': 'file in the gyp directory',
-                'include/include_file': 'file in the include directory',
-                'src/src_file': 'file in the src directory',
-            })
+            "repo_1",
+            {
+                "skia_base_file": "root-level file.",
+                "gyp/gyp_file": "file in the gyp directory",
+                "include/include_file": "file in the include directory",
+                "src/src_file": "file in the src directory",
+            },
+        )
         self._commit_git(
-            'repo_3',
+            "repo_3",
             {  # skia/gyp
-                'gyp_file': 'file in the gyp directory',
-            })
-        self._commit_git('repo_4', { # skia/include
-            'include_file': 'file in the include directory',
-        })
+                "gyp_file": "file in the gyp directory",
+            },
+        )
         self._commit_git(
-            'repo_5',
+            "repo_4",
+            {  # skia/include
+                "include_file": "file in the include directory",
+            },
+        )
+        self._commit_git(
+            "repo_5",
             {  # skia/src
-                'src_file': 'file in the src directory',
-            })
+                "src_file": "file in the src directory",
+            },
+        )
 
         # Chrome repo.
         self._commit_git(
-            'repo_2', {
-                'DEPS': self.DEPS_git_pre % {
-                    'git_base': self.git_base
-                },
-                'myfile': 'src/trunk/src@1'
-            })
+            "repo_2",
+            {
+                "DEPS": self.DEPS_git_pre % {"git_base": self.git_base},
+                "myfile": "src/trunk/src@1",
+            },
+        )
         self._commit_git(
-            'repo_2', {
-                'DEPS': self.DEPS_post % {
-                    'git_base': self.git_base
-                },
-                'myfile': 'src/trunk/src@2'
-            })
+            "repo_2",
+            {
+                "DEPS": self.DEPS_post % {"git_base": self.git_base},
+                "myfile": "src/trunk/src@2",
+            },
+        )
 
 
 class FakeRepoBlinkDEPS(FakeReposBase):
@@ -1099,38 +1183,39 @@ class FakeRepoBlinkDEPS(FakeReposBase):
 
     NB_GIT_REPOS = 2
     DEPS_pre = 'deps = {"src/third_party/WebKit": "%(git_base)srepo_2",}'
-    DEPS_post = 'deps = {}'
+    DEPS_post = "deps = {}"
 
     def populateGit(self):
         # Blink repo.
         self._commit_git(
-            'repo_2', {
-                'OWNERS': 'OWNERS-pre',
-                'Source/exists_always': '_ignored_',
-                'Source/exists_before_but_not_after': '_ignored_',
-            })
+            "repo_2",
+            {
+                "OWNERS": "OWNERS-pre",
+                "Source/exists_always": "_ignored_",
+                "Source/exists_before_but_not_after": "_ignored_",
+            },
+        )
 
         # Chrome repo.
         self._commit_git(
-            'repo_1', {
-                'DEPS': self.DEPS_pre % {
-                    'git_base': self.git_base
-                },
-                'myfile': 'myfile@1',
-                '.gitignore': '/third_party/WebKit',
-            })
+            "repo_1",
+            {
+                "DEPS": self.DEPS_pre % {"git_base": self.git_base},
+                "myfile": "myfile@1",
+                ".gitignore": "/third_party/WebKit",
+            },
+        )
         self._commit_git(
-            'repo_1', {
-                'DEPS': self.DEPS_post % {
-                    'git_base': self.git_base
-                },
-                'myfile': 'myfile@2',
-                '.gitignore': '',
-                'third_party/WebKit/OWNERS': 'OWNERS-post',
-                'third_party/WebKit/Source/exists_always': '_ignored_',
-                'third_party/WebKit/Source/exists_after_but_not_before':
-                '_ignored',
-            })
+            "repo_1",
+            {
+                "DEPS": self.DEPS_post % {"git_base": self.git_base},
+                "myfile": "myfile@2",
+                ".gitignore": "",
+                "third_party/WebKit/OWNERS": "OWNERS-post",
+                "third_party/WebKit/Source/exists_always": "_ignored_",
+                "third_party/WebKit/Source/exists_after_but_not_before": "_ignored",
+            },
+        )
 
     def populateSvn(self):
         raise NotImplementedError()
@@ -1142,59 +1227,68 @@ class FakeRepoNoSyncDEPS(FakeReposBase):
     NB_GIT_REPOS = 2
 
     def populateGit(self):
-        self._commit_git('repo_2', {'myfile': 'then egg'})
-        self._commit_git('repo_2', {'myfile': 'before egg!'})
+        self._commit_git("repo_2", {"myfile": "then egg"})
+        self._commit_git("repo_2", {"myfile": "before egg!"})
 
         self._commit_git(
-            'repo_1', {
-                'DEPS':
-                textwrap.dedent(
+            "repo_1",
+            {
+                "DEPS": textwrap.dedent(
                     """\
           deps = {
             'src/repo2': {
               'url': %(git_base)r + 'repo_2@%(repo2hash)s',
             },
-          }""" % {
-                        'git_base': self.git_base,
-                        'repo2hash': self.git_hashes['repo_2'][1][0][:7]
-                    })
-            })
+          }"""
+                    % {
+                        "git_base": self.git_base,
+                        "repo2hash": self.git_hashes["repo_2"][1][0][:7],
+                    }
+                )
+            },
+        )
         self._commit_git(
-            'repo_1', {
-                'DEPS':
-                textwrap.dedent(
+            "repo_1",
+            {
+                "DEPS": textwrap.dedent(
                     """\
           deps = {
             'src/repo2': {
               'url': %(git_base)r + 'repo_2@%(repo2hash)s',
             },
-          }""" % {
-                        'git_base': self.git_base,
-                        'repo2hash': self.git_hashes['repo_2'][2][0][:7]
-                    })
-            })
+          }"""
+                    % {
+                        "git_base": self.git_base,
+                        "repo2hash": self.git_hashes["repo_2"][2][0][:7],
+                    }
+                )
+            },
+        )
         self._commit_git(
-            'repo_1', {
-                'foo_file':
-                'chicken content',
-                'DEPS':
-                textwrap.dedent(
+            "repo_1",
+            {
+                "foo_file": "chicken content",
+                "DEPS": textwrap.dedent(
                     """\
           deps = {
             'src/repo2': {
               'url': %(git_base)r + 'repo_2@%(repo2hash)s',
             },
-          }""" % {
-                        'git_base': self.git_base,
-                        'repo2hash': self.git_hashes['repo_2'][1][0][:7]
-                    })
-            })
+          }"""
+                    % {
+                        "git_base": self.git_base,
+                        "repo2hash": self.git_hashes["repo_2"][1][0][:7],
+                    }
+                ),
+            },
+        )
 
-        self._commit_git('repo_1', {'foo_file': 'chicken content@4'})
+        self._commit_git("repo_1", {"foo_file": "chicken content@4"})
 
 
 class FakeReposTestBase(trial_dir.TestCase):
     """This is vaguely inspired by twisted."""
+
     # Static FakeRepos instances. Lazy loaded.
     CACHED_FAKE_REPOS = {}
     # Override if necessary.
@@ -1203,8 +1297,9 @@ class FakeReposTestBase(trial_dir.TestCase):
     def setUp(self):
         super(FakeReposTestBase, self).setUp()
         if not self.FAKE_REPOS_CLASS in self.CACHED_FAKE_REPOS:
-            self.CACHED_FAKE_REPOS[
-                self.FAKE_REPOS_CLASS] = self.FAKE_REPOS_CLASS()
+            self.CACHED_FAKE_REPOS[self.FAKE_REPOS_CLASS] = (
+                self.FAKE_REPOS_CLASS()
+            )
         self.FAKE_REPOS = self.CACHED_FAKE_REPOS[self.FAKE_REPOS_CLASS]
         # No need to call self.FAKE_REPOS.setUp(), it will be called by the
         # child class. Do not define tearDown(), since super's version does the
@@ -1224,7 +1319,7 @@ class FakeReposTestBase(trial_dir.TestCase):
                 expected = expected[1:]
                 result = result[1:]
             # The exception trace makes it hard to read so dump it too.
-            if '\n' in result:
+            if "\n" in result:
                 print(result)
         self.assertEqual(expected, result, msg)
 
@@ -1247,10 +1342,10 @@ class FakeReposTestBase(trial_dir.TestCase):
         result on disk."""
         result = {}
         for item, new_root in args:
-            repo, rev = item.split('@', 1)
+            repo, rev = item.split("@", 1)
             tree = self.gittree(repo, rev)
             for k, v in tree.items():
-                path = join(new_root, k).replace(os.sep, '/')
+                path = join(new_root, k).replace(os.sep, "/")
                 result[path] = v
         return result
 
@@ -1264,21 +1359,22 @@ class FakeReposTestBase(trial_dir.TestCase):
 
     def gitrevparse(self, repo):
         """Returns the actual revision for a given repo."""
-        return self.FAKE_REPOS._git_rev_parse(repo).decode('utf-8')
+        return self.FAKE_REPOS._git_rev_parse(repo).decode("utf-8")
 
 
 def main(argv):
     fake = FakeRepos()
-    print('Using %s' % fake.root_dir)
+    print("Using %s" % fake.root_dir)
     try:
         fake.set_up_git()
         print(
-            'Fake setup, press enter to quit or Ctrl-C to keep the checkouts.')
+            "Fake setup, press enter to quit or Ctrl-C to keep the checkouts."
+        )
         sys.stdin.readline()
     except KeyboardInterrupt:
         trial_dir.TrialDir.SHOULD_LEAK.leak = True
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

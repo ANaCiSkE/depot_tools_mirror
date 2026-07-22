@@ -11,23 +11,24 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class Infra(config_util.Config):
     """Basic Config class for the Infrastructure repositories."""
+
     @staticmethod
     def fetch_spec(props):
         return {
-            'alias': {
-                'config': 'infra_superproject',
-                'props': [],
+            "alias": {
+                "config": "infra_superproject",
+                "props": [],
             },
         }
 
     @staticmethod
     def expected_root(_props):
-        return ''
+        return ""
 
 
 def main(argv=None):
     return Infra().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

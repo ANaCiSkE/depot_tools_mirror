@@ -11,36 +11,39 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class NaCl(config_util.Config):
     """Basic Config class for NaCl."""
+
     @staticmethod
     def fetch_spec(props):
-        url = ('https://chromium.googlesource.com/native_client/'
-               'src/native_client.git')
+        url = (
+            "https://chromium.googlesource.com/native_client/"
+            "src/native_client.git"
+        )
         solution = {
-            'name': 'native_client',
-            'url': url,
-            'deps_file': 'DEPS',
-            'custom_deps': {},
+            "name": "native_client",
+            "url": url,
+            "deps_file": "DEPS",
+            "custom_deps": {},
         }
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
-        if props.get('target_os'):
-            spec['target_os'] = props['target_os'].split(',')
-        if props.get('target_os_only'):
-            spec['target_os_only'] = props['target_os_only']
+        if props.get("target_os"):
+            spec["target_os"] = props["target_os"].split(",")
+        if props.get("target_os_only"):
+            spec["target_os_only"] = props["target_os_only"]
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'native_client'
+        return "native_client"
 
 
 def main(argv=None):
     return NaCl().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

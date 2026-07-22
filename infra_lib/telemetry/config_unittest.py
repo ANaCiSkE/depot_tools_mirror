@@ -20,7 +20,7 @@ class ConfigTest(unittest.TestCase):
             path = pathlib.Path(temp) / "telemetry.cfg"
             cfg = config.Config(path)
 
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 content = f.read()
                 self.assertIn("[root]\nnotice_countdown = 9", content)
                 self.assertIn("[trace]", content)
@@ -36,7 +36,7 @@ class ConfigTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             path = pathlib.Path(temp) / "telemetry.cfg"
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 f.write(
                     "[root]\nnotice_countdown = 3\n\n[trace]\nenabled = True\n\n"
                 )
@@ -51,7 +51,7 @@ class ConfigTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             path = pathlib.Path(temp) / "telemetry.cfg"
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 f.write(
                     "[root]\nnotice_countdown = 7\n\n[trace]\nenabled = True\n\n"
                 )
@@ -62,13 +62,15 @@ class ConfigTest(unittest.TestCase):
             cfg.root_config.update(notice_countdown=9)
             cfg.flush()
 
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 file = f.read()
                 self.assertIn(
-                    "\n".join([
-                        "[root]",
-                        "notice_countdown = 9",
-                    ]),
+                    "\n".join(
+                        [
+                            "[root]",
+                            "notice_countdown = 9",
+                        ]
+                    ),
                     file,
                 )
                 self.assertIn("[trace]", file)
@@ -133,5 +135,5 @@ def test_root_config() -> None:
     assert root_config.notice_countdown == 9
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

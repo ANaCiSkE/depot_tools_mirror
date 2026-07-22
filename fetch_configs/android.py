@@ -11,23 +11,24 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class Android(config_util.Config):
     """Basic Config alias for Android -> Chromium."""
+
     @staticmethod
     def fetch_spec(props):
         return {
-            'alias': {
-                'config': 'chromium',
-                'props': ['--target_os=android'],
+            "alias": {
+                "config": "chromium",
+                "props": ["--target_os=android"],
             },
         }
 
     @staticmethod
     def expected_root(_props):
-        return ''
+        return ""
 
 
 def main(argv=None):
     return Android().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

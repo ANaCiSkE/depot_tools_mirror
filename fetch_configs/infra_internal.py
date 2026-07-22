@@ -11,25 +11,26 @@ import config_util  # pylint: disable=import-error
 # pylint: disable=no-init
 class InfraInternal(config_util.Config):
     """Basic Config class for the whole set of Infrastructure repositories."""
+
     @staticmethod
     def fetch_spec(_props):
         return {
-            'alias': {
-                'config': 'infra_superproject',
-                'props': [
-                    '--checkout_internal=True',
+            "alias": {
+                "config": "infra_superproject",
+                "props": [
+                    "--checkout_internal=True",
                 ],
             },
         }
 
     @staticmethod
     def expected_root(_props):
-        return ''
+        return ""
 
 
 def main(argv=None):
     return InfraInternal().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

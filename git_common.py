@@ -11,7 +11,7 @@ import threading
 from multiprocessing.pool import IMapIterator
 import from_third_party
 
-colorama = from_third_party.import_module('colorama')
+colorama = from_third_party.import_module("colorama")
 
 
 def wrapper(func):
@@ -56,13 +56,13 @@ import subprocess2
 from io import BytesIO
 
 ROOT = os.path.abspath(os.path.dirname(__file__))
-IS_WIN = sys.platform == 'win32'
+IS_WIN = sys.platform == "win32"
 TEST_MODE = False
 
 
 def win_find_git() -> str:
-    for elem in os.environ.get('PATH', '').split(os.pathsep):
-        for candidate in ('git.exe', 'git.bat'):
+    for elem in os.environ.get("PATH", "").split(os.pathsep):
+        for candidate in ("git.exe", "git.bat"):
             path = os.path.join(elem, candidate)
             if os.path.isfile(path):
                 # shell=True or invoking git.bat causes Windows to invoke
@@ -70,10 +70,10 @@ def win_find_git() -> str:
                 # overhead (most visible in the "update" stage of gclient sync)
                 # so we want to avoid it whenever possible, by extracting the
                 # path to git.exe from git.bat in depot_tools.
-                if candidate == 'git.bat':
+                if candidate == "git.bat":
                     path = _extract_git_path_from_git_bat(path)
                 return path
-    raise ValueError('Could not find Git on PATH.')
+    raise ValueError("Could not find Git on PATH.")
 
 
 def _extract_git_path_from_git_bat(path: str) -> str:
@@ -86,32 +86,33 @@ def _extract_git_path_from_git_bat(path: str) -> str:
         The absolute path to git.exe if extraction succeeded,
         otherwise returns the input path to git.bat.
     """
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         git_bat = f.readlines()
         if git_bat[-1].endswith('" %*\n'):
             if git_bat[-1].startswith('"%~dp0'):
                 # Handle relative path.
-                new_path = os.path.join(os.path.dirname(path),
-                                        git_bat[-1][6:-5])
+                new_path = os.path.join(
+                    os.path.dirname(path), git_bat[-1][6:-5]
+                )
             elif git_bat[-1].startswith('"'):
                 # Handle absolute path.
                 new_path = git_bat[-1][1:-5]
 
-            if new_path.endswith('.exe'):
+            if new_path.endswith(".exe"):
                 return new_path
     return path
 
 
-GIT_EXE = 'git' if not IS_WIN else win_find_git()
+GIT_EXE = "git" if not IS_WIN else win_find_git()
 
 # The recommended minimum version of Git, as (<major>, <minor>, <patch>).
 GIT_MIN_VERSION = (2, 46, 0)
 
-GIT_BLAME_IGNORE_REV_FILE = '.git-blame-ignore-revs'
+GIT_BLAME_IGNORE_REV_FILE = ".git-blame-ignore-revs"
 
-FREEZE = 'FREEZE'
-FREEZE_SECTIONS = {'indexed': 'soft', 'unindexed': 'mixed'}
-FREEZE_MATCHER = re.compile(r'%s.(%s)' % (FREEZE, '|'.join(FREEZE_SECTIONS)))
+FREEZE = "FREEZE"
+FREEZE_SECTIONS = {"indexed": "soft", "unindexed": "mixed"}
+FREEZE_MATCHER = re.compile(r"%s.(%s)" % (FREEZE, "|".join(FREEZE_SECTIONS)))
 
 # NOTE: This list is DEPRECATED in favor of the Infra Git wrapper:
 # https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tools/git
@@ -130,48 +131,38 @@ FREEZE_MATCHER = re.compile(r'%s.(%s)' % (FREEZE, '|'.join(FREEZE_SECTIONS)))
 # It was last imported from '7add3ac29564d98ac35ce426bc295e743e7c0c02'.
 GIT_TRANSIENT_ERRORS = (
     # crbug.com/285832
-    r'!.*\[remote rejected\].*\(error in hook\)',
-
+    r"!.*\[remote rejected\].*\(error in hook\)",
     # crbug.com/289932
-    r'!.*\[remote rejected\].*\(failed to lock\)',
-
+    r"!.*\[remote rejected\].*\(failed to lock\)",
     # crbug.com/307156
-    r'!.*\[remote rejected\].*\(error in Gerrit backend\)',
-
+    r"!.*\[remote rejected\].*\(error in Gerrit backend\)",
     # crbug.com/285832
-    r'remote error: Internal Server Error',
-
+    r"remote error: Internal Server Error",
     # crbug.com/294449
-    r'fatal: Couldn\'t find remote ref ',
-
+    r"fatal: Couldn\'t find remote ref ",
     # crbug.com/220543
-    r'git fetch_pack: expected ACK/NAK, got',
-
+    r"git fetch_pack: expected ACK/NAK, got",
     # crbug.com/189455
-    r'protocol error: bad pack header',
-
+    r"protocol error: bad pack header",
     # crbug.com/202807
-    r'The remote end hung up unexpectedly',
-
+    r"The remote end hung up unexpectedly",
     # crbug.com/298189
-    r'TLS packet with unexpected length was received',
-
+    r"TLS packet with unexpected length was received",
     # crbug.com/187444
-    r'RPC failed; result=\d+, HTTP code = \d+',
-
+    r"RPC failed; result=\d+, HTTP code = \d+",
     # crbug.com/388876
-    r'Connection timed out',
-
+    r"Connection timed out",
     # crbug.com/430343
     # TODO(dnj): Resync with Chromite.
-    r'The requested URL returned error: 5\d+',
-    r'Connection reset by peer',
-    r'Unable to look up',
-    r'Couldn\'t resolve host',
+    r"The requested URL returned error: 5\d+",
+    r"Connection reset by peer",
+    r"Unable to look up",
+    r"Couldn\'t resolve host",
 )
 
-GIT_TRANSIENT_ERRORS_RE = re.compile('|'.join(GIT_TRANSIENT_ERRORS),
-                                     re.IGNORECASE)
+GIT_TRANSIENT_ERRORS_RE = re.compile(
+    "|".join(GIT_TRANSIENT_ERRORS), re.IGNORECASE
+)
 
 # git's for-each-ref command first supported the upstream:track token in its
 # format string in version 1.9.0, but some usages were broken until 2.3.0.
@@ -181,7 +172,7 @@ MIN_UPSTREAM_TRACK_GIT_VERSION = (2, 3)
 
 class BadCommitRefException(Exception):
     def __init__(self, refs):
-        msg = ('one of %s does not seem to be a valid commitref.' % str(refs))
+        msg = "one of %s does not seem to be a valid commitref." % str(refs)
         super(BadCommitRefException, self).__init__(msg)
 
 
@@ -190,7 +181,6 @@ class UnsupportedRefStorageError(Exception):
 
 
 class _MemoizeWrapper(object):
-
     def __init__(self, f: Callable[[Any], Any], *, threadsafe: bool):
         self._f: Callable[[Any], Any] = f
         self._cache: dict[Any, Any] = {}
@@ -241,6 +231,7 @@ def memoize_one(*, threadsafe: bool):
             unittests.
         * update(other) - Updates the contents of the cache from another dict.
     """
+
     def decorator(f):
         # Instantiate the lock in decorator, in case users of memoize_one do:
         #
@@ -278,12 +269,12 @@ def ScopedPool(*args, **kwargs):
         kind ('threads', 'procs') - The type of underlying coprocess to use.
         **etc - Arguments to multiprocessing.pool
     """
-    if kwargs.pop('kind', None) == 'threads':
+    if kwargs.pop("kind", None) == "threads":
         pool = multiprocessing.pool.ThreadPool(*args, **kwargs)
     else:
-        orig, orig_args = kwargs.get('initializer'), kwargs.get('initargs', ())
-        kwargs['initializer'] = _ScopedPool_initer
-        kwargs['initargs'] = orig, orig_args
+        orig, orig_args = kwargs.get("initializer"), kwargs.get("initargs", ())
+        kwargs["initializer"] = _ScopedPool_initer
+        kwargs["initargs"] = orig, orig_args
         pool = multiprocessing.pool.Pool(*args, **kwargs)
 
     try:
@@ -298,6 +289,7 @@ def ScopedPool(*args, **kwargs):
 
 class ProgressPrinter(object):
     """Threaded single-stat status message printer."""
+
     def __init__(self, fmt, enabled=None, fout=sys.stderr, period=0.5):
         """Create a ProgressPrinter.
 
@@ -333,15 +325,15 @@ class ProgressPrinter(object):
 
     def _emit(self, s):
         if self.enabled:
-            self._stream.write('\r' + s)
+            self._stream.write("\r" + s)
             self._stream.flush()
 
     def _run(self):
         with self._dead_cond:
             while not self._dead:
-                self._emit(self.fmt % {'count': self._count})
+                self._emit(self.fmt % {"count": self._count})
                 self._dead_cond.wait(self._period)
-                self._emit((self.fmt + '\n') % {'count': self._count})
+                self._emit((self.fmt + "\n") % {"count": self._count})
 
     def inc(self, amount=1):
         self._count += amount
@@ -373,7 +365,7 @@ def once(function):
 
 def unicode_repr(s):
     result = repr(s)
-    return result[1:] if result.startswith('u') else result
+    return result[1:] if result.startswith("u") else result
 
 
 ## Git functions
@@ -385,27 +377,27 @@ def die(message, *args):
 
 
 def blame(filename, revision=None, porcelain=False, abbrev=None, *_args):
-    command = ['blame']
+    command = ["blame"]
     if porcelain:
-        command.append('-p')
+        command.append("-p")
     if revision is not None:
         command.append(revision)
     if abbrev is not None:
-        command.append('--abbrev=%d' % abbrev)
-    command.extend(['--', filename])
+        command.append("--abbrev=%d" % abbrev)
+    command.extend(["--", filename])
     return run(*command)
 
 
-def branch_config(branch: str,
-                  option: str,
-                  default: Optional[str] = None) -> Optional[str]:
-    return get_config('branch.%s.%s' % (branch, option), default=default)
+def branch_config(
+    branch: str, option: str, default: Optional[str] = None
+) -> Optional[str]:
+    return get_config("branch.%s.%s" % (branch, option), default=default)
 
 
 def branch_config_map(option):
     """Return {branch: <|option| value>} for all branches."""
     try:
-        reg = re.compile(r'^branch\.(.*)\.%s$' % option)
+        reg = re.compile(r"^branch\.(.*)\.%s$" % option)
         return {
             m.group(1): v
             for k, v in get_config_regexp(reg.pattern)
@@ -416,12 +408,12 @@ def branch_config_map(option):
 
 
 def branches(use_limit=True, *args):
-    NO_BRANCH = ('* (no branch', '* (detached', '* (HEAD detached')
+    NO_BRANCH = ("* (no branch", "* (detached", "* (HEAD detached")
 
-    key = 'depot-tools.branch-limit'
+    key = "depot-tools.branch-limit"
     limit = get_config_int(key, 20)
 
-    output = run('branch', *args)
+    output = run("branch", *args)
     assert isinstance(output, str)
     raw_branches = output.splitlines()
 
@@ -437,7 +429,11 @@ def branches(use_limit=True, *args):
 
       You may also try cleaning up your old branches by running:
       git cl archive
-      """, num, limit, key)
+      """,
+            num,
+            limit,
+            key,
+        )
 
     for line in raw_branches:
         if line.startswith(NO_BRANCH):
@@ -470,46 +466,48 @@ def get_config_regexp(pattern):
 
 def is_fsmonitor_enabled():
     """Returns true if core.fsmonitor is enabled in git config."""
-    fsmonitor = get_config('core.fsmonitor', 'False')
+    fsmonitor = get_config("core.fsmonitor", "False")
     assert isinstance(fsmonitor, str)
-    return fsmonitor.strip().lower() == 'true'
+    return fsmonitor.strip().lower() == "true"
 
 
 def warn_submodule():
     """Print warnings for submodules."""
     # TODO(crbug.com/1475405): Warn users if the project uses submodules and
     # they have fsmonitor enabled.
-    if sys.platform.startswith('darwin') and is_fsmonitor_enabled():
-        version_string = run('--version')
+    if sys.platform.startswith("darwin") and is_fsmonitor_enabled():
+        version_string = run("--version")
         assert isinstance(version_string, str)
-        if version_string.endswith('goog'):
+        if version_string.endswith("goog"):
             return
         version_tuple = _extract_git_tuple(version_string)
         if version_tuple >= (2, 43):
             return
 
         print(colorama.Fore.RED)
-        print('WARNING: You have fsmonitor enabled. There is a major issue '
-              'resulting in git diff-index returning wrong results. Please '
-              'either disable it by running:')
-        print('    git config core.fsmonitor false')
-        print('or upgrade git to version >= 2.43.')
-        print('See https://crbug.com/1475405 for details.')
+        print(
+            "WARNING: You have fsmonitor enabled. There is a major issue "
+            "resulting in git diff-index returning wrong results. Please "
+            "either disable it by running:"
+        )
+        print("    git config core.fsmonitor false")
+        print("or upgrade git to version >= 2.43.")
+        print("See https://crbug.com/1475405 for details.")
         print(colorama.Style.RESET_ALL)
 
 
 def current_branch():
     try:
-        return run('rev-parse', '--abbrev-ref', 'HEAD')
+        return run("rev-parse", "--abbrev-ref", "HEAD")
     except subprocess2.CalledProcessError:
         return None
 
 
-def del_branch_config(branch, option, scope: scm.GitConfigScope = 'local'):
-    del_config('branch.%s.%s' % (branch, option), scope=scope)
+def del_branch_config(branch, option, scope: scm.GitConfigScope = "local"):
+    del_config("branch.%s.%s" % (branch, option), scope=scope)
 
 
-def del_config(option, scope: scm.GitConfigScope = 'local'):
+def del_config(option, scope: scm.GitConfigScope = "local"):
     try:
         scm.GIT.SetConfig(os.getcwd(), option, scope=scope)
     except subprocess2.CalledProcessError:
@@ -517,12 +515,12 @@ def del_config(option, scope: scm.GitConfigScope = 'local'):
 
 
 def diff(oldrev, newrev, *args):
-    return run('diff', oldrev, newrev, *args)
+    return run("diff", oldrev, newrev, *args)
 
 
 def freeze():
     took_action = False
-    key = 'depot-tools.freeze-size-limit'
+    key = "depot-tools.freeze-size-limit"
     MB = 2**20
     limit_mb = get_config_int(key, 100)
     untracked_bytes = 0
@@ -536,10 +534,10 @@ def freeze():
     # will be set to true if there are any indexed files to commit.
     have_indexed_files = False
 
-    for f, s in status(ignore_submodules='all'):
+    for f, s in status(ignore_submodules="all"):
         if is_unmerged(s):
             die("Cannot freeze unmerged changes!")
-        if s.lstat not in ' ?':
+        if s.lstat not in " ?":
             # This covers all changes to indexed files.
             # lstat = ' ' means that the file is tracked and modified, but
             # wasn't added yet. lstat = '?' means that the file is untracked.
@@ -549,12 +547,12 @@ def freeze():
             # rstat shows the status of the working tree. If the file also has
             # changes in the working tree, it should be tracked both in indexed
             # and unindexed changes.
-            if s.rstat != ' ':
-                unindexed.append(f.encode('utf-8'))
+            if s.rstat != " ":
+                unindexed.append(f.encode("utf-8"))
         else:
-            unindexed.append(f.encode('utf-8'))
+            unindexed.append(f.encode("utf-8"))
 
-        if s.lstat == '?' and limit_mb > 0:
+        if s.lstat == "?" and limit_mb > 0:
             untracked_bytes += os.lstat(os.path.join(root_path, f)).st_size
 
     if limit_mb > 0 and untracked_bytes > limit_mb * MB:
@@ -576,11 +574,14 @@ def freeze():
       freeze limit by running:
         git config %s <new_limit>
       Where <new_limit> is an integer threshold in megabytes.""",
-            untracked_bytes / (MB * 1.0), limit_mb, key)
+            untracked_bytes / (MB * 1.0),
+            limit_mb,
+            key,
+        )
 
     if have_indexed_files:
         try:
-            run('commit', '--no-verify', '-m', f'{FREEZE}.indexed')
+            run("commit", "--no-verify", "-m", f"{FREEZE}.indexed")
             took_action = True
         except subprocess2.CalledProcessError:
             pass
@@ -588,27 +589,29 @@ def freeze():
     add_errors = False
     if unindexed:
         try:
-            run('add',
-                '--pathspec-from-file',
-                '-',
-                '--ignore-errors',
-                indata=b'\n'.join(unindexed),
-                cwd=root_path)
+            run(
+                "add",
+                "--pathspec-from-file",
+                "-",
+                "--ignore-errors",
+                indata=b"\n".join(unindexed),
+                cwd=root_path,
+            )
         except subprocess2.CalledProcessError:
             add_errors = True
 
         try:
-            run('commit', '--no-verify', '-m', f'{FREEZE}.unindexed')
+            run("commit", "--no-verify", "-m", f"{FREEZE}.unindexed")
             took_action = True
         except subprocess2.CalledProcessError:
             pass
 
     ret = []
     if add_errors:
-        ret.append('Failed to index some unindexed files.')
+        ret.append("Failed to index some unindexed files.")
     if not took_action:
-        ret.append('Nothing to freeze.')
-    return ' '.join(ret) or None
+        ret.append("Nothing to freeze.")
+    return " ".join(ret) or None
 
 
 def get_branch_tree(use_limit=False):
@@ -684,17 +687,18 @@ def get_downstream_branches(branch_tree=None):
         downstream_branches[upstream_branch].append(branch)
     return downstream_branches
 
+
 def get_or_create_merge_base(branch, parent=None) -> Optional[str]:
     """Finds the configured merge base for branch.
 
     If parent is supplied, it's used instead of calling upstream(branch).
     """
-    base: Optional[str] = branch_config(branch, 'base')
-    base_upstream = branch_config(branch, 'base-upstream')
+    base: Optional[str] = branch_config(branch, "base")
+    base_upstream = branch_config(branch, "base-upstream")
     parent = parent or upstream(branch)
     if parent is None or branch is None:
         return None
-    actual_merge_base = run('merge-base', parent, branch)
+    actual_merge_base = run("merge-base", parent, branch)
     assert isinstance(actual_merge_base, str)
 
     if base_upstream != parent:
@@ -702,19 +706,21 @@ def get_or_create_merge_base(branch, parent=None) -> Optional[str]:
         base_upstream = None
 
     def is_ancestor(a, b):
-        return run_with_retcode('merge-base', '--is-ancestor', a, b) == 0
+        return run_with_retcode("merge-base", "--is-ancestor", a, b) == 0
 
     if base and base != actual_merge_base:
         if not is_ancestor(base, branch):
-            logging.debug('Found WRONG pre-set merge-base for %s: %s', branch,
-                          base)
+            logging.debug(
+                "Found WRONG pre-set merge-base for %s: %s", branch, base
+            )
             base = None
         elif is_ancestor(base, actual_merge_base):
-            logging.debug('Found OLD pre-set merge-base for %s: %s', branch,
-                          base)
+            logging.debug(
+                "Found OLD pre-set merge-base for %s: %s", branch, base
+            )
             base = None
         else:
-            logging.debug('Found pre-set merge-base for %s: %s', branch, base)
+            logging.debug("Found pre-set merge-base for %s: %s", branch, base)
 
     if not base:
         base = actual_merge_base
@@ -725,24 +731,25 @@ def get_or_create_merge_base(branch, parent=None) -> Optional[str]:
 
 
 def hash_multi(*reflike):
-    return run('rev-parse', *reflike).splitlines()
+    return run("rev-parse", *reflike).splitlines()
 
 
 def hash_one(reflike, short=False):
-    args = ['rev-parse', reflike]
+    args = ["rev-parse", reflike]
     if short:
-        args.insert(1, '--short')
+        args.insert(1, "--short")
     return run(*args)
 
 
 def in_rebase():
-    git_dir = run('rev-parse', '--git-dir')
+    git_dir = run("rev-parse", "--git-dir")
     assert isinstance(git_dir, str)
-    return (os.path.exists(os.path.join(git_dir, 'rebase-merge'))
-            or os.path.exists(os.path.join(git_dir, 'rebase-apply')))
+    return os.path.exists(
+        os.path.join(git_dir, "rebase-merge")
+    ) or os.path.exists(os.path.join(git_dir, "rebase-apply"))
 
 
-def intern_f(f, kind='blob'):
+def intern_f(f, kind="blob"):
     """Interns a file object into the git object store.
 
     Args:
@@ -751,25 +758,25 @@ def intern_f(f, kind='blob'):
 
     Returns the git hash of the interned object (hex encoded).
     """
-    ret = run('hash-object', '-t', kind, '-w', '--stdin', stdin=f)
+    ret = run("hash-object", "-t", kind, "-w", "--stdin", stdin=f)
     f.close()
     return ret
 
 
 def is_dormant(branch):
     # TODO(iannucci): Do an oldness check?
-    return branch_config(branch, 'dormant', 'false') != 'false'
+    return branch_config(branch, "dormant", "false") != "false"
 
 
 def is_unmerged(stat_value):
-    return ('U' in (stat_value.lstat, stat_value.rstat)
-            or ((stat_value.lstat == stat_value.rstat)
-                and stat_value.lstat in 'AD'))
+    return "U" in (stat_value.lstat, stat_value.rstat) or (
+        (stat_value.lstat == stat_value.rstat) and stat_value.lstat in "AD"
+    )
 
 
 def manual_merge_base(branch, base, parent):
-    set_branch_config(branch, 'base', base)
-    set_branch_config(branch, 'base-upstream', parent)
+    set_branch_config(branch, "base", base)
+    set_branch_config(branch, "base-upstream", parent)
 
 
 def mktree(treedict):
@@ -782,9 +789,9 @@ def mktree(treedict):
     """
     with tempfile.TemporaryFile() as f:
         for name, (mode, typ, ref) in treedict.items():
-            f.write(('%s %s %s\t%s\0' % (mode, typ, ref, name)).encode('utf-8'))
+            f.write(("%s %s %s\t%s\0" % (mode, typ, ref, name)).encode("utf-8"))
         f.seek(0)
-        return run('mktree', '-z', stdin=f)
+        return run("mktree", "-z", stdin=f)
 
 
 def parse_commitrefs(*commitrefs):
@@ -802,10 +809,10 @@ def parse_commitrefs(*commitrefs):
     except subprocess2.CalledProcessError:
         raise BadCommitRefException(commitrefs)
     except binascii.Error as e:
-        raise binascii.Error(f'{e}. Invalid hashes are {hashes}')
+        raise binascii.Error(f"{e}. Invalid hashes are {hashes}")
 
 
-RebaseRet = collections.namedtuple('RebaseRet', 'success stdout stderr')
+RebaseRet = collections.namedtuple("RebaseRet", "success stdout stderr")
 
 
 def rebase(parent, start, branch, abort=False, allow_gc=False):
@@ -833,57 +840,60 @@ def rebase(parent, start, branch, abort=False, allow_gc=False):
     """
     try:
         args = [
-            '-c',
-            'gc.auto={}'.format('1' if allow_gc else '0'),
-            'rebase',
+            "-c",
+            "gc.auto={}".format("1" if allow_gc else "0"),
+            "rebase",
         ]
         if TEST_MODE:
-            args.append('--committer-date-is-author-date')
+            args.append("--committer-date-is-author-date")
         args += [
-            '--onto',
+            "--onto",
             parent,
             start,
             branch,
         ]
         run(*args)
-        return RebaseRet(True, '', '')
+        return RebaseRet(True, "", "")
     except subprocess2.CalledProcessError as cpe:
         if abort:
-            run_with_retcode('rebase', '--abort')  # ignore failure
-        return RebaseRet(False, cpe.stdout.decode('utf-8', 'replace'),
-                         cpe.stderr.decode('utf-8', 'replace'))
+            run_with_retcode("rebase", "--abort")  # ignore failure
+        return RebaseRet(
+            False,
+            cpe.stdout.decode("utf-8", "replace"),
+            cpe.stderr.decode("utf-8", "replace"),
+        )
 
 
 def remove_merge_base(branch):
-    del_branch_config(branch, 'base')
-    del_branch_config(branch, 'base-upstream')
+    del_branch_config(branch, "base")
+    del_branch_config(branch, "base-upstream")
 
 
 def repo_root():
     """Returns the absolute path to the repository root."""
-    return run('rev-parse', '--show-toplevel')
+    return run("rev-parse", "--show-toplevel")
 
 
 def upstream_default() -> str:
     """Returns the default branch name of the origin repository."""
     try:
-        ret = run('rev-parse', '--abbrev-ref', 'origin/HEAD')
+        ret = run("rev-parse", "--abbrev-ref", "origin/HEAD")
         # Detect if the repository migrated to main branch
-        if ret == 'origin/master':
+        if ret == "origin/master":
             try:
-                ret = run('rev-parse', '--abbrev-ref', 'origin/main')
-                run('remote', 'set-head', '-a', 'origin')
-                ret = run('rev-parse', '--abbrev-ref', 'origin/HEAD')
+                ret = run("rev-parse", "--abbrev-ref", "origin/main")
+                run("remote", "set-head", "-a", "origin")
+                ret = run("rev-parse", "--abbrev-ref", "origin/HEAD")
             except subprocess2.CalledProcessError:
                 pass
         assert isinstance(ret, str)
         return ret
     except subprocess2.CalledProcessError:
-        return 'origin/main'
+        return "origin/main"
 
 
 def root():
-    return get_config('depot-tools.upstream', upstream_default())
+    return get_config("depot-tools.upstream", upstream_default())
 
 
 @contextlib.contextmanager
@@ -898,14 +908,14 @@ def less():  # pragma: no cover
     if not setup_color.IS_TTY:
         # On Python 3, sys.stdout doesn't accept bytes, and sys.stdout.buffer
         # must be used.
-        yield getattr(sys.stdout, 'buffer', sys.stdout)
+        yield getattr(sys.stdout, "buffer", sys.stdout)
         return
 
     # Run with the same options that git uses (see setup_pager in git repo).
     # -F: Automatically quit if the output is less than one screen.
     # -R: Don't escape ANSI color codes.
     # -X: Don't clear the screen before starting.
-    cmd = ('less', '-FRX')
+    cmd = ("less", "-FRX")
     proc = subprocess2.Popen(cmd, stdin=subprocess2.PIPE)
     try:
         yield proc.stdin
@@ -939,10 +949,10 @@ def run_stream(*cmd, **kwargs) -> typing.IO[AnyStr]:
     stderr is dropped to avoid races if the process outputs to both stdout and
     stderr.
     """
-    kwargs.setdefault('stderr', subprocess2.DEVNULL)
-    kwargs.setdefault('stdout', subprocess2.PIPE)
-    kwargs.setdefault('shell', False)
-    cmd = (GIT_EXE, '-c', 'color.ui=never') + cmd
+    kwargs.setdefault("stderr", subprocess2.DEVNULL)
+    kwargs.setdefault("stdout", subprocess2.PIPE)
+    kwargs.setdefault("shell", False)
+    cmd = (GIT_EXE, "-c", "color.ui=never") + cmd
     proc = subprocess2.Popen(cmd, **kwargs)
     assert proc.stdout is not None
     return proc.stdout
@@ -957,24 +967,24 @@ def run_stream_with_retcode(*cmd, **kwargs):
 
     Raises subprocess2.CalledProcessError on nonzero return code.
     """
-    kwargs.setdefault('stderr', subprocess2.DEVNULL)
-    kwargs.setdefault('stdout', subprocess2.PIPE)
-    kwargs.setdefault('shell', False)
-    cmd = (GIT_EXE, '-c', 'color.ui=never') + cmd
+    kwargs.setdefault("stderr", subprocess2.DEVNULL)
+    kwargs.setdefault("stdout", subprocess2.PIPE)
+    kwargs.setdefault("shell", False)
+    cmd = (GIT_EXE, "-c", "color.ui=never") + cmd
     proc = subprocess2.Popen(cmd, **kwargs)
     try:
         yield proc.stdout
     finally:
         retcode = proc.wait()
         if retcode != 0:
-            cwd = kwargs.get('cwd', os.getcwd())
+            cwd = kwargs.get("cwd", os.getcwd())
             raise subprocess2.CalledProcessError(
                 retcode,
                 cmd,
                 # cwd could be either str or os.PathLike.
-                f'{cwd}',
-                b'',
-                b'',
+                f"{cwd}",
+                b"",
+                b"",
             )
 
 
@@ -992,14 +1002,14 @@ def run_with_stderr(*cmd, **kwargs) -> Tuple[str, str] | Tuple[bytes, bytes]:
             retry on lock failures. Defaults to True.
     """
     retry_cnt = 0
-    if kwargs.pop('retry_lock', True) and len(cmd) > 0 and cmd[0] == 'config':
+    if kwargs.pop("retry_lock", True) and len(cmd) > 0 and cmd[0] == "config":
         retry_cnt = 5
 
     while True:
         try:
             return _run_with_stderr(*cmd, **kwargs)
         except subprocess2.CalledProcessError as ex:
-            lock_err = 'could not lock config file .git/config: File exists'
+            lock_err = "could not lock config file .git/config: File exists"
             if retry_cnt > 0 and lock_err in str(ex):
                 logging.error(ex)
                 jitter = random.uniform(0, 0.2)
@@ -1020,57 +1030,58 @@ def _run_with_stderr(*cmd, **kwargs) -> Tuple[str, str] | Tuple[bytes, bytes]:
         decode (bool) - Whether to return strings. Defaults to True.
         indata (str) - Specifies stdin data for the process.
     """
-    kwargs.setdefault('stdin', subprocess2.PIPE)
-    kwargs.setdefault('stdout', subprocess2.PIPE)
-    kwargs.setdefault('stderr', subprocess2.PIPE)
-    kwargs.setdefault('shell', False)
-    autostrip = kwargs.pop('autostrip', True)
-    indata = kwargs.pop('indata', None)
-    decode = kwargs.pop('decode', True)
-    accepted_retcodes = kwargs.pop('accepted_retcodes', [0])
+    kwargs.setdefault("stdin", subprocess2.PIPE)
+    kwargs.setdefault("stdout", subprocess2.PIPE)
+    kwargs.setdefault("stderr", subprocess2.PIPE)
+    kwargs.setdefault("shell", False)
+    autostrip = kwargs.pop("autostrip", True)
+    indata = kwargs.pop("indata", None)
+    decode = kwargs.pop("decode", True)
+    accepted_retcodes = kwargs.pop("accepted_retcodes", [0])
 
-    cmd = (GIT_EXE, '-c', 'color.ui=never') + cmd
+    cmd = (GIT_EXE, "-c", "color.ui=never") + cmd
     proc = subprocess2.Popen(cmd, **kwargs)
     stdout, stderr = proc.communicate(indata)
     retcode = proc.wait()
     if retcode not in accepted_retcodes:
-        cwd = kwargs.get('cwd', os.getcwd())
+        cwd = kwargs.get("cwd", os.getcwd())
         raise subprocess2.CalledProcessError(
             retcode,
             cmd,
             # cwd could be either str or os.PathLike.
-            f'{cwd}',
+            f"{cwd}",
             stdout,
             stderr,
         )
 
     if autostrip:
-        stdout = (stdout or b'').strip()
-        stderr = (stderr or b'').strip()
+        stdout = (stdout or b"").strip()
+        stderr = (stderr or b"").strip()
 
     if decode:
-        return stdout.decode('utf-8',
-                             'replace'), stderr.decode('utf-8', 'replace')
+        return stdout.decode("utf-8", "replace"), stderr.decode(
+            "utf-8", "replace"
+        )
 
     return stdout, stderr
 
 
-def set_branch_config(branch,
-                      option,
-                      value,
-                      scope: scm.GitConfigScope = 'local'):
-    set_config('branch.%s.%s' % (branch, option), value, scope=scope)
+def set_branch_config(
+    branch, option, value, scope: scm.GitConfigScope = "local"
+):
+    set_config("branch.%s.%s" % (branch, option), value, scope=scope)
 
 
-def set_config(option, value, scope: scm.GitConfigScope = 'local'):
+def set_config(option, value, scope: scm.GitConfigScope = "local"):
     scm.GIT.SetConfig(os.getcwd(), option, value, scope=scope)
 
 
 def get_dirty_files():
     # Make sure index is up-to-date before running diff-index.
-    run_with_retcode('update-index', '--refresh', '-q')
-    return run('diff-index', '--ignore-submodules', '--name-status', 'HEAD',
-               '--')
+    run_with_retcode("update-index", "--refresh", "-q")
+    return run(
+        "diff-index", "--ignore-submodules", "--name-status", "HEAD", "--"
+    )
 
 
 def is_dirty_git_tree(cmd):
@@ -1078,13 +1089,17 @@ def is_dirty_git_tree(cmd):
 
     dirty = get_dirty_files()
     if dirty:
-        w('Cannot %s with a dirty tree. Commit%s or stash your changes first.' %
-          (cmd, '' if cmd == 'upload' else ', freeze'))
-        w('Uncommitted files: (git diff-index --name-status HEAD)')
+        w(
+            "Cannot %s with a dirty tree. Commit%s or stash your changes first."
+            % (cmd, "" if cmd == "upload" else ", freeze")
+        )
+        w("Uncommitted files: (git diff-index --name-status HEAD)")
         w(dirty[:4096])
         if len(dirty) > 4096:  # pragma: no cover
-            w('... (run "git diff-index --name-status HEAD" to see full '
-              'output).')
+            w(
+                '... (run "git diff-index --name-status HEAD" to see full '
+                "output)."
+            )
         return True
     return False
 
@@ -1104,19 +1119,19 @@ def status(ignore_submodules=None):
         if lstat == 'R'
     """
 
-    ignore_submodules = ignore_submodules or 'none'
-    assert ignore_submodules in (
-        'all',
-        'none'), f'ignore_submodules value {ignore_submodules} is invalid'
+    ignore_submodules = ignore_submodules or "none"
+    assert ignore_submodules in ("all", "none"), (
+        f"ignore_submodules value {ignore_submodules} is invalid"
+    )
 
-    stat_entry = collections.namedtuple('stat_entry', 'lstat rstat src')
+    stat_entry = collections.namedtuple("stat_entry", "lstat rstat src")
 
     def tokenizer(stream):
         acc = BytesIO()
         c = None
-        while c != b'':
+        while c != b"":
             c = stream.read(1)
-            if c in (None, b'', b'\0'):
+            if c in (None, b"", b"\0"):
                 if len(acc.getvalue()) > 0:
                     yield acc.getvalue()
                     acc = BytesIO()
@@ -1126,72 +1141,72 @@ def status(ignore_submodules=None):
     def parser(tokens):
         while True:
             try:
-                status_dest = next(tokens).decode('utf-8')
+                status_dest = next(tokens).decode("utf-8")
             except StopIteration:
                 return
             stat, dest = status_dest[:2], status_dest[3:]
             lstat, rstat = stat
-            if lstat == 'R':
-                src = next(tokens).decode('utf-8')
+            if lstat == "R":
+                src = next(tokens).decode("utf-8")
             else:
                 src = dest
             yield (dest, stat_entry(lstat, rstat, src))
 
     return parser(
         tokenizer(
-            run_stream('status',
-                       '-z',
-                       f'--ignore-submodules={ignore_submodules}',
-                       bufsize=-1)))
+            run_stream(
+                "status",
+                "-z",
+                f"--ignore-submodules={ignore_submodules}",
+                bufsize=-1,
+            )
+        )
+    )
 
 
 def squash_current_branch(header=None, merge_base=None):
-    header = header or 'git squash commit for %s.' % current_branch()
+    header = header or "git squash commit for %s." % current_branch()
     merge_base = merge_base or get_or_create_merge_base(current_branch())
-    log_msg = header + '\n'
+    log_msg = header + "\n"
     if log_msg:
-        log_msg += '\n'
-    output = run('log', '--reverse', '--format=%H%n%B', '%s..HEAD' % merge_base)
+        log_msg += "\n"
+    output = run("log", "--reverse", "--format=%H%n%B", "%s..HEAD" % merge_base)
     assert isinstance(output, str)
     log_msg += output
-    run('reset', '--soft', merge_base)
+    run("reset", "--soft", merge_base)
 
     if not get_dirty_files():
         # Sometimes the squash can result in the same tree, meaning that there
         # is nothing to commit at this point.
-        print('Nothing to commit; squashed branch is empty')
+        print("Nothing to commit; squashed branch is empty")
         return False
 
     # git reset --soft will stage all changes so we can just commit those.
     # Note: Just before reset --soft is called, we may have git submodules
     # checked to an old commit (not latest state). We don't want to include
     # those in our commit.
-    run('commit',
-        '--no-verify',
-        '-F',
-        '-',
-        indata=log_msg.encode('utf-8'))
+    run("commit", "--no-verify", "-F", "-", indata=log_msg.encode("utf-8"))
     return True
 
 
 def tags(*args):
-    return run('tag', *args).splitlines()
+    return run("tag", *args).splitlines()
 
 
 def thaw():
     took_action = False
-    with run_stream('rev-list', 'HEAD', '--') as stream:
+    with run_stream("rev-list", "HEAD", "--") as stream:
         for sha in stream:
-            sha = sha.strip().decode('utf-8')
-            msg = run('show', '--format=%f%b', '-s', 'HEAD', '--')
+            sha = sha.strip().decode("utf-8")
+            msg = run("show", "--format=%f%b", "-s", "HEAD", "--")
             assert isinstance(msg, str)
             match = FREEZE_MATCHER.match(msg)
             if not match:
                 if not took_action:
-                    return 'Nothing to thaw.'
+                    return "Nothing to thaw."
                 break
 
-            run('reset', '--' + FREEZE_SECTIONS[match.group(1)], sha)
+            run("reset", "--" + FREEZE_SECTIONS[match.group(1)], sha)
             took_action = True
 
 
@@ -1224,8 +1239,9 @@ def topo_iter(branch_tree, top_down=True):
     # TODO(iannucci): There is probably a more efficient way to do these.
     if top_down:
         while branch_tree:
-            this_pass = [(b, p) for b, p in branch_tree.items()
-                         if p not in branch_tree]
+            this_pass = [
+                (b, p) for b, p in branch_tree.items() if p not in branch_tree
+            ]
             assert this_pass, "Branch tree has cycles: %r" % branch_tree
             for branch, parent in sorted(this_pass):
                 yield branch, parent
@@ -1236,8 +1252,11 @@ def topo_iter(branch_tree, top_down=True):
             parent_to_branches[parent].add(branch)
 
         while branch_tree:
-            this_pass = [(b, p) for b, p in branch_tree.items()
-                         if not parent_to_branches[b]]
+            this_pass = [
+                (b, p)
+                for b, p in branch_tree.items()
+                if not parent_to_branches[b]
+            ]
             assert this_pass, "Branch tree has cycles: %r" % branch_tree
             for branch, parent in sorted(this_pass):
                 yield branch, parent
@@ -1270,9 +1289,9 @@ def tree(treeref, recurse=False):
         ref is the hex encoded hash of the entry.
     """
     ret = {}
-    opts = ['ls-tree', '--full-tree']
+    opts = ["ls-tree", "--full-tree"]
     if recurse:
-        opts.append('-r')
+        opts.append("-r")
     opts.append(treeref)
     try:
         for line in run(*opts).splitlines():
@@ -1283,21 +1302,26 @@ def tree(treeref, recurse=False):
     return ret
 
 
-def get_remote_url(remote='origin'):
-    return scm.GIT.GetConfig(os.getcwd(), 'remote.%s.url' % remote)
+def get_remote_url(remote="origin"):
+    return scm.GIT.GetConfig(os.getcwd(), "remote.%s.url" % remote)
 
 
 def upstream(branch):
     try:
-        return run('rev-parse', '--abbrev-ref', '--symbolic-full-name',
-                   branch + '@{upstream}')
+        return run(
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            branch + "@{upstream}",
+        )
     except subprocess2.CalledProcessError:
         return None
 
 
 @functools.lru_cache
 def check_git_version(
-        min_version: Tuple[int] = GIT_MIN_VERSION) -> Optional[str]:
+    min_version: Tuple[int] = GIT_MIN_VERSION,
+) -> Optional[str]:
     """Checks whether git is installed, and its version meets the recommended
     minimum version, which defaults to GIT_MIN_VERSION if not specified.
 
@@ -1308,23 +1332,27 @@ def check_git_version(
         # No remediation action required in a non-git environment.
         return None
 
-    min_tag = '.'.join(str(x) for x in min_version)
+    min_tag = ".".join(str(x) for x in min_version)
     if shutil.which(GIT_EXE) is None:
         # git command was not found.
-        return ('git command not found.\n'
-                f'Please install version >={min_tag} of git.\n'
-                'See instructions at\n'
-                'https://git-scm.com/book/en/v2/Getting-Started-Installing-Git')
+        return (
+            "git command not found.\n"
+            f"Please install version >={min_tag} of git.\n"
+            "See instructions at\n"
+            "https://git-scm.com/book/en/v2/Getting-Started-Installing-Git"
+        )
 
     if meets_git_version(min_version):
         # git version is sufficient; no remediation action necessary.
         return None
 
     # git is installed but older than the recommended version.
-    tag = '.'.join(str(x) for x in get_git_version()) or 'unknown'
-    return ('git update is recommended.\n'
-            f'Installed git version is {tag};\n'
-            f'depot_tools recommends version {min_tag} or later.')
+    tag = ".".join(str(x) for x in get_git_version()) or "unknown"
+    return (
+        "git update is recommended.\n"
+        f"Installed git version is {tag};\n"
+        f"depot_tools recommends version {min_tag} or later."
+    )
 
 
 def meets_git_version(min_version: Tuple[int]) -> bool:
@@ -1336,73 +1364,81 @@ def meets_git_version(min_version: Tuple[int]) -> bool:
 def get_git_version():
     """Returns a tuple that contains the numeric components of the current git
     version."""
-    version_string = run('--version')
+    version_string = run("--version")
     return _extract_git_tuple(version_string)
 
 
 def _extract_git_tuple(version_string):
-    version_match = re.search(r'(\d+.)+(\d+)', version_string)
+    version_match = re.search(r"(\d+.)+(\d+)", version_string)
     if version_match:
         version = version_match.group()
-        return tuple(int(x) for x in version.split('.'))
+        return tuple(int(x) for x in version.split("."))
     return tuple()
 
 
 def get_num_commits(branch):
     base = get_or_create_merge_base(branch)
     if base:
-        commits_list = run('rev-list', '--count', branch, '^%s' % base, '--')
+        commits_list = run("rev-list", "--count", branch, "^%s" % base, "--")
         return int(commits_list) or None
     return None
 
 
 def get_branches_info(include_tracking_status, include_frozen_status=False):
     format_string = (
-        '--format=%(refname:short):%(objectname:short):%(upstream:short):')
+        "--format=%(refname:short):%(objectname:short):%(upstream:short):"
+    )
 
     # This is not covered by the depot_tools CQ which only has git version 1.8.
-    if (include_tracking_status and get_git_version() >=
-            MIN_UPSTREAM_TRACK_GIT_VERSION):  # pragma: no cover
-        format_string += '%(upstream:track)'
+    if (
+        include_tracking_status
+        and get_git_version() >= MIN_UPSTREAM_TRACK_GIT_VERSION
+    ):  # pragma: no cover
+        format_string += "%(upstream:track)"
 
-    format_string += ':'
+    format_string += ":"
     if include_frozen_status:
-        format_string += '%(subject)'
+        format_string += "%(subject)"
 
     info_map = {}
-    data = run('for-each-ref', format_string, 'refs/heads')
+    data = run("for-each-ref", format_string, "refs/heads")
     assert isinstance(data, str)
     BranchesInfo = collections.namedtuple(
-        'BranchesInfo', 'hash upstream commits behind is_frozen')
+        "BranchesInfo", "hash upstream commits behind is_frozen"
+    )
     for line in data.splitlines():
-        parts = line.split(':', 4)
+        parts = line.split(":", 4)
         branch = parts[0]
         branch_hash = parts[1]
         upstream_branch = parts[2]
         tracking_status = parts[3]
-        subject = parts[4] if len(parts) > 4 else ''
+        subject = parts[4] if len(parts) > 4 else ""
 
         commits = None
         if include_tracking_status:
             commits = get_num_commits(branch)
 
-        behind_match = re.search(r'behind (\d+)', tracking_status)
+        behind_match = re.search(r"behind (\d+)", tracking_status)
         behind = int(behind_match.group(1)) if behind_match else None
 
         is_frozen = bool(FREEZE_MATCHER.match(subject)) if subject else False
 
-        info_map[branch] = BranchesInfo(hash=branch_hash,
-                                        upstream=upstream_branch,
-                                        commits=commits,
-                                        behind=behind,
-                                        is_frozen=is_frozen)
+        info_map[branch] = BranchesInfo(
+            hash=branch_hash,
+            upstream=upstream_branch,
+            commits=commits,
+            behind=behind,
+            is_frozen=is_frozen,
+        )
 
     # Set None for upstreams which are not branches (e.g empty upstream, remotes
     # and deleted upstream branches).
     missing_upstreams = {}
     for info in info_map.values():
-        if (info.upstream not in info_map
-                and info.upstream not in missing_upstreams):
+        if (
+            info.upstream not in info_map
+            and info.upstream not in missing_upstreams
+        ):
             missing_upstreams[info.upstream] = None
 
     result = info_map.copy()
@@ -1410,11 +1446,9 @@ def get_branches_info(include_tracking_status, include_frozen_status=False):
     return result
 
 
-def make_workdir_common(repository,
-                        new_workdir,
-                        files_to_symlink,
-                        files_to_copy,
-                        symlink=None):
+def make_workdir_common(
+    repository, new_workdir, files_to_symlink, files_to_copy, symlink=None
+):
     if not symlink:
         symlink = os.symlink
     os.makedirs(new_workdir)
@@ -1432,31 +1466,36 @@ def make_workdir(repository, new_workdir):
     try:
         # Read the config directly instead of using `git rev-parse
         # --show-ref-format` to avoid opening the repository.
-        ref_storage = run('config', '--file',
-                          os.path.join(repository,
-                                       'config'), 'extensions.refstorage')
+        ref_storage = run(
+            "config",
+            "--file",
+            os.path.join(repository, "config"),
+            "extensions.refstorage",
+        )
     except subprocess2.CalledProcessError:
         # Unset means the default "files" backend.
-        ref_storage = ''
-    if ref_storage.strip().lower() == 'reftable':
+        ref_storage = ""
+    if ref_storage.strip().lower() == "reftable":
         raise UnsupportedRefStorageError(
-            f'{repository} uses the reftable ref storage format, which does not '
-            'support symlink-based workdirs. Use "git worktree" instead.')
+            f"{repository} uses the reftable ref storage format, which does not "
+            'support symlink-based workdirs. Use "git worktree" instead.'
+        )
 
     GIT_DIRECTORY_WHITELIST = [
-        'config',
-        'info',
-        'hooks',
-        'logs/refs',
-        'objects',
-        'packed-refs',
-        'refs',
-        'remotes',
-        'rr-cache',
-        'shallow',
+        "config",
+        "info",
+        "hooks",
+        "logs/refs",
+        "objects",
+        "packed-refs",
+        "refs",
+        "remotes",
+        "rr-cache",
+        "shallow",
     ]
-    make_workdir_common(repository, new_workdir, GIT_DIRECTORY_WHITELIST,
-                        ['HEAD'])
+    make_workdir_common(
+        repository, new_workdir, GIT_DIRECTORY_WHITELIST, ["HEAD"]
+    )
 
 
 def clone_file(repository, new_workdir, link, operation):

@@ -9,7 +9,8 @@ import textwrap
 import unittest
 
 ROOT_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.dirname(__file__))))
+    os.path.join(os.path.dirname(os.path.dirname(__file__)))
+)
 
 
 def native_error(msg, version):
@@ -19,14 +20,18 @@ def native_error(msg, version):
   installed on your PYTHONPATH to run this test. Recommendation:
      sudo apt-get install pip
      sudo pip install --upgrade coverage
-  %s""") % (version, msg))
+  %s""")
+        % (version, msg)
+    )
     sys.exit(1)
 
 
-def covered_main(includes,
-                 require_native=None,
-                 required_percentage=100.0,
-                 disable_coverage=True):
+def covered_main(
+    includes,
+    require_native=None,
+    required_percentage=100.0,
+    disable_coverage=True,
+):
     """Equivalent of unittest.main(), except that it gathers coverage data, and
     asserts if the test is not at 100% coverage.
 
@@ -45,24 +50,32 @@ def covered_main(includes,
 
     try:
         import coverage
+
         if require_native is not None:
             got_ver = coverage.__version__
-            if not getattr(coverage.collector, 'CTracer', None):
+            if not getattr(coverage.collector, "CTracer", None):
                 native_error(
-                    ("Native python-coverage module required.\n"
-                     "Pure-python implementation (version: %s) found: %s") %
-                    (got_ver, coverage), require_native)
+                    (
+                        "Native python-coverage module required.\n"
+                        "Pure-python implementation (version: %s) found: %s"
+                    )
+                    % (got_ver, coverage),
+                    require_native,
+                )
             if got_ver < distutils.version.LooseVersion(require_native):
                 native_error(
                     "Wrong version (%s) found: %s" % (got_ver, coverage),
-                    require_native)
+                    require_native,
+                )
     except ImportError:
         if require_native is None:
-            sys.path.insert(0, os.path.join(ROOT_PATH, 'third_party'))
+            sys.path.insert(0, os.path.join(ROOT_PATH, "third_party"))
             import coverage
         else:
-            print("ERROR: python-coverage (%s) is required to be installed on "
-                  "your PYTHONPATH to run this test." % require_native)
+            print(
+                "ERROR: python-coverage (%s) is required to be installed on "
+                "your PYTHONPATH to run this test." % require_native
+            )
             sys.exit(1)
 
     COVERAGE = coverage.coverage(include=includes)
@@ -76,7 +89,7 @@ def covered_main(includes,
 
     COVERAGE.stop()
     if COVERAGE.report() < required_percentage:
-        print('FATAL: not at required %f%% coverage.' % required_percentage)
+        print("FATAL: not at required %f%% coverage." % required_percentage)
         retcode = 2
 
     return retcode

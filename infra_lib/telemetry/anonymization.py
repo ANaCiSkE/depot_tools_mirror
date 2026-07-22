@@ -16,14 +16,14 @@ class Anonymizer:
     """Redact the personally identifiable information."""
 
     def __init__(
-        self,
-        replacements: Optional[Sequence[Tuple[Pattern[str],
-                                              str]]] = None) -> None:
+        self, replacements: Optional[Sequence[Tuple[Pattern[str], str]]] = None
+    ) -> None:
         self._replacements = list(replacements or [])
         if getpass.getuser() != "root":
             # Substituting the root user doesn't actually anonymize anything.
             self._replacements.append(
-                (re.compile(re.escape(getpass.getuser())), "<user>"))
+                (re.compile(re.escape(getpass.getuser())), "<user>")
+            )
 
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
@@ -45,8 +45,9 @@ class AnonymizingFilter:
     def __init__(self, anonymizer: Anonymizer) -> None:
         self._anonymizer = anonymizer
 
-    def __call__(self,
-                 msg: trace_span_pb2.TraceSpan) -> trace_span_pb2.TraceSpan:
+    def __call__(
+        self, msg: trace_span_pb2.TraceSpan
+    ) -> trace_span_pb2.TraceSpan:
         """Applies the anonymizer to TraceSpan message."""
         raw = json_format.MessageToJson(msg)
         json_msg = self._anonymizer.apply(raw)

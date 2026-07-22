@@ -32,12 +32,12 @@ import tempfile
 import git_common as git
 import subprocess2
 
-CHUNK_FMT = '!20sL'
+CHUNK_FMT = "!20sL"
 CHUNK_SIZE = struct.calcsize(CHUNK_FMT)
 DIRTY_TREES = collections.defaultdict(int)
-REF = 'refs/number/commits'
-AUTHOR_NAME = 'git-number'
-AUTHOR_EMAIL = 'chrome-infrastructure-team@google.com'
+REF = "refs/number/commits"
+AUTHOR_NAME = "git-number"
+AUTHOR_EMAIL = "chrome-infrastructure-team@google.com"
 
 # Number of bytes to use for the prefix on our internal number structure.
 # 0 is slow to deserialize. 2 creates way too much bookkeeping overhead (would
@@ -46,17 +46,17 @@ AUTHOR_EMAIL = 'chrome-infrastructure-team@google.com'
 PREFIX_LEN = 1
 
 # Set this to 'threads' to gather coverage data while testing.
-POOL_KIND = 'procs'
+POOL_KIND = "procs"
 
 
 def pathlify(hash_prefix):
     """Converts a binary object hash prefix into a posix path, one folder per
     byte.
 
-    >>> pathlify('\xDE\xAD')
+    >>> pathlify('\xde\xad')
     'de/ad'
     """
-    return '/'.join('%02x' % b for b in hash_prefix)
+    return "/".join("%02x" % b for b in hash_prefix)
 
 
 @git.memoize_one(threadsafe=False)
@@ -69,13 +69,14 @@ def get_number_tree(prefix_bytes):
     >>> get_number_tree('\x83\xb4')
     {'\x83\xb4\xe3\xe4W\xf9J*\x8f/c\x16\xecD\xd1\x04\x8b\xa9qz': 169, ...}
     """
-    ref = '%s:%s' % (REF, pathlify(prefix_bytes))
+    ref = "%s:%s" % (REF, pathlify(prefix_bytes))
 
     try:
-        raw = git.run('cat-file', 'blob', ref, autostrip=False, decode=False)
+        raw = git.run("cat-file", "blob", ref, autostrip=False, decode=False)
         return dict(
             struct.unpack_from(CHUNK_FMT, raw, i * CHUNK_SIZE)
-            for i in range(len(raw) // CHUNK_SIZE))
+            for i in range(len(raw) // CHUNK_SIZE)
+        )
     except subprocess2.CalledProcessError:
         return {}
 
@@ -95,7 +96,7 @@ def clear_caches(on_disk=False):
     get_number_tree.clear()
     get_num.clear()
     if on_disk:
-        git.run('update-ref', '-d', REF)
+        git.run("update-ref", "-d", REF)
 
 
 def intern_number_tree(tree):
@@ -118,7 +119,7 @@ def intern_number_tree(tree):
 def leaf_map_fn(pre_tree):
     """Converts a prefix and number tree into a git index line."""
     pre, tree = pre_tree
-    return '100644 blob %s\t%s\0' % (intern_number_tree(tree), pathlify(pre))
+    return "100644 blob %s\t%s\0" % (intern_number_tree(tree), pathlify(pre))
 
 
 def finalize(targets):
@@ -132,21 +133,22 @@ def finalize(targets):
     if not DIRTY_TREES:
         return
 
-    msg = 'git-number Added %s numbers' % sum(DIRTY_TREES.values())
+    msg = "git-number Added %s numbers" % sum(DIRTY_TREES.values())
 
-    idx = os.path.join(git.run('rev-parse', '--git-dir'), 'number.idx')
+    idx = os.path.join(git.run("rev-parse", "--git-dir"), "number.idx")
     env = os.environ.copy()
-    env['GIT_INDEX_FILE'] = str(idx)
+    env["GIT_INDEX_FILE"] = str(idx)
 
-    progress_message = 'Finalizing: (%%(count)d/%d)' % len(DIRTY_TREES)
+    progress_message = "Finalizing: (%%(count)d/%d)" % len(DIRTY_TREES)
     with git.ProgressPrinter(progress_message) as inc:
-        git.run('read-tree', REF, env=env)
+        git.run("read-tree", REF, env=env)
 
         prefixes_trees = ((p, get_number_tree(p)) for p in sorted(DIRTY_TREES))
         updater = subprocess2.Popen(
-            ['git', 'update-index', '-z', '--index-info'],
+            ["git", "update-index", "-z", "--index-info"],
             stdin=subprocess2.PIPE,
-            env=env)
+            env=env,
+        )
 
         with git.ScopedPool(kind=POOL_KIND) as leaf_pool:
             for item in leaf_pool.imap(leaf_map_fn, prefixes_trees):
@@ -157,25 +159,25 @@ def finalize(targets):
         updater.wait()
         assert updater.returncode == 0
 
-        tree_id = git.run('write-tree', env=env)
+        tree_id = git.run("write-tree", env=env)
         commit_cmd = [
             # Git user.name and/or user.email may not be configured, so
             # specifying them explicitly. They are not used, but required by
             # Git.
-            '-c',
-            'user.name=%s' % AUTHOR_NAME,
-            '-c',
-            'user.email=%s' % AUTHOR_EMAIL,
-            'commit-tree',
-            '-m',
+            "-c",
+            "user.name=%s" % AUTHOR_NAME,
+            "-c",
+            "user.email=%s" % AUTHOR_EMAIL,
+            "commit-tree",
+            "-m",
             msg,
-            '-p'
+            "-p",
         ] + git.hash_multi(REF)
         for t in targets:
-            commit_cmd.extend(['-p', binascii.hexlify(t).decode()])
+            commit_cmd.extend(["-p", binascii.hexlify(t).decode()])
         commit_cmd.append(tree_id)
         commit_hash = git.run(*commit_cmd)
-        git.run('update-ref', REF, commit_hash)
+        git.run("update-ref", REF, commit_hash)
     DIRTY_TREES.clear()
 
 
@@ -217,31 +219,32 @@ def load_generation_numbers(targets):
             # Git user.name and/or user.email may not be configured, so
             # specifying them explicitly. They are not used, but required by
             # Git.
-            '-c',
-            'user.name=%s' % AUTHOR_NAME,
-            '-c',
-            'user.email=%s' % AUTHOR_EMAIL,
-            'commit-tree',
-            '-m',
-            'Initial commit from git-number',
-            empty)
-        git.run('update-ref', REF, commit_hash)
+            "-c",
+            "user.name=%s" % AUTHOR_NAME,
+            "-c",
+            "user.email=%s" % AUTHOR_EMAIL,
+            "commit-tree",
+            "-m",
+            "Initial commit from git-number",
+            empty,
+        )
+        git.run("update-ref", REF, commit_hash)
 
     with git.ScopedPool(kind=POOL_KIND) as pool:
         preload_iter = pool.imap_unordered(preload_tree, all_prefixes())
 
         rev_list = []
 
-        with git.ProgressPrinter('Loading commits: %(count)d') as inc:
+        with git.ProgressPrinter("Loading commits: %(count)d") as inc:
             # Curiously, buffering the list into memory seems to be the fastest
             # approach in python (as opposed to iterating over the lines in the
             # stdout as they're produced). GIL strikes again :/
             cmd = [
-                'rev-list',
-                '--topo-order',
-                '--parents',
-                '--reverse',
-                '^' + REF,
+                "rev-list",
+                "--topo-order",
+                "--parents",
+                "--reverse",
+                "^" + REF,
             ] + [binascii.hexlify(target).decode() for target in targets]
             for line in git.run(*cmd).splitlines():
                 tokens = [binascii.unhexlify(token) for token in line.split()]
@@ -250,7 +253,7 @@ def load_generation_numbers(targets):
 
         get_number_tree.update(preload_iter)
 
-    with git.ProgressPrinter('Counting: %%(count)d/%d' % len(rev_list)) as inc:
+    with git.ProgressPrinter("Counting: %%(count)d/%d" % len(rev_list)) as inc:
         for commit_hash, pars in rev_list:
             num = max(map(get_num, pars)) + 1 if pars else 0
 
@@ -264,28 +267,35 @@ def load_generation_numbers(targets):
 
 def main():  # pragma: no cover
     parser = optparse.OptionParser(usage=sys.modules[__name__].__doc__)
-    parser.add_option('--no-cache',
-                      action='store_true',
-                      help='Do not actually cache anything we calculate.')
-    parser.add_option('--reset',
-                      action='store_true',
-                      help='Reset the generation number cache and quit.')
-    parser.add_option('-v',
-                      '--verbose',
-                      action='count',
-                      default=0,
-                      help='Be verbose. Use more times for more verbosity.')
+    parser.add_option(
+        "--no-cache",
+        action="store_true",
+        help="Do not actually cache anything we calculate.",
+    )
+    parser.add_option(
+        "--reset",
+        action="store_true",
+        help="Reset the generation number cache and quit.",
+    )
+    parser.add_option(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Be verbose. Use more times for more verbosity.",
+    )
     opts, args = parser.parse_args()
 
     levels = [logging.ERROR, logging.INFO, logging.DEBUG]
     logging.basicConfig(level=levels[min(opts.verbose, len(levels) - 1)])
 
     # 'git number' should only be used on bots.
-    if os.getenv('CHROME_HEADLESS') != '1':
+    if os.getenv("CHROME_HEADLESS") != "1":
         logging.error(
             "'git-number' is an infrastructure tool that is only "
             "intended to be used internally by bots. Developers should "
-            "use the 'Cr-Commit-Position' value in the commit's message.")
+            "use the 'Cr-Commit-Position' value in the commit's message."
+        )
         return 1
 
     if opts.reset:
@@ -293,7 +303,7 @@ def main():  # pragma: no cover
         return
 
     try:
-        targets = git.parse_commitrefs(*(args or ['HEAD']))
+        targets = git.parse_commitrefs(*(args or ["HEAD"]))
     except git.BadCommitRefException as e:
         parser.error(e)
 
@@ -301,13 +311,13 @@ def main():  # pragma: no cover
     if not opts.no_cache:
         finalize(targets)
 
-    print('\n'.join(map(str, map(get_num, targets))))
+    print("\n".join(map(str, map(get_num, targets))))
     return 0
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        sys.stderr.write('interrupted\n')
+        sys.stderr.write("interrupted\n")
         sys.exit(1)

@@ -50,6 +50,7 @@ SENSITIVE_CONFIGS = (
     "ios_google_test_oauth_client_secret",
 )
 
+
 def ParseGNArgs(gn_args):
     """Parse gn_args as json and return config dictionary."""
     configs = json.loads(gn_args)
@@ -68,12 +69,15 @@ def ParseGNArgs(gn_args):
             value = config["default"]["value"]
         value = value.strip('"')
         if key in SENSITIVE_CONFIGS and value:
-            value = '<omitted>'
+            value = "<omitted>"
         # Do not upload username.
         if os.path.isabs(value):
-            value = os.path.join(*[
-                p if p != user else "$USER" for p in pathlib.Path(value).parts
-            ])
+            value = os.path.join(
+                *[
+                    p if p != user else "$USER"
+                    for p in pathlib.Path(value).parts
+                ]
+            )
         build_configs[key] = value
 
     return build_configs, explicit_keys
@@ -122,16 +126,20 @@ def GetJflag(cmdline):
     """Parse cmdline to get flag value for -j"""
 
     for i in range(len(cmdline)):
-        if (cmdline[i] == "-j" and i + 1 < len(cmdline)
-                and cmdline[i + 1].isdigit()):
+        if (
+            cmdline[i] == "-j"
+            and i + 1 < len(cmdline)
+            and cmdline[i + 1].isdigit()
+        ):
             return int(cmdline[i + 1])
 
-        if cmdline[i].startswith("-j") and cmdline[i][len("-j"):].isdigit():
-            return int(cmdline[i][len("-j"):])
+        if cmdline[i].startswith("-j") and cmdline[i][len("-j") :].isdigit():
+            return int(cmdline[i][len("-j") :])
 
 
-def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user,
-                edit_monitor_state):
+def GetMetadata(
+    cmdline, ninjalog, exit_code, build_duration, user, edit_monitor_state
+):
     """Get metadata for uploaded ninjalog.
 
     Returned metadata has schema defined in
@@ -177,14 +185,14 @@ def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user,
 
     invocation_id = os.environ.get("AUTONINJA_BUILD_ID")
     if invocation_id:
-        metadata['invocation_id'] = invocation_id
+        metadata["invocation_id"] = invocation_id
     jflag = GetJflag(cmdline)
     if jflag is not None:
         metadata["jobs"] = jflag
 
     # TODO: crbug.com/447974622 - Remove .siso_metadata.json after switching
     # the filename for a while by https://crrev.com/c/6998852.
-    for metadata_file in ['siso_metadata.json', '.siso_metadata.json']:
+    for metadata_file in ["siso_metadata.json", ".siso_metadata.json"]:
         with contextlib.suppress(FileNotFoundError):
             with open(os.path.join(build_dir, metadata_file), "r") as f:
                 metadata["siso_metadata"] = json.load(f)
@@ -199,8 +207,9 @@ def GetGCEMetadata():
     md = {}
     if "cloudtop" in gce.get("project", {}).get("projectId", ""):
         md["is_cloudtop"] = True
-    match = re.search(r"machineTypes/([^/]+)",
-                      gce.get("instance", {}).get("machineType", ""))
+    match = re.search(
+        r"machineTypes/([^/]+)", gce.get("instance", {}).get("machineType", "")
+    )
     if match:
         md["gce_machine_type"] = match.group(1)
     return md
@@ -243,7 +252,8 @@ def UploadNinjaLog(server, ninjalog, metadata):
                 "https://" + server + "/upload_ninja_log/",
                 data=output.getvalue(),
                 headers={"Content-Encoding": "gzip"},
-            ))
+            )
+        )
         status = resp.status
         logging.info("response header: %s", resp.headers)
         logging.info("response content: %s", resp.read())
@@ -253,8 +263,10 @@ def UploadNinjaLog(server, ninjalog, metadata):
 
     if status != http.HTTPStatus.OK:
         logging.warning(
-            "unexpected status code for response: status: %s, msg: %s", status,
-            err_msg)
+            "unexpected status code for response: status: %s, msg: %s",
+            status,
+            err_msg,
+        )
         return 1
 
     return 0
@@ -268,15 +280,17 @@ def main():
         help="server to upload ninjalog file.",
     )
     parser.add_argument("--ninjalog", help="ninjalog file to upload.")
-    parser.add_argument("--verbose",
-                        action="store_true",
-                        help="Enable verbose logging.")
-    parser.add_argument("--exit_code",
-                        type=int,
-                        help="exit code of the ninja command.")
-    parser.add_argument("--build_duration",
-                        type=int,
-                        help="total duration spent on autoninja (secounds)")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Enable verbose logging."
+    )
+    parser.add_argument(
+        "--exit_code", type=int, help="exit code of the ninja command."
+    )
+    parser.add_argument(
+        "--build_duration",
+        type=int,
+        help="total duration spent on autoninja (secounds)",
+    )
     parser.add_argument(
         "--edit_monitor_state",
         default="",
@@ -313,9 +327,11 @@ def main():
     # If the recorded timestamp is older than the mtime of ninjalog,
     # itt needs to be uploaded.
     ninjalog_mtime = os.stat(ninjalog).st_mtime
-    last_upload_file = pathlib.Path(ninjalog + '.last_upload')
-    if last_upload_file.exists() and ninjalog_mtime <= last_upload_file.stat(
-    ).st_mtime:
+    last_upload_file = pathlib.Path(ninjalog + ".last_upload")
+    if (
+        last_upload_file.exists()
+        and ninjalog_mtime <= last_upload_file.stat().st_mtime
+    ):
         logging.info("ninjalog is already uploaded.")
         return 0
 
@@ -331,7 +347,6 @@ def main():
     if exit_code == 0:
         last_upload_file.touch()
     return exit_code
-
 
 
 if __name__ == "__main__":

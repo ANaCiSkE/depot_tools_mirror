@@ -1096,8 +1096,8 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         }
         self.input_api.subprocess.check_output.side_effect = [
             b"",  # git show HEAD:DEPS
-            b"160000 commit 1111\tsrc/third_party/sub1\0" +
-            b"160000 commit 1111\tsrc/third_party/sub2\0",
+            b"160000 commit 1111\tsrc/third_party/sub1\0"
+            + b"160000 commit 1111\tsrc/third_party/sub2\0",
         ]
 
         mock_instance = mock_config_parser.return_value

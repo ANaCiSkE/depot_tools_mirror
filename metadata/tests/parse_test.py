@@ -18,11 +18,13 @@ import gclient_utils
 import metadata.parse
 import metadata.fields.known
 
+
 class ParseTest(unittest.TestCase):
     def test_parse_single(self):
         """Check parsing works for a single dependency's metadata."""
-        filepath = os.path.join(_THIS_DIR, "data",
-                                "README.chromium.test.single-valid")
+        filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.single-valid"
+        )
         content = gclient_utils.FileRead(filepath)
         all_metadata = metadata.parse.parse_content(content)
 
@@ -32,13 +34,17 @@ class ParseTest(unittest.TestCase):
             [
                 ("Name", "Test-A README for Chromium metadata"),
                 ("Short Name", "metadata-test-valid"),
-                ("URL", "https://www.example.com/metadata,\n"
-                 "     https://www.example.com/parser"),
-                ("Unknown Field",
-                 "Should be extracted into a field, because the preceding URL\n"
-                 "               field is structured, thus terminated by another field-like\n"
-                 "               line, even if the field name isn't well known to us."
-                 ),
+                (
+                    "URL",
+                    "https://www.example.com/metadata,\n"
+                    "     https://www.example.com/parser",
+                ),
+                (
+                    "Unknown Field",
+                    "Should be extracted into a field, because the preceding URL\n"
+                    "               field is structured, thus terminated by another field-like\n"
+                    "               line, even if the field name isn't well known to us.",
+                ),
                 ("Version", "1.0.12"),
                 ("Date", "2020-12-03"),
                 ("License", "Apache, 2.0 and MIT"),
@@ -46,20 +52,24 @@ class ParseTest(unittest.TestCase):
                 ("Security Critical", "yes"),
                 ("Shipped", "yes"),
                 ("CPEPrefix", "unknown"),
-                ("Description", "A test metadata file, with a\n"
-                 " multi-line description."),
+                (
+                    "Description",
+                    "A test metadata file, with a\n multi-line description.",
+                ),
                 ("Local Modifications", "None."),
             ],
         )
 
         # Check line numbers are recorded correctly.
-        self.assertEqual((1, 23),
-                         all_metadata[0].get_first_and_last_line_number())
+        self.assertEqual(
+            (1, 23), all_metadata[0].get_first_and_last_line_number()
+        )
 
     def test_parse_multiple(self):
         """Check parsing works for multiple dependencies' metadata."""
-        filepath = os.path.join(_THIS_DIR, "data",
-                                "README.chromium.test.multi-invalid")
+        filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.multi-invalid"
+        )
         content = gclient_utils.FileRead(filepath)
         all_metadata = metadata.parse.parse_content(content)
 
@@ -69,34 +79,44 @@ class ParseTest(unittest.TestCase):
         self.assertListEqual(
             all_metadata[0].get_entries(),
             [
-                ("Name",
-                 "Test-A README for Chromium metadata (0 errors, 0 warnings)"),
+                (
+                    "Name",
+                    "Test-A README for Chromium metadata (0 errors, 0 warnings)",
+                ),
                 ("Short Name", "metadata-test-valid"),
-                ("URL", "https://www.example.com/metadata,\n"
-                 "     https://www.example.com/parser"),
+                (
+                    "URL",
+                    "https://www.example.com/metadata,\n"
+                    "     https://www.example.com/parser",
+                ),
                 ("Version", "1.0.12"),
                 ("Date", "2020-12-03"),
-                ('License', 'Apache-2.0, MIT'),
+                ("License", "Apache-2.0, MIT"),
                 ("License File", "LICENSE"),
                 ("Security Critical", "yes"),
                 ("Shipped", "yes"),
                 ("Update Mechanism", "Autoroll"),
                 ("CPEPrefix", "unknown"),
-                ("Description", "A test metadata file, with a\n"
-                 " multi-line description."),
+                (
+                    "Description",
+                    "A test metadata file, with a\n multi-line description.",
+                ),
                 ("Local Modifications", "None,\nEXCEPT:\n* nothing."),
             ],
         )
-        self.assertEqual((1, 21),
-                         all_metadata[0].get_first_and_last_line_number())
+        self.assertEqual(
+            (1, 21), all_metadata[0].get_first_and_last_line_number()
+        )
 
         # Check the parser handles different casing for field names, and
         # strips leading and trailing whitespace from values.
         self.assertListEqual(
             all_metadata[1].get_entries(),
             [
-                ("Name",
-                 "Test-B README for Chromium metadata (3 errors, 1 warning)"),
+                (
+                    "Name",
+                    "Test-B README for Chromium metadata (3 errors, 1 warning)",
+                ),
                 ("SHORT NAME", "metadata-test-invalid"),
                 ("URL", "file://home/drive/chromium/src/metadata"),
                 ("Version", "0"),
@@ -109,15 +129,18 @@ class ParseTest(unittest.TestCase):
                 ("Local Modifications", "None."),
             ],
         )
-        self.assertEqual((25, 48),
-                         all_metadata[1].get_first_and_last_line_number())
+        self.assertEqual(
+            (25, 48), all_metadata[1].get_first_and_last_line_number()
+        )
 
         # Check repeated fields persist in the metadata's entries.
         self.assertListEqual(
             all_metadata[2].get_entries(),
             [
-                ("Name",
-                 "Test-C README for Chromium metadata (4 errors, 1 warning)"),
+                (
+                    "Name",
+                    "Test-C README for Chromium metadata (4 errors, 1 warning)",
+                ),
                 ("URL", "https://www.example.com/first"),
                 ("URL", "https://www.example.com/second"),
                 ("Update Mechanism", "Autoroll"),
@@ -125,8 +148,9 @@ class ParseTest(unittest.TestCase):
                 ("Date", "2020-12-03"),
                 ("License", "Custom license"),
                 ("Security Critical", "yes"),
-                ("Description",
-                 """Test metadata with multiple entries for one field, and
+                (
+                    "Description",
+                    """Test metadata with multiple entries for one field, and
 missing a mandatory field.
 These are the expected errors (here for reference only):
 
@@ -142,16 +166,19 @@ warnings:
 1. License has a license not in the allowlist.
 (see https://source.chromium.org/chromium/chromiu
 m/tools/depot_tools/+/main:metadata/fields/custom/license_al
-lowlist.py). Licenses not allowlisted: 'Custom license'."""),
+lowlist.py). Licenses not allowlisted: 'Custom license'.""",
+                ),
             ],
         )
-        self.assertEqual((53, 79),
-                         all_metadata[2].get_first_and_last_line_number())
+        self.assertEqual(
+            (53, 79), all_metadata[2].get_first_and_last_line_number()
+        )
 
     def test_parse_multiple_local_modifications(self):
         """Check parsing works for multiple dependencies, each with different local modifications."""
         filepath = os.path.join(
-            _THIS_DIR, "data", "README.chromium.test.multi-local-modifications")
+            _THIS_DIR, "data", "README.chromium.test.multi-local-modifications"
+        )
         content = gclient_utils.FileRead(filepath)
         all_metadata = metadata.parse.parse_content(content)
 
@@ -161,12 +188,15 @@ lowlist.py). Licenses not allowlisted: 'Custom license'."""),
             all_metadata[0].get_entries(),
             [
                 ("Name", "Test package 1"),
-                ("Local Modifications",
-                 "1. Modified X file\n2. Deleted Y file"),
+                (
+                    "Local Modifications",
+                    "1. Modified X file\n2. Deleted Y file",
+                ),
             ],
         )
-        self.assertEqual((1, 5),
-                         all_metadata[0].get_first_and_last_line_number())
+        self.assertEqual(
+            (1, 5), all_metadata[0].get_first_and_last_line_number()
+        )
 
         self.assertListEqual(
             all_metadata[1].get_entries(),
@@ -175,8 +205,9 @@ lowlist.py). Licenses not allowlisted: 'Custom license'."""),
                 ("Local Modifications", "None"),
             ],
         )
-        self.assertEqual((9, 10),
-                         all_metadata[1].get_first_and_last_line_number())
+        self.assertEqual(
+            (9, 10), all_metadata[1].get_first_and_last_line_number()
+        )
 
         self.assertListEqual(
             all_metadata[2].get_entries(),
@@ -185,8 +216,9 @@ lowlist.py). Licenses not allowlisted: 'Custom license'."""),
                 ("Local Modifications", "None."),
             ],
         )
-        self.assertEqual((14, 24),
-                         all_metadata[2].get_first_and_last_line_number())
+        self.assertEqual(
+            (14, 24), all_metadata[2].get_first_and_last_line_number()
+        )
 
         self.assertListEqual(
             all_metadata[3].get_entries(),
@@ -195,13 +227,15 @@ lowlist.py). Licenses not allowlisted: 'Custom license'."""),
                 ("Local Modifications", "None,\nExcept modified file X."),
             ],
         )
-        self.assertEqual((28, 30),
-                         all_metadata[3].get_first_and_last_line_number())
+        self.assertEqual(
+            (28, 30), all_metadata[3].get_first_and_last_line_number()
+        )
 
     def test_parse_per_field_line_numbers(self):
         """Check parsing marks the line numbers of each individual fields."""
-        filepath = os.path.join(_THIS_DIR, "data",
-                                "README.chromium.test.single-valid")
+        filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.single-valid"
+        )
         content = gclient_utils.FileRead(filepath)
         all_metadata = metadata.parse.parse_content(content)
 
@@ -223,13 +257,15 @@ lowlist.py). Licenses not allowlisted: 'Custom license'."""),
             field_spec.DESCRIPTION: [16, 17, 18],
             field_spec.LOCAL_MODIFICATIONS: [20, 21],
         }
-        self.assertEqual(dm.get_field_line_numbers(metadata.fields.known.NAME),
-                         [1])
+        self.assertEqual(
+            dm.get_field_line_numbers(metadata.fields.known.NAME), [1]
+        )
 
     def test_parse_mitigated(self):
         """Check parsing works for mitigated CVE entries."""
-        filepath = os.path.join(_THIS_DIR, "data",
-                                "README.chromium.test.mitigated")
+        filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.mitigated"
+        )
         content = gclient_utils.FileRead(filepath)
         all_metadata = metadata.parse.parse_content(content)
 
@@ -239,12 +275,9 @@ lowlist.py). Licenses not allowlisted: 'Custom license'."""),
         self.assertDictEqual(
             all_metadata[0].mitigations,
             {
-                "CVE-2011-4061":
-                "This copy of DependencyA only includes rainbows\nthat spill beautifully over multiple lines and are handled\n ~~ Perfectly ~~\nEven: this line with colons that mentions CVE-2000-2000: an unrelated cve.",
-                "CVE-2024-7255":
-                "This copy of DependencyA only includes unicorns",
-                "CVE-2024-7256":
-                "This also doesn't apply because of good reasons"
+                "CVE-2011-4061": "This copy of DependencyA only includes rainbows\nthat spill beautifully over multiple lines and are handled\n ~~ Perfectly ~~\nEven: this line with colons that mentions CVE-2000-2000: an unrelated cve.",
+                "CVE-2024-7255": "This copy of DependencyA only includes unicorns",
+                "CVE-2024-7256": "This also doesn't apply because of good reasons",
             },
         )
 

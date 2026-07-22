@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """SCM wrapper for jj."""
+
 import functools
 import pathlib
 import subprocess
@@ -17,9 +18,9 @@ def prefer_git_wrapper(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         # pylint: disable=protected-access
-        if not hasattr(self, '_prefer_git'):
-            git_path = pathlib.Path(self.checkout_path, '.git')
-            jj_path = pathlib.Path(self.checkout_path, '.jj')
+        if not hasattr(self, "_prefer_git"):
+            git_path = pathlib.Path(self.checkout_path, ".git")
+            jj_path = pathlib.Path(self.checkout_path, ".jj")
             self._prefer_git = git_path.exists() or not jj_path.exists()
         if self._prefer_git:
             super_method = getattr(super(JjWrapper, self), func.__name__)
@@ -37,16 +38,17 @@ class JjWrapper(gclient_scm.GitWrapper):
 
     @prefer_git_wrapper
     def _GetSubmodulePaths(self):
-        gitmodules_path = pathlib.Path(self.checkout_path, '.gitmodules')
-        with gitmodules_path.open('r', encoding='utf-8') as f:
+        gitmodules_path = pathlib.Path(self.checkout_path, ".gitmodules")
+        with gitmodules_path.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if not line.startswith('path = '):
+                if not line.startswith("path = "):
                     continue
-                path = pathlib.Path(self.checkout_path, line[len('path = '):])
+                path = pathlib.Path(self.checkout_path, line[len("path = ") :])
                 # Not every submodule will exist, because many are conditional.
-                if path.is_dir() and ((path / '.git').exists() or
-                                      (path / '.jj').exists()):
+                if path.is_dir() and (
+                    (path / ".git").exists() or (path / ".jj").exists()
+                ):
                     yield path
 
     @prefer_git_wrapper
@@ -56,23 +58,31 @@ class JjWrapper(gclient_scm.GitWrapper):
         # read the submodules from the .gitmodules file.
         state = {}
         for submodule_path in self._GetSubmodulePaths():
-            if (submodule_path / '.git').exists():
-                state[str(submodule_path)] = (subprocess.run(
-                    ['git', 'rev-parse', 'HEAD'],
-                    cwd=submodule_path,
-                    capture_output=True,
-                    check=True,
-                ).stdout.decode('utf-8').strip())
-            elif (submodule_path / '.jj').exists():
-                state[str(submodule_path)] = (subprocess.run(
-                    ['jj', 'log', '-r', '@-', '-T', 'commit_id'],
-                    cwd=submodule_path,
-                    capture_output=True,
-                    check=True,
-                ).stdout.decode('utf-8').strip())
+            if (submodule_path / ".git").exists():
+                state[str(submodule_path)] = (
+                    subprocess.run(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=submodule_path,
+                        capture_output=True,
+                        check=True,
+                    )
+                    .stdout.decode("utf-8")
+                    .strip()
+                )
+            elif (submodule_path / ".jj").exists():
+                state[str(submodule_path)] = (
+                    subprocess.run(
+                        ["jj", "log", "-r", "@-", "-T", "commit_id"],
+                        cwd=submodule_path,
+                        capture_output=True,
+                        check=True,
+                    )
+                    .stdout.decode("utf-8")
+                    .strip()
+                )
             else:
                 raise RuntimeError(
-                    f'Could not determine submodule repo type: {submodule_path}'
+                    f"Could not determine submodule repo type: {submodule_path}"
                 )
 
         return state
@@ -111,11 +121,16 @@ class JjWrapper(gclient_scm.GitWrapper):
 
     @prefer_git_wrapper
     def revinfo(self, options, args, file_list):
-        return subprocess.run(['jj', 'log', '-r', '@-', '-T', 'commit_id'],
-                    cwd=self.checkout_path,
-                    capture_output=True,
-                    check=True,
-                ).stdout.decode('utf-8').strip()
+        return (
+            subprocess.run(
+                ["jj", "log", "-r", "@-", "-T", "commit_id"],
+                cwd=self.checkout_path,
+                capture_output=True,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .strip()
+        )
 
     @prefer_git_wrapper
     def status(self, options, args, file_list):
@@ -128,26 +143,26 @@ class JjWrapper(gclient_scm.GitWrapper):
         if options.revision:
             revision = str(options.revision)
         if not revision:
-            revision = 'main@origin'
-        if revision == 'unmanaged':
+            revision = "main@origin"
+        if revision == "unmanaged":
             return
 
         # Fetch if the revision is missing locally
         check_res = subprocess.run(
-            ['jj', 'log', '-r', revision, '-G', '-T', ''],
+            ["jj", "log", "-r", revision, "-G", "-T", ""],
             cwd=self.checkout_path,
             capture_output=True,
         )
         if check_res.returncode != 0:
             subprocess.run(
-                ['jj', 'git', 'fetch'],
+                ["jj", "git", "fetch"],
                 cwd=self.checkout_path,
                 capture_output=True,
                 check=True,
             )
 
         subprocess.run(
-            ['jj', 'new', revision],
+            ["jj", "new", revision],
             cwd=self.checkout_path,
             capture_output=True,
             check=True,

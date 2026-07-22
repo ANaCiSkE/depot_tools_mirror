@@ -4,15 +4,16 @@
 
 from recipe_engine import recipe_test_api
 
+
 class GitTestApi(recipe_test_api.RecipeTestApi):
   def count_objects_output(self, value):
     return (
-        'count: %s\n'
-        'size: %s\n'
-        'in_pack: %s\n'
-        'packs: %s\n'
-        'size-pack: %s\n'
-        'prune-packable: %s\n'
-        'garbage: %s\n'
-        'size-garbage: %s\n'
+      "count: %s\n"
+      "size: %s\n"
+      "in_pack: %s\n"
+      "packs: %s\n"
+      "size-pack: %s\n"
+      "prune-packable: %s\n"
+      "garbage: %s\n"
+      "size-garbage: %s\n"
     ) % tuple([value] * 8)

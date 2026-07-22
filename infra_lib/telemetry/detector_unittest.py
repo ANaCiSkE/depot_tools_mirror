@@ -84,8 +84,9 @@ SwapTotal: 15 kB
 VmallocTotal: 25 kB
 MemTotal: 35 kB
     """
-    monkeypatch.setattr(Path, "exists",
-                        mock_exists(detector.PROC_MEMINFO_PATH, True))
+    monkeypatch.setattr(
+        Path, "exists", mock_exists(detector.PROC_MEMINFO_PATH, True)
+    )
     monkeypatch.setattr(
         Path,
         "read_text",
@@ -98,15 +99,17 @@ MemTotal: 35 kB
     assert m.total_virtual_memory == 25 * 1024
 
 
-def test_memory_info_class_warns_on_unexpected_unit(monkeypatch,
-                                                    capsys) -> None:
+def test_memory_info_class_warns_on_unexpected_unit(
+    monkeypatch, capsys
+) -> None:
     proc_meminfo_contents = """
 SwapTotal: 15 mB
 VmallocTotal: 25 gB
 MemTotal: 35 tB
     """
-    monkeypatch.setattr(Path, "exists",
-                        mock_exists(detector.PROC_MEMINFO_PATH, True))
+    monkeypatch.setattr(
+        Path, "exists", mock_exists(detector.PROC_MEMINFO_PATH, True)
+    )
     monkeypatch.setattr(
         Path,
         "read_text",
@@ -126,8 +129,9 @@ def test_memory_info_class_no_units(monkeypatch) -> None:
     proc_meminfo_contents = """
 SwapTotal: 15
     """
-    monkeypatch.setattr(Path, "exists",
-                        mock_exists(detector.PROC_MEMINFO_PATH, True))
+    monkeypatch.setattr(
+        Path, "exists", mock_exists(detector.PROC_MEMINFO_PATH, True)
+    )
     monkeypatch.setattr(
         Path,
         "read_text",
@@ -142,8 +146,9 @@ def test_memory_info_class_no_provided_value(monkeypatch, capsys) -> None:
     proc_meminfo_contents = """
 SwapTotal:
     """
-    monkeypatch.setattr(Path, "exists",
-                        mock_exists(detector.PROC_MEMINFO_PATH, True))
+    monkeypatch.setattr(
+        Path, "exists", mock_exists(detector.PROC_MEMINFO_PATH, True)
+    )
     monkeypatch.setattr(
         Path,
         "read_text",
@@ -161,8 +166,9 @@ SwapTotal: 15 kB
 VmallocTotal: 25 kB
 MemTotal: 35 kB
     """
-    monkeypatch.setattr(Path, "exists",
-                        mock_exists(detector.PROC_MEMINFO_PATH, True))
+    monkeypatch.setattr(
+        Path, "exists", mock_exists(detector.PROC_MEMINFO_PATH, True)
+    )
     monkeypatch.setattr(
         Path,
         "read_text",
@@ -203,8 +209,9 @@ def test_system_info_to_capture_host_type_from_dmi(monkeypatch) -> None:
 
     monkeypatch.setattr(getpass, "getuser", lambda: "someuser")
     monkeypatch.setattr(Path, "exists", mock_exists(detector.DMI_PATH, True))
-    monkeypatch.setattr(Path, "read_text",
-                        mock_read_text(detector.DMI_PATH, "SomeId"))
+    monkeypatch.setattr(
+        Path, "read_text", mock_read_text(detector.DMI_PATH, "SomeId")
+    )
 
     d = detector.SystemDetector()
     attrs = d.detect().attributes

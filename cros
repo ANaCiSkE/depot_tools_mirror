@@ -26,7 +26,7 @@ MIN_PYTHON_VER_HARD = (3, 8)
 DEPOT_TOOLS_DIR = Path(__file__).resolve().parent
 
 # Directory where cros-specific CIPD packages are installed.
-CIPD_CACHE_DIR = DEPOT_TOOLS_DIR / '.cipd_bin_cros_python2'
+CIPD_CACHE_DIR = DEPOT_TOOLS_DIR / ".cipd_bin_cros_python2"
 
 
 class Checkout(NamedTuple):
@@ -43,17 +43,17 @@ def _FindChromite(path: Path) -> Optional[Checkout]:
     # Chromite lives in a different location.
     roots = (
         # CrOS checkout using normal manifest.
-        ('.repo', 'chromite/.git'),
+        (".repo", "chromite/.git"),
         # CrOS checkout using CitC.
-        ('../.citc', 'chromite/__init__.py'),
+        ("../.citc", "chromite/__init__.py"),
         # Chromium checkout using gclient+DEPS.
-        ('.gclient', 'src/third_party/chromite/.git'),
+        (".gclient", "src/third_party/chromite/.git"),
         # Chromium checkout using git submodules (submodules at root).
-        ('.gitmodules', 'chromite/.git'),
+        (".gitmodules", "chromite/.git"),
         # Chromium checkout using git submodules.
-        ('src/.gitmodules', 'src/third_party/chromite/.git'),
+        ("src/.gitmodules", "src/third_party/chromite/.git"),
         # Chromium checkout using CitC.
-        ('../.citc', 'third_party/chromite/__init__.py'),
+        ("../.citc", "third_party/chromite/__init__.py"),
     )
 
     while path != Path("/"):
@@ -65,12 +65,15 @@ def _FindChromite(path: Path) -> Optional[Checkout]:
 
 
 def _MissingErrorOut(target):
-    sys.stderr.write("""ERROR: Couldn't find the chromite tool %s.
+    sys.stderr.write(
+        """ERROR: Couldn't find the chromite tool %s.
 
 Please change to a directory inside your ChromiumOS source tree
 and retry.  If you need to setup a ChromiumOS source tree, see
   https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md
-""" % target)
+"""
+        % target
+    )
     return 127
 
 
@@ -80,29 +83,45 @@ def _CheckPythonVersion():
         return
 
     progname = os.path.basename(sys.argv[0])
-    print('%s: ChromiumOS requires Python-%s+, but "%s" is "%s"' %
-          (progname, '.'.join(str(x) for x in MIN_PYTHON_VER_SOFT),
-           sys.executable, sys.version.replace('\n', ' ')),
-          file=sys.stderr)
+    print(
+        '%s: ChromiumOS requires Python-%s+, but "%s" is "%s"'
+        % (
+            progname,
+            ".".join(str(x) for x in MIN_PYTHON_VER_SOFT),
+            sys.executable,
+            sys.version.replace("\n", " "),
+        ),
+        file=sys.stderr,
+    )
     if sys.version_info < MIN_PYTHON_VER_HARD:
-        print('%s: fatal: giving up since Python is too old.' % (progname, ),
-              file=sys.stderr)
+        print(
+            "%s: fatal: giving up since Python is too old." % (progname,),
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     print(
-        'warning: temporarily continuing anyways; you must upgrade soon to '
-        'maintain support.',
-        file=sys.stderr)
+        "warning: temporarily continuing anyways; you must upgrade soon to "
+        "maintain support.",
+        file=sys.stderr,
+    )
 
 
 def _BootstrapVpython27():
     """Installs the vpython2.7 packages into the cipd cache directory."""
-    subprocess.run([
-        'cipd', 'ensure', '-log-level', 'info', '-ensure-file',
-        DEPOT_TOOLS_DIR / 'cipd_manifest_cros_python2.txt', '-root',
-        CIPD_CACHE_DIR
-    ],
-                   check=True)
+    subprocess.run(
+        [
+            "cipd",
+            "ensure",
+            "-log-level",
+            "info",
+            "-ensure-file",
+            DEPOT_TOOLS_DIR / "cipd_manifest_cros_python2.txt",
+            "-root",
+            CIPD_CACHE_DIR,
+        ],
+        check=True,
+    )
 
 
 def main():
@@ -125,13 +144,14 @@ def main():
     with path.open("rb") as fp:
         shebang = next(fp).strip()
     interpreter = shebang.split()[-1]
-    if interpreter in (b'python', b'python2', b'python2.7', b'vpython'):
+    if interpreter in (b"python", b"python2", b"python2.7", b"vpython"):
         _BootstrapVpython27()
-        vpython = CIPD_CACHE_DIR / 'vpython'
+        vpython = CIPD_CACHE_DIR / "vpython"
         args = [vpython]
-        if interpreter != b'vpython':
+        if interpreter != b"vpython":
             args.extend(
-                ['-vpython-spec', DEPOT_TOOLS_DIR / 'cros_python2.vpython'])
+                ["-vpython-spec", DEPOT_TOOLS_DIR / "cros_python2.vpython"]
+            )
         args.append(path)
         path = vpython
     else:
@@ -140,5 +160,5 @@ def main():
     os.execv(path, args + sys.argv[1:])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

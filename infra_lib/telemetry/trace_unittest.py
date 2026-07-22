@@ -24,7 +24,7 @@ class SpanExporterStub(export_sdk.SpanExporter):
         return self._spans
 
     def export(
-            self, spans: Sequence[trace_sdk.ReadableSpan]
+        self, spans: Sequence[trace_sdk.ReadableSpan]
     ) -> export_sdk.SpanExportResult:
         self._spans.extend(spans)
 
@@ -36,7 +36,8 @@ def test_span_to_capture_keyboard_interrupt_as_decorator() -> None:
     exporter = SpanExporterStub()
     provider = trace.TracerProvider(trace_sdk.TracerProvider())
     provider.add_span_processor(
-        export_sdk.BatchSpanProcessor(span_exporter=exporter))
+        export_sdk.BatchSpanProcessor(span_exporter=exporter)
+    )
     tracer = provider.get_tracer(__name__)
 
     @tracer.start_as_current_span("test-span")
@@ -50,8 +51,10 @@ def test_span_to_capture_keyboard_interrupt_as_decorator() -> None:
 
     assert len(exporter.spans) == 1
     assert exporter.spans[0].events[0].name == "exception"
-    assert (exporter.spans[0].events[0].attributes["exception.type"] ==
-            "KeyboardInterrupt")
+    assert (
+        exporter.spans[0].events[0].attributes["exception.type"]
+        == "KeyboardInterrupt"
+    )
     assert exporter.spans[0].status.status_code == trace_api.StatusCode.OK
 
 
@@ -60,7 +63,8 @@ def test_span_to_capture_keyboard_interrupt_in_context() -> None:
     exporter = SpanExporterStub()
     provider = trace.TracerProvider(trace_sdk.TracerProvider())
     provider.add_span_processor(
-        export_sdk.BatchSpanProcessor(span_exporter=exporter))
+        export_sdk.BatchSpanProcessor(span_exporter=exporter)
+    )
     tracer = provider.get_tracer(__name__)
 
     with contextlib.suppress(KeyboardInterrupt):
@@ -71,6 +75,8 @@ def test_span_to_capture_keyboard_interrupt_in_context() -> None:
 
     assert len(exporter.spans) == 1
     assert exporter.spans[0].events[0].name == "exception"
-    assert (exporter.spans[0].events[0].attributes["exception.type"] ==
-            "KeyboardInterrupt")
+    assert (
+        exporter.spans[0].events[0].attributes["exception.type"]
+        == "KeyboardInterrupt"
+    )
     assert exporter.spans[0].status.status_code == trace_api.StatusCode.OK

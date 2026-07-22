@@ -13,8 +13,8 @@ setup(
     license="MIT",
     keywords="schema json validation",
     url="https://github.com/keleshev/schema",
-    py_modules=['schema'],
-    long_description=codecs.open('README.rst', 'r', 'utf-8').read(),
+    py_modules=["schema"],
+    long_description=codecs.open("README.rst", "r", "utf-8").read(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Utilities",

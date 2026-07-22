@@ -17,21 +17,23 @@ import gclient_utils
 import metrics
 
 
-@metrics.collector.collect_metrics('git nav-downstream')
+@metrics.collector.collect_metrics("git nav-downstream")
 def main(args):
     if gclient_utils.IsEnvCog():
-        print('nav-downstream command is not supported in non-git environment.',
-              file=sys.stderr)
+        print(
+            "nav-downstream command is not supported in non-git environment.",
+            file=sys.stderr,
+        )
         return 1
     parser = argparse.ArgumentParser()
-    parser.add_argument('--pick',
-                        help=('The number to pick if this command would '
-                              'prompt'))
+    parser.add_argument(
+        "--pick", help=("The number to pick if this command would prompt")
+    )
     opts = parser.parse_args(args)
 
     upfn = upstream
     cur = current_branch()
-    if cur == 'HEAD':
+    if cur == "HEAD":
 
         def _upfn(b):
             parent = upstream(b)
@@ -46,7 +48,7 @@ def main(args):
         return 1
 
     if len(downstreams) == 1:
-        run('checkout', downstreams[0], stdout=sys.stdout, stderr=sys.stderr)
+        run("checkout", downstreams[0], stdout=sys.stdout, stderr=sys.stderr)
     else:
         high = len(downstreams) - 1
         while True:
@@ -58,18 +60,20 @@ def main(args):
             if r:
                 print(prompt + r)
             else:
-                r = gclient_utils.AskForData(prompt).strip() or '0'
+                r = gclient_utils.AskForData(prompt).strip() or "0"
             if not r.isdigit() or (0 > int(r) > high):
                 print("Invalid choice.")
             else:
-                run('checkout',
+                run(
+                    "checkout",
                     downstreams[int(r)],
                     stdout=sys.stdout,
-                    stderr=sys.stderr)
+                    stderr=sys.stderr,
+                )
                 break
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     with metrics.collector.print_notice_and_exit():
         sys.exit(main(sys.argv[1:]))

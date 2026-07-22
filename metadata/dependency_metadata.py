@@ -44,16 +44,16 @@ import metadata.fields.custom.license_allowlist as allowlist_util
 class DependencyMetadata:
     """The metadata for a single dependency.
 
-       See @property declarations below to retrieve validated fields for
-       downstream consumption.
+    See @property declarations below to retrieve validated fields for
+    downstream consumption.
 
-       The property returns `None` if the provided value (e.g. in
-       README.chromium file) is clearly invalid.
+    The property returns `None` if the provided value (e.g. in
+    README.chromium file) is clearly invalid.
 
-       Otherwise, it returns a suitably typed value (see comments on each
-       property).
+    Otherwise, it returns a suitably typed value (see comments on each
+    property).
 
-       To retrieve unvalidated (i.e. raw values) fields, use get_entries().
+    To retrieve unvalidated (i.e. raw values) fields, use get_entries().
     """
 
     # Fields that are always required.
@@ -83,17 +83,19 @@ class DependencyMetadata:
         self._metadata: Dict[field_types.MetadataField, str] = {}
 
         # The line numbers of each metadata fields.
-        self._metadata_line_numbers: Dict[field_types.MetadataField,
-                                          Set[int]] = defaultdict(lambda: set())
+        self._metadata_line_numbers: Dict[
+            field_types.MetadataField, Set[int]
+        ] = defaultdict(lambda: set())
 
         # The line numbers of the first and the last line (in the text file)
         # of this dependency metadata.
-        self._first_line = float('inf')
+        self._first_line = float("inf")
         self._last_line = -1
 
         # The record of how many times a field entry was added.
-        self._occurrences: Dict[field_types.MetadataField,
-                                int] = defaultdict(int)
+        self._occurrences: Dict[field_types.MetadataField, int] = defaultdict(
+            int
+        )
 
     def add_entry(self, field_name: str, field_value: str):
         value = field_value.strip()
@@ -115,18 +117,22 @@ class DependencyMetadata:
         self._first_line = min(self._first_line, line_number)
         self._last_line = max(self._last_line, line_number)
 
-    def record_field_line_number(self, field: field_types.MetadataField,
-                                 line_number: int):
+    def record_field_line_number(
+        self, field: field_types.MetadataField, line_number: int
+    ):
         self._metadata_line_numbers[field].add(line_number)
 
     def get_first_and_last_line_number(self) -> Tuple[int, int]:
         return (self._first_line, self._last_line)
 
-    def get_field_line_numbers(self,
-                               field: field_types.MetadataField) -> List[int]:
+    def get_field_line_numbers(
+        self, field: field_types.MetadataField
+    ) -> List[int]:
         return sorted(self._metadata_line_numbers[field])
 
-    def _assess_required_fields(self, is_open_source_project: bool = False) -> Set[field_types.MetadataField]:
+    def _assess_required_fields(
+        self, is_open_source_project: bool = False
+    ) -> Set[field_types.MetadataField]:
         """Returns the set of required fields, based on the current
         metadata.
         """
@@ -134,8 +140,9 @@ class DependencyMetadata:
 
         # Assume the dependency is shipped if not specified.
         shipped_value = self._metadata.get(known_fields.SHIPPED)
-        is_shipped = (shipped_value is None
-                      or util.infer_as_boolean(shipped_value, default=True))
+        is_shipped = shipped_value is None or util.infer_as_boolean(
+            shipped_value, default=True
+        )
 
         if is_shipped:
             # A license file is required if the dependency is shipped.
@@ -145,16 +152,22 @@ class DependencyMetadata:
             # package is shipped and the license is not in the
             # allowlist.
             license_value = self._metadata.get(known_fields.LICENSE)
-            if not license_value or not known_fields.LICENSE.all_licenses_allowed(
-                    license_value, is_open_source_project,
-                    is_shipped=is_shipped):
+            if (
+                not license_value
+                or not known_fields.LICENSE.all_licenses_allowed(
+                    license_value, is_open_source_project, is_shipped=is_shipped
+                )
+            ):
                 required.add(known_fields.LICENSE_ANDROID_COMPATIBLE)
 
         return required
 
-    def validate(self, source_file_dir: str,
-                 repo_root_dir: str,
-                 is_open_source_project: bool = False) -> List[vr.ValidationResult]:
+    def validate(
+        self,
+        source_file_dir: str,
+        repo_root_dir: str,
+        is_open_source_project: bool = False,
+    ) -> List[vr.ValidationResult]:
         """Validates all the metadata.
 
         Args:
@@ -172,21 +185,29 @@ class DependencyMetadata:
             field for field, count in self._occurrences.items() if count > 1
         ]
         if repeated_fields:
-            repeated = ", ".join([
-                f"{field.get_name()} ({self._occurrences[field]})"
-                for field in repeated_fields
-            ])
-            error = vr.ValidationError(reason="There is a repeated field.",
-                                       additional=[
-                                           f"Repeated fields: {repeated}",
-                                       ])
+            repeated = ", ".join(
+                [
+                    f"{field.get_name()} ({self._occurrences[field]})"
+                    for field in repeated_fields
+                ]
+            )
+            error = vr.ValidationError(
+                reason="There is a repeated field.",
+                additional=[
+                    f"Repeated fields: {repeated}",
+                ],
+            )
             # Merge line numbers.
             lines = sorted(
                 set(
-                    itertools.chain.from_iterable([
-                        self.get_field_line_numbers(field)
-                        for field in repeated_fields
-                    ])))
+                    itertools.chain.from_iterable(
+                        [
+                            self.get_field_line_numbers(field)
+                            for field in repeated_fields
+                        ]
+                    )
+                )
+            )
             error.set_lines(lines)
             results.append(error)
 
@@ -201,12 +222,15 @@ class DependencyMetadata:
                     field_result = main_field.validate(
                         main_value,
                         is_shipped=self.shipped,
-                        is_open_source_project=is_open_source_project)
+                        is_open_source_project=is_open_source_project,
+                    )
                     if field_result:
-                        field_result.set_tag(tag="field",
-                                             value=main_field.get_name())
+                        field_result.set_tag(
+                            tag="field", value=main_field.get_name()
+                        )
                         field_result.set_lines(
-                            self.get_field_line_numbers(main_field))
+                            self.get_field_line_numbers(main_field)
+                        )
                         results.append(field_result)
 
                 self._metadata[main_field] = self._metadata[alias_field]
@@ -225,16 +249,20 @@ class DependencyMetadata:
             if field_result:
                 field_result.set_tag(tag="field", value=source_field.get_name())
                 field_result.set_lines(
-                    self.get_field_line_numbers(source_field))
+                    self.get_field_line_numbers(source_field)
+                )
                 results.append(field_result)
 
         # Check required fields are present.
-        required_fields = self._assess_required_fields(is_open_source_project=is_open_source_project)
+        required_fields = self._assess_required_fields(
+            is_open_source_project=is_open_source_project
+        )
         for field in required_fields:
             if field not in self._metadata:
                 field_name = field.get_name()
                 error = vr.ValidationError(
-                    reason=f"Required field '{field_name}' is missing.")
+                    reason=f"Required field '{field_name}' is missing."
+                )
                 results.append(error)
 
         # If CPEPrefix is provided without a version, the Version field must be
@@ -246,21 +274,27 @@ class DependencyMetadata:
                 additional=[
                     "When the 'Version' field is not provided, the 'CPEPrefix' "
                     "must include a version component."
-                ])
-            error.set_lines(self.get_field_line_numbers(known_fields.CPE_PREFIX))
+                ],
+            )
+            error.set_lines(
+                self.get_field_line_numbers(known_fields.CPE_PREFIX)
+            )
             results.append(error)
 
         # If the repository is hosted somewhere (i.e. Chromium isn't the
         # canonical repositroy of the dependency), at least one of the fields
         # Version, Date or Revision must be provided, unless it is canonical or internal.
         if not (self.is_canonical or self.is_internal) and not (
-                self.version or self.date or self.revision
-                or self.revision_in_deps):
+            self.version or self.date or self.revision or self.revision_in_deps
+        ):
             versioning_fields = [
-                known_fields.VERSION, known_fields.DATE, known_fields.REVISION
+                known_fields.VERSION,
+                known_fields.DATE,
+                known_fields.REVISION,
             ]
             names = util.quoted(
-                [field.get_name() for field in versioning_fields])
+                [field.get_name() for field in versioning_fields]
+            )
             error = vr.ValidationError(
                 reason="Versioning fields are insufficient.",
                 additional=[f"Provide at least one of [{names}]."],
@@ -276,10 +310,12 @@ class DependencyMetadata:
                 repo_root_dir=repo_root_dir,
             )
             if result:
-                result.set_tag(tag="field",
-                               value=known_fields.LICENSE_FILE.get_name())
+                result.set_tag(
+                    tag="field", value=known_fields.LICENSE_FILE.get_name()
+                )
                 result.set_lines(
-                    self.get_field_line_numbers(known_fields.LICENSE_FILE))
+                    self.get_field_line_numbers(known_fields.LICENSE_FILE)
+                )
                 results.append(result)
 
         # Match values reported in the 'Mitigated:' field with the supplementry
@@ -298,7 +334,9 @@ class DependencyMetadata:
                     reason="Missing descriptions for vulnerability IDs",
                     additional=[
                         f"Add descriptions for: {util.quoted(missing_descriptions)}"
-                    ]))
+                    ],
+                )
+            )
 
         extra_descriptions = mitigated_entries - mitigated_ids
         if extra_descriptions:
@@ -307,25 +345,30 @@ class DependencyMetadata:
                     reason="Found descriptions for unlisted vulnerability IDs",
                     additional=[
                         f"List these IDs in the 'Mitigated:' field: {util.quoted(extra_descriptions)}"
-                    ]))
+                    ],
+                )
+            )
 
         # Begin by only warning for a small subset of cases.
         # TODO(b/438384123): Expand this to all cases.
-        if (self.security_critical
+        if (
+            self.security_critical
             and self.shipped
-            and self.vuln_scan_sufficiency == "insufficient"):
+            and self.vuln_scan_sufficiency == "insufficient"
+        ):
             # TODO(b/448003595): Provide a pre-populated bug link for when people
             # think this is incorrect.
             results.append(
                 vr.ValidationWarning(
-                    reason=
-                    "Dependency metadata is insufficient for vulnerability scanning.",
+                    reason="Dependency metadata is insufficient for vulnerability scanning.",
                     additional=[
                         "Please provide one of the following combinations:",
                         "- 'CPEPrefix' with a version.",
                         "- A git clonable 'URL' and a 'Revision'.",
                         "- A package manager 'URL' and a 'Version'. ",
-                    ]))
+                    ],
+                )
+            )
         return results
 
     def _cpe_prefix_lacks_version(self) -> List[vr.ValidationResult]:
@@ -336,7 +379,8 @@ class DependencyMetadata:
         cpe_provided = cpe_prefix and not util.is_unknown(cpe_prefix)
         version_is_valid = version and not util.is_not_applicable(version)
         cpe_has_version = cpe_prefix and cpe_prefix_util.has_version_component(
-            cpe_prefix)
+            cpe_prefix
+        )
         return cpe_provided and not (version_is_valid or cpe_has_version)
 
     def _mitigations_from_entries(self) -> Dict[str, str]:
@@ -368,7 +412,9 @@ class DependencyMetadata:
     def mitigations(self) -> Dict[str, str]:
         """Returns mapping of vulnerability IDs to their descriptions."""
         result = self._mitigations_from_entries()
-        mitigated_values = self._return_as_property(known_fields.MITIGATED) or []
+        mitigated_values = (
+            self._return_as_property(known_fields.MITIGATED) or []
+        )
         # Add entries listed in Mitigated field but without a supplement
         # mitigation description line.
         for id in mitigated_values:
@@ -471,13 +517,14 @@ class DependencyMetadata:
     @property
     def local_modifications(self) -> Optional[Union[Literal[False], str]]:
         """Returns `False` if there's no local modifications.
-           Otherwise the text content extracted from the metadata.
+        Otherwise the text content extracted from the metadata.
         """
         return self._return_as_property(known_fields.LOCAL_MODIFICATIONS)
 
     @property
     def update_mechanism(
-            self) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
+        self,
+    ) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
         """
         Returns the parsed Update Mechanism value.
 
@@ -521,7 +568,6 @@ class DependencyMetadata:
                     return True
         return False
 
-
     @property
     def vuln_scan_sufficiency(self) -> str:
         """Determines if the dependency metadata is sufficient for vulnerability scanning.
@@ -557,8 +603,10 @@ class DependencyMetadata:
         if self.update_mechanism and self.update_mechanism[0]:
             if self.update_mechanism[0].lower() == "static":
                 return "ignore:Static"
-            if (self.update_mechanism[1]
-                    and self.update_mechanism[1].lower() == "googlemanaged"):
+            if (
+                self.update_mechanism[1]
+                and self.update_mechanism[1].lower() == "googlemanaged"
+            ):
                 return "ignore:GoogleManaged"
 
         return "insufficient"

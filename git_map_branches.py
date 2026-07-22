@@ -38,14 +38,15 @@ import git_common
 import setup_color
 import from_third_party
 
-Fore = from_third_party.import_module('colorama').Fore
-Style = from_third_party.import_module('colorama').Style
+Fore = from_third_party.import_module("colorama").Fore
+Style = from_third_party.import_module("colorama").Style
 
-DEFAULT_SEPARATOR = ' ' * 4
+DEFAULT_SEPARATOR = " " * 4
 
 
 class OutputManager(object):
     """Manages a number of OutputLines and formats them into aligned columns."""
+
     def __init__(self):
         self.lines = []
         self.nocolor = False
@@ -60,28 +61,31 @@ class OutputManager(object):
         assert self.num_columns == len(line.columns)
 
         if self.nocolor:
-            line.colors = [''] * self.num_columns
+            line.colors = [""] * self.num_columns
 
         self.lines.append(line)
 
         # Update maximum column lengths.
         for i, col in enumerate(line.columns):
-            self.max_column_lengths[i] = max(self.max_column_lengths[i],
-                                             len(col))
+            self.max_column_lengths[i] = max(
+                self.max_column_lengths[i], len(col)
+            )
 
     def merge(self, other):
         for line in other.lines:
             self.append(line)
 
     def as_formatted_string(self):
-        return '\n'.join(
-            l.as_padded_string(self.max_column_lengths) for l in self.lines)
+        return "\n".join(
+            l.as_padded_string(self.max_column_lengths) for l in self.lines
+        )
 
 
 class OutputLine(object):
     """A single line of data.
 
     This consists of an equal number of columns, colors and separators."""
+
     def __init__(self):
         self.columns = []
         self.separators = []
@@ -93,15 +97,16 @@ class OutputLine(object):
         self.colors.append(color)
 
     def as_padded_string(self, max_column_lengths):
-        """"Returns the data as a string with each column padded to
+        """ "Returns the data as a string with each column padded to
         |max_column_lengths|."""
-        output_string = ''
+        output_string = ""
         for i, (color, data, separator) in enumerate(
-                zip(self.colors, self.columns, self.separators)):
+            zip(self.colors, self.columns, self.separators)
+        ):
             if max_column_lengths[i] == 0:
                 continue
 
-            padding = (max_column_lengths[i] - len(data)) * ' '
+            padding = (max_column_lengths[i] - len(data)) * " "
             output_string += color + data + padding + separator
 
         return output_string.rstrip()
@@ -115,6 +120,7 @@ class BranchMapper(object):
             consist of the branch hash, upstream and ahead/behind status.
         __gone_branches: a set of upstreams which are not fetchable by git
     """
+
     def __init__(self):
         self.verbosity = 0
         self.maxjobs = 0
@@ -134,24 +140,31 @@ class BranchMapper(object):
         self.__root = git_common.root()
         self.__branches_info = get_branches_info(
             include_tracking_status=self.verbosity >= 1,
-            include_frozen_status=self.verbosity >= 3)
-        if (self.verbosity >= 2):
+            include_frozen_status=self.verbosity >= 3,
+        )
+        if self.verbosity >= 2:
             # Avoid heavy import unless necessary.
             from git_cl import get_cl_statuses, color_for_status, Changelist
 
             change_cls = [
-                Changelist(branchref='refs/heads/' + b)
-                for b in self.__branches_info.keys() if b
+                Changelist(branchref="refs/heads/" + b)
+                for b in self.__branches_info.keys()
+                if b
             ]
-            status_info = get_cl_statuses(change_cls,
-                                          fine_grained=self.verbosity > 2,
-                                          max_processes=self.maxjobs)
+            status_info = get_cl_statuses(
+                change_cls,
+                fine_grained=self.verbosity > 2,
+                max_processes=self.maxjobs,
+            )
 
             # This is a blocking get which waits for the remote CL status to be
             # retrieved.
             for cl, status in status_info:
-                self.__status_info[cl.GetBranch()] = (cl.GetIssueURL(
-                    short=True), color_for_status(status), status)
+                self.__status_info[cl.GetBranch()] = (
+                    cl.GetIssueURL(short=True),
+                    color_for_status(status),
+                    status,
+                )
 
         roots = set()
 
@@ -175,7 +188,7 @@ class BranchMapper(object):
             self.__parent_map[parent].append(branch)
 
         self.__current_branch = current_branch()
-        self.__current_hash = hash_one('HEAD', short=True)
+        self.__current_hash = hash_one("HEAD", short=True)
         self.__tag_set = tags()
 
         if roots:
@@ -183,7 +196,7 @@ class BranchMapper(object):
                 self.__append_branch(root, self.output)
         else:
             no_branches = OutputLine()
-            no_branches.append('No User Branches')
+            no_branches.append("No User Branches")
             self.output.append(no_branches)
 
     def __check_cycle(self, branch):
@@ -195,9 +208,12 @@ class BranchMapper(object):
             parent = self.__branches_info[cycle[-1]].upstream
             cycle.append(parent)
             if parent == branch:
-                print('Warning: Detected cycle in branches: {}'.format(
-                    ' -> '.join(cycle)),
-                      file=sys.stderr)
+                print(
+                    "Warning: Detected cycle in branches: {}".format(
+                        " -> ".join(cycle)
+                    ),
+                    file=sys.stderr,
+                )
                 return True
         return False
 
@@ -205,9 +221,9 @@ class BranchMapper(object):
         return not parent or parent in self.__gone_branches
 
     def __color_for_branch(self, branch, branch_hash):
-        if branch == self.__root or branch.startswith('origin/'):
+        if branch == self.__root or branch.startswith("origin/"):
             color = Fore.RED
-        elif branch.startswith('branch-heads'):
+        elif branch.startswith("branch-heads"):
             color = Fore.BLUE
         elif self.__is_invalid_parent(branch) or branch in self.__tag_set:
             color = Fore.MAGENTA
@@ -224,10 +240,10 @@ class BranchMapper(object):
         return color
 
     def __is_dormant_branch(self, branch):
-        if '/' in branch:
+        if "/" in branch:
             return False
 
-        return get_config(f'branch.{branch}.dormant') == 'true'
+        return get_config(f"branch.{branch}.dormant") == "true"
 
     def __append_branch(self, branch, output, depth=0):
         """Recurses through the tree structure and appends an OutputLine to the
@@ -252,80 +268,87 @@ class BranchMapper(object):
         line = OutputLine()
 
         # The branch name with appropriate indentation.
-        suffix = ''
-        if branch == self.__current_branch or (self.__current_branch == 'HEAD'
-                                               and branch
-                                               == self.__current_hash):
-            suffix = ' *'
+        suffix = ""
+        if branch == self.__current_branch or (
+            self.__current_branch == "HEAD" and branch == self.__current_hash
+        ):
+            suffix = " *"
         branch_string = branch
         if branch in self.__gone_branches:
-            branch_string = '{%s:GONE}' % branch
+            branch_string = "{%s:GONE}" % branch
         if not branch:
-            branch_string = '{NO_UPSTREAM}'
-        main_string = '  ' * depth + branch_string + suffix
-        line.append(main_string,
-                    color=self.__color_for_branch(branch, branch_hash))
+            branch_string = "{NO_UPSTREAM}"
+        main_string = "  " * depth + branch_string + suffix
+        line.append(
+            main_string, color=self.__color_for_branch(branch, branch_hash)
+        )
 
         # The branch hash.
         if self.verbosity >= 2:
-            line.append(branch_hash or '', separator=' ', color=Fore.RED)
+            line.append(branch_hash or "", separator=" ", color=Fore.RED)
 
         # The branch tracking status.
         if self.verbosity >= 1:
-            commits_string = ''
-            behind_string = ''
-            front_separator = ''
-            center_separator = ''
-            back_separator = ''
+            commits_string = ""
+            behind_string = ""
+            front_separator = ""
+            center_separator = ""
+            back_separator = ""
             if branch_info and not self.__is_invalid_parent(
-                    branch_info.upstream):
+                branch_info.upstream
+            ):
                 behind = branch_info.behind
                 commits = branch_info.commits
 
                 if commits:
-                    commits_string = '%d commit' % commits
-                    commits_string += 's' if commits > 1 else ' '
+                    commits_string = "%d commit" % commits
+                    commits_string += "s" if commits > 1 else " "
                 if behind:
-                    behind_string = 'behind %d' % behind
+                    behind_string = "behind %d" % behind
 
                 if commits or behind:
-                    front_separator = '['
-                    back_separator = ']'
+                    front_separator = "["
+                    back_separator = "]"
 
                 if commits and behind:
-                    center_separator = '|'
+                    center_separator = "|"
 
-            line.append(front_separator, separator=' ')
-            line.append(commits_string, separator=' ', color=Fore.MAGENTA)
-            line.append(center_separator, separator=' ')
-            line.append(behind_string, separator=' ', color=Fore.MAGENTA)
+            line.append(front_separator, separator=" ")
+            line.append(commits_string, separator=" ", color=Fore.MAGENTA)
+            line.append(center_separator, separator=" ")
+            line.append(behind_string, separator=" ", color=Fore.MAGENTA)
             line.append(back_separator)
 
         if self.verbosity >= 4:
-            line.append(' (dormant)' if is_dormant_branch else '          ',
-                        separator='  ',
-                        color=Fore.RED)
+            line.append(
+                " (dormant)" if is_dormant_branch else "          ",
+                separator="  ",
+                color=Fore.RED,
+            )
 
         # The Rietveld issue associated with the branch.
         if self.verbosity >= 2:
-            (url, color,
-             status) = (('', '', '') if self.__is_invalid_parent(branch) else
-                        self.__status_info[branch])
+            (url, color, status) = (
+                ("", "", "")
+                if self.__is_invalid_parent(branch)
+                else self.__status_info[branch]
+            )
             if self.verbosity > 2:
-                line.append('{} ({})'.format(url, status) if url else '',
-                            color=color)
+                line.append(
+                    "{} ({})".format(url, status) if url else "", color=color
+                )
 
                 is_frozen = branch_info and branch_info.is_frozen
-                line.append('[frozen]' if is_frozen else '', color=Fore.CYAN)
+                line.append("[frozen]" if is_frozen else "", color=Fore.CYAN)
             else:
-                line.append(url or '', color=color)
+                line.append(url or "", color=color)
 
         # The subject of the most recent commit on the branch.
         if self.show_subject:
             if not self.__is_invalid_parent(branch):
-                line.append(run('log', '-n1', '--format=%s', branch, '--'))
+                line.append(run("log", "-n1", "--format=%s", branch, "--"))
             else:
-                line.append('')
+                line.append("")
 
         output.append(line)
 
@@ -334,63 +357,78 @@ class BranchMapper(object):
 
 def print_desc():
     for line in __doc__.splitlines():
-        starpos = line.find('* ')
-        if starpos == -1 or '-' not in line:
+        starpos = line.find("* ")
+        if starpos == -1 or "-" not in line:
             print(line)
         else:
             _, color, rest = line.split(None, 2)
-            outline = line[:starpos + 1]
-            outline += getattr(Fore,
-                               color.upper()) + " " + color + " " + Fore.RESET
+            outline = line[: starpos + 1]
+            outline += (
+                getattr(Fore, color.upper()) + " " + color + " " + Fore.RESET
+            )
             outline += rest
             print(outline)
-    print('')
+    print("")
 
 
-@metrics.collector.collect_metrics('git map-branches')
+@metrics.collector.collect_metrics("git map-branches")
 def main(argv):
     if gclient_utils.IsEnvCog():
-        print('map-branches command is not supported in non-git environment.',
-              file=sys.stderr)
+        print(
+            "map-branches command is not supported in non-git environment.",
+            file=sys.stderr,
+        )
         return 1
     setup_color.init()
     if get_git_version() < MIN_UPSTREAM_TRACK_GIT_VERSION:
         print(
-            'This tool will not show all tracking information for git version '
-            'earlier than ' +
-            '.'.join(str(x) for x in MIN_UPSTREAM_TRACK_GIT_VERSION) +
-            '. Please consider upgrading.',
-            file=sys.stderr)
+            "This tool will not show all tracking information for git version "
+            "earlier than "
+            + ".".join(str(x) for x in MIN_UPSTREAM_TRACK_GIT_VERSION)
+            + ". Please consider upgrading.",
+            file=sys.stderr,
+        )
 
-    if '-h' in argv:
+    if "-h" in argv:
         print_desc()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-v',
-                        action='count',
-                        default=0,
-                        help=('Pass once to show tracking info, '
-                              'twice for hash and review url, '
-                              'thrice for review status, '
-                              'four times to mark dormant branches'))
-    parser.add_argument('--no-color',
-                        action='store_true',
-                        dest='nocolor',
-                        help='Turn off colors.')
     parser.add_argument(
-        '-j',
-        '--maxjobs',
-        action='store',
+        "-v",
+        action="count",
+        default=0,
+        help=(
+            "Pass once to show tracking info, "
+            "twice for hash and review url, "
+            "thrice for review status, "
+            "four times to mark dormant branches"
+        ),
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        dest="nocolor",
+        help="Turn off colors.",
+    )
+    parser.add_argument(
+        "-j",
+        "--maxjobs",
+        action="store",
         type=int,
-        help='The number of jobs to use when retrieving review status')
-    parser.add_argument('--show-subject',
-                        action='store_true',
-                        dest='show_subject',
-                        help='Show the commit subject.')
-    parser.add_argument('--hide-dormant',
-                        action='store_true',
-                        dest='hide_dormant',
-                        help='Hides dormant branches.')
+        help="The number of jobs to use when retrieving review status",
+    )
+    parser.add_argument(
+        "--show-subject",
+        action="store_true",
+        dest="show_subject",
+        help="Show the commit subject.",
+    )
+    parser.add_argument(
+        "--hide-dormant",
+        action="store_true",
+        dest="hide_dormant",
+        help="Hides dormant branches.",
+    )
 
     opts = parser.parse_args(argv)
 
@@ -405,10 +443,10 @@ def main(argv):
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         with metrics.collector.print_notice_and_exit():
             sys.exit(main(sys.argv[1:]))
     except KeyboardInterrupt:
-        sys.stderr.write('interrupted\n')
+        sys.stderr.write("interrupted\n")
         sys.exit(1)

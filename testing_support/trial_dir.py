@@ -19,6 +19,7 @@ class TrialDir(object):
     directory created in /tmp or the equivalent. It will be deleted on process
     exit unless TrialDir.SHOULD_LEAK is set to True.
     """
+
     # When SHOULD_LEAK is set to True, temporary directories created while the
     # tests are running aren't deleted at the end of the tests. Expect failures
     # when running more than one test due to inter-test side-effects. Helps with
@@ -39,7 +40,8 @@ class TrialDir(object):
         if not self.TRIAL_ROOT:
             # Was not yet initialized.
             TrialDir.TRIAL_ROOT = os.path.realpath(
-                tempfile.mkdtemp(prefix='trial'))
+                tempfile.mkdtemp(prefix="trial")
+            )
             atexit.register(self._clean)
         self.root_dir = os.path.join(TrialDir.TRIAL_ROOT, self.subdir)
         gclient_utils.rmtree(self.root_dir)
@@ -48,20 +50,20 @@ class TrialDir(object):
     def tear_down(self):
         """Cleans the trial subdirectory for this instance."""
         if not self.leak:
-            logging.debug('Removing %s' % self.root_dir)
+            logging.debug("Removing %s" % self.root_dir)
             gclient_utils.rmtree(self.root_dir)
         else:
-            logging.error('Leaking %s' % self.root_dir)
+            logging.error("Leaking %s" % self.root_dir)
         self.root_dir = None
 
     @staticmethod
     def _clean():
         """Cleans the root trial directory."""
         if not TrialDir.SHOULD_LEAK:
-            logging.debug('Removing %s' % TrialDir.TRIAL_ROOT)
+            logging.debug("Removing %s" % TrialDir.TRIAL_ROOT)
             gclient_utils.rmtree(TrialDir.TRIAL_ROOT)
         else:
-            logging.error('Leaking %s' % TrialDir.TRIAL_ROOT)
+            logging.error("Leaking %s" % TrialDir.TRIAL_ROOT)
 
 
 class TrialDirMixIn(object):
@@ -80,6 +82,7 @@ class TrialDirMixIn(object):
 
 class TestCase(unittest.TestCase, TrialDirMixIn):
     """Base unittest class that cleans off a trial directory in tearDown()."""
+
     def setUp(self):
         unittest.TestCase.setUp(self)
         TrialDirMixIn.setUp(self)
@@ -89,8 +92,8 @@ class TestCase(unittest.TestCase, TrialDirMixIn):
         unittest.TestCase.tearDown(self)
 
 
-if '-l' in sys.argv:
+if "-l" in sys.argv:
     # See SHOULD_LEAK definition in TrialDir for its purpose.
     TrialDir.SHOULD_LEAK = True
-    print('Leaking!')
-    sys.argv.remove('-l')
+    print("Leaking!")
+    sys.argv.remove("-l")

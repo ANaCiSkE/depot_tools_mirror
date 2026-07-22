@@ -42,7 +42,7 @@ _WARNINGS = []
 # very large objects they contain.  It is not safe to use threaded index-pack
 # when cloning/fetching them.
 THREADED_INDEX_PACK_BLOCKLIST = [
-    'https://chromium.googlesource.com/chromium/reference_builds/chrome_win.git'
+    "https://chromium.googlesource.com/chromium/reference_builds/chrome_win.git"
 ]
 
 
@@ -57,23 +57,24 @@ def reraise(typ, value, tb=None):
 
 class Error(Exception):
     """gclient exception class."""
+
     def __init__(self, msg, *args, **kwargs):
-        index = getattr(threading.current_thread(), 'index', 0)
+        index = getattr(threading.current_thread(), "index", 0)
         if index:
-            msg = '\n'.join('%d> %s' % (index, l) for l in msg.splitlines())
+            msg = "\n".join("%d> %s" % (index, l) for l in msg.splitlines())
         super(Error, self).__init__(msg, *args, **kwargs)
 
 
 def Elapsed(until=None):
     if until is None:
         until = datetime.datetime.now()
-    return str(until - START).partition('.')[0]
+    return str(until - START).partition(".")[0]
 
 
 def PrintWarnings():
     """Prints any accumulated warnings."""
     if _WARNINGS:
-        print('\n\nWarnings:', file=sys.stderr)
+        print("\n\nWarnings:", file=sys.stderr)
         for warning in _WARNINGS:
             print(warning, file=sys.stderr)
 
@@ -98,22 +99,22 @@ def FuzzyMatchRepo(repo, candidates):
     """
     if repo in candidates:
         return repo
-    if repo.endswith('.git') and repo[:-len('.git')] in candidates:
-        return repo[:-len('.git')]
-    if repo + '.git' in candidates:
-        return repo + '.git'
+    if repo.endswith(".git") and repo[: -len(".git")] in candidates:
+        return repo[: -len(".git")]
+    if repo + ".git" in candidates:
+        return repo + ".git"
     return None
 
 
 def SplitUrlRevision(url):
     """Splits url and returns a two-tuple: url, rev."""
-    if url.startswith('ssh:'):
+    if url.startswith("ssh:"):
         # Make sure ssh://user-name@example.com/~/test.git@stable works
-        regex = r'(ssh://(?:[-.\w]+@)?[-\w:\.]+/[-~\w\./]+)(?:@(.+))?'
+        regex = r"(ssh://(?:[-.\w]+@)?[-\w:\.]+/[-~\w\./]+)(?:@(.+))?"
         components = re.search(regex, url).groups()
     else:
-        components = url.rsplit('@', 1)
-        if re.match(r'^\w+\@', url) and '@' not in components[0]:
+        components = url.rsplit("@", 1)
+        if re.match(r"^\w+\@", url) and "@" not in components[0]:
             components = [url]
 
         if len(components) == 1:
@@ -124,26 +125,26 @@ def SplitUrlRevision(url):
 def ExtractRefName(remote, full_refs_str):
     """Returns the ref name if full_refs_str is a valid ref."""
     result = re.compile(
-        r'^refs(\/.+)?\/((%s)|(heads)|(tags))\/(?P<ref_name>.+)' %
-        remote).match(full_refs_str)
+        r"^refs(\/.+)?\/((%s)|(heads)|(tags))\/(?P<ref_name>.+)" % remote
+    ).match(full_refs_str)
     if result:
-        return result.group('ref_name')
+        return result.group("ref_name")
     return None
 
 
 def IsGitSha(revision):
     """Returns true if the given string is a valid hex-encoded sha."""
-    return re.match('^[a-fA-F0-9]{6,40}$', revision) is not None
+    return re.match("^[a-fA-F0-9]{6,40}$", revision) is not None
 
 
 def IsFullGitSha(revision):
     """Returns true if the given string is a valid hex-encoded full sha."""
-    return re.match('^[a-fA-F0-9]{40}$', revision) is not None
+    return re.match("^[a-fA-F0-9]{40}$", revision) is not None
 
 
 def IsDateRevision(revision):
     """Returns true if the given revision is of the form "{ ... }"."""
-    return bool(revision and re.match(r'^\{.+\}$', str(revision)))
+    return bool(revision and re.match(r"^\{.+\}$", str(revision)))
 
 
 def MakeDateRevision(date):
@@ -157,11 +158,14 @@ def SyntaxErrorToError(filename, e):
     try:
         # Try to construct a human readable error message
         if filename:
-            error_message = 'There is a syntax error in %s\n' % filename
+            error_message = "There is a syntax error in %s\n" % filename
         else:
-            error_message = 'There is a syntax error\n'
+            error_message = "There is a syntax error\n"
         error_message += 'Line #%s, character %s: "%s"' % (
-            e.lineno, e.offset, re.sub(r'[\r\n]*$', '', e.text))
+            e.lineno,
+            e.offset,
+            re.sub(r"[\r\n]*$", "", e.text),
+        )
     except:
         # Something went wrong, re-raise the original exception
         raise e
@@ -171,11 +175,11 @@ def SyntaxErrorToError(filename, e):
 
 class PrintableObject(object):
     def __str__(self):
-        output = ''
+        output = ""
         for i in dir(self):
-            if i.startswith('__'):
+            if i.startswith("__"):
                 continue
-            output += '%s = %s\n' % (i, str(getattr(self, i, '')))
+            output += "%s = %s\n" % (i, str(getattr(self, i, "")))
         return output
 
 
@@ -197,17 +201,17 @@ def AskForData(message):
         sys.exit(1)
 
 
-def FileRead(filename, mode='rbU'):
+def FileRead(filename, mode="rbU"):
     # mode is ignored now; we always return unicode strings.
-    with open(filename, mode='rb') as f:
+    with open(filename, mode="rb") as f:
         s = f.read()
     try:
-        return s.decode('utf-8', 'replace')
+        return s.decode("utf-8", "replace")
     except (UnicodeDecodeError, AttributeError):
         return s
 
 
-def FileWrite(filename, content, mode='w', encoding='utf-8'):
+def FileWrite(filename, content, mode="w", encoding="utf-8"):
     with codecs.open(filename, mode=mode, encoding=encoding) as f:
         f.write(content)
 
@@ -270,8 +274,9 @@ def safe_replace(old, new):
                 # Give up.
                 raise
             # retry
-            logging.debug("Renaming failed from %s to %s. Retrying ..." %
-                          (old, new))
+            logging.debug(
+                "Renaming failed from %s to %s. Retrying ..." % (old, new)
+            )
             time.sleep(0.1)
 
 
@@ -311,20 +316,21 @@ def rmtree(path):
         return
 
     if os.path.islink(path) or not os.path.isdir(path):
-        raise Error('Called rmtree(%s) in non-directory' % path)
+        raise Error("Called rmtree(%s) in non-directory" % path)
 
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         # Give up and use cmd.exe's rd command.
         path = os.path.normcase(path)
         for _ in range(3):
             exitcode = subprocess.call(
-                ['cmd.exe', '/c', 'rd', '/q', '/s', path])
+                ["cmd.exe", "/c", "rd", "/q", "/s", path]
+            )
             if exitcode == 0:
                 return
 
-            print('rd exited with code %d' % exitcode, file=sys.stderr)
+            print("rd exited with code %d" % exitcode, file=sys.stderr)
             time.sleep(3)
-        raise Exception('Failed to remove path %s' % path)
+        raise Exception("Failed to remove path %s" % path)
 
     # On POSIX systems, we need the x-bit set on the directory to access it,
     # the r-bit to see its contents, and the w-bit to remove files from it.
@@ -371,13 +377,14 @@ def safe_makedirs(tree):
 
 def CommandToStr(args):
     """Converts an arg list into a shell escaped string."""
-    return ' '.join(shlex.quote(arg) for arg in args)
+    return " ".join(shlex.quote(arg) for arg in args)
 
 
 class Wrapper(object):
     """Wraps an object, acting as a transparent proxy for all properties by
     default.
     """
+
     def __init__(self, wrapped):
         self._wrapped = wrapped
 
@@ -387,9 +394,10 @@ class Wrapper(object):
 
 class AutoFlush(Wrapper):
     """Creates a file object clone to automatically flush after N seconds."""
+
     def __init__(self, wrapped, delay):
         super(AutoFlush, self).__init__(wrapped)
-        if not hasattr(self, 'lock'):
+        if not hasattr(self, "lock"):
             self.lock = threading.Lock()
         self.__last_flushed_at = time.time()
         self.delay = delay
@@ -403,8 +411,10 @@ class AutoFlush(Wrapper):
         should_flush = False
         self.lock.acquire()
         try:
-            if self.delay and (time.time() -
-                               self.__last_flushed_at) > self.delay:
+            if (
+                self.delay
+                and (time.time() - self.__last_flushed_at) > self.delay
+            ):
                 should_flush = True
                 self.__last_flushed_at = time.time()
         finally:
@@ -417,14 +427,16 @@ class Annotated(Wrapper):
     """Creates a file object clone to automatically prepends every line in
     worker threads with a NN> prefix.
     """
+
     def __init__(self, wrapped, include_zero=False):
         super(Annotated, self).__init__(wrapped)
-        if not hasattr(self, 'lock'):
+        if not hasattr(self, "lock"):
             self.lock = threading.Lock()
         self.__output_buffers = {}
         self.__include_zero = include_zero
-        self._wrapped_write = getattr(self._wrapped, 'buffer',
-                                      self._wrapped).write
+        self._wrapped_write = getattr(
+            self._wrapped, "buffer", self._wrapped
+        ).write
 
     @property
     def annotated(self):
@@ -433,9 +445,9 @@ class Annotated(Wrapper):
     def write(self, out):
         # Store as bytes to ensure Unicode characters get output correctly.
         if not isinstance(out, bytes):
-            out = out.encode('utf-8')
+            out = out.encode("utf-8")
 
-        index = getattr(threading.current_thread(), 'index', 0)
+        index = getattr(threading.current_thread(), "index", 0)
         if not index and not self.__include_zero:
             # Unindexed threads aren't buffered.
             return self._wrapped_write(out)
@@ -447,7 +459,7 @@ class Annotated(Wrapper):
             # dictionary otherwise. Using an array is faster than using a dummy
             # object.
             if not index in self.__output_buffers:
-                obj = self.__output_buffers[index] = [b'']
+                obj = self.__output_buffers[index] = [b""]
             else:
                 obj = self.__output_buffers[index]
         finally:
@@ -456,19 +468,19 @@ class Annotated(Wrapper):
         # Continue lockless.
         obj[0] += out
         while True:
-            cr_loc = obj[0].find(b'\r')
-            lf_loc = obj[0].find(b'\n')
+            cr_loc = obj[0].find(b"\r")
+            lf_loc = obj[0].find(b"\n")
             if cr_loc == lf_loc == -1:
                 break
 
             if cr_loc == -1 or (0 <= lf_loc < cr_loc):
-                line, remaining = obj[0].split(b'\n', 1)
+                line, remaining = obj[0].split(b"\n", 1)
                 if line:
-                    self._wrapped_write(b'%d>%s\n' % (index, line))
+                    self._wrapped_write(b"%d>%s\n" % (index, line))
             elif lf_loc == -1 or (0 <= cr_loc < lf_loc):
-                line, remaining = obj[0].split(b'\r', 1)
+                line, remaining = obj[0].split(b"\r", 1)
                 if line:
-                    self._wrapped_write(b'%d>%s\r' % (index, line))
+                    self._wrapped_write(b"%d>%s\r" % (index, line))
             obj[0] = remaining
 
     def flush(self):
@@ -477,7 +489,7 @@ class Annotated(Wrapper):
         self.lock.acquire()
         try:
             # Detect threads no longer existing.
-            indexes = (getattr(t, 'index', None) for t in threading.enumerate())
+            indexes = (getattr(t, "index", None) for t in threading.enumerate())
             indexes = filter(None, indexes)
             for index in self.__output_buffers:
                 if not index in indexes:
@@ -490,12 +502,12 @@ class Annotated(Wrapper):
         # Don't keep the lock while writing. Will append \n when it shouldn't.
         for orphan in orphans:
             if orphan[1]:
-                self._wrapped_write(b'%d>%s\n' % (orphan[0], orphan[1]))
+                self._wrapped_write(b"%d>%s\n" % (orphan[0], orphan[1]))
         return self._wrapped.flush()
 
 
 def MakeFileAutoFlush(fileobj, delay=10):
-    autoflush = getattr(fileobj, 'autoflush', None)
+    autoflush = getattr(fileobj, "autoflush", None)
     if autoflush:
         autoflush.delay = delay
         return fileobj
@@ -503,7 +515,7 @@ def MakeFileAutoFlush(fileobj, delay=10):
 
 
 def MakeFileAnnotated(fileobj, include_zero=False):
-    if getattr(fileobj, 'annotated', None):
+    if getattr(fileobj, "annotated", None):
         return fileobj
     return Annotated(fileobj, include_zero)
 
@@ -555,19 +567,23 @@ class GClientChildren(object):
 
         with GCLIENT_CHILDREN_LOCK:
             if GCLIENT_CHILDREN:
-                print('Could not kill the following subprocesses:',
-                      file=sys.stderr)
+                print(
+                    "Could not kill the following subprocesses:",
+                    file=sys.stderr,
+                )
                 for zombie in GCLIENT_CHILDREN:
-                    print('  ', zombie.pid, file=sys.stderr)
+                    print("  ", zombie.pid, file=sys.stderr)
 
 
-def CheckCallAndFilter(args,
-                       print_stdout=False,
-                       filter_fn=None,
-                       show_header=False,
-                       always_show_header=False,
-                       retry=False,
-                       **kwargs):
+def CheckCallAndFilter(
+    args,
+    print_stdout=False,
+    filter_fn=None,
+    show_header=False,
+    always_show_header=False,
+    retry=False,
+    **kwargs,
+):
     """Runs a command and calls back a filter function if needed.
 
     Accepts all subprocess2.Popen() parameters plus:
@@ -585,6 +601,7 @@ def CheckCallAndFilter(args,
 
     Returns the output of the command as a binary string.
     """
+
     def show_header_if_necessary(needs_header, attempt):
         """Show the header at most once."""
         if not needs_header[0]:
@@ -595,15 +612,17 @@ def CheckCallAndFilter(args,
         # always_show_header is false, since it usually indicates there's an
         # external progress display, and it's better not to clobber it in that
         # case.
-        header = '' if always_show_header else '\n'
-        header += '________ running \'%s\' in \'%s\'' % (' '.join(args),
-                                                         kwargs.get('cwd', '.'))
+        header = "" if always_show_header else "\n"
+        header += "________ running '%s' in '%s'" % (
+            " ".join(args),
+            kwargs.get("cwd", "."),
+        )
         if attempt:
-            header += ' attempt %s / %s' % (attempt + 1, RETRY_MAX + 1)
-        header += '\n'
+            header += " attempt %s / %s" % (attempt + 1, RETRY_MAX + 1)
+        header += "\n"
 
         if print_stdout:
-            stdout_write = getattr(sys.stdout, 'buffer', sys.stdout).write
+            stdout_write = getattr(sys.stdout, "buffer", sys.stdout).write
             stdout_write(header.encode())
         if filter_fn:
             filter_fn(header)
@@ -613,18 +632,18 @@ def CheckCallAndFilter(args,
         if not filter_fn or line_start is None:
             return
         command_output.seek(line_start)
-        filter_fn(command_output.read().decode('utf-8'))
+        filter_fn(command_output.read().decode("utf-8"))
 
     # Initialize stdout writer if needed. On Python 3, sys.stdout does not
     # accept byte inputs and sys.stdout.buffer must be used instead.
     if print_stdout:
         sys.stdout.flush()
-        stdout_write = getattr(sys.stdout, 'buffer', sys.stdout).write
+        stdout_write = getattr(sys.stdout, "buffer", sys.stdout).write
     else:
         stdout_write = lambda _: None
 
     sleep_interval = RETRY_INITIAL_SLEEP
-    run_cwd = kwargs.get('cwd', os.getcwd())
+    run_cwd = kwargs.get("cwd", os.getcwd())
 
     # Store the output of the command regardless of the value of print_stdout or
     # filter_fn.
@@ -634,7 +653,7 @@ def CheckCallAndFilter(args,
         # subprocess when filtering its output. This makes the subproc believe
         # it was launched from a terminal, which will preserve ANSI color codes.
         os_type = GetOperatingSystem()
-        if sys.stdout.isatty() and os_type not in ['win', 'aix', 'zos']:
+        if sys.stdout.isatty() and os_type not in ["win", "aix", "zos"]:
             pipe_reader, pipe_writer = os.openpty()
         else:
             pipe_reader, pipe_writer = os.pipe()
@@ -647,19 +666,21 @@ def CheckCallAndFilter(args,
         # environment will cause those values to be picked up by
         # `shutil.get_terminal_size()` in the subprocess (and of course
         # anything that checks for the env vars direcstly as well).
-        if 'env' not in kwargs:
-            kwargs['env'] = os.environ.copy()
-        if 'COLUMNS' not in kwargs['env'] or 'LINES' not in kwargs['env']:
+        if "env" not in kwargs:
+            kwargs["env"] = os.environ.copy()
+        if "COLUMNS" not in kwargs["env"] or "LINES" not in kwargs["env"]:
             size = shutil.get_terminal_size()
             if size.columns and size.lines:
-                kwargs['env']['COLUMNS'] = str(size.columns)
-                kwargs['env']['LINES'] = str(size.lines)
+                kwargs["env"]["COLUMNS"] = str(size.columns)
+                kwargs["env"]["LINES"] = str(size.lines)
 
-        kid = subprocess2.Popen(args,
-                                bufsize=0,
-                                stdout=pipe_writer,
-                                stderr=subprocess2.STDOUT,
-                                **kwargs)
+        kid = subprocess2.Popen(
+            args,
+            bufsize=0,
+            stdout=pipe_writer,
+            stderr=subprocess2.STDOUT,
+            **kwargs,
+        )
         # Close the write end of the pipe once we hand it off to the child proc.
         os.close(pipe_writer)
 
@@ -686,7 +707,7 @@ def CheckCallAndFilter(args,
                         in_byte = None
                     else:
                         raise e
-                is_newline = in_byte in (b'\n', b'\r')
+                is_newline = in_byte in (b"\n", b"\r")
                 if not in_byte:
                     break
 
@@ -716,7 +737,7 @@ def CheckCallAndFilter(args,
             GClientChildren.remove(kid)
 
         except KeyboardInterrupt:
-            print('Failed while running "%s"' % ' '.join(args), file=sys.stderr)
+            print('Failed while running "%s"' % " ".join(args), file=sys.stderr)
             raise
 
         if rv == 0:
@@ -725,14 +746,17 @@ def CheckCallAndFilter(args,
         if not retry:
             break
 
-        print("WARNING: subprocess '%s' in %s failed; will retry after a short "
-              'nap...' % (' '.join('"%s"' % x for x in args), run_cwd))
+        print(
+            "WARNING: subprocess '%s' in %s failed; will retry after a short "
+            "nap..." % (" ".join('"%s"' % x for x in args), run_cwd)
+        )
         command_output = io.BytesIO()
         time.sleep(sleep_interval)
         sleep_interval *= 2
 
-    raise subprocess2.CalledProcessError(rv, args, kwargs.get('cwd', None),
-                                         command_output.getvalue(), None)
+    raise subprocess2.CalledProcessError(
+        rv, args, kwargs.get("cwd", None), command_output.getvalue(), None
+    )
 
 
 class GitFilter(object):
@@ -742,7 +766,8 @@ class GitFilter(object):
     throttle the output of percentage completed lines to only output every X
     seconds.
     """
-    PERCENT_RE = re.compile('(.*) ([0-9]{1,3})% .*')
+
+    PERCENT_RE = re.compile("(.*) ([0-9]{1,3})% .*")
 
     def __init__(self, time_throttle=0, predicate=None, out_fh=None):
         """
@@ -777,7 +802,7 @@ class GitFilter(object):
                 return
         self.last_time = now
         if not self.first_line:
-            self.out_fh.write('[%s] ' % Elapsed())
+            self.out_fh.write("[%s] " % Elapsed())
         self.first_line = False
         print(line, file=self.out_fh)
 
@@ -802,17 +827,17 @@ def FindFileUpwards(filename, path=None):
 
 def GetOperatingSystem():
     """Returns 'mac', 'win', 'linux', or the name of the current platform."""
-    if sys.platform.startswith(('cygwin', 'win')):
-        return 'win'
+    if sys.platform.startswith(("cygwin", "win")):
+        return "win"
 
-    if sys.platform.startswith('linux'):
-        return 'linux'
+    if sys.platform.startswith("linux"):
+        return "linux"
 
-    if sys.platform == 'darwin':
-        return 'mac'
+    if sys.platform == "darwin":
+        return "mac"
 
-    if sys.platform.startswith('aix'):
-        return 'aix'
+    if sys.platform.startswith("aix"):
+        return "aix"
 
     try:
         return os.uname().sysname.lower()
@@ -822,7 +847,7 @@ def GetOperatingSystem():
 
 def GetGClientRootAndEntries(path=None):
     """Returns the gclient root and the dict of entries."""
-    config_file = '.gclient_entries'
+    config_file = ".gclient_entries"
     root = FindFileUpwards(config_file, path)
     if not root:
         print("Can't find %s" % config_file)
@@ -830,17 +855,18 @@ def GetGClientRootAndEntries(path=None):
     config_path = os.path.join(root, config_file)
     env = gclient_eval.ParseLocalConfig(FileRead(config_path), config_path)
     config_dir = os.path.dirname(config_path)
-    return config_dir, env['entries']
+    return config_dir, env["entries"]
 
 
 def lockedmethod(method):
     """Method decorator that holds self.lock for the duration of the call."""
+
     def inner(self, *args, **kwargs):
         try:
             try:
                 self.lock.acquire()
             except KeyboardInterrupt:
-                print('Was deadlocked', file=sys.stderr)
+                print("Was deadlocked", file=sys.stderr)
                 raise
             return method(self, *args, **kwargs)
         finally:
@@ -851,6 +877,7 @@ def lockedmethod(method):
 
 class WorkItem(object):
     """One work item."""
+
     # On cygwin, creating a lock throwing randomly when nearing ~100 locks.
     # As a workaround, use a single lock. Yep you read it right. Single lock for
     # all the 100 objects.
@@ -881,6 +908,7 @@ class ExecutionQueue(object):
 
     Methods of this class are thread safe.
     """
+
     def __init__(self, jobs, progress, ignore_requirements, verbose=False):
         """jobs specifies the number of concurrent tasks to allow. progress is a
         Progress instance."""
@@ -917,7 +945,7 @@ class ExecutionQueue(object):
             total = len(self.queued) + len(self.ran) + len(self.running)
             if self.jobs == 1:
                 total += 1
-            logging.debug('enqueued(%s)' % d.name)
+            logging.debug("enqueued(%s)" % d.name)
             if self.progress:
                 self.progress._total = total
                 self.progress.update(0)
@@ -931,56 +959,63 @@ class ExecutionQueue(object):
 
     def _print_stall_diagnostics(self, now):
         if self.progress:
-            print('')
+            print("")
             sys.stdout.flush()
 
         elapsed = Elapsed()
-        def _print(msg):
-            print(f'[{elapsed}] {msg}')
 
-        _print('STALL DETECTED: gclient has been silent for 5 minutes.')
-        _print('Currently active tasks:')
+        def _print(msg):
+            print(f"[{elapsed}] {msg}")
+
+        _print("STALL DETECTED: gclient has been silent for 5 minutes.")
+        _print("Currently active tasks:")
         for task in self.running:
             if task.item.start:
-                duration = str(now - task.item.start).partition('.')[0]
+                duration = str(now - task.item.start).partition(".")[0]
             else:
-                duration = 'N/A'
-            _print(f'   {task.item.name} (Running for {duration})')
-        _print('Suggestions:')
-        _print('1. Authentication: Check for background prompts.')
-        _print('2. Network: Check your internet connection and proxies.')
-        _print('3. Locks: Check for other git processes holding a lock.')
-        _print('4. Verbose: Run gclient with --verbose to see more output.')
+                duration = "N/A"
+            _print(f"   {task.item.name} (Running for {duration})")
+        _print("Suggestions:")
+        _print("1. Authentication: Check for background prompts.")
+        _print("2. Network: Check your internet connection and proxies.")
+        _print("3. Locks: Check for other git processes holding a lock.")
+        _print("4. Verbose: Run gclient with --verbose to see more output.")
         sys.stdout.flush()
 
     @staticmethod
-    def format_task_output(task, comment=''):
+    def format_task_output(task, comment=""):
         if comment:
-            comment = ' (%s)' % comment
+            comment = " (%s)" % comment
         if task.start and task.finish:
-            elapsed = ' (Elapsed: %s)' % (str(task.finish -
-                                              task.start).partition('.')[0])
+            elapsed = (
+                " (Elapsed: %s)"
+                % (str(task.finish - task.start).partition(".")[0])
+            )
         else:
-            elapsed = ''
+            elapsed = ""
         return """
 %s%s%s
 ----------------------------------------
 %s
-----------------------------------------""" % (task.name, comment, elapsed,
-                                               task.outbuf.getvalue().strip())
+----------------------------------------""" % (
+            task.name,
+            comment,
+            elapsed,
+            task.outbuf.getvalue().strip(),
+        )
 
     def _is_conflict(self, job):
         """Checks to see if a job will conflict with another running job."""
         for running_job in self.running:
             for used_resource in running_job.item.resources:
-                logging.debug('Checking resource %s' % used_resource)
+                logging.debug("Checking resource %s" % used_resource)
                 if used_resource in job.resources:
                     return True
         return False
 
     def flush(self, *args, **kwargs):
         """Runs all enqueued items until all are executed."""
-        kwargs['work_queue'] = self
+        kwargs["work_queue"] = self
         self.last_subproc_output = self.last_join = datetime.datetime.now()
         self.ready_cond.acquire()
         try:
@@ -992,23 +1027,28 @@ class ExecutionQueue(object):
                         # logged.
                         self.queued = []
                     self._flush_terminated_threads()
-                    if (not self.queued and not self.running
-                            or self.jobs == len(self.running)):
+                    if (
+                        not self.queued
+                        and not self.running
+                        or self.jobs == len(self.running)
+                    ):
                         logging.debug(
-                            'No more worker threads or can\'t queue anything.')
+                            "No more worker threads or can't queue anything."
+                        )
                         break
 
                     # Check for new tasks to start.
                     for i in range(len(self.queued)):
                         # Verify its requirements.
-                        if (self.ignore_requirements
-                                or not (set(self.queued[i].requirements) -
-                                        set(self.ran))):
+                        if self.ignore_requirements or not (
+                            set(self.queued[i].requirements) - set(self.ran)
+                        ):
                             if not self._is_conflict(self.queued[i]):
                                 # Start one work item: all its requirements are
                                 # satisfied.
-                                self._run_one_task(self.queued.pop(i), args,
-                                                   kwargs)
+                                self._run_one_task(
+                                    self.queued.pop(i), args, kwargs
+                                )
                                 break
                     else:
                         # Couldn't find an item that could run. Break out the
@@ -1027,52 +1067,67 @@ class ExecutionQueue(object):
                     now = datetime.datetime.now()
 
                     progress_timeout = datetime.timedelta(seconds=60)
-                    if (now - self.last_join > progress_timeout
-                            and self.last_subproc_output > self.last_join):
+                    if (
+                        now - self.last_join > progress_timeout
+                        and self.last_subproc_output > self.last_join
+                    ):
                         if self.progress:
-                            print('')
+                            print("")
                             sys.stdout.flush()
                         elapsed = Elapsed()
-                        print(f'[{elapsed}] Still working on:')
+                        print(f"[{elapsed}] Still working on:")
                         sys.stdout.flush()
                         for task in self.running:
-                            print(f'[{elapsed}]   {task.item.name}')
+                            print(f"[{elapsed}]   {task.item.name}")
                             sys.stdout.flush()
 
                     stall_timeout = datetime.timedelta(seconds=300)
-                    if (now - self.last_join > stall_timeout
-                            and now - self.last_subproc_output > stall_timeout):
+                    if (
+                        now - self.last_join > stall_timeout
+                        and now - self.last_subproc_output > stall_timeout
+                    ):
                         self._print_stall_diagnostics(now)
                         self.last_join = now
                 except KeyboardInterrupt:
                     # Help debugging by printing some information:
                     print(
-                        ('\nAllowed parallel jobs: %d\n# queued: %d\nRan: %s\n'
-                         'Running: %d') %
-                        (self.jobs, len(self.queued), ', '.join(
-                            self.ran), len(self.running)),
-                        file=sys.stderr)
+                        (
+                            "\nAllowed parallel jobs: %d\n# queued: %d\nRan: %s\n"
+                            "Running: %d"
+                        )
+                        % (
+                            self.jobs,
+                            len(self.queued),
+                            ", ".join(self.ran),
+                            len(self.running),
+                        ),
+                        file=sys.stderr,
+                    )
                     for i in self.queued:
-                        print('%s (not started): %s' %
-                              (i.name, ', '.join(i.requirements)),
-                              file=sys.stderr)
+                        print(
+                            "%s (not started): %s"
+                            % (i.name, ", ".join(i.requirements)),
+                            file=sys.stderr,
+                        )
                     for i in self.running:
-                        print(self.format_task_output(i.item, 'interrupted'),
-                              file=sys.stderr)
+                        print(
+                            self.format_task_output(i.item, "interrupted"),
+                            file=sys.stderr,
+                        )
                     raise
                 # Something happened: self.enqueue() or a thread terminated.
                 # Loop again.
         finally:
             self.ready_cond.release()
 
-        assert not self.running, 'Now guaranteed to be single-threaded'
+        assert not self.running, "Now guaranteed to be single-threaded"
         if not self.exceptions.empty():
             if self.progress:
-                print('')
+                print("")
             # To get back the stack location correctly, the raise a, b, c form
             # must be used, passing a tuple as the first argument doesn't work.
             e, task = self.exceptions.get()
-            print(self.format_task_output(task.item, 'ERROR'), file=sys.stderr)
+            print(self.format_task_output(task.item, "ERROR"), file=sys.stderr)
             reraise(e[0], e[1], e[2])
         elif self.progress:
             self.progress.end()
@@ -1093,8 +1148,10 @@ class ExecutionQueue(object):
                 if self.progress:
                     self.progress.update(1, t.item.name)
                 if t.item.name in self.ran:
-                    raise Error('gclient is confused, "%s" is already in "%s"' %
-                                (t.item.name, ', '.join(self.ran)))
+                    raise Error(
+                        'gclient is confused, "%s" is already in "%s"'
+                        % (t.item.name, ", ".join(self.ran))
+                    )
                 if not t.item.name in self.ran:
                     self.ran.append(t.item.name)
 
@@ -1110,34 +1167,43 @@ class ExecutionQueue(object):
             # exception.
             try:
                 task_item.start = datetime.datetime.now()
-                print('[%s] Started.' % Elapsed(task_item.start),
-                      file=task_item.outbuf)
+                print(
+                    "[%s] Started." % Elapsed(task_item.start),
+                    file=task_item.outbuf,
+                )
                 task_item.run(*args, **kwargs)
                 task_item.finish = datetime.datetime.now()
-                print('[%s] Finished.' % Elapsed(task_item.finish),
-                      file=task_item.outbuf)
+                print(
+                    "[%s] Finished." % Elapsed(task_item.finish),
+                    file=task_item.outbuf,
+                )
                 self.ran.append(task_item.name)
                 if self.verbose:
                     if self.progress:
-                        print('')
+                        print("")
                     print(self.format_task_output(task_item))
                 if self.progress:
                     self.progress.update(
-                        1, ', '.join(t.item.name for t in self.running))
+                        1, ", ".join(t.item.name for t in self.running)
+                    )
             except KeyboardInterrupt:
-                print(self.format_task_output(task_item, 'interrupted'),
-                      file=sys.stderr)
+                print(
+                    self.format_task_output(task_item, "interrupted"),
+                    file=sys.stderr,
+                )
                 raise
             except Exception:
-                print(self.format_task_output(task_item, 'ERROR'),
-                      file=sys.stderr)
+                print(
+                    self.format_task_output(task_item, "ERROR"), file=sys.stderr
+                )
                 raise
 
     class _Worker(threading.Thread):
         """One thread to execute one WorkItem."""
+
         def __init__(self, item, index, args, kwargs):
-            threading.Thread.__init__(self, name=item.name or 'Worker')
-            logging.info('_Worker(%s) reqs:%s' % (item.name, item.requirements))
+            threading.Thread.__init__(self, name=item.name or "Worker")
+            logging.info("_Worker(%s) reqs:%s" % (item.name, item.requirements))
             self.item = item
             self.index = index
             self.args = args
@@ -1146,29 +1212,34 @@ class ExecutionQueue(object):
 
         def run(self):
             """Runs in its own thread."""
-            logging.debug('_Worker.run(%s)' % self.item.name)
-            work_queue = self.kwargs['work_queue']
+            logging.debug("_Worker.run(%s)" % self.item.name)
+            work_queue = self.kwargs["work_queue"]
             try:
                 self.item.start = datetime.datetime.now()
-                print('[%s] Started.' % Elapsed(self.item.start),
-                      file=self.item.outbuf)
+                print(
+                    "[%s] Started." % Elapsed(self.item.start),
+                    file=self.item.outbuf,
+                )
                 self.item.run(*self.args, **self.kwargs)
                 self.item.finish = datetime.datetime.now()
-                print('[%s] Finished.' % Elapsed(self.item.finish),
-                      file=self.item.outbuf)
+                print(
+                    "[%s] Finished." % Elapsed(self.item.finish),
+                    file=self.item.outbuf,
+                )
             except KeyboardInterrupt:
-                logging.info('Caught KeyboardInterrupt in thread %s',
-                             self.item.name)
+                logging.info(
+                    "Caught KeyboardInterrupt in thread %s", self.item.name
+                )
                 logging.info(str(sys.exc_info()))
                 work_queue.exceptions.put((sys.exc_info(), self))
                 raise
             except Exception:
                 # Catch exception location.
-                logging.info('Caught exception in thread %s', self.item.name)
+                logging.info("Caught exception in thread %s", self.item.name)
                 logging.info(str(sys.exc_info()))
                 work_queue.exceptions.put((sys.exc_info(), self))
             finally:
-                logging.info('_Worker.run(%s) done', self.item.name)
+                logging.info("_Worker.run(%s) done", self.item.name)
                 work_queue.ready_cond.acquire()
                 try:
                     work_queue.ready_cond.notifyAll()
@@ -1189,16 +1260,16 @@ def GetEditor(git_editor=None):
     In the case of git-cl, this matches git's behaviour, except that it does not
     include dumb terminal detection.
     """
-    editor = os.environ.get('GIT_EDITOR') or git_editor
+    editor = os.environ.get("GIT_EDITOR") or git_editor
     if not editor:
-        editor = os.environ.get('VISUAL')
+        editor = os.environ.get("VISUAL")
     if not editor:
-        editor = os.environ.get('EDITOR')
+        editor = os.environ.get("EDITOR")
     if not editor:
-        if sys.platform.startswith('win'):
-            editor = 'notepad'
+        if sys.platform.startswith("win"):
+            editor = "notepad"
         else:
-            editor = 'vi'
+            editor = "vi"
     return editor
 
 
@@ -1208,20 +1279,23 @@ def RunEditor(content, git, git_editor=None):
     if not editor:
         return None
     # Make sure CRLF is handled properly by requiring none.
-    if '\r' in content:
-        print('!! Please remove \\r from your change description !!',
-              file=sys.stderr)
+    if "\r" in content:
+        print(
+            "!! Please remove \\r from your change description !!",
+            file=sys.stderr,
+        )
 
-    file_handle, filename = tempfile.mkstemp(text=True,
-                                             prefix='cl_description.')
-    fileobj = os.fdopen(file_handle, 'wb')
+    file_handle, filename = tempfile.mkstemp(
+        text=True, prefix="cl_description."
+    )
+    fileobj = os.fdopen(file_handle, "wb")
     # Still remove \r if present.
-    content = re.sub('\r?\n', '\n', content)
+    content = re.sub("\r?\n", "\n", content)
     # Some editors complain when the file doesn't end in \n.
-    if not content.endswith('\n'):
-        content += '\n'
+    if not content.endswith("\n"):
+        content += "\n"
 
-    if 'vim' in editor or editor == 'vi':
+    if "vim" in editor or editor == "vi":
         # If the user is using vim and has 'modelines' enabled, this will change
         # the filetype from a generic auto-detected 'conf' to 'gitcommit', which
         # is used to activate proper column wrapping, spell checking, syntax
@@ -1230,16 +1304,16 @@ def RunEditor(content, git, git_editor=None):
         # Because of the implementation of GetEditor above, we also check for
         # the exact string 'vi' here, to help users get a sane default when they
         # have vi symlink'd to vim (or something like vim).
-        fileobj.write('# vim: ft=gitcommit\n'.encode('utf-8'))
+        fileobj.write("# vim: ft=gitcommit\n".encode("utf-8"))
 
-    fileobj.write(content.encode('utf-8'))
+    fileobj.write(content.encode("utf-8"))
     fileobj.close()
 
     try:
-        cmd = '%s %s' % (editor, filename)
-        if sys.platform == 'win32' and os.environ.get('TERM') == 'msys':
+        cmd = "%s %s" % (editor, filename)
+        if sys.platform == "win32" and os.environ.get("TERM") == "msys":
             # Msysgit requires the usage of 'env' to be present.
-            cmd = 'env ' + cmd
+            cmd = "env " + cmd
         try:
             # shell=True to allow the shell to handle all forms of quotes in
             # $EDITOR.
@@ -1253,16 +1327,16 @@ def RunEditor(content, git, git_editor=None):
 
 def IsEnvCog():
     """Returns whether the command is running in a Cog environment."""
-    return os.getcwd().startswith('/google/cog/cloud')
+    return os.getcwd().startswith("/google/cog/cloud")
 
 
 AI_AGENT_ENV_VARS = (
-    'GEMINI_CLI',
-    'CLAUDECODE',
-    'ANTIGRAVITY_AGENT',
-    'CODEX_SANDBOX',
-    'CURSOR_AGENT',
-    'AI_AGENT',
+    "GEMINI_CLI",
+    "CLAUDECODE",
+    "ANTIGRAVITY_AGENT",
+    "CODEX_SANDBOX",
+    "CURSOR_AGENT",
+    "AI_AGENT",
 )
 
 
@@ -1273,7 +1347,7 @@ def GetAiAgentEnvVars(env=None):
     active = []
     for v in AI_AGENT_ENV_VARS:
         val = env.get(v)
-        if val is not None and str(val).lower() not in ('', '0', 'false'):
+        if val is not None and str(val).lower() not in ("", "0", "false"):
             active.append(v)
     return active
 
@@ -1292,15 +1366,15 @@ def UpgradeToHttps(url):
     """
     if not url:
         return url
-    if not re.match(r'[a-z\-]+\://.*', url):
+    if not re.match(r"[a-z\-]+\://.*", url):
         # Make sure it is a valid uri. Otherwise, urlparse() will consider it a
         # relative url and will use http:///foo. Note that it defaults to
         # http:// for compatibility with naked url like "localhost:8080".
-        url = 'http://%s' % url
+        url = "http://%s" % url
     parsed = list(urllib.parse.urlparse(url))
     # Do not automatically upgrade http to https if a port number is provided.
-    if parsed[0] == 'http' and not re.match(r'^.+?\:\d+$', parsed[1]):
-        parsed[0] = 'https'
+    if parsed[0] == "http" and not re.match(r"^.+?\:\d+$", parsed[1]):
+        parsed[0] = "https"
     return urllib.parse.urlunparse(parsed)
 
 
@@ -1308,17 +1382,18 @@ def ParseCodereviewSettingsContent(content):
     """Process a codereview.settings file properly."""
     lines = (l for l in content.splitlines() if not l.strip().startswith("#"))
     try:
-        keyvals = dict([x.strip() for x in l.split(':', 1)] for l in lines if l)
+        keyvals = dict([x.strip() for x in l.split(":", 1)] for l in lines if l)
     except ValueError:
-        raise Error('Failed to process settings, please fix. Content:\n\n%s' %
-                    content)
+        raise Error(
+            "Failed to process settings, please fix. Content:\n\n%s" % content
+        )
 
     def fix_url(key):
         if keyvals.get(key):
             keyvals[key] = UpgradeToHttps(keyvals[key])
 
-    fix_url('CODE_REVIEW_SERVER')
-    fix_url('VIEW_VC')
+    fix_url("CODE_REVIEW_SERVER")
+    fix_url("VIEW_VC")
     return keyvals
 
 
@@ -1336,21 +1411,24 @@ def NumLocalCpus():
         # NotImplementedError.
         try:
             import multiprocessing
+
             return multiprocessing.cpu_count()
         except NotImplementedError:  # pylint: disable=bare-except
             # (UNIX) Query 'os.sysconf'.
             # pylint: disable=no-member
-            if hasattr(os,
-                       'sysconf') and 'SC_NPROCESSORS_ONLN' in os.sysconf_names:
-                return int(os.sysconf('SC_NPROCESSORS_ONLN'))
+            if (
+                hasattr(os, "sysconf")
+                and "SC_NPROCESSORS_ONLN" in os.sysconf_names
+            ):
+                return int(os.sysconf("SC_NPROCESSORS_ONLN"))
 
             # (Windows) Query 'NUMBER_OF_PROCESSORS' environment variable.
-            if 'NUMBER_OF_PROCESSORS' in os.environ:
-                return int(os.environ['NUMBER_OF_PROCESSORS'])
+            if "NUMBER_OF_PROCESSORS" in os.environ:
+                return int(os.environ["NUMBER_OF_PROCESSORS"])
     except Exception as e:
         logging.exception("Exception raised while probing CPU count: %s", e)
 
-    logging.debug('Failed to get CPU count. Defaulting to 1.')
+    logging.debug("Failed to get CPU count. Defaulting to 1.")
     return 1
 
 
@@ -1361,27 +1439,27 @@ def DefaultDeltaBaseCacheLimit():
     size limit is per-thread, and 32-bit systems can hit OOM errors if this
     parameter is set too high.
     """
-    if platform.architecture()[0].startswith('64'):
-        return '2g'
+    if platform.architecture()[0].startswith("64"):
+        return "2g"
 
-    return '512m'
+    return "512m"
 
 
-def DefaultIndexPackConfig(url=''):
+def DefaultIndexPackConfig(url=""):
     """Return reasonable default values for configuring git-index-pack.
 
     Experiments suggest that higher values for pack.threads don't improve
     performance."""
     cache_limit = DefaultDeltaBaseCacheLimit()
-    result = ['-c', 'core.deltaBaseCacheLimit=%s' % cache_limit]
+    result = ["-c", "core.deltaBaseCacheLimit=%s" % cache_limit]
     if url in THREADED_INDEX_PACK_BLOCKLIST:
-        result.extend(['-c', 'pack.threads=1'])
+        result.extend(["-c", "pack.threads=1"])
     return result
 
 
 def FindExecutable(executable):
     """This mimics the "which" utility."""
-    path_folders = os.environ.get('PATH').split(os.pathsep)
+    path_folders = os.environ.get("PATH").split(os.pathsep)
 
     for path_folder in path_folders:
         target = os.path.join(path_folder, executable)
@@ -1389,11 +1467,12 @@ def FindExecutable(executable):
         target = os.path.abspath(os.path.expanduser(target))
         if os.path.isfile(target) and os.access(target, os.X_OK):
             return target
-        if sys.platform.startswith('win'):
-            for suffix in ('.bat', '.cmd', '.exe'):
+        if sys.platform.startswith("win"):
+            for suffix in (".bat", ".cmd", ".exe"):
                 alt_target = target + suffix
                 if os.path.isfile(alt_target) and os.access(
-                        alt_target, os.X_OK):
+                    alt_target, os.X_OK
+                ):
                     return alt_target
     return None
 
@@ -1428,14 +1507,15 @@ class FrozenDict(collections.abc.Mapping):
 
     Modified From: http://stackoverflow.com/a/2704866
     """
+
     def __init__(self, *args, **kwargs):
         self._d = collections.OrderedDict(*args, **kwargs)
 
         # Calculate the hash immediately so that we know all the items are
         # hashable too.
-        self._hash = functools.reduce(operator.xor,
-                                      (hash(i)
-                                       for i in enumerate(self._d.items())), 0)
+        self._hash = functools.reduce(
+            operator.xor, (hash(i) for i in enumerate(self._d.items())), 0
+        )
 
     def __eq__(self, other):
         if not isinstance(other, collections.abc.Mapping):
@@ -1462,7 +1542,7 @@ class FrozenDict(collections.abc.Mapping):
         return self._hash
 
     def __repr__(self):
-        return 'FrozenDict(%r)' % (self._d.items(), )
+        return "FrozenDict(%r)" % (self._d.items(),)
 
 
 def merge_conditions(*conditions):
@@ -1474,16 +1554,13 @@ def merge_conditions(*conditions):
         if not condition:
             condition = current_condition
             continue
-        condition = f'({condition}) and ({current_condition})'
+        condition = f"({condition}) and ({current_condition})"
     return condition
 
 
-def exponential_backoff_retry(fn,
-                              excs=(Exception, ),
-                              name=None,
-                              count=10,
-                              sleep_time=0.25,
-                              printerr=None):
+def exponential_backoff_retry(
+    fn, excs=(Exception,), name=None, count=10, sleep_time=0.25, printerr=None
+):
     """Executes |fn| up to |count| times, backing off exponentially.
 
     Args:
@@ -1511,7 +1588,9 @@ def exponential_backoff_retry(fn,
             if (i + 1) >= count:
                 raise
 
-            printerr('Retrying %s in %.2f second(s) (%d / %d attempts): %s' %
-                     ((name or 'operation'), sleep_time, (i + 1), count, e))
+            printerr(
+                "Retrying %s in %.2f second(s) (%d / %d attempts): %s"
+                % ((name or "operation"), sleep_time, (i + 1), count, e)
+            )
             time.sleep(sleep_time)
             sleep_time *= 2

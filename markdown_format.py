@@ -54,34 +54,37 @@ import setup_color
 import utils
 import from_third_party
 
-colorama = from_third_party.import_module('colorama')
+colorama = from_third_party.import_module("colorama")
 
 # Internal formatting rules.
-_WRAP_WIDTH = '80'
-_CONFIG_FILENAME = '.style.mdformat'
+_WRAP_WIDTH = "80"
+_CONFIG_FILENAME = ".style.mdformat"
 
 
 def _get_colored_diff(diff: Iterable[str]) -> str:
     """Adds ANSI colors to a unified diff if the output is a TTY."""
     if not setup_color.IS_TTY:
-        return ''.join(diff)
+        return "".join(diff)
 
     colored_lines = []
     for line in diff:
-        if line.startswith('---') or line.startswith('+++'):
+        if line.startswith("---") or line.startswith("+++"):
             colored_lines.append(line)
-        elif line.startswith('-'):
-            colored_lines.append(colorama.Fore.RED + line +
-                                 colorama.Style.RESET_ALL)
-        elif line.startswith('+'):
-            colored_lines.append(colorama.Fore.GREEN + line +
-                                 colorama.Style.RESET_ALL)
-        elif line.startswith('@@'):
-            colored_lines.append(colorama.Fore.CYAN + line +
-                                 colorama.Style.RESET_ALL)
+        elif line.startswith("-"):
+            colored_lines.append(
+                colorama.Fore.RED + line + colorama.Style.RESET_ALL
+            )
+        elif line.startswith("+"):
+            colored_lines.append(
+                colorama.Fore.GREEN + line + colorama.Style.RESET_ALL
+            )
+        elif line.startswith("@@"):
+            colored_lines.append(
+                colorama.Fore.CYAN + line + colorama.Style.RESET_ALL
+            )
         else:
             colored_lines.append(line)
-    return ''.join(colored_lines)
+    return "".join(colored_lines)
 
 
 def print_diff(original: str, formatted: str, filename: str) -> int:
@@ -91,10 +94,13 @@ def print_diff(original: str, formatted: str, filename: str) -> int:
         2 if differences were found, 0 otherwise.
     """
     diff = list(
-        difflib.unified_diff(original.splitlines(keepends=True),
-                             formatted.splitlines(keepends=True),
-                             fromfile=f'a/{filename}',
-                             tofile=f'b/{filename}'))
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            formatted.splitlines(keepends=True),
+            fromfile=f"a/{filename}",
+            tofile=f"b/{filename}",
+        )
+    )
 
     if not diff:
         return 0
@@ -120,7 +126,7 @@ def process_stdin(args: argparse.Namespace) -> int:
     directory hierarchy.
     """
     if args.files:
-        print('Error: Cannot specify files with --from-stdin.', file=sys.stderr)
+        print("Error: Cannot specify files with --from-stdin.", file=sys.stderr)
         return 1
 
     original = sys.stdin.read()
@@ -134,22 +140,21 @@ def process_stdin(args: argparse.Namespace) -> int:
             return 0
 
     try:
-        formatted = mdformat.text(original,
-                                  options={
-                                      'wrap': int(_WRAP_WIDTH),
-                                      'number': True
-                                  },
-                                  extensions={'frontmatter', 'tables'})
+        formatted = mdformat.text(
+            original,
+            options={"wrap": int(_WRAP_WIDTH), "number": True},
+            extensions={"frontmatter", "tables"},
+        )
     except Exception as e:
-        sys.stderr.write(f'Error formatting: {e}\n')
+        sys.stderr.write(f"Error formatting: {e}\n")
         return 1
 
     if args.diff:
-        return print_diff(original, formatted, args.assume_filename or 'stdin')
+        return print_diff(original, formatted, args.assume_filename or "stdin")
 
     if args.check:
         if original != formatted:
-            print('Markdown content is not formatted.', file=sys.stderr)
+            print("Markdown content is not formatted.", file=sys.stderr)
             return 2
         return 0
 
@@ -163,7 +168,7 @@ def process_files(args: argparse.Namespace) -> int:
     return_value = 0
     for path in args.files:
         if not os.path.exists(path):
-            print(f'Error: File not found: {path}', file=sys.stderr)
+            print(f"Error: File not found: {path}", file=sys.stderr)
             return_value = 1
             continue
 
@@ -171,18 +176,17 @@ def process_files(args: argparse.Namespace) -> int:
         if not utils.find_config_file(path, _CONFIG_FILENAME):
             continue
 
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, "r", encoding="utf-8") as f:
             original = f.read()
 
         try:
-            formatted = mdformat.text(original,
-                                      options={
-                                          'wrap': int(_WRAP_WIDTH),
-                                          'number': True
-                                      },
-                                      extensions={'frontmatter', 'tables'})
+            formatted = mdformat.text(
+                original,
+                options={"wrap": int(_WRAP_WIDTH), "number": True},
+                extensions={"frontmatter", "tables"},
+            )
         except Exception as e:
-            print(f'Error formatting {path}: {e}', file=sys.stderr)
+            print(f"Error formatting {path}: {e}", file=sys.stderr)
             return_value = 1
             continue
 
@@ -195,14 +199,14 @@ def process_files(args: argparse.Namespace) -> int:
                 return_value = return_value or 2
         else:
             if original != formatted:
-                with open(path, 'w', encoding='utf-8') as f:
+                with open(path, "w", encoding="utf-8") as f:
                     f.write(formatted)
-                print(f'Formatted {path}')
+                print(f"Formatted {path}")
 
     if return_value == 2 and args.check:
-        print('\nMarkdown files are not formatted correctly.', file=sys.stderr)
-        print('To fix, run:', file=sys.stderr)
-        print(f'  git cl format {" ".join(args.files)}', file=sys.stderr)
+        print("\nMarkdown files are not formatted correctly.", file=sys.stderr)
+        print("To fix, run:", file=sys.stderr)
+        print(f"  git cl format {' '.join(args.files)}", file=sys.stderr)
 
     return return_value
 
@@ -211,19 +215,22 @@ def main() -> int:
     setup_color.init()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        '--check',
-        action='store_true',
-        help='Check formatting and return non-zero if not formatted.')
+        "--check",
+        action="store_true",
+        help="Check formatting and return non-zero if not formatted.",
+    )
     parser.add_argument(
-        '--diff',
-        action='store_true',
-        help='Print diff to stdout rather than modifying files.')
-    parser.add_argument('--from-stdin',
-                        action='store_true',
-                        help='Read from stdin.')
-    parser.add_argument('--assume-filename',
-                        help='Filename hint when using --from-stdin.')
-    parser.add_argument('files', nargs='*', help='Markdown files to process.')
+        "--diff",
+        action="store_true",
+        help="Print diff to stdout rather than modifying files.",
+    )
+    parser.add_argument(
+        "--from-stdin", action="store_true", help="Read from stdin."
+    )
+    parser.add_argument(
+        "--assume-filename", help="Filename hint when using --from-stdin."
+    )
+    parser.add_argument("files", nargs="*", help="Markdown files to process.")
     args = parser.parse_args()
 
     if args.from_stdin:
@@ -235,5 +242,5 @@ def main() -> int:
     return process_files(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

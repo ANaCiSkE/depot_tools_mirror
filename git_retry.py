@@ -21,7 +21,7 @@ from git_common import GIT_EXE, GIT_TRANSIENT_ERRORS_RE
 
 class TeeThread(threading.Thread):
     def __init__(self, fd, out_fd, name):
-        super(TeeThread, self).__init__(name='git-retry.tee.%s' % (name, ))
+        super(TeeThread, self).__init__(name="git-retry.tee.%s" % (name,))
         self.data = None
         self.fd = fd
         self.out_fd = out_fd
@@ -29,15 +29,14 @@ class TeeThread(threading.Thread):
     def run(self):
         chunks = []
         for line in self.fd:
-            line = line.decode('utf-8')
+            line = line.decode("utf-8")
             chunks.append(line)
             self.out_fd.write(line)
-        self.data = ''.join(chunks)
+        self.data = "".join(chunks)
 
 
 class GitRetry(object):
-
-    logger = logging.getLogger('git-retry')
+    logger = logging.getLogger("git-retry")
     DEFAULT_DELAY_SECS = 3.0
     DEFAULT_RETRY_COUNT = 5
 
@@ -50,18 +49,20 @@ class GitRetry(object):
         m = GIT_TRANSIENT_ERRORS_RE.search(stderr)
         if not m:
             return False
-        self.logger.info("Encountered known transient error: [%s]",
-                         stderr[m.start():m.end()])
+        self.logger.info(
+            "Encountered known transient error: [%s]",
+            stderr[m.start() : m.end()],
+        )
         return True
 
     @staticmethod
     def execute(*args):
-        args = (GIT_EXE, ) + args
+        args = (GIT_EXE,) + args
         proc = subprocess.Popen(
             args,
             stderr=subprocess.PIPE,
         )
-        stderr_tee = TeeThread(proc.stderr, sys.stderr, 'stderr')
+        stderr_tee = TeeThread(proc.stderr, sys.stderr, "stderr")
 
         # Start our process. Collect/tee 'stdout' and 'stderr'.
         stderr_tee.start()
@@ -89,7 +90,7 @@ class GitRetry(object):
             # Linear delay
             return iteration * self.delay
         # Exponential delay
-        return (self.delay_factor**(iteration - 1)) * self.delay
+        return (self.delay_factor ** (iteration - 1)) * self.delay
 
     def __call__(self, *args):
         returncode = 0
@@ -98,23 +99,31 @@ class GitRetry(object):
             # the next run.
             delay = self.computeDelay(i)
             if delay > 0:
-                self.logger.info("Delaying for [%s second(s)] until next retry",
-                                 delay)
+                self.logger.info(
+                    "Delaying for [%s second(s)] until next retry", delay
+                )
                 time.sleep(delay)
 
-            self.logger.debug("Executing subprocess (%d/%d) with arguments: %s",
-                              (i + 1), self.retry_count, args)
+            self.logger.debug(
+                "Executing subprocess (%d/%d) with arguments: %s",
+                (i + 1),
+                self.retry_count,
+                args,
+            )
             returncode, _, stderr = self.execute(*args)
 
-            self.logger.debug("Process terminated with return code: %d",
-                              returncode)
+            self.logger.debug(
+                "Process terminated with return code: %d", returncode
+            )
             if returncode == 0:
                 break
 
             if not self.shouldRetry(stderr):
                 self.logger.error(
                     "Process failure was not known to be transient; "
-                    "terminating with return code %d", returncode)
+                    "terminating with return code %d",
+                    returncode,
+                )
                 break
         return returncode
 
@@ -122,49 +131,58 @@ class GitRetry(object):
 def main(args):
     # If we're using the Infra Git wrapper, do nothing here.
     # https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tools/git
-    if 'INFRA_GIT_WRAPPER' in os.environ:
+    if "INFRA_GIT_WRAPPER" in os.environ:
         # Remove Git's execution path from PATH so that our call-through
         # re-invokes the Git wrapper. See crbug.com/721450
         env = os.environ.copy()
-        git_exec = subprocess.check_output([GIT_EXE, '--exec-path']).strip()
-        env['PATH'] = os.pathsep.join([
-            elem for elem in env.get('PATH', '').split(os.pathsep)
-            if elem != git_exec
-        ])
+        git_exec = subprocess.check_output([GIT_EXE, "--exec-path"]).strip()
+        env["PATH"] = os.pathsep.join(
+            [
+                elem
+                for elem in env.get("PATH", "").split(os.pathsep)
+                if elem != git_exec
+            ]
+        )
         return subprocess.call([GIT_EXE] + args, env=env)
 
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
     parser.add_option(
-        '-v',
-        '--verbose',
-        action='count',
+        "-v",
+        "--verbose",
+        action="count",
         default=0,
-        help="Increase verbosity; can be specified multiple times")
-    parser.add_option('-c',
-                      '--retry-count',
-                      metavar='COUNT',
-                      type=int,
-                      default=GitRetry.DEFAULT_RETRY_COUNT,
-                      help="Number of times to retry (default=%default)")
-    parser.add_option('-d',
-                      '--delay',
-                      metavar='SECONDS',
-                      type=float,
-                      default=GitRetry.DEFAULT_DELAY_SECS,
-                      help="Specifies the amount of time (in seconds) to wait "
-                      "between successive retries (default=%default). This "
-                      "can be zero.")
+        help="Increase verbosity; can be specified multiple times",
+    )
     parser.add_option(
-        '-D',
-        '--delay-factor',
-        metavar='FACTOR',
+        "-c",
+        "--retry-count",
+        metavar="COUNT",
+        type=int,
+        default=GitRetry.DEFAULT_RETRY_COUNT,
+        help="Number of times to retry (default=%default)",
+    )
+    parser.add_option(
+        "-d",
+        "--delay",
+        metavar="SECONDS",
+        type=float,
+        default=GitRetry.DEFAULT_DELAY_SECS,
+        help="Specifies the amount of time (in seconds) to wait "
+        "between successive retries (default=%default). This "
+        "can be zero.",
+    )
+    parser.add_option(
+        "-D",
+        "--delay-factor",
+        metavar="FACTOR",
         type=int,
         default=2,
         help="The exponential factor to apply to delays in between "
         "successive failures (default=%default). If this is "
         "zero, delays will increase linearly. Set this to "
-        "one to have a constant (non-increasing) delay.")
+        "one to have a constant (non-increasing) delay.",
+    )
 
     opts, args = parser.parse_args(args)
 
@@ -185,11 +203,11 @@ def main(args):
     return retry(*args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig()
     logging.getLogger().setLevel(logging.WARNING)
     try:
         sys.exit(main(sys.argv[2:]))
     except KeyboardInterrupt:
-        sys.stderr.write('interrupted\n')
+        sys.stderr.write("interrupted\n")
         sys.exit(1)

@@ -21,7 +21,8 @@ _VULN_PREFIXES = [
 
 _PATTERN_PREFIX = "|".join(_VULN_PREFIXES)
 PATTERN_VULN_ID = re.compile(
-    rf"({_PATTERN_PREFIX})-[a-zA-Z0-9]{{4}}-[a-zA-Z0-9:-]+")
+    rf"({_PATTERN_PREFIX})-[a-zA-Z0-9]{{4}}-[a-zA-Z0-9:-]+"
+)
 PATTERN_VULN_ID_WITH_ANCHORS = re.compile(f"^{PATTERN_VULN_ID.pattern}$")
 
 
@@ -72,8 +73,8 @@ class MitigatedField(field_types.SingleLineTextField):
                 reason=f"{self._name} contains invalid vulnerability IDs.",
                 additional=[
                     f"Invalid Vulnerability IDs: {util.quoted(invalid_vuln_ids)}",
-                    "The following identifiers are supported: " +
-                    ", ".join(_VULN_PREFIXES),
+                    "The following identifiers are supported: "
+                    + ", ".join(_VULN_PREFIXES),
                 ],
             )
 

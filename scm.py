@@ -37,21 +37,23 @@ def determine_scm(root):
 
     Returns 'git' or 'diff'.
     """
-    if os.path.isdir(os.path.join(root, '.git')):
-        return 'git'
+    if os.path.isdir(os.path.join(root, ".git")):
+        return "git"
 
     try:
-        subprocess2.check_call(['git', 'rev-parse', '--show-cdup'],
-                               stdout=subprocess2.DEVNULL,
-                               stderr=subprocess2.DEVNULL,
-                               cwd=root)
-        return 'git'
+        subprocess2.check_call(
+            ["git", "rev-parse", "--show-cdup"],
+            stdout=subprocess2.DEVNULL,
+            stderr=subprocess2.DEVNULL,
+            cwd=root,
+        )
+        return "git"
     except (OSError, subprocess2.CalledProcessError):
-        return 'diff'
+        return "diff"
 
 
-GitConfigScope = Literal['system', 'global', 'local', 'worktree']
-GitScopeOrder: list[GitConfigScope] = ['system', 'global', 'local', 'worktree']
+GitConfigScope = Literal["system", "global", "local", "worktree"]
+GitScopeOrder: list[GitConfigScope] = ["system", "global", "local", "worktree"]
 GitFlatConfigData = Mapping[str, Mapping[str, Sequence[str]]]
 
 
@@ -84,8 +86,9 @@ class GitConfigStateBase(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def set_config(self, key: str, value: str, *, append: bool,
-                   scope: GitConfigScope):
+    def set_config(
+        self, key: str, value: str, *, append: bool, scope: GitConfigScope
+    ):
         """When invoked, this should set `key` to a singluar `value` in the git
         scope `scope` in this state's underlying data.
 
@@ -96,8 +99,14 @@ class GitConfigStateBase(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def set_config_multi(self, key: str, value: str, *,
-                         value_pattern: Optional[str], scope: GitConfigScope):
+    def set_config_multi(
+        self,
+        key: str,
+        value: str,
+        *,
+        value_pattern: Optional[str],
+        scope: GitConfigScope,
+    ):
         """When invoked, this should replace all existing values of `key` with
         `value` in the git scope `scope` in this state's underlying data.
 
@@ -111,8 +120,9 @@ class GitConfigStateBase(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def unset_config(self, key: str, *, scope: GitConfigScope,
-                     missing_ok: bool):
+    def unset_config(
+        self, key: str, *, scope: GitConfigScope, missing_ok: bool
+    ):
         """When invoked, remove a singlar value from `key` in this state's underlying data.
 
         If missing_ok is False and `key` is not present in the given scope, this
@@ -125,8 +135,14 @@ class GitConfigStateBase(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def unset_config_multi(self, key: str, *, value_pattern: Optional[str],
-                           scope: GitConfigScope, missing_ok: bool):
+    def unset_config_multi(
+        self,
+        key: str,
+        *,
+        value_pattern: Optional[str],
+        scope: GitConfigScope,
+        missing_ok: bool,
+    ):
         """When invoked, remove all values from `key` in this state's underlying data.
 
         If `value_pattern` is supplied, only values matching this pattern will
@@ -143,38 +159,34 @@ class GitConfigStateBase(metaclass=abc.ABCMeta):
 
 
 class GitConfigUnsetMissingValue(ValueError):
-
     def __init__(self, key: str, scope: str) -> None:
         super().__init__(
-            f'Cannot unset missing key {key!r} in scope {scope!r} with missing_ok=False.'
+            f"Cannot unset missing key {key!r} in scope {scope!r} with missing_ok=False."
         )
 
 
 class GitConfigUnsetMultipleValues(ValueError):
-
     def __init__(self, key: str, scope: str) -> None:
         super().__init__(
-            f'Cannot unset multi-value key {key!r} in scope {scope!r} with modify_all=False.'
+            f"Cannot unset multi-value key {key!r} in scope {scope!r} with modify_all=False."
         )
 
 
 class GitConfigUneditableScope(ValueError):
-
     def __init__(self, scope: str) -> None:
-        super().__init__(f'Cannot edit git config in scope {scope!r}.')
+        super().__init__(f"Cannot edit git config in scope {scope!r}.")
 
 
 class GitConfigUnknownScope(ValueError):
-
     def __init__(self, scope: str) -> None:
-        super().__init__(f'Unknown git config scope {scope!r}.')
+        super().__init__(f"Unknown git config scope {scope!r}.")
 
 
 class GitConfigInvalidKey(ValueError):
-
     def __init__(self, key: str) -> None:
         super().__init__(
-            f'Invalid git config key {key!r}: does not contain a section.')
+            f"Invalid git config key {key!r}: does not contain a section."
+        )
 
 
 def canonicalize_git_config_key(key: str) -> str:
@@ -187,13 +199,15 @@ def canonicalize_git_config_key(key: str) -> str:
     This also normalizes keys in the form 'section.variable' (both 'section' and
     'variable' will be lowercased).
     """
-    sections = key.split('.')
+    sections = key.split(".")
     if len(sections) >= 3:
-        return '.'.join(
-            chain((sections[0].lower(), ), sections[1:-1],
-                  (sections[-1].lower(), )))
+        return ".".join(
+            chain(
+                (sections[0].lower(),), sections[1:-1], (sections[-1].lower(),)
+            )
+        )
     if len(sections) == 2:
-        return '.'.join((sections[0].lower(), sections[1].lower()))
+        return ".".join((sections[0].lower(), sections[1].lower()))
     raise GitConfigInvalidKey(key)
 
 
@@ -233,10 +247,12 @@ class CachedGitConfigState(object):
     def clear_cache(self):
         self._config = None
 
-    def GetConfig(self,
-                  key: str,
-                  default: Optional[str] = None,
-                  scope: Optional[str] = None) -> Optional[str]:
+    def GetConfig(
+        self,
+        key: str,
+        default: Optional[str] = None,
+        scope: Optional[str] = None,
+    ) -> Optional[str]:
         """Lazily loads all configration observable for this CachedGitConfigState,
         then returns the last value for `key` as a string.
 
@@ -267,16 +283,16 @@ class CachedGitConfigState(object):
         This follows `git config` semantics (i.e. it normalizes the string value
         of the config value to "true" - all other string values return False).
         """
-        return self.GetConfig(key) == 'true'
+        return self.GetConfig(key) == "true"
 
     def GetConfigList(self, key: str) -> list[str]:
         """Returns all values of `key` as a list of strings."""
         key = canonicalize_git_config_key(key)
-        return list(self._maybe_load_config().get('default', {}).get(key, ()))
+        return list(self._maybe_load_config().get("default", {}).get(key, ()))
 
-    def YieldConfigRegexp(self,
-                          pattern: Optional[str] = None
-                          ) -> Iterable[tuple[str, str]]:
+    def YieldConfigRegexp(
+        self, pattern: Optional[str] = None
+    ) -> Iterable[tuple[str, str]]:
         """Yields (key, value) pairs for any config keys matching `pattern`.
 
         This use re.match, so `pattern` needs to be for the entire config key.
@@ -291,21 +307,24 @@ class CachedGitConfigState(object):
             pred = lambda _: True
         else:
             pred = re.compile(pattern).match
-        for key, values in sorted(self._maybe_load_config().get('default',
-                                                                {}).items()):
+        for key, values in sorted(
+            self._maybe_load_config().get("default", {}).items()
+        ):
             if pred(key):
                 for value in values:
                     yield key, value
 
-    def SetConfig(self,
-                  key,
-                  value=None,
-                  *,
-                  append: bool = False,
-                  missing_ok: bool = True,
-                  modify_all: bool = False,
-                  scope: GitConfigScope = 'local',
-                  value_pattern: Optional[str] = None):
+    def SetConfig(
+        self,
+        key,
+        value=None,
+        *,
+        append: bool = False,
+        missing_ok: bool = True,
+        modify_all: bool = False,
+        scope: GitConfigScope = "local",
+        value_pattern: Optional[str] = None,
+    ):
         """Sets or unsets one or more config values.
 
         Args:
@@ -333,38 +352,38 @@ class CachedGitConfigState(object):
         """
         if scope not in GitScopeOrder:
             raise GitConfigUnknownScope(scope)
-        if scope == 'system':
+        if scope == "system":
             raise GitConfigUneditableScope(scope)
 
         if value is None:
             if modify_all:
-                self._impl.unset_config_multi(key,
-                                              value_pattern=value_pattern,
-                                              scope=scope,
-                                              missing_ok=missing_ok)
+                self._impl.unset_config_multi(
+                    key,
+                    value_pattern=value_pattern,
+                    scope=scope,
+                    missing_ok=missing_ok,
+                )
             else:
                 self._impl.unset_config(key, scope=scope, missing_ok=missing_ok)
         else:
             if value_pattern:
                 if not modify_all:
                     raise ValueError(
-                        'SetConfig with (value_pattern) and (not modify_all) is invalid.'
+                        "SetConfig with (value_pattern) and (not modify_all) is invalid."
                     )
                 if append:
                     raise ValueError(
-                        'SetConfig with (value_pattern) and (append) is invalid.'
+                        "SetConfig with (value_pattern) and (append) is invalid."
                     )
 
-                self._impl.set_config_multi(key,
-                                            value,
-                                            value_pattern=value_pattern,
-                                            scope=scope)
+                self._impl.set_config_multi(
+                    key, value, value_pattern=value_pattern, scope=scope
+                )
             else:
                 if modify_all:
-                    self._impl.set_config_multi(key,
-                                                value,
-                                                value_pattern=None,
-                                                scope=scope)
+                    self._impl.set_config_multi(
+                        key, value, value_pattern=None, scope=scope
+                    )
 
                 self._impl.set_config(key, value, append=append, scope=scope)
 
@@ -387,25 +406,26 @@ class GitConfigStateReal(GitConfigStateBase):
     def load_config(self) -> GitFlatConfigData:
         # NOTE: `git config --list` already canonicalizes keys.
         try:
-            gitConfigCmd = ['config', '--list', '-z', '--show-scope']
+            gitConfigCmd = ["config", "--list", "-z", "--show-scope"]
             if git_common.get_git_version() <= (2, 25):
-                gitConfigCmd = ['config', '--list', '-z']
+                gitConfigCmd = ["config", "--list", "-z"]
 
-            rawConfig = GIT.Capture(gitConfigCmd,
-                                    cwd=self.root,
-                                    strip_out=False)
+            rawConfig = GIT.Capture(
+                gitConfigCmd, cwd=self.root, strip_out=False
+            )
         except subprocess2.CalledProcessError:
             return {}
 
         assert isinstance(rawConfig, str)
-        cfg: Dict[str, Dict[str,
-                            list[str]]] = defaultdict(lambda: defaultdict(list))
+        cfg: Dict[str, Dict[str, list[str]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
 
-        entries = rawConfig.split('\x00')[:-1]
+        entries = rawConfig.split("\x00")[:-1]
 
         def process_entry(entry: str, scope: str) -> None:
-            parts = entry.split('\n', 1)
-            key, value = parts if len(parts) == 2 else (parts[0], '')
+            parts = entry.split("\n", 1)
+            key, value = parts if len(parts) == 2 else (parts[0], "")
             key, value = key.strip(), value.strip()
             cfg[scope][key].append(value)
             if scope != "default":
@@ -413,7 +433,7 @@ class GitConfigStateReal(GitConfigStateBase):
 
         i = 0
         while i < len(entries):
-            if entries[i] in ['local', 'global', 'system']:
+            if entries[i] in ["local", "global", "system"]:
                 scope = entries[i]
                 i += 1
                 if i < len(entries):
@@ -424,61 +444,77 @@ class GitConfigStateReal(GitConfigStateBase):
 
         return cfg
 
-    def set_config(self, key: str, value: str, *, append: bool,
-                   scope: GitConfigScope):
+    def set_config(
+        self, key: str, value: str, *, append: bool, scope: GitConfigScope
+    ):
         # NOTE: `git config` already canonicalizes key.
-        args = ['config', f'--{scope}', key, value]
+        args = ["config", f"--{scope}", key, value]
         if append:
-            args.append('--add')
+            args.append("--add")
         with self._scope_lock(scope):
             GIT.Capture(args, cwd=self.root)
 
-    def set_config_multi(self, key: str, value: str, *,
-                         value_pattern: Optional[str], scope: GitConfigScope):
+    def set_config_multi(
+        self,
+        key: str,
+        value: str,
+        *,
+        value_pattern: Optional[str],
+        scope: GitConfigScope,
+    ):
         # NOTE: `git config` already canonicalizes key.
-        args = ['config', f'--{scope}', '--replace-all', key, value]
+        args = ["config", f"--{scope}", "--replace-all", key, value]
         if value_pattern is not None:
             args.append(value_pattern)
         with self._scope_lock(scope):
             GIT.Capture(args, cwd=self.root)
 
-    def unset_config(self, key: str, *, scope: GitConfigScope,
-                     missing_ok: bool):
+    def unset_config(
+        self, key: str, *, scope: GitConfigScope, missing_ok: bool
+    ):
         # NOTE: `git config` already canonicalizes key.
-        accepted_retcodes = (0, 5) if missing_ok else (0, )
+        accepted_retcodes = (0, 5) if missing_ok else (0,)
         try:
             with self._scope_lock(scope):
-                GIT.Capture(['config', f'--{scope}', '--unset', key],
-                            cwd=self.root,
-                            accepted_retcodes=accepted_retcodes)
+                GIT.Capture(
+                    ["config", f"--{scope}", "--unset", key],
+                    cwd=self.root,
+                    accepted_retcodes=accepted_retcodes,
+                )
         except subprocess2.CalledProcessError as cpe:
             if cpe.returncode == 5:
-                if b'multiple values' in cpe.stderr:
+                if b"multiple values" in cpe.stderr:
                     raise GitConfigUnsetMultipleValues(key, scope)
                 raise GitConfigUnsetMissingValue(key, scope)
             raise
 
-    def unset_config_multi(self, key: str, *, value_pattern: Optional[str],
-                           scope: GitConfigScope, missing_ok: bool):
+    def unset_config_multi(
+        self,
+        key: str,
+        *,
+        value_pattern: Optional[str],
+        scope: GitConfigScope,
+        missing_ok: bool,
+    ):
         # NOTE: `git config` already canonicalizes key.
-        accepted_retcodes = (0, 5) if missing_ok else (0, )
-        args = ['config', f'--{scope}', '--unset-all', key]
+        accepted_retcodes = (0, 5) if missing_ok else (0,)
+        args = ["config", f"--{scope}", "--unset-all", key]
         if value_pattern is not None:
             args.append(value_pattern)
         try:
             with self._scope_lock(scope):
-                GIT.Capture(args,
-                            cwd=self.root,
-                            accepted_retcodes=accepted_retcodes)
+                GIT.Capture(
+                    args, cwd=self.root, accepted_retcodes=accepted_retcodes
+                )
         except subprocess2.CalledProcessError as cpe:
             if cpe.returncode == 5:
                 raise GitConfigUnsetMissingValue(key, scope)
             raise
 
     def _scope_lock(
-            self,
-            scope: GitConfigScope) -> contextlib.AbstractContextManager[Any]:
-        if scope == 'global':
+        self, scope: GitConfigScope
+    ) -> contextlib.AbstractContextManager[Any]:
+        if scope == "global":
             return self._GLOBAL_LOCK
         # TODO(ayatane): We should lock per local repo scope as well
         # from a correctness perspective.
@@ -491,11 +527,13 @@ class GitConfigStateTest(GitConfigStateBase):
     To properly initialize this, see tests/scm_mock.py.
     """
 
-    def __init__(self,
-                 global_state_lock: threading.Lock,
-                 global_state: dict[str, list[str]],
-                 *,
-                 system_state: Optional[GitFlatConfigData] = None):
+    def __init__(
+        self,
+        global_state_lock: threading.Lock,
+        global_state: dict[str, list[str]],
+        *,
+        system_state: Optional[GitFlatConfigData] = None,
+    ):
         """Initializes a new (local, worktree) config state, with a reference to
         a single global `global` state and an optional immutable `system` state.
 
@@ -520,18 +558,19 @@ class GitConfigStateTest(GitConfigStateBase):
 
     @contextlib.contextmanager
     def _editable_scope(
-            self, scope: GitConfigScope) -> Iterator[dict[str, list[str]]]:
-        if scope == 'system':
+        self, scope: GitConfigScope
+    ) -> Iterator[dict[str, list[str]]]:
+        if scope == "system":
             # This is also checked in CachedGitConfigState.SetConfig, but double
             # check here.
             raise GitConfigUneditableScope(scope)
 
-        if scope == 'global':
+        if scope == "global":
             with self.global_state_lock:
                 yield self.global_state
-        elif scope == 'local':
+        elif scope == "local":
             yield self.local_state
-        elif scope == 'worktree':
+        elif scope == "worktree":
             yield self.worktree_state
         else:
             # This is also checked in CachedGitConfigState.SetConfig, but double
@@ -540,22 +579,24 @@ class GitConfigStateTest(GitConfigStateBase):
 
     def load_config(self) -> GitFlatConfigData:
         cfg: Mapping[str, Mapping[str, list[str]]] = defaultdict(
-            lambda: defaultdict(list))
+            lambda: defaultdict(list)
+        )
 
         for key, values in self.system_state.items():
-            cfg['system'][key].extend(values)
-            cfg['default'][key].extend(values)
+            cfg["system"][key].extend(values)
+            cfg["default"][key].extend(values)
         for ordered_scope in GitScopeOrder:
-            if ordered_scope == 'system':
+            if ordered_scope == "system":
                 continue
             with self._editable_scope(ordered_scope) as scope_cfg:
                 for key, values in scope_cfg.items():
                     cfg[ordered_scope][key].extend(values)
-                    cfg['default'][key].extend(values)
+                    cfg["default"][key].extend(values)
         return cfg
 
-    def set_config(self, key: str, value: str, *, append: bool,
-                   scope: GitConfigScope):
+    def set_config(
+        self, key: str, value: str, *, append: bool, scope: GitConfigScope
+    ):
         key = canonicalize_git_config_key(key)
         with self._editable_scope(scope) as cfg:
             cur = cfg.get(key)
@@ -568,11 +609,19 @@ class GitConfigStateTest(GitConfigStateBase):
             if len(cur) == 1:
                 cfg[key] = [value]
                 return
-            raise ValueError(f'GitConfigStateTest: Cannot set key {key} '
-                             f'- current value {cur!r} is multiple.')
+            raise ValueError(
+                f"GitConfigStateTest: Cannot set key {key} "
+                f"- current value {cur!r} is multiple."
+            )
 
-    def set_config_multi(self, key: str, value: str, *,
-                         value_pattern: Optional[str], scope: GitConfigScope):
+    def set_config_multi(
+        self,
+        key: str,
+        value: str,
+        *,
+        value_pattern: Optional[str],
+        scope: GitConfigScope,
+    ):
         key = canonicalize_git_config_key(key)
         with self._editable_scope(scope) as cfg:
             cur = cfg.get(key)
@@ -596,8 +645,9 @@ class GitConfigStateTest(GitConfigStateBase):
                 newval.append(value)
             cfg[key] = newval
 
-    def unset_config(self, key: str, *, scope: GitConfigScope,
-                     missing_ok: bool):
+    def unset_config(
+        self, key: str, *, scope: GitConfigScope, missing_ok: bool
+    ):
         key = canonicalize_git_config_key(key)
         with self._editable_scope(scope) as cfg:
             cur = cfg.get(key)
@@ -610,8 +660,14 @@ class GitConfigStateTest(GitConfigStateBase):
                 return
             raise GitConfigUnsetMultipleValues(key, scope)
 
-    def unset_config_multi(self, key: str, *, value_pattern: Optional[str],
-                           scope: GitConfigScope, missing_ok: bool):
+    def unset_config_multi(
+        self,
+        key: str,
+        *,
+        value_pattern: Optional[str],
+        scope: GitConfigScope,
+        missing_ok: bool,
+    ):
         key = canonicalize_git_config_key(key)
         with self._editable_scope(scope) as cfg:
             cur = cfg.get(key)
@@ -682,12 +738,13 @@ class GIT(object):
             for key, val in cls._CONFIG_CACHE.items():
                 if val is not None:
                     state[str(key)] = val._maybe_load_config().get(
-                        'default', {})
+                        "default", {}
+                    )
         return state
 
     @staticmethod
     def ApplyEnvVars(kwargs):
-        env = kwargs.pop('env', None) or os.environ.copy()
+        env = kwargs.pop("env", None) or os.environ.copy()
         # Don't prompt for passwords; just fail quickly and noisily.
         # By default, git will use an interactive terminal prompt when a
         # username/ password is needed.  That shouldn't happen in the chromium
@@ -696,44 +753,48 @@ class GIT(object):
         # has gone wrong will be when gclient hangs unresponsively.  Instead, we
         # disable the password prompt and simply allow git to fail noisily.  The
         # error message produced by git will be copied to gclient's output.
-        env.setdefault('GIT_ASKPASS', 'true')
-        env.setdefault('SSH_ASKPASS', 'true')
+        env.setdefault("GIT_ASKPASS", "true")
+        env.setdefault("SSH_ASKPASS", "true")
         # 'cat' is a magical git string that disables pagers on all platforms.
-        env.setdefault('GIT_PAGER', 'cat')
+        env.setdefault("GIT_PAGER", "cat")
         # Git-on-Borg does not support Git LFS. Skip attempted checkouts.
-        env.setdefault('GIT_LFS_SKIP_SMUDGE', '1')
+        env.setdefault("GIT_LFS_SKIP_SMUDGE", "1")
         return env
 
     @staticmethod
     def Capture(args, cwd=None, strip_out=True, **kwargs) -> str | bytes:
-        kwargs.setdefault('env', GIT.ApplyEnvVars(kwargs))
-        kwargs.setdefault('cwd', cwd)
-        kwargs.setdefault('autostrip', strip_out)
+        kwargs.setdefault("env", GIT.ApplyEnvVars(kwargs))
+        kwargs.setdefault("cwd", cwd)
+        kwargs.setdefault("autostrip", strip_out)
         return git_common.run(*args, **kwargs)
 
     @staticmethod
     def CaptureStatus(
-            cwd: str,
-            upstream_branch: str,
-            end_commit: Optional[str] = None,
-            ignore_submodules: bool = True) -> Sequence[tuple[str, str]]:
+        cwd: str,
+        upstream_branch: str,
+        end_commit: Optional[str] = None,
+        ignore_submodules: bool = True,
+    ) -> Sequence[tuple[str, str]]:
         """Returns git status.
 
         Returns an array of (status, file) tuples."""
         if end_commit is None:
-            end_commit = ''
+            end_commit = ""
         if upstream_branch is None:
             upstream_branch = GIT.GetUpstreamBranch(cwd)
             if upstream_branch is None:
-                raise gclient_utils.Error('Cannot determine upstream branch')
+                raise gclient_utils.Error("Cannot determine upstream branch")
 
         command = [
-            '-c', 'core.quotePath=false', 'diff', '--name-status',
-            '--no-renames'
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--name-status",
+            "--no-renames",
         ]
         if ignore_submodules:
-            command.append('--ignore-submodules=all')
-        command.extend(['-r', '%s...%s' % (upstream_branch, end_commit)])
+            command.append("--ignore-submodules=all")
+        command.extend(["-r", "%s...%s" % (upstream_branch, end_commit)])
 
         status = GIT.Capture(command, cwd)
         assert isinstance(status, str)
@@ -743,19 +804,22 @@ class GIT(object):
                 # 3-way merges can cause the status can be 'MMM' instead of 'M'.
                 # This can happen when the user has 2 local branches and he
                 # diffs between these 2 branches instead diffing to upstream.
-                m = re.match(r'^(\w)+\t(.+)$', statusline)
+                m = re.match(r"^(\w)+\t(.+)$", statusline)
                 if not m:
                     raise gclient_utils.Error(
-                        'status currently unsupported: %s' % statusline)
+                        "status currently unsupported: %s" % statusline
+                    )
                 # Only grab the first letter.
-                results.append(('%s      ' % m.group(1)[0], m.group(2)))
+                results.append(("%s      " % m.group(1)[0], m.group(2)))
         return results
 
     @staticmethod
-    def GetConfig(cwd: str,
-                  key: str,
-                  default: Optional[str] = None,
-                  scope: Optional[str] = None) -> Optional[str]:
+    def GetConfig(
+        cwd: str,
+        key: str,
+        default: Optional[str] = None,
+        scope: Optional[str] = None,
+    ) -> Optional[str]:
         """Lazily loads all configration observable for this CachedGitConfigState,
         then returns the last value for `key` as a string.
 
@@ -779,8 +843,8 @@ class GIT(object):
 
     @staticmethod
     def YieldConfigRegexp(
-            cwd: str,
-            pattern: Optional[str] = None) -> Iterable[tuple[str, str]]:
+        cwd: str, pattern: Optional[str] = None
+    ) -> Iterable[tuple[str, str]]:
         """Yields (key, value) pairs for any config keys matching `pattern`.
 
         This use re.match, so `pattern` needs to be for the entire config key.
@@ -790,24 +854,25 @@ class GIT(object):
         yield from GIT._get_config_state(cwd).YieldConfigRegexp(pattern)
 
     @staticmethod
-    def GetBranchConfig(cwd: str,
-                        branch: str,
-                        key: str,
-                        default: Optional[str] = None) -> Optional[str]:
-        assert branch, 'A branch must be given'
-        key = 'branch.%s.%s' % (branch, key)
+    def GetBranchConfig(
+        cwd: str, branch: str, key: str, default: Optional[str] = None
+    ) -> Optional[str]:
+        assert branch, "A branch must be given"
+        key = "branch.%s.%s" % (branch, key)
         return GIT.GetConfig(cwd, key, default)
 
     @staticmethod
-    def SetConfig(cwd: str,
-                  key: str,
-                  value: Optional[str] = None,
-                  *,
-                  append: bool = False,
-                  missing_ok: bool = True,
-                  modify_all: bool = False,
-                  scope: GitConfigScope = 'local',
-                  value_pattern: Optional[str] = None):
+    def SetConfig(
+        cwd: str,
+        key: str,
+        value: Optional[str] = None,
+        *,
+        append: bool = False,
+        missing_ok: bool = True,
+        modify_all: bool = False,
+        scope: GitConfigScope = "local",
+        value_pattern: Optional[str] = None,
+    ):
         """Sets or unsets one or more config values.
 
         Args:
@@ -833,30 +898,32 @@ class GIT(object):
                 the currently configured value. Ignored for
                 `modify_all=False`.
         """
-        GIT._get_config_state(cwd).SetConfig(key,
-                                             value,
-                                             append=append,
-                                             missing_ok=missing_ok,
-                                             modify_all=modify_all,
-                                             scope=scope,
-                                             value_pattern=value_pattern)
+        GIT._get_config_state(cwd).SetConfig(
+            key,
+            value,
+            append=append,
+            missing_ok=missing_ok,
+            modify_all=modify_all,
+            scope=scope,
+            value_pattern=value_pattern,
+        )
 
     @staticmethod
     def SetBranchConfig(cwd, branch, key, value=None):
-        assert branch, 'A branch must be given'
-        key = 'branch.%s.%s' % (branch, key)
+        assert branch, "A branch must be given"
+        key = "branch.%s.%s" % (branch, key)
         GIT.SetConfig(cwd, key, value)
 
     @staticmethod
     def ShortBranchName(branch):
         """Converts a name like 'refs/heads/foo' to just 'foo'."""
-        return branch.replace('refs/heads/', '')
+        return branch.replace("refs/heads/", "")
 
     @staticmethod
     def GetBranchRef(cwd):
         """Returns the full branch reference, e.g. 'refs/heads/main'."""
         try:
-            return GIT.Capture(['symbolic-ref', 'HEAD'], cwd=cwd)
+            return GIT.Capture(["symbolic-ref", "HEAD"], cwd=cwd)
         except subprocess2.CalledProcessError:
             return None
 
@@ -868,12 +935,12 @@ class GIT(object):
         use_local=False skips the local refs/remotes/<remote>/HEAD lookup,
         for callers whose cwd may point at a different upstream than url."""
         if use_local and os.path.exists(cwd):
-            ref = 'refs/remotes/%s/HEAD' % remote
+            ref = "refs/remotes/%s/HEAD" % remote
             try:
                 # Try using local git copy first
-                ref = GIT.Capture(['symbolic-ref', ref], cwd=cwd)
+                ref = GIT.Capture(["symbolic-ref", ref], cwd=cwd)
                 assert isinstance(ref, str)
-                if not ref.endswith('master'):
+                if not ref.endswith("master"):
                     return ref
             except subprocess2.CalledProcessError:
                 pass
@@ -881,26 +948,26 @@ class GIT(object):
             try:
                 # Check if there are changes in the default branch for this
                 # particular repository.
-                GIT.Capture(['remote', 'set-head', '-a', remote], cwd=cwd)
-                return GIT.Capture(['symbolic-ref', ref], cwd=cwd)
+                GIT.Capture(["remote", "set-head", "-a", remote], cwd=cwd)
+                return GIT.Capture(["symbolic-ref", ref], cwd=cwd)
             except subprocess2.CalledProcessError:
                 pass
 
         try:
             # Fetch information from git server
-            resp = GIT.Capture(['ls-remote', '--symref', url, 'HEAD'])
+            resp = GIT.Capture(["ls-remote", "--symref", url, "HEAD"])
             assert isinstance(resp, str)
-            regex = r'^ref: (.*)\tHEAD$'
-            for line in resp.split('\n'):
+            regex = r"^ref: (.*)\tHEAD$"
+            for line in resp.split("\n"):
                 m = re.match(regex, line)
                 if m:
                     refpair = GIT.RefToRemoteRef(m.group(1), remote)
                     assert isinstance(refpair, tuple)
-                    return ''.join(refpair)
+                    return "".join(refpair)
         except subprocess2.CalledProcessError:
             pass
         # Return default branch
-        return 'refs/remotes/%s/main' % remote
+        return "refs/remotes/%s/main" % remote
 
     @staticmethod
     def GetBranch(cwd):
@@ -912,12 +979,11 @@ class GIT(object):
 
     @staticmethod
     def GetRemoteBranches(cwd):
-        return GIT.Capture(['branch', '-r'], cwd=cwd).split()
+        return GIT.Capture(["branch", "-r"], cwd=cwd).split()
 
     @staticmethod
     def FetchUpstreamTuple(
-            cwd: str,
-            branch: Optional[str] = None
+        cwd: str, branch: Optional[str] = None
     ) -> tuple[Optional[str], Optional[str]]:
         """Returns a tuple containing remote and remote ref,
         e.g. 'origin', 'refs/heads/main'
@@ -927,25 +993,25 @@ class GIT(object):
         except subprocess2.CalledProcessError:
             pass
         if branch:
-            upstream_branch = GIT.GetBranchConfig(cwd, branch, 'merge')
+            upstream_branch = GIT.GetBranchConfig(cwd, branch, "merge")
             if upstream_branch:
-                remote = GIT.GetBranchConfig(cwd, branch, 'remote', '.')
+                remote = GIT.GetBranchConfig(cwd, branch, "remote", ".")
                 return remote, upstream_branch
 
-        upstream_branch = GIT.GetConfig(cwd, 'rietveld.upstream-branch')
+        upstream_branch = GIT.GetConfig(cwd, "rietveld.upstream-branch")
         if upstream_branch:
-            remote = GIT.GetConfig(cwd, 'rietveld.upstream-remote', '.')
+            remote = GIT.GetConfig(cwd, "rietveld.upstream-remote", ".")
             return remote, upstream_branch
 
         # Else, try to guess the origin remote.
         remote_branches = GIT.GetRemoteBranches(cwd)
-        if 'origin/main' in remote_branches:
+        if "origin/main" in remote_branches:
             # Fall back on origin/main if it exits.
-            return 'origin', 'refs/heads/main'
+            return "origin", "refs/heads/main"
 
-        if 'origin/master' in remote_branches:
+        if "origin/master" in remote_branches:
             # Fall back on origin/master if it exits.
-            return 'origin', 'refs/heads/master'
+            return "origin", "refs/heads/master"
 
         return None, None
 
@@ -961,48 +1027,50 @@ class GIT(object):
         # git config. It's a bit better than the even more brute-force
         # replace('heads', ...), but could still be smarter (like maybe actually
         # using values gleaned from the git config).
-        m = re.match('^(refs/(remotes/)?)?branch-heads/', ref or '')
+        m = re.match("^(refs/(remotes/)?)?branch-heads/", ref or "")
         if m:
-            return ('refs/remotes/branch-heads/', ref.replace(m.group(0), ''))
+            return ("refs/remotes/branch-heads/", ref.replace(m.group(0), ""))
 
-        m = re.match('^((refs/)?remotes/)?%s/|(refs/)?heads/' % remote, ref
-                     or '')
+        m = re.match(
+            "^((refs/)?remotes/)?%s/|(refs/)?heads/" % remote, ref or ""
+        )
         if m:
-            return ('refs/remotes/%s/' % remote, ref.replace(m.group(0), ''))
+            return ("refs/remotes/%s/" % remote, ref.replace(m.group(0), ""))
 
         return None
 
     @staticmethod
     def RemoteRefToRef(ref, remote):
-        assert remote, 'A remote must be given'
-        if not ref or not ref.startswith('refs/'):
+        assert remote, "A remote must be given"
+        if not ref or not ref.startswith("refs/"):
             return None
-        if not ref.startswith('refs/remotes/'):
+        if not ref.startswith("refs/remotes/"):
             return ref
-        if ref.startswith('refs/remotes/branch-heads/'):
-            return 'refs' + ref[len('refs/remotes'):]
-        if ref.startswith('refs/remotes/%s/' % remote):
-            return 'refs/heads' + ref[len('refs/remotes/%s' % remote):]
+        if ref.startswith("refs/remotes/branch-heads/"):
+            return "refs" + ref[len("refs/remotes") :]
+        if ref.startswith("refs/remotes/%s/" % remote):
+            return "refs/heads" + ref[len("refs/remotes/%s" % remote) :]
         return None
 
     @staticmethod
     def GetUpstreamBranch(cwd) -> Optional[str]:
         """Gets the current branch's upstream branch."""
         remote, upstream_branch = GIT.FetchUpstreamTuple(cwd)
-        if remote != '.' and upstream_branch:
+        if remote != "." and upstream_branch:
             remote_ref = GIT.RefToRemoteRef(upstream_branch, remote)
             if remote_ref:
-                upstream_branch = ''.join(remote_ref)
+                upstream_branch = "".join(remote_ref)
         return upstream_branch
 
     @staticmethod
-    def IsAncestor(maybe_ancestor: str,
-                   ref: str,
-                   cwd: Optional[str] = None) -> bool:
+    def IsAncestor(
+        maybe_ancestor: str, ref: str, cwd: Optional[str] = None
+    ) -> bool:
         """Verifies if |maybe_ancestor| is an ancestor of |ref|."""
         try:
-            GIT.Capture(['merge-base', '--is-ancestor', maybe_ancestor, ref],
-                        cwd=cwd)
+            GIT.Capture(
+                ["merge-base", "--is-ancestor", maybe_ancestor, ref], cwd=cwd
+            )
             return True
         except subprocess2.CalledProcessError:
             return False
@@ -1011,23 +1079,25 @@ class GIT(object):
     def GetOldContents(cwd, filename, branch=None):
         if not branch:
             branch = GIT.GetUpstreamBranch(cwd)
-        if platform.system() == 'Windows':
+        if platform.system() == "Windows":
             # git show <sha>:<path> wants a posix path.
-            filename = filename.replace('\\', '/')
-        command = ['show', '%s:%s' % (branch, filename)]
+            filename = filename.replace("\\", "/")
+        command = ["show", "%s:%s" % (branch, filename)]
         try:
             return GIT.Capture(command, cwd=cwd, strip_out=False)
         except subprocess2.CalledProcessError:
-            return ''
+            return ""
 
     @staticmethod
-    def GenerateDiff(cwd: str,
-                     branch: Optional[str] = None,
-                     branch_head: str = 'HEAD',
-                     full_move: bool = False,
-                     files: Optional[Iterable[str]] = None,
-                     allow_prefix: bool = False,
-                     context: int = 3) -> str:
+    def GenerateDiff(
+        cwd: str,
+        branch: Optional[str] = None,
+        branch_head: str = "HEAD",
+        full_move: bool = False,
+        files: Optional[Iterable[str]] = None,
+        allow_prefix: bool = False,
+        context: int = 3,
+    ) -> str:
         """Diffs against the upstream branch or optionally another branch.
 
         full_move means that move or copy operations should completely recreate the
@@ -1036,31 +1106,31 @@ class GIT(object):
             branch = GIT.GetUpstreamBranch(cwd)
             assert isinstance(branch, str)
         command = [
-            '-c',
-            'core.quotePath=false',
-            'diff',
-            '-p',
-            '--no-color',
-            '--no-ext-diff',
-            f'-U{context}',
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "-p",
+            "--no-color",
+            "--no-ext-diff",
+            f"-U{context}",
         ]
 
         if allow_prefix:
             # explicitly setting --src-prefix and --dst-prefix is necessary in the
             # case that diff.noprefix is set in the user's git config.
-            command.extend(['--src-prefix=a/', '--dst-prefix=b/'])
+            command.extend(["--src-prefix=a/", "--dst-prefix=b/"])
         else:
-            command.extend(['--no-prefix'])
+            command.extend(["--no-prefix"])
 
         command.append(branch + "..." + branch_head)
 
         if full_move:
-            command.append('--no-renames')
+            command.append("--no-renames")
         else:
-            command.append('-C')
+            command.append("-C")
         # TODO(maruel): --binary support.
         if files:
-            command.append('--')
+            command.append("--")
             command.extend(files)
         output = GIT.Capture(command, cwd=cwd, strip_out=False)
         assert isinstance(output, str)
@@ -1068,38 +1138,38 @@ class GIT(object):
         for i in range(len(diff)):
             # In the case of added files, replace /dev/null with the path to the
             # file being added.
-            if diff[i].startswith('--- /dev/null'):
-                diff[i] = '--- %s' % diff[i + 1][4:]
-        return ''.join(diff)
+            if diff[i].startswith("--- /dev/null"):
+                diff[i] = "--- %s" % diff[i + 1][4:]
+        return "".join(diff)
 
     @staticmethod
     def GetAllFiles(cwd):
         """Returns the list of all files under revision control."""
-        command = ['-c', 'core.quotePath=false', 'ls-files', '--', '.']
+        command = ["-c", "core.quotePath=false", "ls-files", "--", "."]
         return GIT.Capture(command, cwd=cwd).splitlines(False)
 
     @staticmethod
-    def GetSubmoduleCommits(cwd: str,
-                            submodules: list[str]) -> Mapping[str, str]:
+    def GetSubmoduleCommits(
+        cwd: str, submodules: list[str]
+    ) -> Mapping[str, str]:
         """Returns a mapping of staged or committed new commits for submodules."""
         if not submodules:
             return {}
-        result = subprocess2.check_output(['git', 'ls-files', '-s', '--'] +
-                                          submodules,
-                                          cwd=cwd).decode('utf-8')
+        result = subprocess2.check_output(
+            ["git", "ls-files", "-s", "--"] + submodules, cwd=cwd
+        ).decode("utf-8")
         commit_hashes = {}
         for r in result.splitlines():
             # ['<mode>', '<commit_hash>', '<stage_number>', '<path>'].
             record = r.strip().split(maxsplit=3)  # path can contain spaces.
-            assert record[0] == '160000', 'file is not a gitlink: %s' % record
+            assert record[0] == "160000", "file is not a gitlink: %s" % record
             commit_hashes[record[3]] = record[1]
         return commit_hashes
 
     @staticmethod
     def GetCheckoutRoot(cwd) -> str:
-        """Returns the top level directory of a git checkout as an absolute path.
-        """
-        root = GIT.Capture(['rev-parse', '--show-cdup'], cwd=cwd)
+        """Returns the top level directory of a git checkout as an absolute path."""
+        root = GIT.Capture(["rev-parse", "--show-cdup"], cwd=cwd)
         assert isinstance(root, str)
         return os.path.abspath(os.path.join(cwd, root))
 
@@ -1110,25 +1180,25 @@ class GIT(object):
         This should be used instead of `GetCheckoutRoot()/.git` to avoid issues
         with worktrees that do not have their own .git directory.
         """
-        git_dir = GIT.Capture(['rev-parse', '--git-common-dir'], cwd=cwd)
+        git_dir = GIT.Capture(["rev-parse", "--git-common-dir"], cwd=cwd)
         assert isinstance(git_dir, str)
         return os.path.abspath(os.path.join(cwd, git_dir))
 
     @staticmethod
     def IsInsideWorkTree(cwd):
         try:
-            return GIT.Capture(['rev-parse', '--is-inside-work-tree'], cwd=cwd)
+            return GIT.Capture(["rev-parse", "--is-inside-work-tree"], cwd=cwd)
         except (OSError, subprocess2.CalledProcessError):
             return False
 
     @staticmethod
     def IsVersioned(cwd: str, relative_dir: str) -> int:
         """Checks whether the given |relative_dir| is part of cwd's repo."""
-        output = GIT.Capture(['ls-tree', 'HEAD', '--', relative_dir], cwd=cwd)
+        output = GIT.Capture(["ls-tree", "HEAD", "--", relative_dir], cwd=cwd)
         assert isinstance(output, str)
         if not output:
             return VERSIONED_NO
-        if output.startswith('160000'):
+        if output.startswith("160000"):
             return VERSIONED_SUBMODULE
         return VERSIONED_DIR
 
@@ -1138,25 +1208,26 @@ class GIT(object):
 
         Path separators will be adjusted for the current OS.
         """
-        if not os.path.exists(os.path.join(repo_root, '.gitmodules')):
+        if not os.path.exists(os.path.join(repo_root, ".gitmodules")):
             return []
         try:
             config_output = GIT.Capture(
-                ['config', '--file', '.gitmodules', '--get-regexp', 'path'],
-                cwd=repo_root)
+                ["config", "--file", ".gitmodules", "--get-regexp", "path"],
+                cwd=repo_root,
+            )
         except subprocess2.CalledProcessError:
             # Git exits with 1 if no config matches are found.
             return []
         assert isinstance(config_output, str)
         return [
-            line.split()[-1].replace('/', os.path.sep)
+            line.split()[-1].replace("/", os.path.sep)
             for line in config_output.splitlines()
         ]
 
     @staticmethod
     def CleanupDir(cwd, relative_dir):
         """Cleans up untracked file inside |relative_dir|."""
-        return bool(GIT.Capture(['clean', '-df', relative_dir], cwd=cwd))
+        return bool(GIT.Capture(["clean", "-df", relative_dir], cwd=cwd))
 
     @staticmethod
     def ResolveCommit(cwd, rev):
@@ -1175,7 +1246,7 @@ class GIT(object):
             # forces git to check if FULL_GIT_SHA refers to an object in the
             # local database.
             rev = rev[:-1]
-        res = GIT.Capture(['rev-parse', '--quiet', '--verify', rev], cwd=cwd)
+        res = GIT.Capture(["rev-parse", "--quiet", "--verify", rev], cwd=cwd)
         if cache_key:
             # We don't expect concurrent execution, so we don't lock anything.
             GIT.rev_parse_cache[cache_key] = res
@@ -1199,7 +1270,6 @@ class GIT(object):
 
 
 class DIFF(object):
-
     @staticmethod
     def GetAllFiles(cwd):
         """Return all files under the repo at cwd.
@@ -1211,7 +1281,8 @@ class DIFF(object):
         submodules = GIT.ListSubmodules(cwd)
         if not submodules:
             return [
-                str(p.relative_to(cwd)) for p in pathlib.Path(cwd).rglob("*")
+                str(p.relative_to(cwd))
+                for p in pathlib.Path(cwd).rglob("*")
                 if p.is_file()
             ]
 

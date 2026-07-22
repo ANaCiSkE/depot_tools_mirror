@@ -34,10 +34,10 @@ This notice will be displayed {run_count} more times.
 """
 
 # This does not include Googlers' physical machines/laptops
-_GOOGLE_HOSTNAME_SUFFIX = ('.google.com', '.googler.com', '.googlers.com')
+_GOOGLE_HOSTNAME_SUFFIX = (".google.com", ".googler.com", ".googlers.com")
 
 # The version keeps track of telemetry changes.
-_TELEMETRY_VERSION = '3'
+_TELEMETRY_VERSION = "3"
 
 
 def get_host_name(fully_qualified: bool = False) -> str:
@@ -46,15 +46,16 @@ def get_host_name(fully_qualified: bool = False) -> str:
     try:
         hostname = socket.gethostbyaddr(hostname)[0]
     except (socket.gaierror, socket.herror) as e:
-        if sys.platform.startswith('linux'):
+        if sys.platform.startswith("linux"):
             print(
-                'please check your /etc/hosts file; resolving your hostname'
-                f' ({hostname}) failed: {e}',
-                file=sys.stderr)
+                "please check your /etc/hosts file; resolving your hostname"
+                f" ({hostname}) failed: {e}",
+                file=sys.stderr,
+            )
 
     if fully_qualified:
         return hostname
-    return hostname.partition('.')[0]
+    return hostname.partition(".")[0]
 
 
 def is_google_host() -> bool:
@@ -64,45 +65,56 @@ def is_google_host() -> bool:
     return hostname.endswith(_GOOGLE_HOSTNAME_SUFFIX)
 
 
-def initialize(service_name,
-               notice=DEFAULT_BANNER,
-               cfg_file=config.DEFAULT_CONFIG_FILE):
-    if 'SWARMING_BOT_ID' in os.environ:
+def initialize(
+    service_name, notice=DEFAULT_BANNER, cfg_file=config.DEFAULT_CONFIG_FILE
+):
+    if "SWARMING_BOT_ID" in os.environ:
         return
 
     cfg = config.Config(cfg_file)
     if cfg.trace_config.disabled():
         return
 
-    bot_enabled = (cfg.trace_config.has_enabled()
-                   and cfg.trace_config.enabled_reason == 'BOT_USER')
+    bot_enabled = (
+        cfg.trace_config.has_enabled()
+        and cfg.trace_config.enabled_reason == "BOT_USER"
+    )
     if not is_google_host() and not bot_enabled:
         return
 
     if not cfg.trace_config.has_enabled():
         if cfg.root_config.notice_countdown > -1:
-            print(notice.format(run_count=cfg.root_config.notice_countdown,
-                                config_file=cfg_file),
-                  file=sys.stderr)
+            print(
+                notice.format(
+                    run_count=cfg.root_config.notice_countdown,
+                    config_file=cfg_file,
+                ),
+                file=sys.stderr,
+            )
             cfg.root_config.update(
-                notice_countdown=cfg.root_config.notice_countdown - 1)
+                notice_countdown=cfg.root_config.notice_countdown - 1
+            )
         else:
-            cfg.trace_config.update(enabled=True, reason='AUTO')
+            cfg.trace_config.update(enabled=True, reason="AUTO")
 
         cfg.flush()
 
-    default_resource = otel_resources.Resource.create({
-        otel_resources.SERVICE_NAME: service_name,
-        'telemetry.version': _TELEMETRY_VERSION,
-        'user.id': cfg.trace_config.user_uuid(),
-    })
+    default_resource = otel_resources.Resource.create(
+        {
+            otel_resources.SERVICE_NAME: service_name,
+            "telemetry.version": _TELEMETRY_VERSION,
+            "user.id": cfg.trace_config.user_uuid(),
+        }
+    )
 
-    detected_resource = otel_resources.get_aggregated_resources([
-        otel_resources.ProcessResourceDetector(),
-        otel_resources.OTELResourceDetector(),
-        detector.ProcessDetector(),
-        detector.SystemDetector(),
-    ])
+    detected_resource = otel_resources.get_aggregated_resources(
+        [
+            otel_resources.ProcessResourceDetector(),
+            otel_resources.OTELResourceDetector(),
+            detector.ProcessDetector(),
+            detector.SystemDetector(),
+        ]
+    )
 
     resource = detected_resource.merge(default_resource)
     trace_provider = otel_trace_sdk.TracerProvider(resource=resource)
@@ -110,7 +122,9 @@ def initialize(service_name,
     trace_provider.add_span_processor(
         otel_export.BatchSpanProcessor(
             # Replace with ConsoleSpanExporter() to debug spans on the console
-            clearcut_span_exporter.ClearcutSpanExporter()))
+            clearcut_span_exporter.ClearcutSpanExporter()
+        )
+    )
 
 
 def get_tracer(name: str, version: Optional[str] = None):
@@ -128,8 +142,10 @@ def opted_in(cfg_file=config.DEFAULT_CONFIG_FILE):
     if cfg.trace_config.disabled():
         return False
 
-    bot_enabled = (cfg.trace_config.has_enabled()
-                   and cfg.trace_config.enabled_reason == 'BOT_USER')
+    bot_enabled = (
+        cfg.trace_config.has_enabled()
+        and cfg.trace_config.enabled_reason == "BOT_USER"
+    )
     if not is_google_host() and not bot_enabled:
         return False
 

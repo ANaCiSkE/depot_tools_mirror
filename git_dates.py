@@ -26,7 +26,7 @@ def timestamp_offset_to_datetime(timestamp, offset):
 
 def datetime_string(dt):
     """Converts a tz-aware datetime.datetime into a string in git format."""
-    return dt.strftime('%Y-%m-%d %H:%M:%S %z')
+    return dt.strftime("%Y-%m-%d %H:%M:%S %z")
 
 
 # Adapted from: https://docs.python.org/2/library/datetime.html#tzinfo-objects
@@ -37,8 +37,9 @@ class FixedOffsetTZ(datetime.tzinfo):
         self.__name = name
 
     def __repr__(self):  # pragma: no cover
-        return '{}({!r}, {!r})'.format(
-            type(self).__name__, self.__offset, self.__name)
+        return "{}({!r}, {!r})".format(
+            type(self).__name__, self.__offset, self.__name
+        )
 
     @classmethod
     def from_offset_string(cls, offset):
@@ -46,7 +47,7 @@ class FixedOffsetTZ(datetime.tzinfo):
             hours = int(offset[:-2])
             minutes = int(offset[-2:])
         except ValueError:
-            return cls(datetime.timedelta(0), 'UTC')
+            return cls(datetime.timedelta(0), "UTC")
 
         delta = datetime.timedelta(hours=hours, minutes=minutes)
         return cls(delta, offset)

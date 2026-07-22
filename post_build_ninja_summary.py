@@ -67,6 +67,7 @@ long_ext_count = 10
 
 class Target:
     """Represents a single line read for a .ninja_log file."""
+
     def __init__(self, start, end):
         """Creates a target object by passing in the start/end times in seconds
         as a float."""
@@ -124,7 +125,8 @@ def ReadTargets(log, show_all):
     if not header:
         return []
     assert header in ("# ninja log v5\n", "# ninja log v6\n"), (
-        "unrecognized ninja log version %r" % header)
+        "unrecognized ninja log version %r" % header
+    )
     targets_dict = {}
     last_end_seen = 0.0
     for line in log:
@@ -273,9 +275,11 @@ def SummarizeEntries(entries, extra_step_types, elapsed_time_sorting):
 
     # Warn if the sum of weighted times is off by more than half a second.
     if abs(length - weighted_total) > 500:
-        print("Warning: Possible corrupt ninja log, results may be "
-              "untrustworthy. Length = %.3f, weighted total = %.3f" %
-              (length, weighted_total))
+        print(
+            "Warning: Possible corrupt ninja log, results may be "
+            "untrustworthy. Length = %.3f, weighted total = %.3f"
+            % (length, weighted_total)
+        )
 
     # Print the slowest build steps:
     print("    Longest build steps:")
@@ -284,11 +288,14 @@ def SummarizeEntries(entries, extra_step_types, elapsed_time_sorting):
     else:
         entries.sort(key=lambda x: x.WeightedDuration())
     for target in entries[-long_count:]:
-        print("      %8.1f weighted s to build %s (%.1f s elapsed time)" % (
-            target.WeightedDuration(),
-            target.DescribeTargets(),
-            target.Duration(),
-        ))
+        print(
+            "      %8.1f weighted s to build %s (%.1f s elapsed time)"
+            % (
+                target.WeightedDuration(),
+                target.DescribeTargets(),
+                target.Duration(),
+            )
+        )
 
     # Sum up the time by file extension/type of the output file
     count_by_ext = {}
@@ -297,35 +304,45 @@ def SummarizeEntries(entries, extra_step_types, elapsed_time_sorting):
     # Scan through all of the targets to build up per-extension statistics.
     for target in entries:
         extension = GetExtension(target, extra_step_types)
-        time_by_ext[extension] = (time_by_ext.get(extension, 0) +
-                                  target.Duration())
+        time_by_ext[extension] = (
+            time_by_ext.get(extension, 0) + target.Duration()
+        )
         weighted_time_by_ext[extension] = (
-            weighted_time_by_ext.get(extension, 0) + target.WeightedDuration())
+            weighted_time_by_ext.get(extension, 0) + target.WeightedDuration()
+        )
         count_by_ext[extension] = count_by_ext.get(extension, 0) + 1
 
     print("    Time by build-step type:")
     # Copy to a list with extension name and total time swapped, to (time, ext)
     if elapsed_time_sorting:
         weighted_time_by_ext_sorted = sorted(
-            (y, x) for (x, y) in time_by_ext.items())
+            (y, x) for (x, y) in time_by_ext.items()
+        )
     else:
         weighted_time_by_ext_sorted = sorted(
-            (y, x) for (x, y) in weighted_time_by_ext.items())
+            (y, x) for (x, y) in weighted_time_by_ext.items()
+        )
     # Print the slowest build target types:
     for time, extension in weighted_time_by_ext_sorted[-long_ext_count:]:
-        print("      %8.1f s weighted time to generate %d %s files "
-              "(%1.1f s elapsed time sum)" % (
-                  time,
-                  count_by_ext[extension],
-                  extension,
-                  time_by_ext[extension],
-              ))
+        print(
+            "      %8.1f s weighted time to generate %d %s files "
+            "(%1.1f s elapsed time sum)"
+            % (
+                time,
+                count_by_ext[extension],
+                extension,
+                time_by_ext[extension],
+            )
+        )
 
-    print("    %.1f s weighted time (%.1f s elapsed time sum, %1.1fx "
-          "parallelism)" %
-          (length, total_cpu_time, total_cpu_time * 1.0 / length))
-    print("    %d build steps completed, average of %1.2f/s" %
-          (len(entries), len(entries) / (length)))
+    print(
+        "    %.1f s weighted time (%.1f s elapsed time sum, %1.1fx "
+        "parallelism)" % (length, total_cpu_time, total_cpu_time * 1.0 / length)
+    )
+    print(
+        "    %d build steps completed, average of %1.2f/s"
+        % (len(entries), len(entries) / (length))
+    )
 
 
 def main():
@@ -353,8 +370,9 @@ def main():
         action="store_true",
         help="Sort output by elapsed time instead of weighted time",
     )
-    parser.add_argument("--log-file",
-                        help="specific ninja log file to analyze.")
+    parser.add_argument(
+        "--log-file", help="specific ninja log file to analyze."
+    )
     args, _ = parser.parse_known_args(passed_args)
     if args.build_directory:
         log_file = os.path.join(args.build_directory, log_file)
@@ -387,8 +405,9 @@ def main():
         with open(log_file, "r") as log:
             entries = ReadTargets(log, False)
             if entries:
-                SummarizeEntries(entries, args.step_types,
-                                 args.elapsed_time_sorting)
+                SummarizeEntries(
+                    entries, args.step_types, args.elapsed_time_sorting
+                )
     except IOError:
         print("Log file %r not found, no build summary created." % log_file)
         return errno.ENOENT

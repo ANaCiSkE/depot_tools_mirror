@@ -23,7 +23,7 @@ import ninja
 import siso
 
 THIS_DIR = os.path.dirname(__file__)
-RECLIENT_LOG_CLEANUP = os.path.join(THIS_DIR, 'reclient_log_cleanup.py')
+RECLIENT_LOG_CLEANUP = os.path.join(THIS_DIR, "reclient_log_cleanup.py")
 
 
 def find_reclient_bin_dir():
@@ -31,7 +31,7 @@ def find_reclient_bin_dir():
     if not tools_path:
         return None
 
-    reclient_bin_dir = os.path.join(tools_path, 'reclient')
+    reclient_bin_dir = os.path.join(tools_path, "reclient")
     if os.path.isdir(reclient_bin_dir):
         return reclient_bin_dir
     return None
@@ -42,47 +42,56 @@ def find_reclient_cfg():
     if not tools_path:
         return None
 
-    reclient_cfg = os.path.join(tools_path, 'reclient_cfgs', 'reproxy.cfg')
+    reclient_cfg = os.path.join(tools_path, "reclient_cfgs", "reproxy.cfg")
     if os.path.isfile(reclient_cfg):
         return reclient_cfg
     return None
 
 
 def run(cmd_args):
-    if os.environ.get('NINJA_SUMMARIZE_BUILD') == '1':
-        print(' '.join(cmd_args))
+    if os.environ.get("NINJA_SUMMARIZE_BUILD") == "1":
+        print(" ".join(cmd_args))
     return subprocess.call(cmd_args)
 
 
 def start_reproxy(reclient_cfg, reclient_bin_dir):
-    return run([
-        os.path.join(reclient_bin_dir,
-                     'bootstrap' + gclient_paths.GetExeSuffix()),
-        '--re_proxy=' + os.path.join(reclient_bin_dir,
-                                     'reproxy' + gclient_paths.GetExeSuffix()),
-        '--cfg=' + reclient_cfg
-    ])
+    return run(
+        [
+            os.path.join(
+                reclient_bin_dir, "bootstrap" + gclient_paths.GetExeSuffix()
+            ),
+            "--re_proxy="
+            + os.path.join(
+                reclient_bin_dir, "reproxy" + gclient_paths.GetExeSuffix()
+            ),
+            "--cfg=" + reclient_cfg,
+        ]
+    )
 
 
 def stop_reproxy(reclient_cfg, reclient_bin_dir):
-    return run([
-        os.path.join(reclient_bin_dir,
-                     'bootstrap' + gclient_paths.GetExeSuffix()), '--shutdown',
-        '--cfg=' + reclient_cfg
-    ])
+    return run(
+        [
+            os.path.join(
+                reclient_bin_dir, "bootstrap" + gclient_paths.GetExeSuffix()
+            ),
+            "--shutdown",
+            "--cfg=" + reclient_cfg,
+        ]
+    )
 
 
 def find_ninja_out_dir(args):
     # Ninja uses getopt_long, which allows to intermix non-option arguments.
     # To leave non supported parameters untouched, we do not use getopt.
     for index, arg in enumerate(args[1:]):
-        if arg == '-C':
+        if arg == "-C":
             # + 1 to get the next argument and +1 because we trimmed off args[0]
             return args[index + 2]
-        if arg.startswith('-C'):
+        if arg.startswith("-C"):
             # Support -Cout/Default
             return arg[2:]
-    return '.'
+    return "."
 
 
 def find_cache_dir(tmp_dir):
@@ -97,9 +106,12 @@ def find_cache_dir(tmp_dir):
     """
     gclient_root = gclient_paths.FindGclientRoot(os.getcwd())
     if gclient_root:
-        return os.path.join(gclient_root, '.reproxy_cache',
-                            hashlib.md5(tmp_dir.encode()).hexdigest())
-    return os.path.join(tmp_dir, 'cache')
+        return os.path.join(
+            gclient_root,
+            ".reproxy_cache",
+            hashlib.md5(tmp_dir.encode()).hexdigest(),
+        )
+    return os.path.join(tmp_dir, "cache")
 
 
 def auth_cache_status():
@@ -112,11 +124,11 @@ def auth_cache_status():
             mechanism = "UNSPECIFIED"
             for line in f.readlines():
                 if "seconds:" in line:
-                    exp = int(line.strip()[len("seconds:"):].strip())
+                    exp = int(line.strip()[len("seconds:") :].strip())
                     if exp < (time.time() + 5 * 60):
                         status = "expired"
                 elif "mechanism:" in line:
-                    mechanism = line.strip()[len("mechanism:"):].strip()
+                    mechanism = line.strip()[len("mechanism:") :].strip()
             return status, mechanism
     except OSError:
         return "missing", "UNSPECIFIED"
@@ -163,8 +175,10 @@ def set_reproxy_metrics_flags(tool):
 
 def remove_mdproxy_from_path():
     os.environ["PATH"] = os.pathsep.join(
-        d for d in os.environ.get("PATH", "").split(os.pathsep)
-        if "mdproxy" not in d)
+        d
+        for d in os.environ.get("PATH", "").split(os.pathsep)
+        if "mdproxy" not in d
+    )
 
 
 # Mockable datetime.datetime.utcnow for testing.
@@ -207,12 +221,15 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
         RBE_server_address=pipe://md5(out_dir/.reproxy_tmp)/reproxy.pipe
     """
     os.environ.setdefault("AUTONINJA_BUILD_ID", str(uuid.uuid4()))
-    run_sub_dir = datetime_now().strftime(
-        '%Y%m%dT%H%M%S.%f') + "_" + os.environ["AUTONINJA_BUILD_ID"]
-    tmp_dir = os.path.abspath(os.path.join(out_dir, '.reproxy_tmp'))
-    log_dir = os.path.join(tmp_dir, 'logs')
+    run_sub_dir = (
+        datetime_now().strftime("%Y%m%dT%H%M%S.%f")
+        + "_"
+        + os.environ["AUTONINJA_BUILD_ID"]
+    )
+    tmp_dir = os.path.abspath(os.path.join(out_dir, ".reproxy_tmp"))
+    log_dir = os.path.join(tmp_dir, "logs")
     run_log_dir = os.path.join(log_dir, run_sub_dir)
-    racing_dir = os.path.join(tmp_dir, 'racing')
+    racing_dir = os.path.join(tmp_dir, "racing")
     run_racing_dir = os.path.join(racing_dir, run_sub_dir)
     cache_dir = find_cache_dir(tmp_dir)
 
@@ -228,7 +245,8 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
                 print(
                     "Couldn't clear logs because reproxy did "
                     "not shutdown after the last build",
-                    file=sys.stderr)
+                    file=sys.stderr,
+                )
         os.makedirs(tmp_dir, exist_ok=True)
         os.makedirs(log_dir, exist_ok=True)
         os.makedirs(run_log_dir, exist_ok=True)
@@ -237,7 +255,8 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
         os.makedirs(run_racing_dir, exist_ok=True)
 
     old_log_dirs = [
-        d for d in os.listdir(log_dir)
+        d
+        for d in os.listdir(log_dir)
         if os.path.isdir(os.path.join(log_dir, d))
     ]
 
@@ -251,16 +270,19 @@ def set_reproxy_path_flags(out_dir, make_dirs=True):
     os.environ.setdefault("RBE_log_dir", run_log_dir)
     os.environ.setdefault("RBE_cache_dir", cache_dir)
     os.environ.setdefault("RBE_racing_tmp_dir", run_racing_dir)
-    if sys.platform.startswith('win'):
+    if sys.platform.startswith("win"):
         pipe_dir = hashlib.sha256(run_log_dir.encode()).hexdigest()
-        os.environ.setdefault("RBE_server_address",
-                              "pipe://%s/reproxy.pipe" % pipe_dir)
+        os.environ.setdefault(
+            "RBE_server_address", "pipe://%s/reproxy.pipe" % pipe_dir
+        )
     else:
         # unix domain socket has path length limit, so use fixed size path here.
         # ref: https://www.man7.org/linux/man-pages/man7/unix.7.html
         os.environ.setdefault(
-            "RBE_server_address", "unix:///tmp/reproxy_%s.sock" %
-            hashlib.sha256(run_log_dir.encode()).hexdigest())
+            "RBE_server_address",
+            "unix:///tmp/reproxy_%s.sock"
+            % hashlib.sha256(run_log_dir.encode()).hexdigest(),
+        )
 
 
 def set_racing_defaults():
@@ -293,13 +315,14 @@ def set_win_defaults():
     # use it.
     os.environ.setdefault("RBE_enable_creds_cache", "false")
     # Extend timeouts on windows
-    os.environ.setdefault("RBE_exec_timeout","4m")
-    os.environ.setdefault("RBE_reclient_timeout","8m")
+    os.environ.setdefault("RBE_exec_timeout", "4m")
+    os.environ.setdefault("RBE_reclient_timeout", "8m")
 
 
 def workspace_is_cog():
-    return sys.platform == "linux" and os.path.realpath(
-        os.getcwd()).startswith("/google/cog")
+    return sys.platform == "linux" and os.path.realpath(os.getcwd()).startswith(
+        "/google/cog"
+    )
 
 
 # pylint: disable=line-too-long
@@ -321,11 +344,12 @@ def build_context(argv, tool, should_collect_logs=False):
     reclient_cfg = find_reclient_cfg()
     if reclient_bin_dir is None or reclient_cfg is None:
         print(
-            'Build is configured to use reclient but necessary binaries '
+            "Build is configured to use reclient but necessary binaries "
             "or config files can't be found.\n"
             'Please check if `"download_remoteexec_cfg": True` custom var is '
-            'set in `.gclient`, and run `gclient sync`.',
-            file=sys.stderr)
+            "set in `.gclient`, and run `gclient sync`.",
+            file=sys.stderr,
+        )
         yield 1
         return
 
@@ -341,12 +365,14 @@ def build_context(argv, tool, should_collect_logs=False):
     if should_collect_logs:
         set_reproxy_metrics_flags(tool)
 
-    if os.environ.get('RBE_instance', None):
-        print('WARNING: Using RBE_instance=%s\n' %
-              os.environ.get('RBE_instance', ''))
+    if os.environ.get("RBE_instance", None):
+        print(
+            "WARNING: Using RBE_instance=%s\n"
+            % os.environ.get("RBE_instance", "")
+        )
 
-    remote_disabled = os.environ.get('RBE_remote_disabled')
-    if remote_disabled not in ('1', 't', 'T', 'true', 'TRUE', 'True'):
+    remote_disabled = os.environ.get("RBE_remote_disabled")
+    if remote_disabled not in ("1", "t", "T", "true", "TRUE", "True"):
         # If we are building inside a Cog workspace, racing is likely not a
         # performance improvement, so we disable it by default.
         if workspace_is_cog():
@@ -362,15 +388,17 @@ def build_context(argv, tool, should_collect_logs=False):
 
     start = time.time()
     reproxy_ret_code = start_reproxy(reclient_cfg, reclient_bin_dir)
-    if os.environ.get('NINJA_SUMMARIZE_BUILD') == '1':
+    if os.environ.get("NINJA_SUMMARIZE_BUILD") == "1":
         elapsed = time.time() - start
-        print('%1.3fs to start reproxy' % elapsed)
+        print("%1.3fs to start reproxy" % elapsed)
     if reproxy_ret_code != 0:
-        print(f'''Failed to start reproxy!
+        print(
+            f"""Failed to start reproxy!
 See above error message for details.
 Ensure you have completed the reproxy setup instructions:
-{reclient_setup_docs_url()}''',
-              file=sys.stderr)
+{reclient_setup_docs_url()}""",
+            file=sys.stderr,
+        )
         yield reproxy_ret_code
         return
     try:
@@ -378,16 +406,17 @@ Ensure you have completed the reproxy setup instructions:
     finally:
         start = time.time()
         stop_reproxy(reclient_cfg, reclient_bin_dir)
-        if os.environ.get('NINJA_SUMMARIZE_BUILD') == '1':
+        if os.environ.get("NINJA_SUMMARIZE_BUILD") == "1":
             elapsed = time.time() - start
-            print('%1.3fs to stop reproxy' % elapsed)
+            print("%1.3fs to stop reproxy" % elapsed)
 
 
 def run_ninja(ninja_cmd, should_collect_logs=False):
     """Runs Ninja in build_context()."""
     # TODO: crbug.com/345113094 - rename the `tool` label to `ninja`.
-    with build_context(ninja_cmd, "ninja_reclient",
-                       should_collect_logs) as ret_code:
+    with build_context(
+        ninja_cmd, "ninja_reclient", should_collect_logs
+    ) as ret_code:
         if ret_code:
             return ret_code
         try:

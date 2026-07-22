@@ -14,7 +14,7 @@ class LockError(Exception):
     pass
 
 
-if sys.platform.startswith('win'):
+if sys.platform.startswith("win"):
     # Windows implementation
     import win32imports
 
@@ -29,8 +29,9 @@ if sys.platform.startswith('win'):
                 None,  # lpSecurityAttributes
                 win32imports.CREATE_ALWAYS,  # dwCreationDisposition
                 win32imports.FILE_ATTRIBUTE_NORMAL,  # dwFlagsAndAttributes
-                None  # hTemplateFile
-            ))
+                None,  # hTemplateFile
+            )
+        )
 
     def _close_file(handle, unlock):
         if unlock:
@@ -46,23 +47,24 @@ if sys.platform.startswith('win'):
             handle,  # hFile
             win32imports.LOCKFILE_FAIL_IMMEDIATELY
             | win32imports.LOCKFILE_EXCLUSIVE_LOCK,  # dwFlags
-            0,  #dwReserved
+            0,  # dwReserved
             BYTES_TO_LOCK,  # nNumberOfBytesToLockLow
             0,  # nNumberOfBytesToLockHigh
-            win32imports.Overlapped()  # lpOverlapped
+            win32imports.Overlapped(),  # lpOverlapped
         )
         # LockFileEx returns result as bool, which is converted into an integer
         # (1 == successful; 0 == not successful)
         if ret == 0:
             error_code = win32imports.GetLastError()
-            raise OSError('Failed to lock handle (error code: %d).' %
-                          error_code)
+            raise OSError(
+                "Failed to lock handle (error code: %d)." % error_code
+            )
 else:
     # Unix implementation
     import fcntl
 
     def _open_file(lockfile):
-        open_flags = (os.O_CREAT | os.O_WRONLY)
+        open_flags = os.O_CREAT | os.O_WRONLY
         return os.open(lockfile, open_flags, 0o644)
 
     def _close_file(fd, unlock):
@@ -101,12 +103,14 @@ def _lock(path, timeout=0):
     sleep_time = 0.1
     while True:
         try:
-            return _try_lock(path + '.locked')
+            return _try_lock(path + ".locked")
         except (OSError, IOError) as e:
             if elapsed < timeout:
                 logging.info(
-                    'Could not create git cache lockfile; '
-                    'will retry after sleep(%d).', sleep_time)
+                    "Could not create git cache lockfile; "
+                    "will retry after sleep(%d).",
+                    sleep_time,
+                )
                 elapsed += sleep_time
                 time.sleep(sleep_time)
                 continue

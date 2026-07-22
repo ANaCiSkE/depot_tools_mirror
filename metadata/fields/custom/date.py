@@ -59,8 +59,9 @@ _RECOGNIZED_DATE_FORMATS = (
 )
 
 
-def parse_with_format(value: str,
-                      date_format: str) -> Optional[datetime.datetime]:
+def parse_with_format(
+    value: str, date_format: str
+) -> Optional[datetime.datetime]:
     """Returns datetime object if `value` can be parsed with `date_format`"""
     try:
         return datetime.datetime.strptime(value, date_format)
@@ -75,10 +76,10 @@ def to_preferred_format(dt: datetime.datetime) -> str:
 def parse_date(value: str) -> Optional[Tuple[str, bool]]:
     """Try to parse value into a YYYY-MM-DD date.
 
-       If successful: returns (str, int).
-       - The str is guaranteed to be in YYYY-MM-DD format.
-       - The bool indicates whether `value` is ambiguous.
-         For example, "2020/03/05" matches both "YYYY/MM/DD" and "YYYY/DD/MM".
+    If successful: returns (str, int).
+    - The str is guaranteed to be in YYYY-MM-DD format.
+    - The bool indicates whether `value` is ambiguous.
+      For example, "2020/03/05" matches both "YYYY/MM/DD" and "YYYY/DD/MM".
     """
     matches = []
     value = value.strip()
@@ -122,6 +123,7 @@ def parse_date(value: str) -> Optional[Tuple[str, bool]]:
 
 class DateField(field_types.SingleLineTextField):
     """Custom field for the date when the package was updated."""
+
     def __init__(self):
         super().__init__(name="Date")
 
@@ -131,23 +133,27 @@ class DateField(field_types.SingleLineTextField):
         if not value:
             return vr.ValidationError(
                 reason=f"{self._name} is empty.",
-                additional=["Provide date in format YYYY-MM-DD."])
+                additional=["Provide date in format YYYY-MM-DD."],
+            )
 
         if not (parsed := parse_date(value)):
             return vr.ValidationError(
                 reason=f"{self._name} is invalid.",
-                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."],
+            )
 
         parsed_date, is_ambiguous = parsed
         if is_ambiguous:
             return vr.ValidationError(
                 reason=f"{self._name} is ambiguous.",
-                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."],
+            )
 
         if not parse_with_format(value, _PREFERRED_PREFIX_FORMAT):
             return vr.ValidationWarning(
                 reason=f"{self._name} isn't using the canonical format.",
-                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."],
+            )
 
         return None
 

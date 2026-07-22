@@ -26,7 +26,8 @@ import metadata.validation_result as vr
 # can determine if the CPE prefix provides sufficient information (see
 # `is_adequate_cpe_urn` below).
 _PATTERN_CPE_URN = re.compile(
-    r"^[c][pP][eE]:/[AHOaho]?((:[A-Za-z0-9\._\-~%]*){0,6})$")
+    r"^[c][pP][eE]:/[AHOaho]?((:[A-Za-z0-9\._\-~%]*){0,6})$"
+)
 
 # Pattern that will match CPE 2.3 string format.
 # Taken from https://csrc.nist.gov/schema/cpe/2.3/cpe-naming_2.3.xsd
@@ -79,12 +80,16 @@ def has_version_component(value: str) -> bool:
 
 class CPEPrefixField(field_types.SingleLineTextField):
     """Custom field for the package's CPE."""
+
     def __init__(self):
         super().__init__(name="CPEPrefix")
 
     def _is_valid(self, value: str) -> bool:
-        return util.is_unknown(value) or is_adequate_cpe_urn(
-            value) or util.matches(_PATTERN_CPE_FORMATTED_STRING, value)
+        return (
+            util.is_unknown(value)
+            or is_adequate_cpe_urn(value)
+            or util.matches(_PATTERN_CPE_FORMATTED_STRING, value)
+        )
 
     def validate(self, value: str, **kwargs) -> Optional[vr.ValidationResult]:
         """Checks the given value is either 'unknown', or conforms to
@@ -104,7 +109,8 @@ class CPEPrefixField(field_types.SingleLineTextField):
                 "(e.g. a for Application, h for Hardware, o for Operating "
                 "System)."
                 f"Current value: '{value}'.",
-            ])
+            ],
+        )
 
     def narrow_type(self, value: str) -> Optional[str]:
         if not self._is_valid(value):

@@ -14,29 +14,29 @@ class Ipcz(config_util.Config):
 
     @staticmethod
     def fetch_spec(props):
-        url = 'https://chromium.googlesource.com/chromium/src/third_party/ipcz'
+        url = "https://chromium.googlesource.com/chromium/src/third_party/ipcz"
         solution = {
-            'name': 'ipcz',
-            'url': url,
-            'deps_file': 'DEPS',
-            'custom_deps': {},
+            "name": "ipcz",
+            "url": url,
+            "deps_file": "DEPS",
+            "custom_deps": {},
         }
         spec = {
-            'solutions': [solution],
+            "solutions": [solution],
         }
         return {
-            'type': 'gclient_git',
-            'gclient_git_spec': spec,
+            "type": "gclient_git",
+            "gclient_git_spec": spec,
         }
 
     @staticmethod
     def expected_root(_props):
-        return 'ipcz'
+        return "ipcz"
 
 
 def main(argv=None):
     return Ipcz().handle_args(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

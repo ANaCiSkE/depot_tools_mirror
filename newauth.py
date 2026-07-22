@@ -40,7 +40,7 @@ def Default() -> bool:
 
 def _HasGitcookies() -> bool:
     """Returns True if user has gitcookies file."""
-    return os.path.exists(os.path.expanduser('~/.gitcookies'))
+    return os.path.exists(os.path.expanduser("~/.gitcookies"))
 
 
 _warning_printed = False
@@ -51,7 +51,7 @@ def _PrintGitcookiesWarning() -> None:
     if _warning_printed:
         return
     _warning_printed = True
-    sys.stderr.write('''
+    sys.stderr.write("""
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Warning !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 depot_tools will soon stop using the .gitcookies file for authentication.
 
@@ -61,7 +61,7 @@ If you encounter any issues, please report them using:
 https://issues.chromium.org/issues/new?component=1456702&template=2076315
 --------------------------------------------------------------------------------
 
-''')
+""")
 
 
 def ExplicitlyEnabled() -> bool:
@@ -69,13 +69,19 @@ def ExplicitlyEnabled() -> bool:
 
     Directly checks config and doesn't do gitcookie check.
     """
-    return scm.GIT.GetConfig(os.getcwd(),
-                             'depot-tools.usenewauthstack') in ('yes', 'on',
-                                                                'true', '1')
+    return scm.GIT.GetConfig(os.getcwd(), "depot-tools.usenewauthstack") in (
+        "yes",
+        "on",
+        "true",
+        "1",
+    )
 
 
 def ExplicitlyDisabled() -> bool:
     """Returns True if new auth stack is explicitly disabled."""
-    return scm.GIT.GetConfig(os.getcwd(),
-                             'depot-tools.usenewauthstack') in ('no', 'off',
-                                                                'false', '0')
+    return scm.GIT.GetConfig(os.getcwd(), "depot-tools.usenewauthstack") in (
+        "no",
+        "off",
+        "false",
+        "0",
+    )
