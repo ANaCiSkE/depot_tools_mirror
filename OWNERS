@@ -9,6 +9,12 @@ per-file CROS_OWNERS=file://CROS_OWNERS
 per-file LUCI_OWNERS=file://LUCI_OWNERS
 per-file RECLIENT_OWNERS=file://RECLIENT_OWNERS
 
+# Simple files that are safe to give expanded access to.
+# go/keep-sorted start
+per-file .git-blame-ignore-revs=*
+per-file .gitignore=*
+# go/keep-sorted end
+
 # Ninja
 per-file autoninja*=file://BUILD_OWNERS
 per-file ninja*=thakis@chromium.org
