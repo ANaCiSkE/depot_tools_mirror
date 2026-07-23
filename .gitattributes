@@ -36,7 +36,6 @@
 /cipd_manifest* recipes
 
 # Symlinks
-/cbuildbot recipes
 /cros*     recipes
 
 /lib/*     recipes
