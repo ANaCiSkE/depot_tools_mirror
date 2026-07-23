@@ -34,6 +34,7 @@ per-file build_telemetry*=file://BUILD_OWNERS
 # Build util
 per-file caffeinate.py=file://BUILD_OWNERS
 
+per-file black*=vapier@chromium.org
 per-file pylint*=vapier@chromium.org
 
 # ChromeOS related tooling
