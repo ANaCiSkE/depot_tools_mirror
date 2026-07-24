@@ -15,7 +15,7 @@ WS=build/whitespace_file.txt
 
 mkdir build
 cat > "$WS" <<EOF
-Copyright 2014 The Chromium Authors. All rights reserved.
+Copyright 2014 The Chromium Authors
 Use of this useless file is governed by a BSD-style license that can be
 found in the LICENSE file.
 
