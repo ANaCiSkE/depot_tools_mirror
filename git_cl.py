@@ -742,16 +742,12 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
     if len(files) == 0:
         return {}
 
-    pattern = r"^@@.*\+(.*) @@"
-    # 2 capture groups
-    # 0 == fname of diff file
-    # 1 == 'diff_start,diff_count' or 'diff_start'
-    # will match each of
-    # diff --git a/foo.foo b/foo.py
-    # @@ -12,2 +14,3 @@
-    # @@ -12,2 +17 @@
-    # running re.findall on the above string with pattern will give
-    # [('foo.py', ''), ('', '14,3'), ('', '17')]
+    # Matches the added/modified line range in a diff hunk header.
+    # 1 capture group: 'diff_start,diff_count' or 'diff_start'
+    # Matches:
+    #   @@ -12,2 +14,3 @@ -> '14,3'
+    #   @@ -12,2 +17 @@   -> '17'
+    pattern = r"^@@ -\d+(?:,\d+)? \+([0-9,]+) @@"
 
     line_diffs = collections.defaultdict(list)
     for file in files:

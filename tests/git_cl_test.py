@@ -8525,6 +8525,19 @@ class BuildbucketBatchTest(unittest.TestCase):
         res = git_cl._ComputeFormatDiffLineRanges(["foo.py"], {"foo.py": diff})
         self.assertEqual({"foo.py": [(1, 5)]}, res)
 
+    def test_compute_format_diff_line_ranges_with_at_at_in_header(self):
+        diff = (
+            "diff --git a/foo.py b/foo.py\n"
+            "index 0000000..1111111 100644\n"
+            "--- a/foo.py\n"
+            "+++ b/foo.py\n"
+            "@@ -17 +17 @@ _REGEX = re.compile(r\"^@@ \\-(\\d+),?(\\d+)? \\+(\\d+),?(\\d+)? @@\")\n"
+            "-x = 1\n"
+            "+x = 2\n"
+        )
+        res = git_cl._ComputeFormatDiffLineRanges(["foo.py"], {"foo.py": diff})
+        self.assertEqual({"foo.py": [(17, 17)]}, res)
+
 
 class TestRuffBatchIntegration(unittest.TestCase):
     def setUp(self):
