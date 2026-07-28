@@ -42,6 +42,22 @@ import tomllib
 from typing import NamedTuple
 
 
+KNOWN_SUBCOMMANDS = {
+    "check",
+    "format",
+    "linter",
+    "rule",
+    "config",
+    "explain",
+    "clean",
+    "timezone",
+    "version",
+    "help",
+    "server",
+    "analyze",
+}
+
+
 class LineRange(NamedTuple):
     """Represents a 1-based line range interval [start, end) where end is exclusive."""
 
@@ -62,6 +78,7 @@ class FormattingOptions(NamedTuple):
     has_format: bool
     has_diff: bool
     has_check: bool
+    subcommand: str | None
     target_files: list[str]
     chain_base_args: list[str]
     subcmd_idx: int
@@ -73,8 +90,8 @@ _dir_config_cache: dict[tuple[str, str | None], str | None] = {}
 def resolve_config_for_dir(
     target_dir: str, root_dir: str | None = None
 ) -> str | None:
-    search_dir = os.path.abspath(target_dir)
-    abs_root = os.path.abspath(root_dir) if root_dir else None
+    search_dir = os.path.realpath(os.path.abspath(target_dir))
+    abs_root = os.path.realpath(os.path.abspath(root_dir)) if root_dir else None
     cache_key = (search_dir, abs_root)
     traversed_dirs = []
 
@@ -317,6 +334,7 @@ def parse_formatting_options(pass_through_args: list[str]) -> FormattingOptions:
     has_format = False
     has_diff = False
     has_check = False
+    subcommand: str | None = None
     target_files: list[str] = []
     chain_base_args: list[str] = []
 
@@ -336,8 +354,10 @@ def parse_formatting_options(pass_through_args: list[str]) -> FormattingOptions:
             skip_next = False
             chain_base_args.append(arg)
             continue
-        if arg == "format" and not has_format:
-            has_format = True
+        if arg in KNOWN_SUBCOMMANDS and subcommand is None:
+            subcommand = arg
+            if arg == "format":
+                has_format = True
             subcmd_idx = len(chain_base_args)
             chain_base_args.append(arg)
         elif arg == "--diff":
@@ -360,6 +380,7 @@ def parse_formatting_options(pass_through_args: list[str]) -> FormattingOptions:
         has_format=has_format,
         has_diff=has_diff,
         has_check=has_check,
+        subcommand=subcommand,
         target_files=target_files,
         chain_base_args=chain_base_args,
         subcmd_idx=subcmd_idx,
@@ -476,7 +497,7 @@ def run_ruff_with_ranges(args: list[str]) -> int:
 
     opts = parse_formatting_options(parsed_args.pass_through_args)
 
-    if not opts.has_format:
+    if opts.subcommand is None:
         ruff_args.insert(0, "format")
         try:
             parsed_args = parse_ranges(ruff_args)
@@ -854,9 +875,17 @@ def main() -> int:
         elif arg == "--stdin-filename" and i + 1 < len(args):
             target_path = args[i + 1]
             break
-        elif not arg.startswith("-") and arg != "format":
+        elif not arg.startswith("-") and arg not in KNOWN_SUBCOMMANDS:
             target_path = arg
             break
+
+    try:
+        parsed_args = parse_ranges(args)
+        opts = parse_formatting_options(parsed_args.pass_through_args)
+        if opts.subcommand is not None and opts.subcommand != "format":
+            return run_ruff_with_ranges(args)
+    except Exception:
+        pass
 
     if should_use_ruff(target_path, root_dir):
         return run_ruff_with_ranges(args)

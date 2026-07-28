@@ -1104,5 +1104,47 @@ class TestRunRuffWithRanges(unittest.TestCase):
         self.assertEqual(args_passed[2], "./format")
 
 
+class TestSubcommands(unittest.TestCase):
+    @patch("subprocess.call")
+    @patch("depot_tools_ruff_chromium.get_ruff_bin", return_value="ruff")
+    def test_check_subcommand_does_not_insert_format(
+        self, mock_get_bin, mock_call
+    ):
+        mock_call.return_value = 0
+        ret = run_ruff_with_ranges(["check", "foo.py"])
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        self.assertEqual(
+            args_passed, ["ruff", "check", "foo.py", "--force-exclude"]
+        )
+
+    @patch("subprocess.call")
+    @patch("depot_tools_ruff_chromium.get_ruff_bin", return_value="ruff")
+    def test_main_with_check_subcommand(self, mock_get_bin, mock_call):
+        mock_call.return_value = 0
+        with patch("sys.argv", ["ruff_chromium", "check", "foo.py"]):
+            ret = depot_tools_ruff.main()
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        self.assertEqual(
+            args_passed, ["ruff", "check", "foo.py", "--force-exclude"]
+        )
+
+    @patch("subprocess.call")
+    @patch("depot_tools_ruff_chromium.get_ruff_bin", return_value="ruff")
+    def test_main_with_rule_subcommand(self, mock_get_bin, mock_call):
+        mock_call.return_value = 0
+        with patch("sys.argv", ["ruff_chromium", "rule", "F401"]):
+            ret = depot_tools_ruff.main()
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        args_passed = mock_call.call_args[0][0]
+        self.assertEqual(
+            args_passed, ["ruff", "rule", "F401", "--force-exclude"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
