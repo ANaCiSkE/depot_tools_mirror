@@ -4689,12 +4689,19 @@ the current line as well!
             "a", "b", self.fake_root_dir, None, 0, 0, None
         )
         input_api = self.MockInputApi(change, False)
-        affected_filenames = ["/path1/to/.vpython", "/path1/to/.vpython3"]
+        affected_local_paths = [
+            "path1/to/.vpython",
+            "path1/to/.vpython3",
+            "path1/to/vpython.toml",
+            "path1/to/script.py",
+        ]
         affected_files = []
 
-        for filename in affected_filenames:
+        for local_path in affected_local_paths:
+            filename = os.path.join(self.fake_root_dir, local_path)
             affected_file = mock.MagicMock(presubmit.GitAffectedFile)
             affected_file.AbsoluteLocalPath.return_value = filename
+            affected_file.LocalPath.return_value = local_path
             affected_files.append(affected_file)
         input_api.AffectedTestableFiles.return_value = affected_files
 
@@ -4702,23 +4709,44 @@ the current line as well!
             input_api, presubmit.OutputApi
         )
 
-        self.assertEqual(len(commands), len(affected_filenames))
+        depot_tools_dir = os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))
+        )
+        verify_script = os.path.join(depot_tools_dir, "verify_lockfile.py")
+        verify_spec = os.path.join(
+            depot_tools_dir, "verify_lockfile.py.vpython3"
+        )
+
+        vpython3_name = "vpython3.bat" if input_api.is_windows else "vpython3"
+        vpython3_bin = os.path.join(depot_tools_dir, vpython3_name)
+        if not os.path.exists(vpython3_bin):
+            vpython3_bin = vpython3_name
+
+        self.assertEqual(len(commands), len(affected_local_paths))
         for i in range(0, len(commands)):
-            self.assertEqual(
-                commands[i].name, "Verify " + affected_filenames[i]
-            )
-            self.assertEqual(
-                commands[i].cmd,
-                [
-                    input_api.python3_executable,
+            local_path = affected_local_paths[i]
+            filename = os.path.join(self.fake_root_dir, local_path)
+            self.assertEqual(commands[i].name, "Verify " + local_path)
+            if local_path.endswith((".vpython", ".vpython3")):
+                expected_cmd = [
+                    vpython3_bin,
                     "-vpython-spec",
-                    affected_filenames[i],
+                    filename,
                     "-vpython-tool",
                     "verify",
-                ],
-            )
+                ]
+            else:
+                expected_cmd = [
+                    vpython3_bin,
+                    "-vpython-spec",
+                    verify_spec,
+                    verify_script,
+                    filename,
+                    filename + ".uv.lock",
+                ]
+            self.assertEqual(commands[i].cmd, expected_cmd)
             self.assertDictEqual(
-                commands[0].kwargs,
+                commands[i].kwargs,
                 {
                     "stderr": input_api.subprocess.STDOUT,
                     "stdout": input_api.subprocess.PIPE,
@@ -4726,9 +4754,177 @@ the current line as well!
                 },
             )
             self.assertEqual(
-                commands[0].message, presubmit.OutputApi.PresubmitError
+                commands[i].message, presubmit.OutputApi.PresubmitError
             )
-            self.assertIsNone(commands[0].info)
+            self.assertIsNone(commands[i].info)
+
+    def testCannedCheckVPythonSpecLockfileOnly(self):
+        change = presubmit.Change(
+            "a", "b", self.fake_root_dir, None, 0, 0, None
+        )
+        input_api = self.MockInputApi(change, False)
+        lockfile_local_path = "path1/to/vpython.toml.uv.lock"
+        spec_local_path = "path1/to/vpython.toml"
+
+        filename = os.path.join(self.fake_root_dir, lockfile_local_path)
+        affected_file = mock.MagicMock(presubmit.GitAffectedFile)
+        affected_file.AbsoluteLocalPath.return_value = filename
+        affected_file.LocalPath.return_value = lockfile_local_path
+        input_api.AffectedTestableFiles.return_value = [affected_file]
+
+        commands = presubmit_canned_checks.CheckVPythonSpec(
+            input_api, presubmit.OutputApi
+        )
+
+        depot_tools_dir = os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))
+        )
+        verify_script = os.path.join(depot_tools_dir, "verify_lockfile.py")
+        verify_spec = os.path.join(
+            depot_tools_dir, "verify_lockfile.py.vpython3"
+        )
+        vpython3_name = "vpython3.bat" if input_api.is_windows else "vpython3"
+        vpython3_bin = os.path.join(depot_tools_dir, vpython3_name)
+        if not os.path.exists(vpython3_bin):
+            vpython3_bin = vpython3_name
+
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].name, "Verify " + spec_local_path)
+        expected_spec_filename = os.path.join(
+            self.fake_root_dir, spec_local_path
+        )
+        self.assertEqual(
+            commands[0].cmd,
+            [
+                vpython3_bin,
+                "-vpython-spec",
+                verify_spec,
+                verify_script,
+                expected_spec_filename,
+                expected_spec_filename + ".uv.lock",
+            ],
+        )
+
+    def testCheckVPythonSpecDefaultFilter(self):
+        change = presubmit.Change(
+            "a", "b", self.fake_root_dir, None, 0, 0, None
+        )
+        input_api = self.MockInputApi(change, False)
+
+        captured_filter = []
+
+        def mock_affected_testable_files(file_filter=None):
+            captured_filter.append(file_filter)
+            return []
+
+        input_api.AffectedTestableFiles = mock_affected_testable_files
+
+        presubmit_canned_checks.CheckVPythonSpec(input_api, presubmit.OutputApi)
+        self.assertEqual(len(captured_filter), 1)
+        filter_fn = captured_filter[0]
+
+        # Test .vpython and .vpython3
+        f_vpython = mock.MagicMock()
+        f_vpython.LocalPath.return_value = "foo/.vpython"
+        self.assertTrue(filter_fn(f_vpython))
+
+        f_vpython3 = mock.MagicMock()
+        f_vpython3.LocalPath.return_value = "foo/.vpython3"
+        self.assertTrue(filter_fn(f_vpython3))
+
+        # Test vpython.toml vs custom_vpython.toml
+        f_toml = mock.MagicMock()
+        f_toml.LocalPath.return_value = "foo/vpython.toml"
+        self.assertTrue(filter_fn(f_toml))
+
+        f_custom_toml = mock.MagicMock()
+        f_custom_toml.LocalPath.return_value = "foo/custom_vpython.toml"
+        f_custom_toml.AbsoluteLocalPath.return_value = (
+            "/foo/custom_vpython.toml"
+        )
+        self.assertFalse(filter_fn(f_custom_toml))
+
+        # Test .pyw script with PEP 723 marker
+        f_pyw_pep723 = mock.MagicMock()
+        f_pyw_pep723.LocalPath.return_value = "script.pyw"
+        f_pyw_pep723.AbsoluteLocalPath.return_value = "/foo/script.pyw"
+        f_pyw_pep723.NewContents.return_value = [
+            "#!/usr/bin/env vpython3",
+            "# /// script",
+            "# dependencies = ['six']",
+            "# ///",
+        ]
+        self.assertTrue(filter_fn(f_pyw_pep723))
+
+        # Test plain .py script without markers or lockfile
+        f_py_plain = mock.MagicMock()
+        f_py_plain.LocalPath.return_value = "plain.py"
+        f_py_plain.AbsoluteLocalPath.return_value = "/foo/plain.py"
+        f_py_plain.NewContents.return_value = ["print('hello')"]
+        self.assertFalse(filter_fn(f_py_plain))
+
+        # Test malformed marker e.g. # /// script_extra
+        f_py_extra = mock.MagicMock()
+        f_py_extra.LocalPath.return_value = "extra.py"
+        f_py_extra.AbsoluteLocalPath.return_value = "/foo/extra.py"
+        f_py_extra.NewContents.return_value = ["# /// script_extra"]
+        self.assertFalse(filter_fn(f_py_extra))
+
+        # Test .vpython.uv.lock is ignored
+        f_vpython_lock = mock.MagicMock()
+        f_vpython_lock.LocalPath.return_value = "foo/.vpython.uv.lock"
+        self.assertFalse(filter_fn(f_vpython_lock))
+
+        # Test deleted .vpython and vpython.toml files are ignored
+        f_deleted_vpython = mock.MagicMock()
+        f_deleted_vpython.LocalPath.return_value = "foo/.vpython"
+        f_deleted_vpython.Action.return_value = "D"
+        self.assertFalse(filter_fn(f_deleted_vpython))
+
+        f_deleted_toml = mock.MagicMock()
+        f_deleted_toml.LocalPath.return_value = "foo/vpython.toml"
+        f_deleted_toml.Action.return_value = "D"
+        self.assertFalse(filter_fn(f_deleted_toml))
+
+        # Test deleted .uv.lock file triggers check if target spec file exists on disk
+        input_api.os_path = mock.MagicMock(wraps=os.path)
+        input_api.os_path.exists.side_effect = lambda path: (
+            path == "/foo/vpython.toml"
+        )
+
+        f_deleted_lock = mock.MagicMock()
+        f_deleted_lock.LocalPath.return_value = "vpython.toml.uv.lock"
+        f_deleted_lock.AbsoluteLocalPath.return_value = (
+            "/foo/vpython.toml.uv.lock"
+        )
+        f_deleted_lock.Action.return_value = "D"
+        self.assertTrue(filter_fn(f_deleted_lock))
+
+    def testCheckVPythonSpecDeduplication(self):
+        change = presubmit.Change(
+            "a", "b", self.fake_root_dir, None, 0, 0, None
+        )
+        input_api = self.MockInputApi(change, False)
+
+        spec_file = mock.MagicMock(presubmit.GitAffectedFile)
+        spec_file.LocalPath.return_value = "script.py"
+        spec_file.AbsoluteLocalPath.return_value = os.path.join(
+            self.fake_root_dir, "script.py"
+        )
+
+        lock_file = mock.MagicMock(presubmit.GitAffectedFile)
+        lock_file.LocalPath.return_value = "script.py.uv.lock"
+        lock_file.AbsoluteLocalPath.return_value = os.path.join(
+            self.fake_root_dir, "script.py.uv.lock"
+        )
+
+        input_api.AffectedTestableFiles.return_value = [spec_file, lock_file]
+
+        commands = presubmit_canned_checks.CheckVPythonSpec(
+            input_api, presubmit.OutputApi
+        )
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].name, "Verify script.py")
 
 
 class ThreadPoolTest(unittest.TestCase):
