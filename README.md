@@ -37,6 +37,17 @@ that find binaries in chromium checkout, and run with proper setup/check.
 To use these wrappers, you need to initialize/bootstrap depot_tools (using
 `gclient`, `update_depot_tools` or `ensure_bootstrap`).
 
+## AI agent tooling
+
+This repository contains two separate directories of agent-related tooling with
+distinct audiences:
+
+- `agents/`: Skills and configuration meant for **Chromium developers** (and
+  their AI agents) working in the Chromium codebase using depot_tools.
+- `depot_tools_agents/`: AI review agents (e.g. Gerrit review agents) meant only
+  for **maintainers of depot_tools** working on the `depot_tools` code itself.
+  This is **not** intended for use with the Chromium codebase.
+
 ## Installing
 
 See [set-up documentation](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).

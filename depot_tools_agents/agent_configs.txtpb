@@ -1,0 +1,26 @@
+# proto-file: google/corp/android/engprod/codereviewagentconfiguration/v1/agent.proto
+# proto-message: HostAgents
+
+# Code Review Workflow Agent
+configs {
+  id: "code-review-workflow"
+  display_name: "Code Review Workflow"
+  description: "Analyzes depot_tools Gerrit review coordination, OWNERS/code-ownership approvals, Python code style, commit metadata, documentation, and developer collaboration workflows."
+  skills: "code-review-workflow"
+  include_filters {
+    project: "chromium/tools/depot_tools"
+  }
+  automatic: false
+}
+
+# Core Internals Agent
+configs {
+  id: "core-internals"
+  display_name: "Core Internals"
+  description: "Analyzes depot_tools core internals: SCM/git wrappers, gclient, vpython, presubmit infrastructure, git_cl tooling, build-system daemons/IPC, filesystem management, and Git/LUCI authentication."
+  skills: "core-internals"
+  include_filters {
+    project: "chromium/tools/depot_tools"
+  }
+  automatic: false
+}
