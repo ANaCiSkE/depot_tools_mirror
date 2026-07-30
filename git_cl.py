@@ -6752,23 +6752,30 @@ def UploadAllSquashed(
                 # root of the tree.
                 parent = cl.GetCommonAncestorWithUpstream()
 
+        root_branch = scm.GIT.GetBranch(settings.GetRoot())
         if orig_parent is None:
             orig_parent = parent
-        for i, cl in enumerate(ordered_cls):
-            # If we're in the middle of the stack, set end_commit to
-            # downstream's direct ancestor.
-            if i + 1 < len(ordered_cls):
-                child_base_commit = ordered_cls[
-                    i + 1
-                ].GetCommonAncestorWithUpstream()
-            else:
-                child_base_commit = None
-            new_upload = cl.PrepareSquashedCommit(
-                options, parent, orig_parent, end_commit=child_base_commit
-            )
-            uploads_by_cl.append((cl, new_upload))
-            parent = new_upload.commit_to_push
-            orig_parent = child_base_commit
+        try:
+            for i, cl in enumerate(ordered_cls):
+                if cl.GetBranch():
+                    RunGit(["checkout", "-q", cl.GetBranch()])
+                # If we're in the middle of the stack, set end_commit to
+                # downstream's direct ancestor.
+                if i + 1 < len(ordered_cls):
+                    child_base_commit = ordered_cls[
+                        i + 1
+                    ].GetCommonAncestorWithUpstream()
+                else:
+                    child_base_commit = None
+                new_upload = cl.PrepareSquashedCommit(
+                    options, parent, orig_parent, end_commit=child_base_commit
+                )
+                uploads_by_cl.append((cl, new_upload))
+                parent = new_upload.commit_to_push
+                orig_parent = child_base_commit
+        finally:
+            if root_branch:
+                RunGit(["checkout", "-q", root_branch])
 
     # Create refspec options
     cl, new_upload = uploads_by_cl[-1]

@@ -2015,6 +2015,12 @@ class TestGitCl(unittest.TestCase):
             "googlesource.com/c/chromium/circus/clown/+/1234 stonks"
         )
 
+        self.calls = [
+            ((["git", "checkout", "-q", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
         # Call
         git_cl.UploadAllSquashed(options, orig_args)
 
@@ -2152,6 +2158,12 @@ class TestGitCl(unittest.TestCase):
             "googlesource.com/c/chromium/depot_tools/+/1234"
         )
 
+        self.calls = [
+            ((["git", "checkout", "-q", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
         # Call
         git_cl.UploadAllSquashed(options, orig_args)
 
@@ -2257,6 +2269,12 @@ class TestGitCl(unittest.TestCase):
             "googlesource.com/c/chromium/depot_tools/+/1233"
         )
 
+        self.calls = [
+            ((["git", "checkout", "-q", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
         # Call
         with self.assertRaises(SystemExitMock):
             git_cl.UploadAllSquashed(options, orig_args)
@@ -2349,6 +2367,11 @@ class TestGitCl(unittest.TestCase):
         mockExternalChanges.reset_mock()
         mockExternalChanges.return_value = "external-commit"
 
+        self.calls = [
+            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
         # Call
         git_cl.UploadAllSquashed(options, orig_args)
 
@@ -2386,6 +2409,11 @@ class TestGitCl(unittest.TestCase):
         mockSquashedCommit.reset_mock()
         mockExternalChanges.return_value = None
 
+        self.calls = [
+            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
         # Call
         git_cl.UploadAllSquashed(options, orig_args)
 
@@ -2401,6 +2429,33 @@ class TestGitCl(unittest.TestCase):
                 )
             ],
         )
+
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        side_effect=["current-upstream-ancestor", "next-upstream-ancestor"],
+    )
+    @mock.patch("git_cl._UploadAllPrecheck")
+    @mock.patch("git_cl.Changelist.PrepareSquashedCommit")
+    def test_upload_all_squashed_restores_branch_on_exception(
+        self, mockSquashedCommit, mockUploadAllPrecheck, *_mocks
+    ):
+        cls = [
+            git_cl.Changelist(branchref="refs/heads/current-branch"),
+            git_cl.Changelist(branchref="refs/heads/upstream-branch"),
+        ]
+        mockUploadAllPrecheck.return_value = (cls, False)
+        mockSquashedCommit.side_effect = RuntimeError("Presubmit hook failure")
+
+        options = optparse.Values()
+        options.squash = True
+
+        self.calls = [
+            ((["git", "checkout", "-q", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
+        with self.assertRaises(RuntimeError):
+            git_cl.UploadAllSquashed(options, [])
 
     @mock.patch(
         "git_cl.Changelist._GerritCommitMsgHookCheck",
@@ -8531,7 +8586,7 @@ class BuildbucketBatchTest(unittest.TestCase):
             "index 0000000..1111111 100644\n"
             "--- a/foo.py\n"
             "+++ b/foo.py\n"
-            "@@ -17 +17 @@ _REGEX = re.compile(r\"^@@ \\-(\\d+),?(\\d+)? \\+(\\d+),?(\\d+)? @@\")\n"
+            '@@ -17 +17 @@ _REGEX = re.compile(r"^@@ \\-(\\d+),?(\\d+)? \\+(\\d+),?(\\d+)? @@")\n'
             "-x = 1\n"
             "+x = 2\n"
         )
