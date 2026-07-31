@@ -33,13 +33,29 @@ def run_bb(args):
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
-        raise BuildbucketError(
-            f"Error running bb command: {e}\nStderr: {e.stderr}"
-        )
+        err_msg = f"Error running bb command: {e}\nStderr: {e.stderr}"
+        if (
+            "login required" in e.stderr.lower()
+            or "permission denied" in e.stderr.lower()
+        ):
+            if not is_authenticated():
+                err_msg += "\n\n`bb auth-info` failed. The user must run `bb auth-login` to authenticate."
+        raise BuildbucketError(err_msg)
     except subprocess.TimeoutExpired as e:
         raise BuildbucketError(
             f"Error: bb command timed out after 60 seconds: {' '.join(cmd)}"
         )
+
+
+def is_authenticated():
+    """Checks if the user is logged into buildbucket."""
+    try:
+        res = subprocess.run(
+            ["bb", "auth-info"], capture_output=True, text=True, check=False
+        )
+        return res.returncode == 0
+    except FileNotFoundError:
+        return False
 
 
 def get_latest_build(builder_path):

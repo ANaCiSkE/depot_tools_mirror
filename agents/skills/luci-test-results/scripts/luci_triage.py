@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env vpython3
 # Copyright 2026 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -28,6 +28,17 @@ def run_prpc(service, method, payload):
             )
             return None
         return json.loads(stdout)
+
+
+def is_authenticated():
+    """Checks if the user is logged into buildbucket."""
+    try:
+        res = subprocess.run(
+            ["bb", "auth-info"], capture_output=True, text=True, check=False
+        )
+        return res.returncode == 0
+    except FileNotFoundError:
+        return False
 
 
 def resolve_build_id(project, bucket, builder, build_number):
@@ -170,7 +181,10 @@ def fetch_log_snippet(res_name, raw=False):
         payload,
     )
     if not result or "artifacts" not in result:
-        return "No artifacts found."
+        msg = "No artifacts found. This can happen if the build failed early or the logs were purged."
+        if not is_authenticated():
+            msg += " If the build is private, the user must run `bb auth-login` to authenticate."
+        return msg
 
     # Prefer "Test Log" or similar
     artifacts = result["artifacts"]

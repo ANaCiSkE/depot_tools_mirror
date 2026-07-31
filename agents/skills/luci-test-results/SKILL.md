@@ -3,18 +3,22 @@ name: luci-test-results
 description: >
   Triage and analyze LUCI build results (including tests and compile).
   Fetches a list of test failures by querying ResultDB directly.
-  Can also be used to check results of specific tests.
-  Use this when you need to investigate specific test failures.
+  Use this for detailed information about specific test case regressions,
+  grouping failures by task, and extracting filtered log snippets.
+  For high-level builder status or compile errors, use the 'buildbucket' skill.
 ---
 
 # LUCI Triage Cheat Sheet
+
+This skill provides a tool (`luci_triage.py`) for deep-diving into **Test-level**
+failures across LUCI shards and tasks.
 
 ## 1. Resolve Build ID
 
 If you have a builder + build number, get the long `<BUILD_ID>`:
 
 ```bash
-scripts/luci_triage.py resolve-build-id \
+vpython3 scripts/luci_triage.py resolve-build-id \
   --builder "<BUILDER>" \
   --build-number <NUMBER> \
   --project <PROJECT> \
@@ -29,7 +33,7 @@ For the URL
 https://ci.chromium.org/ui/p/chromium/builders/try/linux-chromeos-rel/2769679/overview
 you should run the script for this skill with the following arguments:
 ```bash
-scripts/luci_triage.py resolve-build-id \
+vpython3 scripts/luci_triage.py resolve-build-id \
   --builder "linux-chromeos-rel" \
   --build-number 2769679 \
   --project chromium \
@@ -41,7 +45,7 @@ scripts/luci_triage.py resolve-build-id \
 Find builds for a specific CL and patchset (defaults to non-successful builds):
 
 ```bash
-scripts/luci_triage.py find-cl-builds \
+vpython3 scripts/luci_triage.py find-cl-builds \
   --cl <CL_NUMBER> \
   [--patchset <PATCHSET>] \
   [--all] \
@@ -65,7 +69,7 @@ scripts/luci_triage.py find-cl-builds \
 Get status, summary markdown, and output properties of a build:
 
 ```bash
-scripts/luci_triage.py get-build \
+vpython3 scripts/luci_triage.py get-build \
   --build-id <BUILD_ID>
 ```
 
@@ -75,7 +79,7 @@ Get a clean list of tests that failed unexpectedly, deduplicated by test ID and
 grouped by Swarming task:
 
 ```bash
-scripts/luci_triage.py list-failures \
+vpython3 scripts/luci_triage.py list-failures \
   --build-id <BUILD_ID>
 ```
 
@@ -88,7 +92,7 @@ Retrieve a filtered failure log snippet using the result name (`res`) from step
 4:
 
 ```bash
-scripts/luci_triage.py fetch-log \
+vpython3 scripts/luci_triage.py fetch-log \
   --res "<RES_NAME>"
 ```
 
@@ -98,7 +102,7 @@ Check if a specific test (or tests matching a regex) ran in a build, and see
 its status:
 
 ```bash
-scripts/luci_triage.py check-test \
+vpython3 scripts/luci_triage.py check-test \
   --build-id <BUILD_ID> \
   --test-regex "<TEST_REGEX>"
 ```
@@ -106,6 +110,14 @@ scripts/luci_triage.py check-test \
 - **Efficiency:** This command uses server-side filtering via `QueryTestResults`
   and automatically wraps your regex with `.*` for partial matching. It fetches
   all results (expected and unexpected) for matching tests.
+
+## Troubleshooting
+
+- **"No Artifacts Found"**: This can happen if the build failed before producing
+  ResultDB artifacts, if the logs were purged (old build), or if there is an
+  auth issue.
+- **Fallback**: If artifacts are missing, use `bb log <build_id> <step_name>`
+  (from the `buildbucket` skill) to see the raw step output.
 
 ## 7. Get Test History
 
