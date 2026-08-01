@@ -3,6 +3,9 @@ set noparent
 gavinmak@google.com
 brgan@google.com
 
+# Siso team members global owners in Asia.
+ovsienko@google.com
+
 # Allow teams to self-manage who belongs to them.
 per-file BUILD_OWNERS=file://BUILD_OWNERS
 per-file CROS_OWNERS=file://CROS_OWNERS
