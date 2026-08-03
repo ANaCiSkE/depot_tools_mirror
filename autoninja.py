@@ -64,7 +64,6 @@ _ALL_META_CHARS = _UNSAFE_FOR_CMD.union(set('"'))
 _HELP_MESSAGE = """\
 autoninja:
   -o/--offline  temporary disable remote execution
-  --virtual-build-path  virtualize paths to /tmp/siso_virtual_build_path to share the local build cache state across workspaces (Linux only). Can also be applied by setting SISO_USE_VIRTUAL_BUILD_PATH=1
 """
 
 
@@ -559,16 +558,11 @@ def _main_inner(
         return 1
 
     # Strip -o/--offline so ninja doesn't see them.
-    input_args = [arg for arg in input_args if arg not in ("-o", "--offline")]
-
-    if "--virtual-build-path" in input_args:
-        print(
-            "Warning: --virtual-build-path is only supported when using Siso. Ignoring flag.",
-            file=sys.stderr,
-        )
-        input_args = [
-            arg for arg in input_args if arg != "--virtual-build-path"
-        ]
+    input_args = [
+        arg
+        for arg in input_args
+        if arg not in ("-o", "--offline", "--virtual-build-path")
+    ]
 
     ninja_args = ["ninja"]
     num_cores = multiprocessing.cpu_count()

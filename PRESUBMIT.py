@@ -171,6 +171,7 @@ def CheckUnitTestsOnCommit(input_api, output_api):
                 r".*git_map_test\.py$",
                 r".*ninjalog_uploader_test\.py$",
                 r".*recipes_test\.py$",
+                r".*run_in_virtual_path_test\.py$",
             ]
         )
 

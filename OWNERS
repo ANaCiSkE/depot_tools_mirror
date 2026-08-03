@@ -42,6 +42,7 @@ per-file build_telemetry*=file://BUILD_OWNERS
 
 # Build util
 per-file caffeinate.py=file://BUILD_OWNERS
+per-file run_in_virtual_path*=file://BUILD_OWNERS
 
 per-file black*=vapier@chromium.org
 per-file pylint*=vapier@chromium.org
