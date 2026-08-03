@@ -73,7 +73,7 @@ per-file setup_btrfs_loop.sh=nbilling@google.com
 per-file crowbar*=file://SECURITY_TEAM_OWNERS
 
 # Ruff formatter
-per-file ruff*=ovsienko@google.com
+per-file ruff_chromium*=ovsienko@google.com
 per-file .ruff.toml=ovsienko@google.com
 
 # Temp ownership of git cl while it get modified to work with ruff
