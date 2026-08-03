@@ -236,6 +236,20 @@ def real_git_dir(repo_path):
     return os.path.realpath(os.path.join(repo_path, relative_git_dir))
 
 
+def _refresh_index_stat_cache(dest):
+    subprocess.call(
+        [
+            "git",
+            "-c",
+            "core.checkStat=minimal",
+            "update-index",
+            "-q",
+            "--refresh",
+        ],
+        cwd=dest,
+    )
+
+
 def link_git_repo(src, dest, use_copy_on_write):
     print("Linking: %s/.git" % src)
     src_git_dir = real_git_dir(src)
@@ -249,6 +263,7 @@ def link_git_repo(src, dest, use_copy_on_write):
         subprocess.check_call(
             ["git", "update-ref", "--no-deref", "HEAD", "HEAD"], cwd=dest
         )
+        _refresh_index_stat_cache(dest)
     else:
         print("Running: git checkout --detach -f %s" % dest)
         subprocess.check_call(["git", "checkout", "--detach", "-f"], cwd=dest)
@@ -283,6 +298,7 @@ def adopt_git_worktree(src, dest):
     src_index = os.path.join(real_git_dir(src), "index")
     dest_index = os.path.join(real_git_dir(dest), "index")
     copy_on_write(src_index, dest_index)
+    _refresh_index_stat_cache(dest)
 
 
 def create_git_worktree(src, workdir):

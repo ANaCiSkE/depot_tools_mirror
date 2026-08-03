@@ -330,6 +330,21 @@ class TestGclientNewWorkdir(unittest.TestCase):
             # Verify that adopt_git_worktree was called!
             mock_adopt.assert_called_once_with("/fake/repo", "/fake/dest")
 
+    @patch("subprocess.call")
+    def test_refresh_index_stat_cache(self, mock_call):
+        gclient_new_workdir._refresh_index_stat_cache("/fake/dest")
+        mock_call.assert_called_once_with(
+            [
+                "git",
+                "-c",
+                "core.checkStat=minimal",
+                "update-index",
+                "-q",
+                "--refresh",
+            ],
+            cwd="/fake/dest",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
