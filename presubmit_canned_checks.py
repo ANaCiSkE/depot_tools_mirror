@@ -1695,6 +1695,61 @@ def RunPylint(input_api, *args, **kwargs):
     return input_api.RunTests(GetPylint(input_api, *args, **kwargs), False)
 
 
+def GetRuff(
+    input_api,
+    output_api,
+    files_to_check=None,
+    files_to_skip=None,
+    extra_args=None,
+):
+    """Run ruff check on python files."""
+    files_to_check = tuple(files_to_check or (r".*\.py$",))
+    files_to_skip = tuple(files_to_skip or input_api.DEFAULT_FILES_TO_SKIP)
+
+    if input_api.is_committing or input_api.no_diffs:
+        error_type = output_api.PresubmitError
+    else:
+        error_type = output_api.PresubmitPromptWarning
+
+    src_filter = lambda x: input_api.FilterSourceFile(
+        x, files_to_check, files_to_skip
+    )
+    affected_files = [
+        f.AbsoluteLocalPath()
+        for f in input_api.AffectedSourceFiles(src_filter)
+    ]
+    if not affected_files:
+        return []
+
+    tool = input_api.os_path.join(_HERE, "ruff_chromium")
+    if input_api.is_windows:
+        tool += ".bat"
+
+    cmd = ["vpython3", tool, "check"]
+    if extra_args:
+        cmd.extend(extra_args)
+    cmd.extend(affected_files)
+
+    num_files = len(affected_files)
+    file_suffix = "" if num_files == 1 else "s"
+    name = "Ruff (%d file%s)" % (num_files, file_suffix)
+
+    return [
+        input_api.Command(
+            name=name,
+            cmd=cmd,
+            kwargs={},
+            message=error_type,
+            python3=True,
+        )
+    ]
+
+
+def RunRuff(input_api, *args, **kwargs):
+    """Legacy presubmit function for running Ruff."""
+    return input_api.RunTests(GetRuff(input_api, *args, **kwargs), False)
+
+
 def CheckDirMetadataFormat(input_api, output_api, dirmd_bin=None):
     # TODO(crbug.com/1102997): Remove OWNERS once DIR_METADATA migration is
     # complete.

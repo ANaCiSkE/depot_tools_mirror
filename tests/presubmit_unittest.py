@@ -4035,6 +4035,28 @@ the current line as well!
 
         self.checkstdout("")
 
+    def testCannedRunRuff(self):
+        affected_file = mock.Mock()
+        affected_file.AbsoluteLocalPath.return_value = "/path/to/file1.py"
+        input_api = self.MockInputApi(mock.Mock(), True)
+        input_api.is_windows = sys.platform == "win32"
+        input_api.AffectedSourceFiles = mock.Mock(return_value=[affected_file])
+        input_api.is_committing = False
+        input_api.no_diffs = False
+
+        commands = presubmit_canned_checks.GetRuff(
+            input_api, presubmit.OutputApi
+        )
+        self.assertEqual(len(commands), 1)
+        cmd = commands[0]
+        self.assertEqual(cmd.name, "Ruff (1 file)")
+        expected_tool = os.path.join(_ROOT, "ruff_chromium")
+        if sys.platform == "win32":
+            expected_tool += ".bat"
+        self.assertEqual(
+            cmd.cmd, ["vpython3", expected_tool, "check", "/path/to/file1.py"]
+        )
+
     def GetInputApiWithFiles(self, files):
         change = mock.MagicMock(presubmit.Change)
         change.AffectedFiles = lambda *a, **kw: presubmit.Change.AffectedFiles(
