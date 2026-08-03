@@ -132,6 +132,7 @@ _ALLOWED_SPDX_LICENSES = frozenset(
         "NCSA",
         "OFL-1.1",
         "OpenSSL",
+        "PSF-2.0",
         "Python-2.0",
         "SGI-B-2.0",
         "Spencer-86",
