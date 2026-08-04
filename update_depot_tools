@@ -92,12 +92,6 @@ function update_git_repo {
       echo "$GIT_CMD_TXT" >&2
     fi
   fi
-  # Having python3 on depot_tools causes problems if users put depot_tools in
-  # PATH before system's python3, so remove it if present.
-  # See crbug.com/1017812.
-  if [[ -e python3 ]]; then
-    rm python3
-  fi
   return $STATUS
 }
 
