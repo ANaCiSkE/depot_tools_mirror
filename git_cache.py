@@ -510,9 +510,17 @@ class Mirror(object):
         # its HEAD still pointing to refs/heads/master. This causes bot_update
         # to fail. If in this state, delete the cache and force bootstrap.
         try:
-            with open(os.path.join(self.mirror_path, "HEAD")) as f:
-                head_ref = f.read()
-        except FileNotFoundError:
+            head_ref = subprocess.check_output(
+                [
+                    self.git_exe,
+                    "--git-dir",
+                    os.path.abspath(self.mirror_path),
+                    "symbolic-ref",
+                    "HEAD",
+                ],
+                stderr=subprocess.DEVNULL,
+            ).decode("utf-8", "ignore")
+        except (subprocess.CalledProcessError, OSError):
             head_ref = ""
 
         # Check only when HEAD points to master.
