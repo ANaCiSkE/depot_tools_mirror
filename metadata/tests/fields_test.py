@@ -162,6 +162,22 @@ class FieldValidationTest(unittest.TestCase):
             ],
         )
 
+    def test_revision_validation(self):
+        self._run_field_validation(
+            field=known_fields.REVISION,
+            valid_values=[
+                "DEPS",  # Sentinel.
+                "a" * 64,
+            ],
+            error_values=[
+                "a" * 6,
+                "g" * 40,  # Right length, but not hex.
+            ],
+            warning_values=[
+                "unknown",  # "unknown" is a soft failure, not a hard error.
+            ],
+        )
+
     def test_license_validation(self):
         self._run_field_validation(
             field=known_fields.LICENSE,

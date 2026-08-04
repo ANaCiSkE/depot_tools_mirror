@@ -43,7 +43,9 @@ def main():
 
   with open(readme_path, "r") as rmd:
     prev_commit = re.match(
-      r".*/([a-f0-9]{40})/.*", rmd.read(), re.MULTILINE | re.DOTALL
+      r".*/([a-f0-9]{40}|[a-f0-9]{64})/.*",
+      rmd.read(),
+      re.MULTILINE | re.DOTALL,
     ).group(1)
 
   to_remove = set()

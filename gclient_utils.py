@@ -134,12 +134,14 @@ def ExtractRefName(remote, full_refs_str):
 
 def IsGitSha(revision):
     """Returns true if the given string is a valid hex-encoded sha."""
-    return re.match("^[a-fA-F0-9]{6,40}$", revision) is not None
+    return re.match("^[a-fA-F0-9]{6,64}$", revision) is not None
 
 
 def IsFullGitSha(revision):
     """Returns true if the given string is a valid hex-encoded full sha."""
-    return re.match("^[a-fA-F0-9]{40}$", revision) is not None
+    return (
+        re.match("^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$", revision) is not None
+    )
 
 
 def IsDateRevision(revision):

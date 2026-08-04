@@ -112,8 +112,13 @@ class FieldValidationTest(unittest.TestCase):
         expect("123456", None, "treat too short hex as None")
         expect(
             "0123456789abcdef0123456789abcdef01234567abcabc",
+            "0123456789abcdef0123456789abcdef01234567abcabc",
+            "leave an abbreviated SHA-256 (41-63 chars) unchanged",
+        )
+        expect(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01",
             None,
-            "treat long hex (>40) as None",
+            "treat hex longer than SHA-256 (>64) as None",
         )
         expect("varies", None, "treat varies as None")
         expect("see deps", None, "treat see deps as None")
@@ -124,7 +129,17 @@ class FieldValidationTest(unittest.TestCase):
         expect(
             "abcdef1abcdef1",
             "abcdef1abcdef1",
-            "leave valid hex unchanged if between 7-40 chars",
+            "leave valid hex unchanged if between 7-64 chars",
+        )
+        expect(
+            "0123456789abcdef0123456789abcdef01234567",
+            "0123456789abcdef0123456789abcdef01234567",
+            "leave a full SHA-1 (40 chars) unchanged",
+        )
+        expect(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "leave a full SHA-256 (64 chars) unchanged",
         )
 
     def test_license(self):

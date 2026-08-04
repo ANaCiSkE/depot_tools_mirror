@@ -93,7 +93,9 @@ PRESUBMIT_SUPPORT = os.path.join(DEPOT_TOOLS, "presubmit_support.py")
 
 # When collecting traces, Git hashes will be reduced to 6 characters to reduce
 # the size after compression.
-GIT_HASH_RE = re.compile(r"\b([a-f0-9]{6})[a-f0-9]{34}\b", flags=re.I)
+GIT_HASH_RE = re.compile(
+    r"\b([a-f0-9]{6})(?:[a-f0-9]{34}|[a-f0-9]{58})\b", flags=re.I
+)
 # Used to redact the cookies from the gitcookies file.
 GITCOOKIES_REDACT_RE = re.compile(r"1/.*")
 
@@ -1371,7 +1373,10 @@ class ChangeDescription(object):
     CC_LINE = r"^[ \t]*(CC)[ \t]*=[ \t]*(.*?)[ \t]*$"
     BUG_LINE = r"^[ \t]*(?:(BUG)[ \t]*=|Bug:)[ \t]*(.*?)[ \t]*$"
     FIXED_LINE = r"^[ \t]*Fixed[ \t]*:[ \t]*(.*?)[ \t]*$"
-    CHERRY_PICK_LINE = r"^\(cherry picked from commit [a-fA-F0-9]{40}\)$"
+    CHERRY_PICK_LINE = (
+        r"^\(cherry picked from commit "
+        r"(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\)$"
+    )
     STRIP_HASH_TAG_PREFIX = r'^(\s*(revert|reland)( "|:)?\s*)*'
     BRACKET_HASH_TAG = r"\s*\[([^\[\]]+)\]"
     COLON_SEPARATED_HASH_TAG = r"^([a-zA-Z0-9_\- ]+):($|[^:])"

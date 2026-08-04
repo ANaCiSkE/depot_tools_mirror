@@ -207,6 +207,13 @@ class TestGitClBasic(unittest.TestCase):
         self.assertEqual(sys.stdout.getvalue(), "")
         sys.exit.assert_called_once_with(1)
 
+    def test_cherry_pick_line_regex(self):
+        pattern = git_cl.ChangeDescription.CHERRY_PICK_LINE
+        self.assertRegex(f"(cherry picked from commit {'a' * 40})", pattern)
+        self.assertRegex(f"(cherry picked from commit {'a' * 64})", pattern)
+        self.assertNotRegex(f"(cherry picked from commit {'a' * 50})", pattern)
+        self.assertNotRegex("(cherry picked from commit zzzz)", pattern)
+
     @mock.patch("git_cl.subcommand.CommandDispatcher.execute")
     def test_main_outside_git_repo(self, mock_execute):
         mock_execute.side_effect = subprocess2.CalledProcessError(

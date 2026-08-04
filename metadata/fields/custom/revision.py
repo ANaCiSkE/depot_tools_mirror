@@ -20,7 +20,7 @@ import metadata.fields.custom.version as version_field
 import metadata.fields.util as util
 import metadata.validation_result as vr
 
-HEX_PATTERN = re.compile(r"^[a-fA-F0-9]{7,40}$")
+HEX_PATTERN = re.compile(r"^[a-fA-F0-9]{7,64}$")
 
 # A special pattern to indicate that revision is written in DEPS file.
 DEPS_PATTERN = re.compile(r"^DEPS$")
@@ -56,7 +56,7 @@ class RevisionField(field_types.SingleLineTextField):
 
         Checks:
           - Non-empty value.
-          - Valid hexadecimal format (length 7-40 characters).
+          - Valid hexadecimal format (length 7-64 characters).
         """
         if self.is_revision_in_deps(value):
             return None
@@ -76,7 +76,7 @@ class RevisionField(field_types.SingleLineTextField):
             return vr.ValidationError(
                 reason=f"{self._name} is not a valid hexadecimal revision.",
                 additional=[
-                    "Revisions must be hexadecimal strings with a length of 7 to 40 characters."
+                    "Revisions must be hexadecimal strings with a length of 7 to 64 characters."
                 ],
             )
 

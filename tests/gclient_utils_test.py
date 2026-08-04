@@ -461,6 +461,38 @@ class GClientUtilsTest(trial_dir.TestCase):
         )
 
 
+class IsGitShaTest(unittest.TestCase):
+    def testIsFullGitSha(self):
+        # A full object name is 40 hex chars for SHA-1 or 64 for SHA-256.
+        self.assertTrue(gclient_utils.IsFullGitSha("a" * 40))
+        self.assertTrue(gclient_utils.IsFullGitSha("0" * 64))
+        self.assertTrue(
+            gclient_utils.IsFullGitSha(
+                "0123456789abcdef0123456789abcdef01234567"
+            )
+        )
+
+    def testIsFullGitShaRejectsInvalid(self):
+        # Abbreviated, invalid-length (41-63), over-length, and non-hex values
+        # are not full shas.
+        self.assertFalse(gclient_utils.IsFullGitSha("a" * 39))
+        self.assertFalse(gclient_utils.IsFullGitSha("a" * 41))
+        self.assertFalse(gclient_utils.IsFullGitSha("a" * 63))
+        self.assertFalse(gclient_utils.IsFullGitSha("a" * 65))
+        self.assertFalse(gclient_utils.IsFullGitSha("z" * 40))
+
+    def testIsGitSha(self):
+        # Abbreviated (>=6 hex) through a full SHA-256 (64) are accepted.
+        self.assertTrue(gclient_utils.IsGitSha("abcdef"))
+        self.assertTrue(gclient_utils.IsGitSha("a" * 40))
+        self.assertTrue(gclient_utils.IsGitSha("a" * 64))
+
+    def testIsGitShaRejectsInvalid(self):
+        self.assertFalse(gclient_utils.IsGitSha("abc"))
+        self.assertFalse(gclient_utils.IsGitSha("a" * 65))
+        self.assertFalse(gclient_utils.IsGitSha("z" * 40))
+
+
 if __name__ == "__main__":
     unittest.main()
 

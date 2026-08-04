@@ -49,8 +49,8 @@ CHROMIUM_SRC_URL = CHROMIUM_GIT_HOST + "/chromium/src.git"
 BRANCH_HEADS_REFSPEC = "+refs/branch-heads/*"
 TAGS_REFSPEC = "+refs/tags/*"
 
-# Regular expression to match sha1 git revision.
-COMMIT_HASH_RE = re.compile(r"[0-9a-f]{5,40}", re.IGNORECASE)
+# Regular expression to match SHA-1 (Git 2) or SHA-256 (Git 3) git revision.
+COMMIT_HASH_RE = re.compile(r"[0-9a-f]{5,64}", re.IGNORECASE)
 
 # Regular expression that matches a single commit footer line.
 COMMIT_FOOTER_ENTRY_RE = re.compile(r"([^:]+):\s*(.*)")
