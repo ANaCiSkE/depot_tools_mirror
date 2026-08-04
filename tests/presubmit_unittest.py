@@ -4051,8 +4051,6 @@ the current line as well!
         cmd = commands[0]
         self.assertEqual(cmd.name, "Ruff (1 file)")
         expected_tool = os.path.join(_ROOT, "ruff_chromium")
-        if sys.platform == "win32":
-            expected_tool += ".bat"
         self.assertEqual(
             cmd.cmd, ["vpython3", expected_tool, "check", "/path/to/file1.py"]
         )

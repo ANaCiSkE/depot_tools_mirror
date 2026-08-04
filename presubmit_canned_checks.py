@@ -1721,8 +1721,7 @@ def GetRuff(
     if not affected_files:
         return []
 
-    tool_name = "ruff_chromium.bat" if input_api.is_windows else "ruff_chromium"
-    tool = input_api.os_path.join(_HERE, tool_name)
+    tool = input_api.os_path.join(_HERE, "ruff_chromium")
     if not input_api.os_path.exists(tool):
         return [
             output_api.PresubmitPromptWarning(
