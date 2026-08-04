@@ -135,7 +135,7 @@ def resolve_config_for_dir(
             resolved = None
             break
 
-        parent_dir = os.path.dirname(search_dir)
+        parent_dir = os.path.realpath(os.path.dirname(search_dir))
         if parent_dir == search_dir:
             resolved = None
             break
@@ -625,12 +625,12 @@ def get_yapf_style(target_path: str, root_dir: str | None = None) -> str:
             except Exception:
                 pass
 
-        if root_dir and os.path.abspath(search_dir) == os.path.abspath(
-            root_dir
-        ):
+        if root_dir and os.path.realpath(
+            os.path.abspath(search_dir)
+        ) == os.path.realpath(os.path.abspath(root_dir)):
             break
 
-        parent_dir = os.path.dirname(search_dir)
+        parent_dir = os.path.realpath(os.path.dirname(search_dir))
         if parent_dir == search_dir:
             break
         search_dir = parent_dir
