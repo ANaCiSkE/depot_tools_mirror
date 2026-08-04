@@ -7,10 +7,10 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts for
 details on the presubmit API built into depot_tools.
 """
 
-PRESUBMIT_VERSION = "2.0.0"
-
 import fnmatch
 import sys
+
+PRESUBMIT_VERSION = "2.0.0"
 
 # CIPD ensure manifest for checking CIPD client itself.
 CIPD_CLIENT_ENSURE_FILE_TEMPLATE = r"""
@@ -26,6 +26,25 @@ $VerifiedPlatform linux-mips64 linux-mips64le linux-mipsle
 
 # Timeout for a test to be executed.
 TEST_TIMEOUT_S = 450  # 7m 30s
+
+
+def CheckRuff(input_api, output_api):
+    """Run Ruff linter on supported python files."""
+    files_to_check = [
+        r"^mcp/.*\.py$",
+        r"^[^/]*\.py$",
+        r"^testing_support/[^/]*\.py$",
+        r"^tests/[^/]*\.py$",
+        r"^recipe_modules/.*\.py$",  # Allow recursive search in recipe modules.
+    ]
+    return input_api.RunTests(
+        input_api.canned_checks.GetRuff(
+            input_api,
+            output_api,
+            files_to_check=files_to_check,
+            files_to_skip=_GetPylintFilesToSkip(input_api),
+        )
+    )
 
 
 def CheckPylint(input_api, output_api):
