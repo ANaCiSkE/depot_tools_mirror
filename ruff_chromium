@@ -1,32 +1,16 @@
 #!/usr/bin/env vpython3
 #
-# [VPYTHON:BEGIN]
-# python_version: "3.11"
-# wheel: <
-#   name: "infra/python/wheels/ruff/${vpython_platform}"
-#   version: "version:0.15.17"
-# >
-# wheel: <
-#   name: "infra/python/wheels/yapf-py3"
-#   version: "version:0.40.2"
-# >
-# wheel: <
-#   name: "infra/python/wheels/platformdirs-py3"
-#   version: "version:4.1.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/importlib-metadata-py3"
-#   version: "version:7.0.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/tomli-py3"
-#   version: "version:2.0.1"
-# >
-# wheel: <
-#  name: "infra/python/wheels/zipp-py3"
-#  version: "version:3.7.0"
-# >
-# [VPYTHON:END]
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'ruff==0.15.17',
+#   'yapf==0.40.2',
+#   'platformdirs==4.1.0',
+#   'importlib-metadata==7.0.0',
+#   'tomli==2.0.1',
+#   'zipp==3.7.0'
+# ]
+# ///
 
 # Copyright 2026 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
