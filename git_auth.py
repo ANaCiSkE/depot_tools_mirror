@@ -8,14 +8,11 @@ from __future__ import annotations
 import enum
 from collections.abc import Collection
 import contextlib
-import functools
-import logging
 import os
 from typing import Callable, Iterable, NamedTuple, TextIO
 import urllib.parse
 
 import gerrit_util
-import newauth
 import scm
 
 
@@ -272,6 +269,7 @@ class ConfigWizard(object):
             info = self._configure_host(parts, global_email, scope="global")
             if info.method == _ConfigMethod.OAUTH:
                 used_oauth = True
+        self._print_divider()
         if used_oauth:
             self._print_oauth_instructions()
 
@@ -646,6 +644,11 @@ class ConfigWizard(object):
             "(However, if you changed your email, you should do this again"
         )
         self._println("to ensure you're using the right account.)")
+
+    def _print_divider(self) -> None:
+        """Prints a divider line."""
+        self._println()
+        self._println("-" * 79)
 
     # Low level Git config manipulation
 
