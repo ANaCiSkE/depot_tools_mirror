@@ -5,11 +5,10 @@
 setlocal
 
 :: Synchronize the root directory before deferring control back to gclient.py.
-call "%~dp0\update_depot_tools.bat"
 :: Abort the script if we failed to update depot_tools.
-IF %ERRORLEVEL% NEQ 0 (
-  exit /b %ERRORLEVEL%
-)
+call "%~dp0\update_depot_tools.bat" %* & IF ERRORLEVEL 1 (exit /b 1) ELSE (GOTO :CALL_FETCH)
+
+:CALL_FETCH
 
 :: Ensure that "depot_tools" is somewhere in PATH so this tool can be used
 :: standalone, but allow other PATH manipulations to take priority.
