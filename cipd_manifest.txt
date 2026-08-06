@@ -34,7 +34,7 @@ $VerifiedPlatform windows-arm64
 infra/tools/luci/vpython3/${platform} git_revision:c77fff30fe2f2a6b0a2382bf3adc1ffc4e3de2cd
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:052f30c112efd1fdf903976424aebfaee124ba54
+infra/tools/luci/led/${platform} git_revision:58bbad7b3ee46a273ce42a5d840c2b72c19f2bd4
 
 # LUCI config generator
 # NOTE: If you update this pin and lucicfg's version number changes, also update
@@ -45,10 +45,10 @@ infra/tools/luci/lucicfg/${platform} git_revision:5f15dee7e7661742d42841f5e796d1
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:07e67ff89ff11ed0e3071867ed6bb49319a91b05
 
 # LUCI rpc command line tool
-infra/tools/prpc/${platform} git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
+infra/tools/prpc/${platform} git_revision:58bbad7b3ee46a273ce42a5d840c2b72c19f2bd4
 
 # LUCI authentication command line tool
-infra/tools/luci-auth/${platform} git_revision:25cc6bb6f8d2417353f7fe9fbc9492d70ff381f1
+infra/tools/luci-auth/${platform} git_revision:58bbad7b3ee46a273ce42a5d840c2b72c19f2bd4
 
 # LUCI Git credential helper
 infra/tools/luci/git-credential-luci/${platform} git_revision:ef8c65466bc99220f3d816a1c485d10d6566c8b3
@@ -66,7 +66,7 @@ infra/tools/crowbar/${platform=linux-amd64,linux-arm64,mac-amd64,mac-arm64,windo
 infra/tools/luci/luci/${platform=linux-amd64,linux-arm64,mac-amd64,mac-arm64} git_revision:2f4920f746b17c83a7491876d62a0e08257fbce6
 
 # LUCI Buildbucket CLI
-infra/tools/bb/${platform} git_revision:052f30c112efd1fdf903976424aebfaee124ba54
+infra/tools/bb/${platform} git_revision:58bbad7b3ee46a273ce42a5d840c2b72c19f2bd4
 
 # LUCI ResultDB CLI
 infra/tools/rdb/${platform} git_revision:d7b051ec0d29dea2aac92af95a806fc72407d588
