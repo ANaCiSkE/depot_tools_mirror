@@ -11,7 +11,9 @@
 
 # vpython specs
 /.vpython*       recipes
-/gsutil.py.vpython3 recipes
+/*.py.vpython3   recipes
+/*.toml          recipes
+/*.uv.lock       recipes
 
 # Extensionless tools we want and support scripts.
 /autoninja*                   recipes
@@ -30,6 +32,7 @@
 /repo                         recipes
 /repo_launcher                recipes
 /roll-dep*                    recipes
+/ruff_chromium*               recipes
 /yapf*                        recipes
 
 # Ensure depot_tools/.cipd_bin in a recipe step.
