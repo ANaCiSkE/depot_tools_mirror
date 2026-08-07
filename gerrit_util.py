@@ -1747,7 +1747,7 @@ def CreateDraft(host, change, revision="current", body=None):
         body.setdefault("is_ai", True)
     path = f"changes/{change}/revisions/{revision}/drafts"
     conn = CreateHttpConn(host, path, reqtype="PUT", body=body)
-    return ReadHttpJsonResponse(conn)
+    return ReadHttpJsonResponse(conn, accept_statuses=(200, 201))
 
 
 def GetRelatedChanges(host, change, revision="current"):
