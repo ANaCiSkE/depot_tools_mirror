@@ -80,9 +80,14 @@ grouped by Swarming task:
 
 ```bash
 vpython3 scripts/luci_triage.py list-failures \
-  --build-id <BUILD_ID>
+  --build-id <BUILD_ID> \
+  [--ignore-flaky] \
+  [--include-exonerated]
 ```
 
+- **Filtering:** By default, exonerated test variants (known flakes and baseline expectations) are excluded, and results are sorted with unexonerated `UNEXPECTED` regressions first.
+- **Ignore Flakes:** Use `--ignore-flaky` to filter out flaky tests and return only unexonerated `UNEXPECTED` failures.
+- **Include Exonerated:** Use `--include-exonerated` to include exonerated test variants in the output.
 - **Triage Priority:** If multiple tests share a `task` ID, triage **one**
   result first.
 

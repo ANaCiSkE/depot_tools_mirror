@@ -115,7 +115,9 @@ def find_cl_builds(cl_number, patchset=None, host=None, show_all=False):
     ]
 
 
-def list_failures(build_id, limit=None):
+def list_failures(
+    build_id, limit=None, include_exonerated=False, ignore_flaky=False
+):
     """Lists failing and flaky test variants for a build, grouped by task."""
     if build_id.startswith("b"):
         build_id = build_id[1:]
@@ -138,11 +140,38 @@ def list_failures(build_id, limit=None):
 
         test_variants.extend(result.get("testVariants", []))
 
-        if "nextPageToken" not in result or (
-            limit is not None and len(test_variants) >= limit
-        ):
+        if "nextPageToken" not in result:
             break
         payload["pageToken"] = result["nextPageToken"]
+
+    if not include_exonerated:
+        test_variants = [
+            tv
+            for tv in test_variants
+            if not (
+                tv.get("status") == "EXONERATED"
+                or tv.get("exonerated") is True
+                or "exonerations" in tv
+            )
+        ]
+
+    if ignore_flaky:
+        test_variants = [
+            tv for tv in test_variants if tv.get("status") != "FLAKY"
+        ]
+
+    status_order = {
+        "UNEXPECTED": 0,
+        "UNEXPECTEDLY_SKIPPED": 1,
+        "FLAKY": 2,
+        "EXONERATED": 3,
+    }
+    test_variants.sort(
+        key=lambda tv: status_order.get(tv.get("status", ""), 99)
+    )
+
+    if limit is not None:
+        test_variants = test_variants[:limit]
 
     tasks = {}
     for tv in test_variants:
@@ -162,6 +191,7 @@ def list_failures(build_id, limit=None):
             "err": first_result.get("failureReason", {}).get(
                 "primaryErrorMessage", "No error"
             ),
+            "status": tv.get("status", "UNEXPECTED"),
             "flaky": tv.get("status") == "FLAKY",
         }
 
@@ -374,6 +404,16 @@ def main():
     p = subparsers.add_parser("list-failures")
     p.add_argument("--build-id", required=True)
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument(
+        "--include-exonerated",
+        action="store_true",
+        help="Include exonerated test variants in the output",
+    )
+    p.add_argument(
+        "--ignore-flaky",
+        action="store_true",
+        help="Ignore flaky test variants (only show unexonerated UNEXPECTED failures)",
+    )
 
     # fetch-log
     p = subparsers.add_parser("fetch-log")
@@ -417,7 +457,17 @@ def main():
             )
         )
     elif args.command == "list-failures":
-        print(json.dumps(list_failures(args.build_id, args.limit), indent=2))
+        print(
+            json.dumps(
+                list_failures(
+                    args.build_id,
+                    args.limit,
+                    include_exonerated=args.include_exonerated,
+                    ignore_flaky=args.ignore_flaky,
+                ),
+                indent=2,
+            )
+        )
     elif args.command == "fetch-log":
         print(fetch_log_snippet(args.res, args.raw))
     elif args.command == "check-test":
