@@ -2023,8 +2023,8 @@ class TestGitCl(unittest.TestCase):
         )
 
         self.calls = [
-            ((["git", "checkout", "-q", "upstream-branch"],), ""),
-            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
             ((["git", "checkout", "-q", "main"],), ""),
         ]
 
@@ -2166,8 +2166,8 @@ class TestGitCl(unittest.TestCase):
         )
 
         self.calls = [
-            ((["git", "checkout", "-q", "upstream-branch"],), ""),
-            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
             ((["git", "checkout", "-q", "main"],), ""),
         ]
 
@@ -2277,8 +2277,8 @@ class TestGitCl(unittest.TestCase):
         )
 
         self.calls = [
-            ((["git", "checkout", "-q", "upstream-branch"],), ""),
-            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
             ((["git", "checkout", "-q", "main"],), ""),
         ]
 
@@ -2375,7 +2375,7 @@ class TestGitCl(unittest.TestCase):
         mockExternalChanges.return_value = "external-commit"
 
         self.calls = [
-            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
             ((["git", "checkout", "-q", "main"],), ""),
         ]
 
@@ -2417,7 +2417,7 @@ class TestGitCl(unittest.TestCase):
         mockExternalChanges.return_value = None
 
         self.calls = [
-            ((["git", "checkout", "-q", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
             ((["git", "checkout", "-q", "main"],), ""),
         ]
 
@@ -2457,7 +2457,7 @@ class TestGitCl(unittest.TestCase):
         options.squash = True
 
         self.calls = [
-            ((["git", "checkout", "-q", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
             ((["git", "checkout", "-q", "main"],), ""),
         ]
 

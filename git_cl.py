@@ -6763,7 +6763,7 @@ def UploadAllSquashed(
         try:
             for i, cl in enumerate(ordered_cls):
                 if cl.GetBranch():
-                    RunGit(["checkout", "-q", cl.GetBranch()])
+                    RunGit(["checkout", "-q", "--detach", cl.GetBranch()])
                 # If we're in the middle of the stack, set end_commit to
                 # downstream's direct ancestor.
                 if i + 1 < len(ordered_cls):
