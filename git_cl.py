@@ -8686,7 +8686,7 @@ def _FindFilesToFormat(
     Deleted files are always excluded in the return.
     """
     if opts.input_diff_file:
-        with open(opts.input_diff_file) as f:
+        with open(opts.input_diff_file, encoding="utf-8") as f:
             diffs = _SplitDiffsByFile(f.read())
             return diffs.keys(), diffs
 

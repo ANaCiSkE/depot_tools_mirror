@@ -7632,6 +7632,37 @@ class CMDFormatTestCase(unittest.TestCase):
             os.remove(input_diff.name)
 
     @mock.patch("git_cl._RunClangFormatDiff", return_value=0)
+    def testInputDiffFileWithUtf8(self, clang_formatter):
+        utf8_diff = (
+            "diff --git a/test.cc b/test.cc\n"
+            "--- a/test.cc\n"
+            "+++ b/test.cc\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-// English comment\n"
+            "+// 日本語コメント (Unicode: \u3042\u3044\u3046\u3048\u304a \u2603)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_diff_path = os.path.join(tmp_dir, "input.diff")
+            with open(input_diff_path, "wb") as input_diff:
+                input_diff.write(utf8_diff.encode("utf-8"))
+
+            ret = git_cl.main(
+                [
+                    "format",
+                    "--input_diff_file",
+                    input_diff_path,
+                    "--presubmit",
+                ]
+            )
+            self.assertEqual(0, ret)
+            clang_formatter.assert_called_with(
+                mock.ANY,
+                ["test.cc"],
+                mock.ANY,
+                mock.ANY,
+            )
+
+    @mock.patch("git_cl._RunClangFormatDiff", return_value=0)
     @mock.patch("git_cl.settings.GetFormatJs", return_value=True)
     def testJsDefaultTrue(self, get_format_js_mock, clang_formatter):
         # Note: The paths in this diff are dummy files used for testing and do not
