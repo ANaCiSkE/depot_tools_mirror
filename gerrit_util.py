@@ -1507,6 +1507,13 @@ def ReadHttpJsonResponse(
     # The first line of the response should always be: )]}'
     s = fh.readline()
     if s and s.rstrip() != ")]}'":
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            LOGGER.debug(
+                "ReadHttpJsonResponse: Error parsing, first line: %r", s
+            )
+            LOGGER.debug(
+                "ReadHttpJsonResponse: Error parsing, rest: %r", fh.read()
+            )
         raise GerritError(200, "Unexpected json output: %s" % s[:100])
     s = fh.read()
     if not s:
