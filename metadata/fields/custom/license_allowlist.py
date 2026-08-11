@@ -48,9 +48,9 @@
 #   * Remove 'LicenseRef-' prefix from license classifier outputs.
 #   * Case does not matter.
 import json
-import logging
 import os
 import subprocess
+import sys
 from typing import Optional
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -361,7 +361,10 @@ def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
         "scripts",
         "parse_restrictive_license_approval.py",
     )
-    stdout = subprocess.check_output(["vpython3", script_path, path]).decode(
+    vpython_exe = "vpython3"
+    if sys.platform.startswith("win"):
+        vpython_exe += ".bat"
+    stdout = subprocess.check_output([vpython_exe, script_path, path]).decode(
         "utf-8"
     )
     approvals = json.loads(stdout)
