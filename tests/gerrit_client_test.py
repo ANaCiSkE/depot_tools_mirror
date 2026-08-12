@@ -134,6 +134,32 @@ class TestGerritClient(unittest.TestCase):
             o_params=None,
         )
 
+    @mock.patch("gerrit_client.write_result")
+    @mock.patch("gerrit_util.GetChangeComments")
+    def test_comments(self, util_mock, write_result_mock):
+        comments = {"file.py": [{"message": "published comment"}]}
+        util_mock.return_value = comments
+
+        gerrit_client.main(
+            [
+                "comments",
+                "--host",
+                "https://example.org/foo",
+                "--change",
+                "project~branch~Ichange",
+                "--json_file",
+                "comments.json",
+            ]
+        )
+
+        util_mock.assert_called_once_with(
+            "example.org", "project~branch~Ichange"
+        )
+        write_result_mock.assert_called_once()
+        result, opt = write_result_mock.call_args.args
+        self.assertIs(comments, result)
+        self.assertEqual("comments.json", opt.json_file)
+
     @mock.patch("gerrit_util.GetRelatedChanges", return_value="")
     def test_relatedchanges(self, util_mock):
         gerrit_client.main(
@@ -267,6 +293,64 @@ class TestGerritClient(unittest.TestCase):
             msg="This is a message",
             automatic_attention_set_update=None,
         )
+
+    @mock.patch("gerrit_util.GetPatch", return_value=b"formatted patch\n")
+    def test_patch_defaults(self, util_mock):
+        with mock.patch("gerrit_client.sys.stdout") as stdout_mock:
+            gerrit_client.main(
+                [
+                    "patch",
+                    "--host",
+                    "https://example.org/foo",
+                    "--change",
+                    "Ichange",
+                ]
+            )
+
+        util_mock.assert_called_once_with(
+            "example.org",
+            "Ichange",
+            revision="current",
+            path=None,
+            parent=None,
+            context=None,
+        )
+        stdout_mock.buffer.write.assert_called_once_with(b"formatted patch\n")
+
+    @mock.patch("gerrit_client.write_result")
+    @mock.patch("gerrit_util.GetPatch", return_value=b"file patch\n")
+    def test_patch_options(self, util_mock, write_result_mock):
+        with mock.patch("gerrit_client.sys.stdout") as stdout_mock:
+            gerrit_client.main(
+                [
+                    "patch",
+                    "--host",
+                    "https://example.org/foo",
+                    "--change",
+                    "123",
+                    "--revision",
+                    "7",
+                    "--path",
+                    "src/file name.cc",
+                    "--parent",
+                    "2",
+                    "--context",
+                    "0",
+                    "--json_file",
+                    "ignored.json",
+                ]
+            )
+
+        util_mock.assert_called_once_with(
+            "example.org",
+            "123",
+            revision="7",
+            path="src/file name.cc",
+            parent=2,
+            context=0,
+        )
+        stdout_mock.buffer.write.assert_called_once_with(b"file patch\n")
+        write_result_mock.assert_not_called()
 
 
 if __name__ == "__main__":

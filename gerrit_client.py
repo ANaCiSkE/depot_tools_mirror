@@ -283,6 +283,22 @@ def CMDchanges(parser, args):
 
 
 @subcommand.usage("[args ...]")
+def CMDcomments(parser, args):
+    """Gets published comments for a given change."""
+    parser.add_option("-c", "--change", type=str, help="change id")
+
+    (opt, args) = parser.parse_args(args)
+    if not opt.change:
+        parser.error("--change is required")
+
+    result = gerrit_util.GetChangeComments(
+        urllib.parse.urlparse(opt.host).netloc, opt.change
+    )
+    logging.info(result)
+    write_result(result, opt)
+
+
+@subcommand.usage("[args ...]")
 def CMDrelatedchanges(parser, args):
     """Gets related changes for a given change and revision."""
     parser.add_option("-c", "--change", type=str, help="change id")
@@ -576,6 +592,31 @@ def CMDcontent(parser, args):
         opt.change,
         opt.path,
         opt.revision,
+    )
+    # Write bytes directly to stdout, write_result assumes json output.
+    sys.stdout.buffer.write(result)
+
+
+@subcommand.usage("[args ...]")
+def CMDpatch(parser, args):
+    """Gets a formatted patch for a change."""
+    parser.add_option("-c", "--change", type=str, help="change id")
+    parser.add_option("-r", "--revision", default="current", help="revision id")
+    parser.add_option("--path", help="path to include in the patch")
+    parser.add_option("--parent", type=int, help="parent number")
+    parser.add_option("--context", type=int, help="lines of context")
+
+    (opt, args) = parser.parse_args(args)
+    if not opt.change:
+        parser.error("--change is required")
+
+    result = gerrit_util.GetPatch(
+        urllib.parse.urlparse(opt.host).netloc,
+        opt.change,
+        revision=opt.revision,
+        path=opt.path,
+        parent=opt.parent,
+        context=opt.context,
     )
     # Write bytes directly to stdout, write_result assumes json output.
     sys.stdout.buffer.write(result)

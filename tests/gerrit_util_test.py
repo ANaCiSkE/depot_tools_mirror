@@ -4,6 +4,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import base64
 import json
 import os
 import socket
@@ -1026,6 +1027,49 @@ class GerritUtilTest(unittest.TestCase):
             "changes/change/revisions/current/cherrypick",
             reqtype="POST",
             body={"destination": "destination", "allow_conflicts": True},
+        )
+
+    @mock.patch("gerrit_util.ReadHttpResponse")
+    @mock.patch("gerrit_util.CreateHttpConn")
+    def testGetPatchDefaults(self, mockCreateHttpConn, mockReadHttpResponse):
+        expected = b"From commit\nformatted patch\n"
+        mockReadHttpResponse.return_value = StringIO(
+            base64.b64encode(expected).decode()
+        )
+
+        result = gerrit_util.GetPatch("host", "change")
+
+        self.assertEqual(expected, result)
+        mockCreateHttpConn.assert_called_once_with(
+            "host",
+            "changes/change/revisions/current/patch",
+            reqtype="GET",
+        )
+        mockReadHttpResponse.assert_called_once_with(
+            mockCreateHttpConn.return_value
+        )
+
+    @mock.patch("gerrit_util.ReadHttpResponse")
+    @mock.patch("gerrit_util.CreateHttpConn")
+    def testGetPatchOptions(self, mockCreateHttpConn, mockReadHttpResponse):
+        mockReadHttpResponse.return_value = StringIO("")
+
+        gerrit_util.GetPatch(
+            "host",
+            "change",
+            revision="7",
+            path="src/file name.cc",
+            parent=2,
+            context=0,
+        )
+
+        mockCreateHttpConn.assert_called_once_with(
+            "host",
+            (
+                "changes/change/revisions/7/patch"
+                "?path=src%2Ffile+name.cc&parent=2&context=0"
+            ),
+            reqtype="GET",
         )
 
 

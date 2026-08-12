@@ -1898,6 +1898,30 @@ def CherryPickCommit(host, project, commit, destination):
     return ReadHttpJsonResponse(conn)
 
 
+def GetPatch(
+    host: str,
+    change: str,
+    revision: str = "current",
+    path: Optional[str] = None,
+    parent: Optional[int] = None,
+    context: Optional[int] = None,
+) -> bytes:
+    """Get a formatted patch for a change revision."""
+    endpoint = f"changes/{change}/revisions/{revision}/patch"
+    params = []
+    if path is not None:
+        params.append(("path", path))
+    if parent is not None:
+        params.append(("parent", parent))
+    if context is not None:
+        params.append(("context", context))
+    if params:
+        endpoint += "?" + urllib.parse.urlencode(params)
+
+    conn = CreateHttpConn(host, endpoint, reqtype="GET")
+    return base64.b64decode(ReadHttpResponse(conn).read())
+
+
 def GetFileContents(host, change, path, revision="current"):
     """Get the contents of a file with the given path in the given revision.
 
