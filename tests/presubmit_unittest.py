@@ -4055,6 +4055,30 @@ the current line as well!
             cmd.cmd, ["vpython3", expected_tool, "check", "/path/to/file1.py"]
         )
 
+    def testCannedRunRuffWindowsChunking(self):
+        # On Windows, GetRuff chunks by 50 files (matching ruff_chromium formatting)
+        # to avoid exceeding the 8,191 character limit.
+        affected_files = [mock.Mock() for _ in range(150)]
+        for i, f in enumerate(affected_files):
+            f.AbsoluteLocalPath.return_value = f"/path/to/file_{i}.py"
+        input_api = self.MockInputApi(mock.Mock(), True)
+        input_api.is_windows = True
+        input_api.AffectedSourceFiles = mock.Mock(return_value=affected_files)
+        input_api.is_committing = False
+        input_api.no_diffs = False
+
+        commands = presubmit_canned_checks.GetRuff(
+            input_api, presubmit.OutputApi
+        )
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(commands[0].name, "Ruff (1-50 of 150 files)")
+        self.assertEqual(commands[1].name, "Ruff (51-100 of 150 files)")
+        self.assertEqual(commands[2].name, "Ruff (101-150 of 150 files)")
+        self.assertEqual(len(commands[0].cmd), 3 + 50)
+        self.assertEqual(len(commands[1].cmd), 3 + 50)
+        self.assertEqual(len(commands[2].cmd), 3 + 50)
+
+
     def testCannedRunRuffMissingTool(self):
         affected_file = mock.Mock()
         affected_file.AbsoluteLocalPath.return_value = "/path/to/file1.py"

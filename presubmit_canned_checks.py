@@ -1730,24 +1730,46 @@ def GetRuff(
             )
         ]
 
-    cmd = ["vpython3", tool, "check"]
-    if extra_args:
-        cmd.extend(extra_args)
-    cmd.extend(affected_files)
-
-    num_files = len(affected_files)
-    file_suffix = "" if num_files == 1 else "s"
-    name = "Ruff (%d file%s)" % (num_files, file_suffix)
-
-    return [
-        input_api.Command(
-            name=name,
-            cmd=cmd,
-            kwargs={},
-            message=error_type,
-            python3=True,
-        )
+    # Chunk paths on Windows to avoid the command line length limit (8191 characters).
+    # Matches the 50-file chunk limit used in ruff_chromium formatting.
+    chunk_size = 50 if input_api.is_windows else len(affected_files)
+    chunks = [
+        affected_files[i : i + chunk_size]
+        for i in range(0, len(affected_files), chunk_size)
     ]
+
+    commands = []
+    processed_count = 0
+    total_files = len(affected_files)
+    for chunk in chunks:
+        cmd = ["vpython3", tool, "check"]
+        if extra_args:
+            cmd.extend(extra_args)
+        cmd.extend(chunk)
+
+        num_files = len(chunk)
+        file_suffix = "" if num_files == 1 else "s"
+        if len(chunks) > 1:
+            name = "Ruff (%d-%d of %d files)" % (
+                processed_count + 1,
+                processed_count + num_files,
+                total_files,
+            )
+        else:
+            name = "Ruff (%d file%s)" % (num_files, file_suffix)
+        processed_count += num_files
+
+        commands.append(
+            input_api.Command(
+                name=name,
+                cmd=cmd,
+                kwargs={},
+                message=error_type,
+                python3=True,
+            )
+        )
+
+    return commands
 
 
 def RunRuff(input_api, *args, **kwargs):
