@@ -770,6 +770,67 @@ class MirrorTest(unittest.TestCase):
         )
 
 
+class ObjectFormatBootstrapTest(unittest.TestCase):
+    def setUp(self):
+        self.cache_dir = tempfile.mkdtemp(prefix="gc_obj_fmt_")
+        self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
+        git_cache.Mirror.SetCachePath(self.cache_dir)
+
+    def _init_bare_repo(self, path: str, object_format: str) -> None:
+        os.makedirs(path, exist_ok=True)
+        git = "git.bat" if sys.platform == "win32" else "git"
+        subprocess.check_call(
+            [git, "init", f"--object-format={object_format}", "--bare"],
+            cwd=path,
+        )
+
+    def testBootstrapSnapshotFormatMismatch(self):
+        cases = [
+            ("sha1", "sha256", True),
+            ("sha256", "sha1", True),
+            ("sha1", "sha1", False),
+            ("sha256", "sha256", False),
+        ]
+        for snapshot_format, remote_format, expected_discard in cases:
+            label = f"snapshot={snapshot_format} remote={remote_format}"
+            with self.subTest(label):
+                mirror = git_cache.Mirror(
+                    "https://chromium.googlesource.com/foo/bar"
+                )
+                gclient_utils.rmtree(mirror.mirror_path)
+
+                def fake_bootstrap(directory: str) -> bool:
+                    self._init_bare_repo(directory, snapshot_format)
+                    with open(
+                        os.path.join(directory, "snapshot_marker"), "w"
+                    ) as f:
+                        f.write("snapshot")
+                    return True
+
+                with (
+                    mock.patch.object(
+                        mirror, "bootstrap_repo", side_effect=fake_bootstrap
+                    ),
+                    mock.patch(
+                        "scm.GIT.GetRemoteObjectFormat",
+                        return_value=remote_format,
+                    ),
+                    mock.patch.object(mirror, "_set_symbolic_ref"),
+                ):
+                    mirror._ensure_bootstrapped(
+                        depth=None, bootstrap=True, reset_fetch_config=False
+                    )
+
+                self.assertEqual(mirror._get_object_format(), remote_format)
+                marker_exists = os.path.exists(
+                    os.path.join(mirror.mirror_path, "snapshot_marker")
+                )
+                if expected_discard:
+                    self.assertFalse(marker_exists)
+                else:
+                    self.assertTrue(marker_exists)
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG if "-v" in sys.argv else logging.ERROR

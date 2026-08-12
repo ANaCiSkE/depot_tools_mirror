@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import time
+from typing import Optional
 import urllib.parse
 
 from download_from_google_storage import Gsutil
@@ -454,6 +455,16 @@ class Mirror(object):
     def exists(self):
         return os.path.isfile(os.path.join(self.mirror_path, "config"))
 
+    def _get_object_format(self) -> Optional[str]:
+        """Returns the object format ('sha1' or 'sha256') of the cache repo."""
+        try:
+            out = self.RunGit(
+                ["rev-parse", "--show-object-format"], print_stdout=False
+            )
+            return out.decode("utf-8", "ignore").strip()
+        except subprocess.CalledProcessError:
+            return None
+
     def supported_project(self):
         """Returns true if this repo is known to have a bootstrap zip file.
 
@@ -580,16 +591,33 @@ class Mirror(object):
             not depth and bootstrap and self.bootstrap_repo(self.mirror_path)
         )
 
+        remote_format = None
+        if bootstrapped:
+            remote_format = scm.GIT.GetRemoteObjectFormat(self.url)
+            local_format = self._get_object_format()
+            if local_format and local_format != remote_format:
+                logging.warning(
+                    "GCS bootstrap snapshot object format (%s) does not match "
+                    "remote (%s); discarding snapshot.",
+                    local_format,
+                    remote_format,
+                )
+                gclient_utils.rmtree(self.mirror_path)
+                os.mkdir(self.mirror_path)
+                bootstrapped = False
+
         if not bootstrapped:
             if not self.exists() or not self.supported_project():
                 # Bootstrap failed due to:
                 # 1. No previous cache.
                 # 2. Project doesn't have a bootstrap folder.
+                # 3. Bootstrap snapshot format mismatched remote.
                 # Start with a bare git dir.
-                object_format = scm.GIT.GetRemoteObjectFormat(self.url)
                 gitargs = ["init", "--bare"]
                 if not self.exists():
-                    gitargs.append(f"--object-format={object_format}")
+                    if remote_format is None:
+                        remote_format = scm.GIT.GetRemoteObjectFormat(self.url)
+                    gitargs.append(f"--object-format={remote_format}")
                 self.RunGit(gitargs)
                 with open(self._init_sentient_file, "w"):
                     # Create sentient file
