@@ -24,6 +24,7 @@ import unittest
 from io import StringIO
 from unittest import mock
 import urllib.request as urllib_request
+from parameterized import parameterized
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
@@ -4078,7 +4079,6 @@ the current line as well!
         self.assertEqual(len(commands[1].cmd), 3 + 50)
         self.assertEqual(len(commands[2].cmd), 3 + 50)
 
-
     def testCannedRunRuffMissingTool(self):
         affected_file = mock.Mock()
         affected_file.AbsoluteLocalPath.return_value = "/path/to/file1.py"
@@ -4220,23 +4220,37 @@ the current line as well!
         self.assertEqual(1, len(results))
         self.assertIsInstance(results[0], presubmit.OutputApi.PresubmitError)
 
-    def GetInputApiWithOWNERS(self, owners_content):
+    def GetInputApiWithOWNERS(self, owners_content, gerrit_enabled=True):
         input_api = self.GetInputApiWithFiles({"OWNERS": ("M", owners_content)})
-        gerrit_mock = mock.MagicMock(presubmit.GerritAccessor)
-        gerrit_mock.IsCodeOwnersEnabledOnRepo = lambda: True
-        input_api.gerrit = gerrit_mock
+        if gerrit_enabled:
+            gerrit_mock = mock.MagicMock(presubmit.GerritAccessor)
+            gerrit_mock.IsCodeOwnersEnabledOnRepo = lambda: True
+            input_api.gerrit = gerrit_mock
+        else:
+            input_api.gerrit = None
 
         return input_api
 
-    def testCheckOwnersFormatWorks_CodeOwners(self):
-        # If code owners is enabled, we rely on it to check owners format
-        # instead of depot tools.
-        input_api = self.GetInputApiWithOWNERS("any content")
+    @parameterized.expand([(True,), (False,)])
+    def testCheckOwnersFormatWorks_CodeOwners(
+        self, gerrit_enabled: bool
+    ) -> None:
+        input_api = self.GetInputApiWithOWNERS(
+            "any content", gerrit_enabled=gerrit_enabled
+        )
         self.assertEqual(
             [],
             presubmit_canned_checks.CheckOwnersFormat(
                 input_api, presubmit.OutputApi
             ),
+        )
+
+    def testCheckOwners_NoGerrit(self) -> None:
+        input_api = self.MockInputApi(mock.MagicMock(presubmit.Change), False)
+        input_api.gerrit = None
+        self.assertEqual(
+            [],
+            presubmit_canned_checks.CheckOwners(input_api, presubmit.OutputApi),
         )
 
     def AssertOwnersWorks(

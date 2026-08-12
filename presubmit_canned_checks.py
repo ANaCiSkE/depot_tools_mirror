@@ -1902,14 +1902,11 @@ def CheckOwnersDirMetadataExclusive(input_api, output_api):
 
 
 def CheckOwnersFormat(input_api, output_api):
-    if input_api.gerrit and input_api.gerrit.IsCodeOwnersEnabledOnRepo():
+    if not input_api.gerrit or input_api.gerrit.IsCodeOwnersEnabledOnRepo():
         return []
 
-    host = "none"
-    project = "none"
-    if input_api.gerrit:
-        host = input_api.gerrit.host
-        project = input_api.gerrit.project
+    host = input_api.gerrit.host
+    project = input_api.gerrit.project
     return [
         output_api.PresubmitError(
             f"code-owners is not enabled on {host}/{project}. "
@@ -1922,8 +1919,10 @@ def CheckOwnersFormat(input_api, output_api):
 
 
 def CheckOwners(input_api, output_api, source_file_filter=None, allow_tbr=True):
-    # Let Gerrit do this check rather than presubmits.
-    if input_api.gerrit and input_api.gerrit.IsCodeOwnersEnabledOnRepo():
+    if (
+        not input_api.gerrit  # Running locally.
+        or input_api.gerrit.IsCodeOwnersEnabledOnRepo()  # Let Gerrit do this check rather than presubmits.
+    ):
         return []
 
     # Skip OWNERS check when Owners-Override label is approved. This is intended
@@ -1934,11 +1933,8 @@ def CheckOwners(input_api, output_api, source_file_filter=None, allow_tbr=True):
     ):
         return []
 
-    host = "none"
-    project = "none"
-    if input_api.gerrit:
-        host = input_api.gerrit.host
-        project = input_api.gerrit.project
+    host = input_api.gerrit.host
+    project = input_api.gerrit.project
     return [
         output_api.PresubmitError(
             f"code-owners is not enabled on {host}/{project}. "
