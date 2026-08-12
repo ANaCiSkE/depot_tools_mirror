@@ -46,6 +46,7 @@ from typing import Any
 from typing import AnyStr
 from typing import Callable
 from typing import ContextManager
+from typing import Iterable
 from typing import Optional
 from typing import Tuple
 
@@ -454,6 +455,17 @@ def get_config_int(option: str, default: int = 0) -> int:
         return int(val)
     except ValueError:
         return default
+
+
+def get_gpg_sign_args() -> list[str]:
+    """Returns GPG signing CLI arguments based on `commit.gpgsign` and `user.signingkey`."""
+    gpg_sign = get_config("commit.gpgsign", "false")
+    if gpg_sign and gpg_sign.strip().lower() in ("true", "yes", "1", "on"):
+        key = get_config("user.signingkey")
+        if key:
+            return [f"-S{key}"]
+        return ["-S"]
+    return []
 
 
 def get_config_list(option):
@@ -1164,29 +1176,181 @@ def status(ignore_submodules=None):
     )
 
 
-def squash_current_branch(header=None, merge_base=None):
-    header = header or "git squash commit for %s." % current_branch()
-    merge_base = merge_base or get_or_create_merge_base(current_branch())
-    log_msg = header + "\n"
-    if log_msg:
-        log_msg += "\n"
-    output = run("log", "--reverse", "--format=%H%n%B", "%s..HEAD" % merge_base)
-    assert isinstance(output, str)
-    log_msg += output
-    run("reset", "--soft", merge_base)
+def get_squash_message(
+    branch: str,
+    merge_base: str,
+    header: Optional[str] = None,
+) -> str:
+    """Constructs the squash commit message using the branch's history since `merge_base`.
 
-    if not get_dirty_files():
-        # Sometimes the squash can result in the same tree, meaning that there
-        # is nothing to commit at this point.
+    Args:
+        branch: The name of the branch being squashed.
+        merge_base: The base commit SHA or ref to compare against.
+        header: Optional custom subject/header line for the commit message.
+
+    Returns:
+        The formatted squash commit message containing the header and reverse commit log.
+    """
+    assert branch and not branch.startswith("refs/")
+    assert merge_base
+    if not header:
+        header = f"git squash commit for {branch}."
+    body = run(
+        "log",
+        "--reverse",
+        "--format=%H%n%B",
+        f"{merge_base}..{branch}",
+    )
+    if body:
+        return f"{header}\n\n{body}\n"
+    return f"{header}\n"
+
+
+def create_squash_commit(
+    branch: str,
+    parent_sha: str,
+    commit_message: str,
+) -> Optional[str]:
+    """Creates a squashed commit object in the Git object store for `branch` on top of `parent_sha`.
+
+    Uses `git commit-tree` to directly construct the commit from the branch's
+    tree snapshot without modifying the working directory or checking out the branch.
+
+    Args:
+        branch: The branch whose tree snapshot will be used.
+        parent_sha: The commit SHA to set as the parent of the squash commit.
+        commit_message: The commit message string.
+
+    Returns:
+        The new commit SHA, or None if the branch introduces no net changes.
+        Does not modify branch references or the index.
+    """
+    assert branch and not branch.startswith("refs/")
+    assert parent_sha
+    assert commit_message
+
+    tree_sha = run("rev-parse", f"{branch}^{{tree}}")
+    parent_tree_sha = run("rev-parse", f"{parent_sha}^{{tree}}")
+
+    # Comparing tree SHAs directly in the object store identifies empty squashes
+    # without modifying working tree files or invoking git status/diff.
+    if tree_sha == parent_tree_sha:
+        return None
+
+    return run(
+        "commit-tree",
+        tree_sha,
+        "-p",
+        parent_sha,
+        *get_gpg_sign_args(),
+        indata=commit_message.encode("utf-8"),
+    )
+
+
+def squash_branch(
+    branch: str,
+    parent: Optional[str] = None,
+    header: Optional[str] = None,
+) -> bool:
+    """Squashes `branch` onto `parent` and updates its ref atomically.
+
+    Constructs a squash commit directly in the object store using `commit-tree`.
+    If `branch` is the currently checked-out branch, verifies the working
+    directory is clean before updating refs.
+
+    Args:
+        branch: The local branch name to squash.
+        parent: Optional upstream ref or commit SHA to squash onto.
+        header: Optional custom header text for the generated commit message.
+
+    Returns:
+        True if a new squash commit was created; False if the squashed branch
+        introduced no changes relative to parent (and ref was pointed to parent).
+
+    Raises:
+        RuntimeError: If called on the current branch while in rebase or with
+            uncommitted modifications.
+    """
+    assert branch and branch != "HEAD" and not branch.startswith("refs/")
+    if branch == current_branch():
+        if in_rebase():
+            raise RuntimeError(
+                "Cannot squash branch while a rebase is in progress."
+            )
+        if get_dirty_files():
+            raise RuntimeError(
+                f"Cannot squash current branch '{branch}' with uncommitted changes. "
+                "Please commit, stash, or freeze your changes first."
+            )
+    merge_base = get_or_create_merge_base(branch, parent=parent)
+    assert merge_base, (
+        f"Unable to determine merge base for {branch} on {parent}"
+    )
+
+    parent_sha = hash_one(merge_base)
+    old_sha = hash_one(branch)
+    commit_message = get_squash_message(branch, merge_base, header=header)
+    # Phase 1: Construct the squash commit object directly in the Git object store.
+    new_sha = create_squash_commit(branch, parent_sha, commit_message)
+    target_sha = new_sha or parent_sha
+    # Phase 2: Update the branch reference atomically with compare-and-swap (CAS)
+    # validation against old_sha.
+    update_refs_atomic([(branch, target_sha, old_sha)], "squash-branch")
+    # If the squashed commit matches the parent's tree, the branch introduced
+    # no net changes relative to its upstream.
+    if new_sha is None:
         print("Nothing to commit; squashed branch is empty")
         return False
-
-    # git reset --soft will stage all changes so we can just commit those.
-    # Note: Just before reset --soft is called, we may have git submodules
-    # checked to an old commit (not latest state). We don't want to include
-    # those in our commit.
-    run("commit", "--no-verify", "-F", "-", indata=log_msg.encode("utf-8"))
     return True
+
+
+def squash_current_branch(
+    header: Optional[str] = None,
+    merge_base: Optional[str] = None,
+) -> bool:
+    """Squashes the currently checked-out branch onto `merge_base`.
+
+    Args:
+        header: Optional custom header text for the commit message.
+        merge_base: Optional merge base ref or commit SHA to squash onto.
+
+    Returns:
+        True if squashed successfully, False if empty.
+    """
+    curr = current_branch()
+    if not curr or curr == "HEAD":
+        raise RuntimeError("Cannot squash in detached HEAD.")
+    return squash_branch(curr, parent=merge_base, header=header)
+
+
+def update_refs_atomic(
+    ref_updates: Iterable[Tuple[str, str, str]],
+    reflog_message: str,
+) -> None:
+    """Applies a list of (branch_or_ref, new_sha, old_sha) atomically via `update-ref -z --stdin`.
+
+    Args:
+        ref_updates: Iterable of (branch_or_ref, new_sha, old_sha) tuples.
+        reflog_message: Required description written to the reflog for each updated ref.
+    """
+    assert reflog_message, "reflog_message must be specified"
+    if not ref_updates:
+        return
+    # Build the null-delimited payload for `git update-ref -z --stdin`.
+    # Each command: "update <ref>\0<new_sha>\0<old_sha>\0" enforces atomic CAS validation.
+    commands = []
+    for b, new, old in ref_updates:
+        ref = b if b.startswith("refs/") else f"refs/heads/{b}"
+        commands.append(f"update {ref}\0{new}\0{old}\0")
+    payload = "".join(commands)
+    run(
+        "update-ref",
+        "-m",
+        reflog_message,
+        "-z",
+        "--stdin",
+        indata=payload.encode("utf-8"),
+    )
 
 
 def tags(*args):

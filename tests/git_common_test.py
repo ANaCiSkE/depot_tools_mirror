@@ -909,7 +909,8 @@ class GitMutableStructuredTest(
         self.repo.git("checkout", "branch_K")
 
         self.assertEqual(
-            True, self.repo.run(self.gc.squash_current_branch, "✔ cool message")
+            True,
+            self.repo.run(self.gc.squash_current_branch, "✔ cool message"),
         )
 
         lines = ["✔ cool message", ""]
@@ -943,6 +944,76 @@ class GitMutableStructuredTest(
         self.assertEqual(
             stdout, "Nothing to commit; squashed branch is empty\n"
         )
+
+    def testGetGpgSignArgs(self):
+        with mock.patch("git_common.get_config") as mock_get_config:
+            mock_get_config.side_effect = lambda opt, *args: {
+                "commit.gpgsign": "true",
+                "user.signingkey": "1234ABCD",
+            }.get(opt)
+            self.assertEqual(self.gc.get_gpg_sign_args(), ["-S1234ABCD"])
+
+            for val in ("true", "yes", "1", "on"):
+                mock_get_config.side_effect = lambda opt, *args, v=val: {
+                    "commit.gpgsign": v,
+                }.get(opt)
+                self.assertEqual(self.gc.get_gpg_sign_args(), ["-S"])
+
+            for val in ("false", "0", "no", "off", None):
+                mock_get_config.side_effect = lambda opt, *args, v=val: {
+                    "commit.gpgsign": v,
+                }.get(opt)
+                self.assertEqual(self.gc.get_gpg_sign_args(), [])
+
+    def testCreateSquashCommitGpgSign(self):
+        self.repo.git("checkout", "branch_K")
+        recorded_calls = []
+        real_run = self.gc.run
+
+        def intercept_run(*args, **kwargs):
+            if args and args[0] == "commit-tree":
+                recorded_calls.append(args)
+                return "0" * 40
+            return real_run(*args, **kwargs)
+
+        with mock.patch.object(
+            self.gc, "get_gpg_sign_args", return_value=["-SKEY123"]
+        ):
+            with mock.patch.object(self.gc, "run", side_effect=intercept_run):
+                self.repo.run(self.gc.squash_current_branch)
+
+        self.assertTrue(any("-SKEY123" in cmd for cmd in recorded_calls))
+
+    def testUpdateRefsAtomic(self):
+        recorded_calls = []
+        real_run = self.gc.run
+
+        def intercept_run(*args, **kwargs):
+            if args and args[0] == "update-ref":
+                recorded_calls.append((args, kwargs))
+                return ""
+            return real_run(*args, **kwargs)
+
+        with mock.patch.object(self.gc, "run", side_effect=intercept_run):
+            self.gc.update_refs_atomic(
+                [("branch_K", "1" * 40, "2" * 40)],
+                reflog_message="custom-reflog-action",
+            )
+
+        self.assertEqual(len(recorded_calls), 1)
+        cmd, kwargs = recorded_calls[0]
+        self.assertIn("-m", cmd)
+        self.assertIn("custom-reflog-action", cmd)
+        self.assertIn("-z", cmd)
+        self.assertIn("--stdin", cmd)
+        self.assertIn(
+            b"update refs/heads/branch_K\0", kwargs.get("indata", b"")
+        )
+
+        with self.assertRaises(AssertionError):
+            self.gc.update_refs_atomic(
+                [("branch_K", "1" * 40, "2" * 40)], reflog_message=""
+            )
 
     def testRebase(self):
         self.assertSchema("""
