@@ -3,6 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import json
 import os.path
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from testing_support.presubmit_canned_checks_test_mocks import (
 )
 
 import presubmit_canned_checks
+import run_alint
 
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
@@ -902,17 +904,15 @@ class CheckAyeAyeTest(unittest.TestCase):
         ).start()
         self.mock_exists.return_value = True
 
-    def test_ayeaye_findings(self):
-        # Simulate alint output with color codes
-        alint_output = (
-            "\x1b[31mERROR:\x1b[0m This is an error.\n"
-            "Some other info line\n"
-            "\x1b[33mWARNING:\x1b[0m This is a warning.\n"
-            "\x1b[94mINFO:\x1b[0m This is an info.\n"
-            "\x1b[31mERROR:\x1b[0m Another error.\n"
-            "\x1b[33mWARNING:\x1b[0m Another warning."
+    def test_ayeaye_findings_with_errors(self):
+        # Simulate run_alint JSON output containing both errors and warnings
+        json_output = json.dumps(
+            {
+                "errors": ["This is an error.", "Another error."],
+                "warnings": ["This is a warning.", "Another warning."],
+            }
         ).encode("utf-8")
-        self.mock_proc.communicate.return_value = (alint_output, b"")
+        self.mock_proc.communicate.return_value = (json_output, b"")
         self.mock_proc.returncode = 0
 
         results = presubmit_canned_checks.CheckAyeAye(
@@ -935,18 +935,44 @@ class CheckAyeAyeTest(unittest.TestCase):
         )
         self.assertEqual(messages, expected_messages)
 
-        self.mock_popen.assert_called_once_with(
-            ["/google/bin/releases/alint/alint", "--", "-t=30s"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            cwd="/fake/repo/root",
+        self.mock_popen.assert_called_once()
+        called_args = self.mock_popen.call_args[0][0]
+        self.assertEqual(called_args[0], "vpython3")
+        self.assertTrue(called_args[1].endswith("run_alint.py"))
+        self.assertEqual(called_args[2], "/google/bin/releases/alint/alint")
+        self.assertEqual(called_args[3], "/fake/repo/root")
+        self.assertEqual(called_args[4], "-t=30s")
+
+    def test_ayeaye_findings_only_warnings(self):
+        # Simulate run_alint JSON output with only warnings
+        json_output = json.dumps(
+            {
+                "errors": [],
+                "warnings": ["This is a warning.", "Another warning."],
+            }
+        ).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
         )
 
-    def test_ayeaye_no_findings(self):
-        self.mock_proc.communicate.return_value = (
-            b"\x1b[94mINFO:\x1b[0m All good",
-            b"",
+        self.assertEqual(len(results), 2)
+        result_types = sorted([r.type for r in results])
+        self.assertEqual(result_types, ["warning", "warning"])
+        messages = sorted([r.message for r in results])
+        expected_messages = sorted(
+            [
+                "This is a warning.",
+                "Another warning.",
+            ]
         )
+        self.assertEqual(messages, expected_messages)
+
+    def test_ayeaye_no_findings(self):
+        json_output = json.dumps({"errors": [], "warnings": []}).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
         self.mock_proc.returncode = 0
         results = presubmit_canned_checks.CheckAyeAye(
             self.input_api, self.output_api
@@ -967,22 +993,48 @@ class CheckAyeAyeTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].type, "error")
-        # Exact message depends on Exception type, so check for key parts
-        self.assertIn("Unexpected error in CheckAyeAye:", results[0].message)
+        self.assertIn("Unexpected error in AyeAye (alint):", results[0].message)
         self.assertIn("BOOM", results[0].message)
 
     def test_ayeaye_alint_fails(self):
-        alint_output = ("\x1b[31mERROR:\x1b[0m Failed to run.\n").encode(
-            "utf-8"
-        )
-        self.mock_proc.communicate.return_value = (alint_output, b"")
-        self.mock_proc.returncode = 1  # Non-zero return code
+        json_output = json.dumps(
+            {
+                "errors": ["Failed to run."],
+                "warnings": [],
+            }
+        ).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+
+        self.input_api.is_committing = True
+
         results = presubmit_canned_checks.CheckAyeAye(
             self.input_api, self.output_api
         )
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].type, "error")
         self.assertIn("Failed to run.", results[0].message)
+
+
+class RunAlintTest(unittest.TestCase):
+    def test_parse_alint_output(self):
+        alint_output = (
+            "\x1b[31mERROR:\x1b[0m This is an error.\n"
+            "Some other info line\n"
+            "\x1b[33mWARNING:\x1b[0m This is a warning.\n"
+            "\x1b[94mINFO:\x1b[0m This is an info.\n"
+            "\x1b[31mERROR:\x1b[0m Another error.\n"
+            "\x1b[33mWARNING:\x1b[0m Another warning."
+        )
+        parsed = run_alint._parse_alint_output(alint_output)
+        self.assertEqual(
+            parsed["errors"],
+            ["This is an error.", "Another error."],
+        )
+        self.assertEqual(
+            parsed["warnings"],
+            ["This is a warning.", "Another warning."],
+        )
 
 
 class CheckForCommitObjectsTest(unittest.TestCase):

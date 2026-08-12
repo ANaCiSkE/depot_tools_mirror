@@ -79,7 +79,15 @@ class PresubmitFailure(Exception):
 
 
 class CommandData(object):
-    def __init__(self, name, cmd, kwargs, message, python3=True):
+    def __init__(
+        self,
+        name,
+        cmd,
+        kwargs,
+        message=None,
+        python3=True,
+        output_parser=None,
+    ):
         # The python3 argument is ignored but has to be retained because of the
         # many callers in other repos that pass it in.
         del python3
@@ -92,6 +100,11 @@ class CommandData(object):
         self.kwargs["stdin"] = subprocess.PIPE
         self.message = message
         self.info = None
+        self.output_parser = output_parser
+
+        assert output_parser or message
+        if message:
+            assert issubclass(message, _PresubmitResult)
 
 
 # Adapted from
@@ -234,28 +247,40 @@ class ThreadPool(object):
         to vpython invocations.
         """
         cmd = self._GetCommand(test)
+        start = time_time()
+
+        def error_results(msg, exception=""):
+            duration = time_time() - start
+            msg_type = test.message or _PresubmitError
+            return msg_type(
+                "%s\n%s %s (%4.2fs)\n%s"
+                % (test.name, " ".join(cmd), msg, duration, exception),
+                show_callstack=show_callstack,
+            )
+
         try:
-            start = time_time()
             returncode, stdout = self._RunWithTimeout(
                 cmd, test.stdin, test.kwargs
             )
-            duration = time_time() - start
         except Exception:
-            duration = time_time() - start
-            return test.message(
-                "%s\n%s exec failure (%4.2fs)\n%s"
-                % (test.name, " ".join(cmd), duration, traceback.format_exc()),
-                show_callstack=show_callstack,
-            )
+            return error_results("exec failure", traceback.format_exc())
+
+        if test.output_parser:
+            try:
+                results = test.output_parser(stdout)
+                if results:
+                    return results
+            except Exception:
+                return error_results(
+                    f"Exception while parsing:\n{stdout}",
+                    traceback.format_exc(),
+                )
 
         if returncode != 0:
-            return test.message(
-                "%s\n%s (%4.2fs) failed\n%s"
-                % (test.name, " ".join(cmd), duration, stdout),
-                show_callstack=show_callstack,
-            )
+            return error_results(f"exit code {returncode}", stdout)
 
         if test.info:
+            duration = time_time() - start
             return test.info(
                 "%s\n%s (%4.2fs)" % (test.name, " ".join(cmd), duration),
                 show_callstack=show_callstack,
@@ -280,7 +305,10 @@ class ThreadPool(object):
                 result = self.CallCommand(test, show_callstack=False)
                 if result:
                     with self._messages_lock:
-                        self._messages.append(result)
+                        if isinstance(result, (list, tuple)):
+                            self._messages.extend(result)
+                        else:
+                            self._messages.append(result)
 
         def _StartDaemon():
             t = threading.Thread(target=_WorkerFn)
@@ -292,7 +320,10 @@ class ThreadPool(object):
             test = self._nonparallel_tests.pop()
             result = self.CallCommand(test)
             if result:
-                self._messages.append(result)
+                if isinstance(result, (list, tuple)):
+                    self._messages.extend(result)
+                else:
+                    self._messages.append(result)
 
         if self._tests:
             threads = [_StartDaemon() for _ in range(self._pool_size)]
@@ -1087,7 +1118,6 @@ class InputApi(object):
             if isinstance(t, OutputApi.PresubmitResult) and t:
                 msgs.append(t)
             else:
-                assert issubclass(t.message, _PresubmitResult)
                 tests.append(t)
                 if self.verbose:
                     t.info = _PresubmitNotifyResult

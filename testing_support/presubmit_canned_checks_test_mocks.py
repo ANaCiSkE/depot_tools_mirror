@@ -58,6 +58,24 @@ class MockCannedChecks(object):
         return errors
 
 
+class MockCommand(object):
+    def __init__(
+        self,
+        name,
+        cmd,
+        kwargs,
+        message=None,
+        python3=True,
+        output_parser=None,
+    ):
+        self.name = name
+        self.cmd = cmd
+        self.kwargs = kwargs
+        self.message = message
+        self.python3 = python3
+        self.output_parser = output_parser
+
+
 class MockInputApi(object):
     """Mock class for the InputApi class.
 
@@ -75,6 +93,7 @@ class MockInputApi(object):
         self.os_path = os.path
         self.platform = sys.platform
         self.python_executable = sys.executable
+        self.python3_executable = "vpython3"
         self.platform = sys.platform
         self.subprocess = subprocess
         self.sys = sys
@@ -84,6 +103,7 @@ class MockInputApi(object):
         self.change = MockChange([])
         self.presubmit_local_path = os.path.dirname(__file__)
         self.logging = logging.getLogger("PRESUBMIT")
+        self.Command = MockCommand
 
     @property
     def is_windows(self):
@@ -146,6 +166,35 @@ class MockInputApi(object):
                 return "\n".join(file_.NewContents())
         # Otherwise, file is not in our mock API.
         raise IOError("No such file or directory: '%s'" % filename)
+
+    def RunTests(self, tests, parallel=True, output_parser=None):
+        results = []
+        for test in tests:
+            parser = test.output_parser or output_parser
+            try:
+                p = self.subprocess.Popen(test.cmd, **test.kwargs)
+                stdout, _ = p.communicate()
+                stdout_str = (
+                    stdout.decode() if isinstance(stdout, bytes) else stdout
+                )
+                if parser:
+                    parse_results = parser(stdout_str)
+                    if parse_results:
+                        if isinstance(parse_results, (list, tuple)):
+                            results.extend(parse_results)
+                        else:
+                            results.append(parse_results)
+                        continue
+
+                if p.returncode:
+                    msg_type = test.message or MockOutputApi.PresubmitError
+                    results.append(msg_type(f"{test.name}\n{stdout_str}"))
+            except Exception as e:
+                msg_type = test.message or MockOutputApi.PresubmitError
+                results.append(
+                    msg_type(f"Unexpected error in {test.name}: {e}")
+                )
+        return results
 
 
 class MockOutputApi(object):

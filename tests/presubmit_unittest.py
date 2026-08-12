@@ -3950,7 +3950,7 @@ the current line as well!
             results[0].__class__, presubmit.OutputApi.PresubmitNotifyResult
         )
         self.assertEqual(
-            "test_module\npyyyyython3 -m test_module (0.00s) failed\nfoo",
+            "test_module\npyyyyython3 -m test_module exit code 1 (0.00s)\nfoo",
             results[0]._message,
         )
 
@@ -3967,7 +3967,7 @@ the current line as well!
             results[0].__class__, presubmit.OutputApi.PresubmitError
         )
         self.assertEqual(
-            "test_module\npyyyyython3 -m test_module (0.00s) failed\nfoo",
+            "test_module\npyyyyython3 -m test_module exit code 1 (0.00s)\nfoo",
             results[0]._message,
         )
 
@@ -4437,7 +4437,7 @@ the current line as well!
 
         results[0].handle()
         self.assertIn(
-            "bar.py --verbose (0.00s) failed\nProcess timed out after 100s",
+            "bar.py --verbose exit code 1 (0.00s)\nProcess timed out after 100s",
             sys.stdout.getvalue(),
         )
 
@@ -5009,25 +5009,84 @@ class ThreadPoolTest(unittest.TestCase):
                 name=str(i),
                 cmd=[str(i)],
                 kwargs={},
-                message=lambda x, **kwargs: x,
+                message=presubmit.OutputApi.PresubmitError,
             )
             for i in range(10)
         ]
 
         t = presubmit.ThreadPool(1)
         t.AddTests(mock_tests)
-        messages = sorted(t.RunAsync())
+        messages = sorted(t.RunAsync(), key=lambda x: x._message)
 
         self.assertEqual(3, len(messages))
         self.assertIn(
             "3\n3 exec failure (0.00s)\nTraceback (most recent call last):",
-            messages[0],
+            messages[0]._message,
         )
         self.assertIn(
             "4\n4 exec failure (0.00s)\nTraceback (most recent call last):",
-            messages[1],
+            messages[1]._message,
         )
-        self.assertEqual("5\n5 (0.00s) failed\nstdout", messages[2])
+        self.assertEqual(
+            "5\n5 exit code 1 (0.00s)\nstdout", messages[2]._message
+        )
+
+    def testOutputParser(self):
+        def FakePopen(cmd, **kwargs):
+            if cmd[0] == "multiple":
+                return mock.Mock(returncode=0)
+            if cmd[0] == "empty_pass":
+                return mock.Mock(returncode=0)
+            if cmd[0] == "empty_fail":
+                return mock.Mock(returncode=1)
+            return mock.Mock(returncode=0)
+
+        subprocess.Popen.side_effect = FakePopen
+
+        def parse_multiple(output):
+            return [
+                presubmit.OutputApi.PresubmitError("error 1"),
+                presubmit.OutputApi.PresubmitError("error 2"),
+                presubmit.OutputApi.PresubmitPromptWarning("warning 1"),
+            ]
+
+        def parse_empty(output):
+            return []
+
+        mock_tests = [
+            presubmit.CommandData(
+                name="multiple",
+                cmd=["multiple"],
+                kwargs={},
+                output_parser=parse_multiple,
+            ),
+            presubmit.CommandData(
+                name="empty_pass",
+                cmd=["empty_pass"],
+                kwargs={},
+                output_parser=parse_empty,
+            ),
+            presubmit.CommandData(
+                name="empty_fail",
+                cmd=["empty_fail"],
+                kwargs={},
+                message=presubmit.OutputApi.PresubmitError,
+                output_parser=parse_empty,
+            ),
+        ]
+
+        t = presubmit.ThreadPool(1)
+        t.AddTests(mock_tests)
+        messages = t.RunAsync()
+        message_strs = [r._message for r in messages]
+
+        self.assertEqual(4, len(messages))
+        self.assertIn(
+            "empty_fail\nempty_fail exit code 1 (0.00s)\nstdout", message_strs
+        )
+        self.assertIn("error 1", message_strs)
+        self.assertIn("error 2", message_strs)
+        self.assertIn("warning 1", message_strs)
 
 
 if __name__ == "__main__":

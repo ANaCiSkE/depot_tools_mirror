@@ -8,7 +8,6 @@ import functools
 import io as _io
 import os as _os
 import time
-import re
 
 import metadata.discover
 import metadata.validate
@@ -1715,8 +1714,7 @@ def GetRuff(
         x, files_to_check, files_to_skip
     )
     affected_files = [
-        f.AbsoluteLocalPath()
-        for f in input_api.AffectedSourceFiles(src_filter)
+        f.AbsoluteLocalPath() for f in input_api.AffectedSourceFiles(src_filter)
     ]
     if not affected_files:
         return []
@@ -3527,67 +3525,39 @@ def CheckValidHostsInDEPSOnUpload(input_api, output_api):
 
 
 def CheckAyeAye(input_api, output_api):
-    """
-    Runs AyeAye analyzers.
-    """
-
-    def strip_ansi_codes(text):
-        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-        return ansi_escape.sub("", text)
-
-    def strip_severity_prefix(text):
-        for prefix in ["ERROR:", "WARNING:", "INFO:"]:
-            if text.startswith(prefix):
-                return text[len(prefix) :].strip()
-        return text
-
+    """Runs AyeAye analyzers."""
     alint_path = "/google/bin/releases/alint/alint"
-    command = [alint_path, "--", "-t=30s"]
     if not _os.path.exists(alint_path):
         return []
 
-    # Determine the git repository root
-    repo_root = input_api.change.RepositoryRoot()
-    if not repo_root:
-        return [
-            output_api.PresubmitError("Could not determine repository root.")
+    def parse_output(output):
+        json_dict = input_api.json.loads(output)
+        results = [output_api.PresubmitError(x) for x in json_dict["errors"]]
+        results += [
+            output_api.PresubmitPromptWarning(x) for x in json_dict["warnings"]
         ]
-
-    try:
-        process = input_api.subprocess.Popen(
-            command,
-            stdout=input_api.subprocess.PIPE,
-            stderr=input_api.subprocess.STDOUT,
-            cwd=repo_root,
-        )
-        stdout, _ = process.communicate()
-        output_str = stdout.decode("utf-8", "ignore")
-
-        if not output_str.strip():
-            return []
-
-        results = []
-        for line in output_str.splitlines():
-            clean_line = strip_ansi_codes(line).strip()
-            if not clean_line:
-                continue
-            if clean_line.startswith("ERROR:"):
-                results.append(
-                    output_api.PresubmitError(strip_severity_prefix(clean_line))
-                )
-            elif clean_line.startswith("WARNING:"):
-                results.append(
-                    output_api.PresubmitPromptWarning(
-                        strip_severity_prefix(clean_line)
-                    )
-                )
         return results
-    except Exception as e:
-        return [
-            output_api.PresubmitError(
-                f"Unexpected error in CheckAyeAye: {type(e).__name__} - {e}"
+
+    cmd = [
+        input_api.python3_executable,
+        _os.path.join(_HERE, "run_alint.py"),
+        alint_path,
+        input_api.change.RepositoryRoot(),
+        "-t=30s",
+    ]
+
+    # Use input_api.Command so that the check can run concurrently with other
+    # checks when "git cl presubmit --parallel" is used.
+    return input_api.RunTests(
+        [
+            input_api.Command(
+                name="AyeAye (alint)",
+                cmd=cmd,
+                kwargs={"cwd": input_api.change.RepositoryRoot()},
+                output_parser=parse_output,
             )
         ]
+    )
 
 
 def CheckSkillFiles(input_api, output_api):
