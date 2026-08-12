@@ -970,6 +970,14 @@ class GIT(object):
         return "refs/remotes/%s/main" % remote
 
     @staticmethod
+    def GetRemoteObjectFormat(url: str) -> str:
+        # TODO(b/532590208): update this to probe remote after sha256 migration is announced.
+        # GoB currently serves sha1 everywhere today so no need to probe at the moment.
+        # see https://chromium-review.googlesource.com/c/chromium/tools/depot_tools/+/8188296/8/scm.py
+        # for a possible implementation.
+        return "sha1"
+
+    @staticmethod
     def GetBranch(cwd):
         """Returns the short branch name, e.g. 'main'."""
         branchref = GIT.GetBranchRef(cwd)

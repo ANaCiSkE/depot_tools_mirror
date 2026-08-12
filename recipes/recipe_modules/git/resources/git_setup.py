@@ -18,6 +18,7 @@ DEPOT_TOOLS_ROOT = os.path.abspath(
 )
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 import git_common
+import scm
 
 
 def run_git(*cmd, **kwargs):
@@ -49,7 +50,8 @@ def main():
   if os.path.exists(os.path.join(path, ".git")):
     run_git("config", "--remove-section", "remote.%s" % remote, cwd=path)
   else:
-    run_git("init", cwd=path)
+    object_format = scm.GIT.GetRemoteObjectFormat(url)
+    run_git("init", f"--object-format={object_format}", cwd=path)
   run_git("remote", "add", remote, url, cwd=path)
   return 0
 

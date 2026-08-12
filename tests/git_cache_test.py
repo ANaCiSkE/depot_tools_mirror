@@ -373,7 +373,51 @@ class GitCacheTest(unittest.TestCase):
             git_cache.GIT_CACHE_CORRUPT_MESSAGE, sys.stdout.getvalue()
         )
 
-    def _makeGitRepoWithTag(self):
+    def testPopulateInitObjectFormat(self):
+        """A fresh mirror pins the bare repo to the remote object format.
+
+        An existing mirror that is re-initialized must not pass
+        --object-format, since the object format cannot be changed after
+        creation.
+        """
+        self._makeGitRepo()
+        mirror = git_cache.Mirror(self.origin_dir)
+        real_run_git = mirror.RunGit
+
+        def populate_capturing_init():
+            init_calls = []
+
+            def record(cmd, *args, **kwargs):
+                if cmd[:1] == ["init"]:
+                    init_calls.append(list(cmd))
+                return real_run_git(cmd, *args, **kwargs)
+
+            with mock.patch.object(mirror, "RunGit", side_effect=record):
+                mirror.populate()
+            return init_calls
+
+        with mock.patch.object(
+            git_cache.scm.GIT,
+            "GetRemoteObjectFormat",
+            return_value="sha1",
+        ) as mock_object_format:
+            fresh_init_calls = populate_capturing_init()
+            existing_init_calls = populate_capturing_init()
+
+        mock_object_format.assert_called_with(self.origin_dir)
+
+        with self.subTest("fresh mirror pins object format"):
+            self.assertTrue(
+                any("--object-format=sha1" in cmd for cmd in fresh_init_calls),
+                fresh_init_calls,
+            )
+
+        with self.subTest("existing mirror omits object format"):
+            self.assertTrue(existing_init_calls)
+            for cmd in existing_init_calls:
+                self.assertNotIn("--object-format=sha1", cmd)
+
+    def _makeGitRepo(self):
         self.git(["init", "-q"])
         with open(os.path.join(self.origin_dir, "foo"), "w") as f:
             f.write("touched\n")
@@ -389,6 +433,9 @@ class GitCacheTest(unittest.TestCase):
                 "foo",
             ]
         )
+
+    def _makeGitRepoWithTag(self):
+        self._makeGitRepo()
         self.git(["tag", "TAG"])
         self.git(["pack-refs"])
 

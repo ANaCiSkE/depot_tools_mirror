@@ -79,6 +79,12 @@ class GitWrapperTestCase(unittest.TestCase):
             r = scm.GIT.RemoteRefToRef(k, remote)
             self.assertEqual(r, v, msg="%s -> %s, expected %s" % (k, r, v))
 
+    def testGetRemoteObjectFormat(self):
+        # GoB currently serves sha1 everywhere, so the object format is always
+        # sha1 regardless of the remote url.
+        for url in ("https://chromium.googlesource.com/chromium/src", ""):
+            self.assertEqual("sha1", scm.GIT.GetRemoteObjectFormat(url))
+
     @mock.patch("scm.GIT.Capture")
     @mock.patch("os.path.exists", lambda _: True)
     def testGetRemoteHeadRefLocal(self, mockCapture):

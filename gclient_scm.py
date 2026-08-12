@@ -1640,7 +1640,16 @@ class GitWrapper(SCMWrapper):
         gclient_utils.safe_makedirs(parent_dir)
 
         if hasattr(options, "no_history") and options.no_history:
-            self._Run(["init", self.checkout_path], options, cwd=self._root_dir)
+            object_format = scm.GIT.GetRemoteObjectFormat(url)
+            self._Run(
+                [
+                    "init",
+                    f"--object-format={object_format}",
+                    self.checkout_path,
+                ],
+                options,
+                cwd=self._root_dir,
+            )
             self._Run(["remote", "add", "origin", url], options)
             revision = self._AutoFetchRef(options, revision, depth=1)
             remote_ref = scm.GIT.RefToRemoteRef(revision, self.remote)
