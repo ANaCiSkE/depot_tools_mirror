@@ -58,6 +58,7 @@ import git_footers
 import git_new_branch
 import git_squash_branch
 import google_java_format
+import ktfmt
 import metrics
 import metrics_utils
 import metrics_xml_format
@@ -8197,6 +8198,46 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
         return return_value
 
 
+def _RunKtfmt(opts, paths, top_dir, diffs):
+    """Runs ktfmt and sets a return value if necessary."""
+    tool = ktfmt.FindKtfmt()
+    if tool is None:
+        print("ktfmt not found, skipping kotlin formatting.")
+        return 0
+
+    if opts.diff:
+        return_value = 0
+        kwds = {"error_ok": True, "cwd": top_dir}
+        for path in paths:
+            file_path = os.path.join(top_dir, path) if top_dir else path
+            with open(file_path, "rb") as f:
+                content = f.read()
+            stdout = RunCommand([tool, "-"], stdin=content, **kwds)
+            diff_output = RunGitDiffCmd(
+                ["-U3"],
+                "--no-index",
+                [path, "-"],
+                stdin=stdout.encode(),
+                **kwds,
+            )
+            if diff_output:
+                sys.stdout.write("Requires formatting: " + diff_output)
+                if opts.dry_run:
+                    return_value = 2
+        return return_value
+
+    cmd = [tool]
+    if opts.dry_run:
+        cmd += ["--set-exit-if-changed", "--dry-run"]
+
+    for paths_batch in _SplitArgsByCmdLineLimit(paths):
+        ktfmt_exitcode = subprocess2.call(cmd + paths_batch, shell=False)
+        if opts.dry_run and ktfmt_exitcode != 0:
+            return 2
+
+    return 0
+
+
 def _RunRustFmt(opts, paths, top_dir, diffs):
     """Runs rustfmt.  Just like _RunClangFormatDiff returns 2 to indicate that
     presubmit checks have failed (and returns 0 otherwise)."""
@@ -8817,6 +8858,14 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         help="Disable auto-formatting of .java",
     )
     parser.add_option(
+        "--ktfmt",
+        dest="ktfmt",
+        action="store_true",
+        default=False,
+        help="Temporary until on by default. "
+        "Enables formatting of .kt files using ktfmt.",
+    )
+    parser.add_option(
         "--lucicfg",
         action="store_true",
         help="Enables formatting of .star files.",
@@ -8892,6 +8941,8 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     ]
     if not opts.no_java:
         formatters.append(([".java"], _RunGoogleJavaFormat, []))
+    if opts.ktfmt:
+        formatters.append(([".kt"], _RunKtfmt, []))
     if opts.clang_format:
         formatters.append((clang_exts, _RunClangFormatDiff, [".html.ts"]))
     if opts.use_rust_fmt:
