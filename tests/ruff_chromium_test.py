@@ -234,6 +234,18 @@ class TestTranslateArgs(unittest.TestCase):
         got = translate_args(["format", "--range=1:10-1:20", "foo.py"])
         self.assertEqual(got, ["--line", "1-1", "foo.py", "-i"])
 
+    def test_translate_stdin_filename_equals(self):
+        got = translate_args(
+            ["format", "--stdin-filename=/path/to/foo.py", "-"]
+        )
+        self.assertEqual(got, ["-"])
+
+    def test_translate_stdin_filename_space(self):
+        got = translate_args(
+            ["format", "--stdin-filename", "/path/to/foo.py", "-"]
+        )
+        self.assertEqual(got, ["-"])
+
 
 class TestBatchMode(unittest.TestCase):
     def setUp(self):
