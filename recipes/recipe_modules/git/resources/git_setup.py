@@ -7,7 +7,6 @@
 
 import argparse
 import os
-import subprocess
 import sys
 
 # Import "git_common" from "depot_tools" root.
@@ -17,8 +16,8 @@ DEPOT_TOOLS_ROOT = os.path.abspath(
   )
 )
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
-import git_common
-import scm
+import git_common  # noqa: E402
+import scm  # noqa: E402
 
 
 def run_git(*cmd, **kwargs):

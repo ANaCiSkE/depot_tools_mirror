@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import contextlib
-import re
 
 from recipe_engine import recipe_api
 

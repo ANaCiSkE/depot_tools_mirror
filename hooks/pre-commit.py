@@ -13,8 +13,8 @@ import sys
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import git_common
-from gclient_eval import SYNC
+import git_common  # noqa: E402
+from gclient_eval import SYNC  # noqa: E402
 
 SKIP_VAR = "SKIP_GITLINK_PRECOMMIT"
 TESTING_ANSWER = "TESTING_ANSWER"
@@ -46,7 +46,7 @@ def main():
     state = None
     try:
         with open("DEPS", "r") as f:
-            for l in f.readlines():
+            for l in f.readlines():  # noqa: E741
                 if l.startswith("git_dependencies"):
                     state = l.split()[-1].strip(" \"'")
                     break
@@ -73,7 +73,7 @@ def main():
         except (FileNotFoundError, OSError):
             try:
                 sys.stdin = open("CON")
-            except:
+            except:  # noqa: E722
                 print(
                     "Unable to acquire input handle, proceeding without modifications"
                 )

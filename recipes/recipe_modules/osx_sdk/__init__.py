@@ -14,14 +14,14 @@ DEPS = [
   "recipe_engine/version",
 ]
 
-from recipe_engine.recipe_api import Property
-from recipe_engine.config import ConfigGroup, Single
+from recipe_engine.recipe_api import Property  # noqa: E402
+from recipe_engine.config import ConfigGroup, Single  # noqa: E402
 
 PROPERTIES = {
   "$depot_tools/osx_sdk": Property(
     help="Properties specifically for the infra osx_sdk module.",
     param_name="sdk_properties",
-    kind=ConfigGroup(  # pylint: disable=line-too-long
+    kind=ConfigGroup(
       # XCode build version number. Internally maps to an XCode build id like
       # '9c40b'. See
       #
@@ -37,5 +37,5 @@ PROPERTIES = {
   )
 }
 
-from .api import OSXSDKApi as API
-from .test_api import OSXSDKTestApi as TEST_API
+from .api import OSXSDKApi as API  # noqa: E402, F401
+from .test_api import OSXSDKTestApi as TEST_API  # noqa: E402, F401

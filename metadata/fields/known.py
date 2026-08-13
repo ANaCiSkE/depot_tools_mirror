@@ -14,17 +14,17 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.custom.cpe_prefix
-import metadata.fields.custom.date
-import metadata.fields.custom.license
-import metadata.fields.custom.license_file
-import metadata.fields.custom.local_modifications
-import metadata.fields.custom.mitigated
-import metadata.fields.custom.update_mechanism
-import metadata.fields.custom.url
-import metadata.fields.custom.version
-import metadata.fields.custom.revision
-import metadata.fields.field_types as field_types
+import metadata.fields.custom.cpe_prefix  # noqa: E402
+import metadata.fields.custom.date  # noqa: E402
+import metadata.fields.custom.license  # noqa: E402
+import metadata.fields.custom.license_file  # noqa: E402
+import metadata.fields.custom.local_modifications  # noqa: E402
+import metadata.fields.custom.mitigated  # noqa: E402
+import metadata.fields.custom.update_mechanism  # noqa: E402
+import metadata.fields.custom.url  # noqa: E402
+import metadata.fields.custom.version  # noqa: E402
+import metadata.fields.custom.revision  # noqa: E402
+import metadata.fields.field_types as field_types  # noqa: E402
 
 # Freeform text fields.
 NAME = field_types.SingleLineTextField("Name")

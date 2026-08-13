@@ -437,7 +437,7 @@ def CMDsetbotcommit(parser, args):
         type=str,
         default="current",
         help="revision ID. See "
-        "https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id "  # pylint: disable=line-too-long
+        "https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id "
         "for acceptable format",
     )
     (opt, args) = parser.parse_args(args)
@@ -542,7 +542,7 @@ def CMDaddMessage(parser, args):
         type=str,
         default="current",
         help="revision ID. See "
-        "https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id "  # pylint: disable=line-too-long
+        "https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id "
         "for acceptable format",
     )
     parser.add_option("-m", "--message", type=str, help="message to add")

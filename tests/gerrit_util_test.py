@@ -10,7 +10,6 @@ import os
 import socket
 import subprocess
 import sys
-import textwrap
 import unittest
 
 from io import StringIO

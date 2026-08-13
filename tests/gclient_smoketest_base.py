@@ -12,8 +12,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GCLIENT_PATH = os.path.join(ROOT_DIR, "gclient")
 sys.path.insert(0, ROOT_DIR)
 
-import subprocess2
-from testing_support import fake_repos
+import subprocess2  # noqa: E402
+from testing_support import fake_repos  # noqa: E402
 
 
 class GClientSmokeBase(fake_repos.FakeReposTestBase):

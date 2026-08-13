@@ -26,4 +26,5 @@ RC_FILE = THIS_DIR / ".isort.cfg"
 # manually override.
 sys.argv = sys.argv[:1] + [f"--settings-file={RC_FILE}"] + sys.argv[1:]
 
-import isort.__main__
+import isort.__main__  # noqa: E402, F401
+

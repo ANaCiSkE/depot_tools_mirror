@@ -8,7 +8,6 @@ import copy
 import datetime
 import hashlib
 import os
-import shutil
 
 # Do not use subprocess2 as we won't be able to test encoding failures
 import subprocess
@@ -91,7 +90,7 @@ class OrderedSet(collections.abc.MutableSet):
             prev[2] = nxt
             nxt[1] = prev
 
-    def pop(self, last=True):  # pylint: disable=arguments-differ
+    def pop(self, last=True):
         if not self:
             raise KeyError("set is empty")
         key = self.end[1][0] if last else self.end[2][0]
@@ -202,7 +201,7 @@ class GitRepoSchema(object):
 
         Throws an AssertionError if it detects a cycle.
         """
-        for commits in (l.split() for l in schema.splitlines() if l.strip()):
+        for commits in (l.split() for l in schema.splitlines() if l.strip()):  # noqa: E741
             parent = None
             for commit in commits:
                 self.add_partial(commit, parent)

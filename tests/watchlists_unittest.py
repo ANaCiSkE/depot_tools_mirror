@@ -4,8 +4,6 @@
 # found in the LICENSE file.
 """Unit tests for watchlists.py."""
 
-# pylint: disable=E1103,no-value-for-parameter,protected-access
-
 import os
 import sys
 import unittest

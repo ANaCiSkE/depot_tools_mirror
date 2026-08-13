@@ -434,7 +434,7 @@ def PrintClInfo(
     description_lines = FormatDescriptionOrComment(
         user_description, cl_description
     ).splitlines()
-    indented_description = "\n".join(["    " + l for l in description_lines])
+    indented_description = "\n".join(["    " + l for l in description_lines])  # noqa: E741
 
     Emit("CL {}/{}".format(cl_index, num_cls))
     Emit("Paths: {}".format(cl_description))
@@ -609,7 +609,7 @@ def ComputeSplitting(
 
     # Note that we do this override even if the list is empty (indicating that
     # the user requested CLs not be assigned to any reviewers).
-    if reviewers_override != None:
+    if reviewers_override != None:  # noqa: E711
         for info in cl_infos:
             info.reviewers = set(reviewers_override)
 
@@ -797,7 +797,7 @@ def SelectReviewersForFiles(cl, author, files, max_depth, repository_root):
             )
         )
 
-        if not reviewers in info_split_by_reviewers:
+        if reviewers not in info_split_by_reviewers:
             info_split_by_reviewers[reviewers] = FilesAndOwnersDirectory([], [])
         info_split_by_reviewers[reviewers].files.extend(split_files)
         info_split_by_reviewers[reviewers].owners_directories.append(directory)

@@ -15,10 +15,10 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-from metadata.fields.field_types import MetadataField
-import metadata.fields.known as fields
-from metadata.dependency_metadata import DependencyMetadata
-import metadata.fields.custom.update_mechanism
+from metadata.fields.field_types import MetadataField  # noqa: E402
+import metadata.fields.known as fields  # noqa: E402
+from metadata.dependency_metadata import DependencyMetadata  # noqa: E402
+import metadata.fields.custom.update_mechanism  # noqa: E402
 
 
 class FieldValidationTest(unittest.TestCase):

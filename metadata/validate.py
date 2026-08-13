@@ -14,9 +14,9 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import gclient_utils
-import metadata.parse
-import metadata.validation_result as vr
+import gclient_utils  # noqa: E402
+import metadata.parse  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
 
 
 _TRANSITION_PRESCRIPT = (

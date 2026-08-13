@@ -16,11 +16,11 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import gclient_utils
-import metadata.scan
-import metadata.validate
-import metadata.validation_result
-import metadata.fields.known
+import gclient_utils  # noqa: E402
+import metadata.scan  # noqa: E402
+import metadata.validate  # noqa: E402
+import metadata.validation_result  # noqa: E402
+import metadata.fields.known  # noqa: E402
 
 # Common paths for tests.
 _SOURCE_FILE_DIR = os.path.join(_THIS_DIR, "data")

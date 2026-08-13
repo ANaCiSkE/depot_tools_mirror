@@ -9,15 +9,14 @@ import subprocess
 import json
 import sys
 import os
-import re
 
 from pathlib import Path
 
 # Add depot_tools to path for importing git_cl and gerrit_util
 depot_tools_dir = Path(__file__).resolve().parents[4]
 sys.path.append(str(depot_tools_dir))
-import git_cl
-import gerrit_util
+import git_cl  # noqa: E402
+import gerrit_util  # noqa: E402
 
 
 class BuildbucketError(Exception):
@@ -41,7 +40,7 @@ def run_bb(args):
             if not is_authenticated():
                 err_msg += "\n\n`bb auth-info` failed. The user must run `bb auth-login` to authenticate."
         raise BuildbucketError(err_msg)
-    except subprocess.TimeoutExpired as e:
+    except subprocess.TimeoutExpired:
         raise BuildbucketError(
             f"Error: bb command timed out after 60 seconds: {' '.join(cmd)}"
         )
@@ -105,7 +104,7 @@ def list_steps(build_id):
 
         print(f"{name:<50} {status_str}")
         if logs:
-            log_names = [l.get("name") for l in logs]
+            log_names = [l.get("name") for l in logs]  # noqa: E741
             print(f"  Logs: {', '.join(log_names)}")
 
 
@@ -388,17 +387,17 @@ def _fetch_and_print_log(build_id, step):
     logs = step.get("logs", [])
     # Log fallback strategy: prioritize failure_summary, then stdout, then step_metadata.
     target_log = next(
-        (l for l in logs if l.get("name") == "failure_summary"),
+        (l for l in logs if l.get("name") == "failure_summary"),  # noqa: E741
         None,
     )
     if not target_log:
         target_log = next(
-            (l for l in logs if l.get("name") == "stdout"),
+            (l for l in logs if l.get("name") == "stdout"),  # noqa: E741
             None,
         )
     if not target_log:
         target_log = next(
-            (l for l in logs if l.get("name") == "step_metadata"),
+            (l for l in logs if l.get("name") == "step_metadata"),  # noqa: E741
             None,
         )
     if not target_log and logs:

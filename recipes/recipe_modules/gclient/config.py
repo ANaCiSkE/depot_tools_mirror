@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from recipe_engine.config import config_item_context, ConfigGroup, BadConf
+from recipe_engine.config import config_item_context, ConfigGroup
 from recipe_engine.config import ConfigList, Dict, Single, Static, Set, List
 
 from . import api as gclient_api

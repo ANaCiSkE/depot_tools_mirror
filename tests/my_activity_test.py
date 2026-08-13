@@ -12,7 +12,7 @@ from datetime import datetime
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-import my_activity
+import my_activity  # noqa: E402
 
 
 class MyActivityTest(unittest.TestCase):

@@ -1217,7 +1217,7 @@ class Requirements:
         )
         try:
             json_data = json.loads(strip_data)
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             # If we couldn't parse it, assume it's incompatible.
             return None
 

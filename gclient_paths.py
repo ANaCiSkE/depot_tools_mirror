@@ -17,10 +17,6 @@ import gclient_eval
 import gclient_utils
 import subprocess2
 
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
-
-
 @functools.lru_cache
 def FindGclientRoot(from_dir, filename=".gclient"):
     """Tries to find the gclient root."""
@@ -75,7 +71,6 @@ def FindGclientRoot(from_dir, filename=".gclient"):
 
     return None
 
-
 @functools.lru_cache
 def _GetPrimarySolutionPathInternal(cwd):
     gclient_root = FindGclientRoot(cwd)
@@ -103,14 +98,12 @@ def _GetPrimarySolutionPathInternal(cwd):
         return top_dir
     return None
 
-
 def GetPrimarySolutionPath(from_dir=None):
     """Returns the full path to the primary solution. (gclient_root + src)"""
     if not from_dir:
         from_dir = os.getcwd()
     from_dir = os.path.abspath(from_dir)
     return _GetPrimarySolutionPathInternal(from_dir)
-
 
 @functools.lru_cache
 def _GetBuildtoolsPathInternal(cwd, override):
@@ -140,7 +133,6 @@ def _GetBuildtoolsPathInternal(cwd, override):
 
     return None
 
-
 def GetBuildtoolsPath():
     """Returns the full path to the buildtools directory.
     This is based on the root of the checkout containing the current directory."""
@@ -148,7 +140,6 @@ def GetBuildtoolsPath():
     # may break without warning.  Do not rely on this for anything important.
     override = os.environ.get("CHROMIUM_BUILDTOOLS_PATH")
     return _GetBuildtoolsPathInternal(os.getcwd(), override)
-
 
 def GetBuildtoolsPlatformBinaryPath():
     """Returns the full path to the binary directory for the current platform."""
@@ -166,13 +157,11 @@ def GetBuildtoolsPlatformBinaryPath():
         raise gclient_utils.Error("Unknown platform: " + sys.platform)
     return os.path.join(buildtools_path, subdir)
 
-
 def GetExeSuffix():
     """Returns '' or '.exe' depending on how executables work on this platform."""
     if sys.platform.startswith(("cygwin", "win")):
         return ".exe"
     return ""
-
 
 @functools.lru_cache
 def _GetGClientConfigInner(gclient_root_dir_path, filename):
@@ -184,7 +173,6 @@ def _GetGClientConfigInner(gclient_root_dir_path, filename):
         gclient_config_contents, gclient_config_file
     )
 
-
 def GetGClientConfig(gclient_root_dir_path=None, filename=".gclient"):
     """Returns the parsed .gclient config contents as a dict, or None if not found."""
     if not gclient_root_dir_path:
@@ -193,12 +181,10 @@ def GetGClientConfig(gclient_root_dir_path=None, filename=".gclient"):
         return None
     return _GetGClientConfigInner(gclient_root_dir_path, filename)
 
-
 @functools.lru_cache
 def _GetGClientSolutions(gclient_root_dir_path):
     config = GetGClientConfig(gclient_root_dir_path)
     return config.get("solutions", []) if config else []
-
 
 def GetGClientPrimarySolutionName(gclient_root_dir_path):
     """Returns the name of the primary solution in the .gclient file specified."""
@@ -207,14 +193,12 @@ def GetGClientPrimarySolutionName(gclient_root_dir_path):
         return solutions[0].get("name")
     return None
 
-
 def GetGClientPrimarySolutionURL(gclient_root_dir_path):
     """Returns the URL of the primary solution in the .gclient file specified."""
     solutions = _GetGClientSolutions(gclient_root_dir_path)
     if solutions:
         return solutions[0].get("url")
     return None
-
 
 def FindInPath(name: str):
     """Shutil.which replacement that skips depot_tools in PATH."""

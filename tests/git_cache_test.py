@@ -17,10 +17,10 @@ from unittest import mock
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-from testing_support import coverage_utils
-import gclient_utils
-import git_cache
-import git_common
+from testing_support import coverage_utils  # noqa: E402
+import gclient_utils  # noqa: E402
+import git_cache  # noqa: E402
+import git_common  # noqa: E402
 
 
 class GitCacheTest(unittest.TestCase):
@@ -561,11 +561,11 @@ class GitCacheDirTest(unittest.TestCase):
             os.environ.pop("GIT_CACHE_PATH", None)
             os.environ["GIT_CONFIG"] = "disabled"
 
-            with self.assertRaisesRegex(RuntimeError, "cache\.cachepath"):
+            with self.assertRaisesRegex(RuntimeError, r"cache\.cachepath"):
                 git_cache.Mirror.GetCachePath()
 
             # negatively cached value still raises
-            with self.assertRaisesRegex(RuntimeError, "cache\.cachepath"):
+            with self.assertRaisesRegex(RuntimeError, r"cache\.cachepath"):
                 git_cache.Mirror.GetCachePath()
         finally:
             for name, val in zip(

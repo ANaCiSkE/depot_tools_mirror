@@ -11,8 +11,8 @@ DEPS = [
   "recipe_engine/step",
 ]
 
-from recipe_engine.recipe_api import Property
-from recipe_engine.config import ConfigGroup, Single
+from recipe_engine.recipe_api import Property  # noqa: E402
+from recipe_engine.config import ConfigGroup, Single  # noqa: E402
 
 PROPERTIES = {
   "$depot_tools/windows_sdk": Property(
@@ -26,4 +26,4 @@ PROPERTIES = {
   )
 }
 
-from .api import WindowsSDKApi as API
+from .api import WindowsSDKApi as API  # noqa: E402, F401

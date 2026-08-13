@@ -7,7 +7,6 @@ import os
 import re
 import sys
 from typing import Optional
-from enum import Enum
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -16,8 +15,8 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.util as util
-import metadata.validation_result as vr
+import metadata.fields.util as util  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
 
 # Pattern used to check if the entire string is either "yes" or "no",
 # case-insensitive.

@@ -4,11 +4,9 @@
 
 import sys
 
-import config_util  # pylint: disable=import-error
+import config_util
 
 
-# This class doesn't need an __init__ method, so we disable the warning
-# pylint: disable=no-init
 class Syzygy(config_util.Config):
     """Basic Config class for Syzygy."""
 

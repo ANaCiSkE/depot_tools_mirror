@@ -54,7 +54,6 @@ def kill_pid(pid):
     """Kills a process by its process id."""
     try:
         # Unable to import 'module'
-        # pylint: disable=no-member,F0401
         import signal
 
         return os.kill(pid, signal.SIGTERM)
@@ -74,7 +73,7 @@ def get_english_env(env):
     env = env or os.environ
 
     # Test if it is necessary at all.
-    is_english = lambda name: env.get(name, "en").startswith("en")
+    is_english = lambda name: env.get(name, "en").startswith("en")  # noqa: E731
 
     if is_english("LANG") and is_english("LANGUAGE"):
         return None

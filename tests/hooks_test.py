@@ -9,15 +9,14 @@ import sys
 import tempfile
 import unittest
 import unittest.mock
-from unittest.mock import patch
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-from gclient import PRECOMMIT_HOOK_VAR
-import gclient_utils
-from gclient_eval import SYNC, SUBMODULES
-import git_common as git
+from gclient import PRECOMMIT_HOOK_VAR  # noqa: E402
+import gclient_utils  # noqa: E402
+from gclient_eval import SYNC, SUBMODULES  # noqa: E402
+import git_common as git  # noqa: E402
 
 
 class HooksTest(unittest.TestCase):

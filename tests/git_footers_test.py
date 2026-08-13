@@ -244,7 +244,7 @@ My commit message is my best friend. It is my life.
         )
 
     def testAddFooterChangeIdWithMultilineFooters(self):
-        add_change_id = lambda lines: git_footers.add_footer_change_id(
+        add_change_id = lambda lines: git_footers.add_footer_change_id(  # noqa: E731
             "\n".join(lines), "Ixxx"
         )
 

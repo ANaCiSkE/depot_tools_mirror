@@ -21,14 +21,10 @@ import traceback
 
 import gclient_utils
 import gerrit_util
-import git_auth
 import git_cache
 import git_common
 import scm
 import subprocess2
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 
 class NoUsableRevError(gclient_utils.Error):
@@ -137,10 +133,10 @@ class SCMWrapper(object):
             "runhooks",
         ]
 
-        if not command in commands:
+        if command not in commands:
             raise gclient_utils.Error("Unknown command %s" % command)
 
-        if not command in dir(self):
+        if command not in dir(self):
             raise gclient_utils.Error(
                 "Command %s not implemented in %s wrapper"
                 % (command, self.__class__.__name__)
@@ -328,7 +324,7 @@ class GitWrapper(SCMWrapper):
         present."""
         out = self._Capture(["ls-files", "-s"])
         result = {}
-        for l in out.split("\n"):
+        for l in out.split("\n"):  # noqa: E741
             if not l.startswith("160000"):
                 # Not a submodule
                 continue
@@ -369,7 +365,7 @@ class GitWrapper(SCMWrapper):
         # 4 - new gitlink content detected. It contains currently checked
         # commit. At this point, we have all information needed, and we can
         # reset state to 0.
-        for l in out.split("\n"):
+        for l in out.split("\n"):  # noqa: E741
             if l.startswith("diff --git"):
                 # New file detected, reset state.
                 state = 1
@@ -2064,7 +2060,6 @@ class GitWrapper(SCMWrapper):
         return revision
 
     def _Run(self, args, options, **kwargs):
-        # Disable 'unused options' warning | pylint: disable=unused-argument
         kwargs.setdefault("cwd", self.checkout_path)
         kwargs.setdefault("filter_fn", self.filter)
         kwargs.setdefault("show_header", True)
@@ -2192,7 +2187,7 @@ class CipdRoot(object):
             ensure_file = None
             with tempfile.NamedTemporaryFile(
                 suffix=".ensure", delete=False, mode="wb"
-            ) as ensure_file:
+            ) as ensure_file:  # noqa: F811
                 ensure_file.write(contents.encode("utf-8", "replace"))
             yield ensure_file.name
         finally:
@@ -2229,7 +2224,7 @@ class CipdRoot(object):
             ensure_file = None
             with tempfile.NamedTemporaryFile(
                 suffix=".ensure", delete=False, mode="wb"
-            ) as ensure_file:
+            ) as ensure_file:  # noqa: F811
                 ensure_file.write(contents.encode("utf-8", "replace"))
             yield ensure_file.name
         finally:

@@ -15,14 +15,14 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.known as known_fields
-import metadata.fields.field_types as field_types
-import metadata.validation_result as vr
-import metadata.fields.custom.cpe_prefix as cpe_prefix_util
-import metadata.fields.custom.mitigated
-import metadata.fields.custom.update_mechanism
-import metadata.fields.custom.license
-import metadata.fields.custom.license_allowlist
+import metadata.fields.known as known_fields  # noqa: E402
+import metadata.fields.field_types as field_types  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
+import metadata.fields.custom.cpe_prefix as cpe_prefix_util  # noqa: E402
+import metadata.fields.custom.mitigated  # noqa: E402
+import metadata.fields.custom.update_mechanism  # noqa: E402
+import metadata.fields.custom.license  # noqa: E402
+import metadata.fields.custom.license_allowlist  # noqa: E402
 
 
 class FieldValidationTest(unittest.TestCase):

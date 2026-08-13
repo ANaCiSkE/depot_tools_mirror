@@ -181,7 +181,7 @@ class GclientApi(recipe_api.RecipeApi):
       list(self.got_revision_reverse_mapping(cfg).values())
       + [s.name for s in cfg.solutions]
     )
-    step_test_data = lambda: self.test_api.output_json(test_data_paths)
+    step_test_data = lambda: self.test_api.output_json(test_data_paths)  # noqa: E731
     try:
       # clean() isn't used because the gclient sync flags passed in checkout()
       # do much the same thing, and they're more correct than doing a separate
@@ -395,7 +395,7 @@ class GclientApi(recipe_api.RecipeApi):
       )
 
       try:
-        cfg = self.c
+        cfg = self.c  # noqa: F841
 
         step_result = self(
           "recursively git diff all DEPS",

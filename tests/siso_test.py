@@ -17,12 +17,9 @@ from typing import Any, Dict, List, Tuple, Generator, Optional
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
-import siso
-import build_telemetry
-import gclient_paths
-
-# These are required for fixtures to work.
-# pylint: disable=redefined-outer-name,unused-argument
+import siso  # noqa: E402
+import build_telemetry  # noqa: E402
+import gclient_paths  # noqa: E402
 
 
 # The functions are annotated with lru and the state is preserved between tests.
@@ -960,7 +957,7 @@ def test_main_process_args(
 
 # Else it won"t even compile on Windows.
 if sys.platform != "win32":
-    SIGKILL = siso.signal.SIGKILL  # pylint: disable=no-member
+    SIGKILL = siso.signal.SIGKILL
 else:
     SIGKILL = None
 

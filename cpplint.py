@@ -28,7 +28,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# pylint: skip-file
 """Does google-lint on c++ files.
 
 The goal of this script is to identify places in the code that *may*
@@ -50,7 +49,6 @@ import os
 import re
 import string
 import sys
-import unicodedata
 
 
 _USAGE = r"""
@@ -3830,8 +3828,7 @@ def CheckComment(line, filename, linenum, next_line_start, error):
                     )
 
                 middle_whitespace = match.group(3)
-                # Comparisons made explicit for correctness -- pylint:
-                # disable=g-explicit-bool-comparison
+                # Comparisons made explicit for correctness.
                 if middle_whitespace != " " and middle_whitespace != "":
                     error(
                         filename,
@@ -5762,7 +5759,7 @@ def CheckLanguage(
         include_state.ResetSection(match.group(1))
 
     # Make Windows paths like Unix.
-    fullname = os.path.abspath(filename).replace("\\", "/")
+    fullname = os.path.abspath(filename).replace("\\", "/")  # noqa: F841
 
     # Perform other checks now that we are sure that this is not an include line
     CheckCasts(filename, clean_lines, linenum, error)
@@ -6870,7 +6867,7 @@ def CheckForIncludeWhatYouUse(
         )
 
         # The following function is just a speed up, no semantics are changed.
-        if not "<" in line:  # Reduces the cpu time usage by skipping lines.
+        if "<" not in line:  # Reduces the cpu time usage by skipping lines.
             continue
 
         required = UpdateRequiredHeadersForLine(

@@ -5,11 +5,9 @@
 import sys
 import ast
 
-import config_util  # pylint: disable=import-error
+import config_util
 
 
-# This class doesn't need an __init__ method, so we disable the warning
-# pylint: disable=no-init
 class InfraSuperproject(config_util.Config):
     """Basic Config class for the whole set of Infrastructure repositories."""
 

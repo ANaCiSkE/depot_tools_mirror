@@ -4,12 +4,38 @@
 
 from __future__ import annotations
 
+import binascii
+import collections
+import contextlib
+import functools
+from io import BytesIO
+import logging
 import multiprocessing.pool
-import sys
-import threading
-
 from multiprocessing.pool import IMapIterator
+import os
+import random
+import re
+import shutil
+import signal
+import sys
+import tempfile
+import textwrap
+import threading
+import time
+import typing
+from typing import Any
+from typing import AnyStr
+from typing import Callable
+from typing import ContextManager
+from typing import Iterable
+from typing import Optional
+from typing import Tuple
+
 import from_third_party
+import gclient_utils
+import scm
+import setup_color
+import subprocess2
 
 colorama = from_third_party.import_module("colorama")
 
@@ -26,35 +52,6 @@ def wrapper(func):
 IMapIterator.next = wrapper(IMapIterator.next)
 IMapIterator.__next__ = IMapIterator.next
 # TODO(iannucci): Monkeypatch all other 'wait' methods too.
-
-import binascii
-import collections
-import contextlib
-import functools
-import logging
-import os
-import random
-import re
-import setup_color
-import shutil
-import signal
-import tempfile
-import textwrap
-import time
-import typing
-from typing import Any
-from typing import AnyStr
-from typing import Callable
-from typing import ContextManager
-from typing import Iterable
-from typing import Optional
-from typing import Tuple
-
-import gclient_utils
-import scm
-import subprocess2
-
-from io import BytesIO
 
 ROOT = os.path.abspath(os.path.dirname(__file__))
 IS_WIN = sys.platform == "win32"
@@ -1097,7 +1094,7 @@ def get_dirty_files():
 
 
 def is_dirty_git_tree(cmd):
-    w = lambda s: sys.stderr.write(s + "\n")
+    w = lambda s: sys.stderr.write(s + "\n")  # noqa: E731
 
     dirty = get_dirty_files()
     if dirty:

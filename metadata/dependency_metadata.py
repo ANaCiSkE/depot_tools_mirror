@@ -30,15 +30,12 @@ PACKAGE_MANAGER_PATHS = (
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.field_types as field_types
-import metadata.fields.custom.cpe_prefix as cpe_prefix_util
-import metadata.fields.custom.license as license_util
-import metadata.fields.custom.version as version_util
-import metadata.fields.custom.mitigated as mitigated_util
-import metadata.fields.known as known_fields
-import metadata.fields.util as util
-import metadata.validation_result as vr
-import metadata.fields.custom.license_allowlist as allowlist_util
+import metadata.fields.field_types as field_types  # noqa: E402
+import metadata.fields.custom.cpe_prefix as cpe_prefix_util  # noqa: E402
+import metadata.fields.custom.mitigated as mitigated_util  # noqa: E402
+import metadata.fields.known as known_fields  # noqa: E402
+import metadata.fields.util as util  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
 
 
 class DependencyMetadata:

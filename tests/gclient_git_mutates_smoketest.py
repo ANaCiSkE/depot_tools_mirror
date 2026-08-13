@@ -17,8 +17,8 @@ import gclient_smoketest_base
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import subprocess2
-from testing_support.fake_repos import join, write
+import subprocess2  # noqa: E402
+from testing_support.fake_repos import join, write  # noqa: E402
 
 
 class GClientSmokeGITMutates(gclient_smoketest_base.GClientSmokeBase):
@@ -42,7 +42,7 @@ class GClientSmokeGITMutates(gclient_smoketest_base.GClientSmokeBase):
         new_deps = "vars = {'r2hash': '%s'}\n%s" % (repo_2_hash, new_deps)
         self.FAKE_REPOS._commit_git(
             "repo_1",
-            {  # pylint: disable=protected-access
+            {
                 "DEPS": new_deps,
                 "origin": "git/repo_1@3\n",
             },
@@ -100,7 +100,7 @@ class GClientSmokeGITMutates(gclient_smoketest_base.GClientSmokeBase):
         # Make a new commit object in the origin repo, to force reset to fetch.
         self.FAKE_REPOS._commit_git(
             "repo_2",
-            {  # pylint: disable=protected-access
+            {
                 "origin": "git/repo_2@3\n",
             },
         )
@@ -143,7 +143,7 @@ class GClientSmokeGITMutates(gclient_smoketest_base.GClientSmokeBase):
         repo_2_hash_old = self.FAKE_REPOS.git_hashes["repo_2"][1][0][:7]
         self.FAKE_REPOS._commit_git(
             "repo_2",
-            {  # pylint: disable=protected-access
+            {
                 "last_file": "file created in last commit",
             },
         )
@@ -152,7 +152,7 @@ class GClientSmokeGITMutates(gclient_smoketest_base.GClientSmokeBase):
         self.assertNotEqual(new_deps, cur_deps)
         self.FAKE_REPOS._commit_git(
             "repo_1",
-            {  # pylint: disable=protected-access
+            {
                 "DEPS": new_deps,
                 "origin": "git/repo_1@4\n",
             },

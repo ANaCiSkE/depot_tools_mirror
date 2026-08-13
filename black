@@ -48,5 +48,5 @@
 
 """Wrapper for stable version of black that we control."""
 
-# pylint: disable=import-error,unused-import
-import black.__main__
+import black.__main__  # noqa: F401
+

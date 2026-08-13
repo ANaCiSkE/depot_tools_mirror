@@ -13,7 +13,7 @@ import logging
 import os
 import sys
 import tempfile
-from typing import Iterable
+from typing import Iterable  # noqa: F811
 import unittest
 from unittest import mock
 import urllib.parse

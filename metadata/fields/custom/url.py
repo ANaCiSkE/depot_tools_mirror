@@ -17,9 +17,9 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.field_types as field_types
-import metadata.fields.util as util
-import metadata.validation_result as vr
+import metadata.fields.field_types as field_types  # noqa: E402
+import metadata.fields.util as util  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
 
 _PATTERN_URL_CANONICAL_REPO = re.compile(
     r"^This is the canonical (public )?repo(sitory)?\.?$", re.IGNORECASE
@@ -59,7 +59,7 @@ def validate_url(url: str) -> Optional[str]:
     """Return why the given `url` is not acceptable, else None."""
     try:
         u = urlparse(url)
-    except:
+    except:  # noqa: E722
         return f"URL '{url}' is malformed."
 
     if u.scheme not in _SUPPORTED_SCHEMES:

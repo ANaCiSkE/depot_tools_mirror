@@ -15,8 +15,7 @@ depot_tools_path = current_path.parent.parent.parent
 if str(depot_tools_path) not in sys.path:
     sys.path.insert(0, str(depot_tools_path))
 
-import infra_lib.telemetry as telemetry
-from infra_lib.telemetry import config
+import infra_lib.telemetry as telemetry  # noqa: E402
 
 
 class InitializeTest(unittest.TestCase):

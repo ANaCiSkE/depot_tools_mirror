@@ -14,9 +14,9 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.dependency_metadata as dm
-import metadata.fields.known as known_fields
-import metadata.validation_result as vr
+import metadata.dependency_metadata as dm  # noqa: E402
+import metadata.fields.known as known_fields  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
 
 
 class DependencyValidationTest(unittest.TestCase):

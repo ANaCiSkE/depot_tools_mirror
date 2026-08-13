@@ -7,7 +7,6 @@
 from io import StringIO
 import optparse
 import os
-import posixpath
 
 import shutil
 import sys

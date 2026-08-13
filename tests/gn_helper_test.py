@@ -10,8 +10,8 @@ import unittest
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import gn_helper
-from testing_support import trial_dir
+import gn_helper  # noqa: E402
+from testing_support import trial_dir  # noqa: E402
 
 
 def write(filename, content):

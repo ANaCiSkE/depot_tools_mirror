@@ -228,8 +228,7 @@ class MetricsCollector(object):
             start = time.time()
             result = func(*args, **kwargs)
             exception = None
-        # pylint: disable=bare-except
-        except:
+        except:  # noqa: E722
             exception = sys.exc_info()
         finally:
             self.add("execution_time", time.time() - start)
@@ -320,8 +319,7 @@ class MetricsCollector(object):
         try:
             yield
             exception = None
-        # pylint: disable=bare-except
-        except:
+        except:  # noqa: E722
             exception = sys.exc_info()
 
         # Print the exception before the metrics notice, so that the notice is

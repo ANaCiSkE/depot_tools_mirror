@@ -15,9 +15,9 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.field_types as field_types
-import metadata.fields.util as util
-import metadata.validation_result as vr
+import metadata.fields.field_types as field_types  # noqa: E402
+import metadata.fields.util as util  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
 
 # Pattern for backward directory navigation in paths.
 _PATTERN_PATH_BACKWARD = re.compile(r"\.\.\/")

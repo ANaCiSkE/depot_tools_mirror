@@ -77,7 +77,8 @@ class OutputManager(object):
 
     def as_formatted_string(self):
         return "\n".join(
-            l.as_padded_string(self.max_column_lengths) for l in self.lines
+            l.as_padded_string(self.max_column_lengths)
+            for l in self.lines  # noqa: E741
         )
 
 

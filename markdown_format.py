@@ -47,7 +47,7 @@ import argparse
 import difflib
 import os
 import sys
-from typing import Iterable, Optional
+from typing import Iterable
 
 import mdformat
 import setup_color

@@ -1,7 +1,6 @@
 import importlib.machinery
 import importlib.util
 import os
-import subprocess
 import sys
 import unittest
 from unittest.mock import MagicMock, patch

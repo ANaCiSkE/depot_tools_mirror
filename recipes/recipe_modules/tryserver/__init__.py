@@ -18,5 +18,5 @@ DEPS = [
   "recipe_engine/step",
 ]
 
-from .api import TryserverApi as API
-from .test_api import TryserverTestApi as TEST_API
+from .api import TryserverApi as API  # noqa: E402, F401
+from .test_api import TryserverTestApi as TEST_API  # noqa: E402, F401

@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gclient_paths_test
 import metrics_xml_format
 
-norm = lambda path: os.path.join(*path.split("/"))
+norm = lambda path: os.path.join(*path.split("/"))  # noqa: E731
 
 
 class TestBase(gclient_paths_test.TestBase):
@@ -40,7 +40,7 @@ class TestBase(gclient_paths_test.TestBase):
 class GetMetricsDirTest(TestBase):
     def testWithAbsolutePath(self):
         top = self.getcwd()
-        get = lambda path: metrics_xml_format.GetMetricsDir(
+        get = lambda path: metrics_xml_format.GetMetricsDir(  # noqa: E731
             top, os.path.join(top, norm(path))
         )
 
@@ -58,7 +58,7 @@ class GetMetricsDirTest(TestBase):
         top = self.getcwd()
         # chdir() to tools so that relative paths from tools become valid.
         self.cwd = os.path.join(self.cwd, "tools")
-        get = lambda path: metrics_xml_format.GetMetricsDir(top, path)
+        get = lambda path: metrics_xml_format.GetMetricsDir(top, path)  # noqa: E731
         self.assertTrue(get(norm("metrics/actions/abc.xml")))
         self.assertFalse(get(norm("abc.xml")))
 

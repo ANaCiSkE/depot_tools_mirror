@@ -75,7 +75,7 @@ def client(prefix):
         The format for this is
             presubmit:gerrit_host/folder/to/repo:path/to/file/
         for example,
-            presubmit:chromium-review.googlesource.com/chromium/src/:services/viz/  # pylint: disable=line-too-long
+            presubmit:chromium-review.googlesource.com/chromium/src/:services/viz/
     Returns:
         An instance of ResultSink() if the luci context is present. None,
         otherwise.

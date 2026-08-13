@@ -61,7 +61,7 @@ class Error(Exception):
     def __init__(self, msg, *args, **kwargs):
         index = getattr(threading.current_thread(), "index", 0)
         if index:
-            msg = "\n".join("%d> %s" % (index, l) for l in msg.splitlines())
+            msg = "\n".join("%d> %s" % (index, l) for l in msg.splitlines())  # noqa: E741
         super(Error, self).__init__(msg, *args, **kwargs)
 
 
@@ -168,7 +168,7 @@ def SyntaxErrorToError(filename, e):
             e.offset,
             re.sub(r"[\r\n]*$", "", e.text),
         )
-    except:
+    except:  # noqa: E722
         # Something went wrong, re-raise the original exception
         raise e
     else:
@@ -189,7 +189,7 @@ def AskForData(message):
     # Try to load the readline module, so that "elaborate line editing" features
     # such as backspace work for `raw_input` / `input`.
     try:
-        import readline
+        import readline  # noqa: F401
     except ImportError:
         # The readline module does not exist in all Python distributions, e.g.
         # on Windows. Fall back to simple input handling.
@@ -460,7 +460,7 @@ class Annotated(Wrapper):
             # Strings are immutable, requiring to keep a lock for the whole
             # dictionary otherwise. Using an array is faster than using a dummy
             # object.
-            if not index in self.__output_buffers:
+            if index not in self.__output_buffers:
                 obj = self.__output_buffers[index] = [b""]
             else:
                 obj = self.__output_buffers[index]
@@ -494,7 +494,7 @@ class Annotated(Wrapper):
             indexes = (getattr(t, "index", None) for t in threading.enumerate())
             indexes = filter(None, indexes)
             for index in self.__output_buffers:
-                if not index in indexes:
+                if index not in indexes:
                     orphans.append((index, self.__output_buffers[index][0]))
             for orphan in orphans:
                 del self.__output_buffers[orphan[0]]
@@ -642,7 +642,7 @@ def CheckCallAndFilter(
         sys.stdout.flush()
         stdout_write = getattr(sys.stdout, "buffer", sys.stdout).write
     else:
-        stdout_write = lambda _: None
+        stdout_write = lambda _: None  # noqa: E731
 
     sleep_interval = RETRY_INITIAL_SLEEP
     run_cwd = kwargs.get("cwd", os.getcwd())
@@ -1154,7 +1154,7 @@ class ExecutionQueue(object):
                         'gclient is confused, "%s" is already in "%s"'
                         % (t.item.name, ", ".join(self.ran))
                     )
-                if not t.item.name in self.ran:
+                if t.item.name not in self.ran:
                     self.ran.append(t.item.name)
 
     def _run_one_task(self, task_item, args, kwargs):
@@ -1382,9 +1382,9 @@ def UpgradeToHttps(url):
 
 def ParseCodereviewSettingsContent(content):
     """Process a codereview.settings file properly."""
-    lines = (l for l in content.splitlines() if not l.strip().startswith("#"))
+    lines = (l for l in content.splitlines() if not l.strip().startswith("#"))  # noqa: E741
     try:
-        keyvals = dict([x.strip() for x in l.split(":", 1)] for l in lines if l)
+        keyvals = dict([x.strip() for x in l.split(":", 1)] for l in lines if l)  # noqa: E741
     except ValueError:
         raise Error(
             "Failed to process settings, please fix. Content:\n\n%s" % content
@@ -1415,9 +1415,8 @@ def NumLocalCpus():
             import multiprocessing
 
             return multiprocessing.cpu_count()
-        except NotImplementedError:  # pylint: disable=bare-except
+        except NotImplementedError:
             # (UNIX) Query 'os.sysconf'.
-            # pylint: disable=no-member
             if (
                 hasattr(os, "sysconf")
                 and "SC_NPROCESSORS_ONLN" in os.sysconf_names

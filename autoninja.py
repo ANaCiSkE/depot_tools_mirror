@@ -55,7 +55,6 @@ _LOGS_STORAGE_BUCKET = "chrome-build-logs"
 # escaping command lines so that they can be copied and pasted into a cmd
 # window.
 #
-# pylint: disable=line-too-long
 # [1] https://learn.microsoft.com/en-us/archive/blogs/twistylittlepassagesallalike/everyone-quotes-command-line-arguments-the-wrong-way # noqa
 # [2] https://web.archive.org/web/20150815000000*/https://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/set.mspx # noqa
 _UNSAFE_FOR_CMD = set("^<>&|()%")
@@ -73,7 +72,7 @@ def _import_from_path(module_name, file_path):
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
-    except:
+    except:  # noqa: E722
         raise ImportError(
             'Could not import module "{}" from "{}"'.format(
                 module_name, file_path
@@ -176,7 +175,7 @@ def _get_use_siso_default(output_dir):
         with open(dot_gn) as f:
             dot_gn_lines = f.readlines()
         p = re.compile(r"(^|\s*)(use_siso)\s*=\s*(true)\s*$")
-        if any(p.match(l) for l in dot_gn_lines):
+        if any(p.match(l) for l in dot_gn_lines):  # noqa: E741
             return True
 
     # Checking `build_with_chromium` var in //build/config/gclient_args.gni

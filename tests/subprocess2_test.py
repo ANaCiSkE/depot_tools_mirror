@@ -12,8 +12,8 @@ from unittest import mock
 DEPOT_TOOLS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS)
 
-import subprocess
-import subprocess2
+import subprocess  # noqa: E402
+import subprocess2  # noqa: E402
 
 TEST_FILENAME = "subprocess2_test_script.py"
 
@@ -99,10 +99,10 @@ def _run_test(with_subprocess=True):
     - With subprocess and subprocess2.
     """
     subps = (subprocess2, subprocess) if with_subprocess else (subprocess2,)
-    no_op = lambda s: s
-    to_bytes = lambda s: s.encode()
-    to_cr_bytes = lambda s: s.replace("\n", "\r").encode()
-    to_crlf_bytes = lambda s: s.replace("\n", "\r\n").encode()
+    no_op = lambda s: s  # noqa: E731
+    to_bytes = lambda s: s.encode()  # noqa: E731
+    to_cr_bytes = lambda s: s.replace("\n", "\r").encode()  # noqa: E731
+    to_crlf_bytes = lambda s: s.replace("\n", "\r\n").encode()  # noqa: E731
 
     def wrapper(test):
         def inner(self):
@@ -141,7 +141,6 @@ class SmokeTests(unittest.TestCase):
     def test_check_output_no_stdout(self):
         for subp in (subprocess, subprocess2):
             with self.assertRaises(ValueError):
-                # pylint: disable=unexpected-keyword-arg
                 subp.check_output(TEST_COMMAND, stdout=subp.PIPE)
 
     def test_print_exception(self):

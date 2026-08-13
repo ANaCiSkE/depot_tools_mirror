@@ -82,7 +82,6 @@
 __version__ = "0.7"
 
 import copy
-import hashlib
 import json
 import logging
 import optparse
@@ -98,8 +97,6 @@ import tempfile
 import time
 import urllib.parse
 import zipfile
-
-from collections.abc import Collection, Mapping, Sequence
 
 import detect_host_arch
 import download_from_google_storage
@@ -120,9 +117,6 @@ import upload_to_google_storage_first_class
 import from_third_party
 
 Progress = from_third_party.import_module("repo.progress").Progress
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 DEPOT_TOOLS_DIR = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 
@@ -379,7 +373,6 @@ class DependencySettings(object):
     def root(self):
         """Returns the root node, a GClient object."""
         if not self.parent:
-            # This line is to signal pylint that it could be a GClient instance.
             return self or GClient(None, None)
         return self.parent.root
 
@@ -1259,7 +1252,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
 
     def add_dependencies_and_close(self, deps_to_add, hooks, hooks_cwd=None):
         """Adds the dependencies, hooks and mark the parsing as done."""
-        if hooks_cwd == None:
+        if hooks_cwd == None:  # noqa: E711
             hooks_cwd = self.root.root_dir
 
         for dep in deps_to_add:
@@ -1330,7 +1323,6 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         return None
 
     # Arguments number differs from overridden method
-    # pylint: disable=arguments-differ
     def run(
         self,
         revision_overrides,  # type: Mapping[str, str]
@@ -1643,7 +1635,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         return result
 
     def RunHooksRecursively(self, options, progress):
-        assert self.hooks_ran == False
+        assert self.hooks_ran == False  # noqa: E712
         self._hooks_ran = True
         hooks = self.GetHooks(options)
         if progress:
@@ -2369,7 +2361,7 @@ it or fix the checkout.
             return revision_overrides
         solutions_names = [s.name for s in self.dependencies]
         for index, revision in enumerate(self._options.revisions):
-            if not "@" in revision:
+            if "@" not in revision:
                 # Support for --revision 123
                 revision = "%s@%s" % (solutions_names[index], revision)
             name, rev = revision.split("@", 1)
@@ -3042,7 +3034,7 @@ class GcsDependency(Dependency):
         )
 
     @property
-    def gcs_file_name(self):
+    def gcs_file_name(self):  # noqa: F811
         # Replace forward slashes
         return self.object_name.replace("/", "_")
 
@@ -3812,7 +3804,7 @@ def CMDgitmodules(parser, args):
     ls = gclient_eval.Parse(deps_content, options.deps_file, None, None)
 
     prefix_length = 0
-    if not "use_relative_paths" in ls or ls["use_relative_paths"] != True:
+    if "use_relative_paths" not in ls or ls["use_relative_paths"] != True:  # noqa: E712
         delta_path = os.path.relpath(deps_dir, os.path.abspath(gclient_path))
         if delta_path:
             prefix_length = len(delta_path.replace(os.path.sep, "/")) + 1
@@ -3838,8 +3830,8 @@ def CMDgitmodules(parser, args):
     if os.path.exists(options.output_gitmodules):
         dot_git_pattern = re.compile(r"^(\s*)url(\s*)=.*\.git$")
         with open(options.output_gitmodules) as f:
-            strip_git_suffix = not any(dot_git_pattern.match(l) for l in f)
-            set_recursedeps = any("gclient-recursedeps" in l for l in f)
+            strip_git_suffix = not any(dot_git_pattern.match(l) for l in f)  # noqa: E741
+            set_recursedeps = any("gclient-recursedeps" in l for l in f)  # noqa: E741
 
     recursedeps = ls.get("recursedeps")
     with open(options.output_gitmodules, "w", newline="") as f:
@@ -5120,8 +5112,8 @@ def CMDsetdep(parser, args):
                     )
                 git_module_name = name
                 if (
-                    not "use_relative_paths" in local_scope
-                    or local_scope["use_relative_paths"] != True
+                    "use_relative_paths" not in local_scope
+                    or local_scope["use_relative_paths"] != True  # noqa: E712
                 ):
                     deps_dir = os.path.dirname(
                         os.path.abspath(options.deps_file)

@@ -429,7 +429,7 @@ def git_config_if_not_set(key, value):
   try:
     git("config", "--global", key)
     should_unset = False
-  except SubprocessFailed as e:
+  except SubprocessFailed:
     git("config", "--global", key, value)
   try:
     yield
@@ -525,7 +525,7 @@ def create_manifest():
   fd, fname = tempfile.mkstemp()
   os.close(fd)
   try:
-    revinfo = call_gclient(
+    revinfo = call_gclient(  # noqa: F841
       "revinfo", "-a", "--ignore-dep-type", "cipd", "--output-json", fname
     )
     with open(fname) as f:
@@ -895,7 +895,7 @@ def parse_got_revision(manifest, got_revision_mapping):
     dir_name = "%s/" % dir_name.rstrip("/")
     if dir_name not in manifest:
       continue
-    info = manifest[dir_name]
+    info = manifest[dir_name]  # noqa: F841
     revision = git("rev-parse", "HEAD", cwd=dir_name).strip()
     commit_position = get_commit_position(dir_name)
 
@@ -1239,7 +1239,7 @@ def checkout(options, git_slns, specs, revisions, step_text):
   try:
     protocol = git("config", "--get", "protocol.version")
     print("Using git protocol version %s" % protocol)
-  except SubprocessFailed as e:
+  except SubprocessFailed:
     print("git protocol version is not specified.")
 
   first_sln = git_slns[0]["name"]

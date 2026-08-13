@@ -14,7 +14,7 @@ import urllib.error
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import ninjalog_uploader
+import ninjalog_uploader  # noqa: E402
 
 
 class NinjalogUploaderTest(unittest.TestCase):

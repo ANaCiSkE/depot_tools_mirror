@@ -14,9 +14,9 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import gclient_utils
-import metadata.parse
-import metadata.fields.known
+import gclient_utils  # noqa: E402
+import metadata.parse  # noqa: E402
+import metadata.fields.known  # noqa: E402
 
 
 class ParseTest(unittest.TestCase):
@@ -243,7 +243,7 @@ lowlist.py). Licenses not allowlisted: 'Custom license'.""",
 
         dm = all_metadata[0]
         field_spec = metadata.fields.known
-        expected_line_numbers = {
+        expected_line_numbers = {  # noqa: F841
             field_spec.NAME: [1],
             field_spec.SHORT_NAME: [2],
             field_spec.URL: [3, 4],

@@ -21,7 +21,7 @@ def RunSteps(api):
   soln.name = "src"
   soln.url = "https://chromium.googlesource.com/chromium/src.git"
   try:
-    bot_update_step = api.bot_update.ensure_checkout(
+    bot_update_step = api.bot_update.ensure_checkout(  # noqa: F841
       patch=True, gclient_config=src_cfg
     )
   except api.step.StepFailure:

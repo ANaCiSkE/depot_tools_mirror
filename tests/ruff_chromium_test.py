@@ -184,7 +184,12 @@ class TestShouldUseRuffRouting(unittest.TestCase):
         test_file = os.path.join(symlink_sub_dir, "foo.py")
         self.assertFalse(should_use_ruff(test_file, root_dir=symlink_sub_dir))
         self.assertFalse(has_yapf_config(test_file, root_dir=symlink_sub_dir))
-        self.assertEqual("pep8", depot_tools_ruff.get_yapf_style(test_file, root_dir=symlink_sub_dir))
+        self.assertEqual(
+            "pep8",
+            depot_tools_ruff.get_yapf_style(
+                test_file, root_dir=symlink_sub_dir
+            ),
+        )
 
     def test_cache_key_depends_on_root_dir(self):
         self.write_file("a/ruff.toml", "")

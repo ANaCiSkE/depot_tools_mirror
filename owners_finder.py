@@ -169,7 +169,7 @@ class OwnersFinder(object):
         if (
             owner in self.selected_owners
             or owner in self.deselected_owners
-            or not (owner in self.owners_queue)
+            or owner not in self.owners_queue
         ):
             return
         self.writeln("Selected: " + owner)
@@ -188,7 +188,7 @@ class OwnersFinder(object):
         if (
             owner in self.selected_owners
             or owner in self.deselected_owners
-            or not (owner in self.owners_queue)
+            or owner not in self.owners_queue
         ):
             return
         self.writeln("Deselected: " + owner)

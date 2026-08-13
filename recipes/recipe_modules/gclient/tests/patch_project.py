@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 from recipe_engine import post_process
-from recipe_engine import recipe_api
 
 
 DEPS = [

@@ -9,7 +9,6 @@ you sync Chrome. This script finds and runs the executable.
 """
 
 import gclient_paths
-import glob
 import os
 import subprocess
 import sys

@@ -7,16 +7,12 @@ import collections
 from io import StringIO
 import logging
 import string
-import sys
 import tokenize
 
 import gclient_utils
 import from_third_party
 
 schema = from_third_party.import_module("schema")
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 # git_dependencies migration states. Used within the DEPS file to indicate
 # the current migration state.
@@ -910,7 +906,7 @@ def AddVar(gclient_dict, var_name, value):
     node = gclient_dict.GetNode("vars")
     if node is None:
         raise ValueError(
-            "The vars dict has no formatting information." % var_name
+            "The vars dict has no formatting information." % var_name  # noqa: F507
         )
     line = node.lineno + 1
 

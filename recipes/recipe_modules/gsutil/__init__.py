@@ -11,4 +11,4 @@ DEPS = [
 
 ENV_PROPERTIES = properties.EnvProperties
 
-from .api import GSUtilApi as API
+from .api import GSUtilApi as API  # noqa: E402, F401

@@ -7,11 +7,9 @@
 import optparse
 import os
 import sys
-import time
 
 if sys.platform == "win32":
     # Annoying, make sure the output is not translated on Windows.
-    # pylint: disable=no-member,import-error
     import msvcrt
 
     msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)

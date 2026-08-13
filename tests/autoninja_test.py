@@ -15,8 +15,8 @@ from unittest import mock
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import autoninja
-from testing_support import trial_dir
+import autoninja  # noqa: E402
+from testing_support import trial_dir  # noqa: E402
 
 
 def write(filename, content):

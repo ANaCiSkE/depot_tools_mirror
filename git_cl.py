@@ -11,9 +11,7 @@ from __future__ import annotations
 import base64
 import collections
 import datetime
-import enum
 import fnmatch
-import functools
 import itertools
 import json
 import logging
@@ -80,11 +78,7 @@ import from_third_party
 
 colorama = from_third_party.import_module("colorama")
 
-
 __version__ = "2.0"
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 # Traces for git push will be stored in a traces directory inside the
 # depot_tools checkout.
@@ -673,7 +667,7 @@ def _print_tryjobs(options, builds):
             }
         )
 
-    sort_key = lambda b: (b["name"], b["id"])
+    sort_key = lambda b: (b["name"], b["id"])  # noqa: E731
 
     def print_builds(title, builds, fmt=None, color=None):
         """Pop matching builds from `builds` dict and print them."""
@@ -682,9 +676,9 @@ def _print_tryjobs(options, builds):
 
         fmt = fmt or "{name} https://ci.chromium.org/b/{id}"
         if not options.color or color is None:
-            colorize = lambda x: x
+            colorize = lambda x: x  # noqa: E731
         else:
-            colorize = lambda x: "%s%s%s" % (color, x, Fore.RESET)
+            colorize = lambda x: "%s%s%s" % (color, x, Fore.RESET)  # noqa: E731
 
         print(colorize(title))
         for b in sorted(builds, key=sort_key):
@@ -1311,7 +1305,7 @@ def ParseIssueNumberArgument(arg):
 def _create_description_from_log(args):
     """Pulls out the commit log to use as a base for the CL description."""
     log_args = []
-    if len(args) == 1 and args[0] == None:
+    if len(args) == 1 and args[0] == None:  # noqa: E711
         # Handle the case where None is passed as the branch.
         return ""
     if len(args) == 1 and not args[0].endswith("."):
@@ -1403,7 +1397,7 @@ class ChangeDescription(object):
                 self.append_footer("Fixed: %s" % ", ".join(values))
 
     @property  # www.logilab.org/ticket/89786
-    def description(self):  # pylint: disable=method-hidden
+    def description(self):
         return "\n".join(self._description_lines)
 
     def set_description(self, desc):
@@ -1453,7 +1447,9 @@ class ChangeDescription(object):
         regexp = re.compile(self.R_LINE)
         matches = [regexp.match(line) for line in self._description_lines]
         new_desc = [
-            l for i, l in enumerate(self._description_lines) if not matches[i]
+            line
+            for i, line in enumerate(self._description_lines)
+            if not matches[i]
         ]
         self.set_description(new_desc)
 
@@ -1497,7 +1493,7 @@ class ChangeDescription(object):
         bug_regexp = re.compile(self.BUG_LINE)
         fixed_regexp = re.compile(self.FIXED_LINE)
         prefix = settings.GetBugPrefix()
-        has_issue = lambda l: bug_regexp.match(l) or fixed_regexp.match(l)
+        has_issue = lambda l: bug_regexp.match(l) or fixed_regexp.match(l)  # noqa: E731, E741
 
         if not any((has_issue(line) for line in self._description_lines)):
             self.append_footer("Bug: %s" % prefix)
@@ -2191,7 +2187,7 @@ class Changelist(object):
         if options.commit_description:
             description = options.commit_description
             if description == "-":
-                description = "\n".join(l.rstrip() for l in sys.stdin)
+                description = "\n".join(l.rstrip() for l in sys.stdin)  # noqa: E741
             elif description == "+":
                 description = _create_description_from_log(git_diff_args)
         elif self.GetIssue() and options.squash:
@@ -4501,10 +4497,10 @@ class _GitCookiesChecker(object):
             print("No Git/Gerrit credentials found.")
             return
         lengths = [max(map(len, (row[i] for row in hosts))) for i in range(3)]
-        header = [("Host", "User", "Which file"), ["=" * l for l in lengths]]
+        header = [("Host", "User", "Which file"), ["=" * l for l in lengths]]  # noqa: E741
         print("Your .gitcookies have credentials for these hosts:")
         for row in header + hosts:
-            print("\t".join((("%%+%ds" % l) % s) for l, s in zip(lengths, row)))
+            print("\t".join((("%%+%ds" % l) % s) for l, s in zip(lengths, row)))  # noqa: E741
 
     @staticmethod
     def _parse_identity(identity):
@@ -5382,7 +5378,7 @@ def colorize_CMDstatus_doc():
         return line
 
     lines = CMDstatus.__doc__.splitlines()
-    CMDstatus.__doc__ = "\n".join(colorize_line(l) for l in lines)
+    CMDstatus.__doc__ = "\n".join(colorize_line(l) for l in lines)  # noqa: E741
 
 
 def write_json(path, contents):
@@ -5894,7 +5890,8 @@ def CMDcomments(parser, args):
                 comment.sender,
                 Fore.RESET,
                 "\n".join(
-                    "  " + l for l in comment.message.strip().splitlines()
+                    "  " + l
+                    for l in comment.message.strip().splitlines()  # noqa: E741
                 ),
             )
         )
@@ -5964,7 +5961,7 @@ def CMDdescription(parser, args):
     if options.new_description:
         text = options.new_description
         if text == "-":
-            text = "\n".join(l.rstrip() for l in sys.stdin)
+            text = "\n".join(l.rstrip() for l in sys.stdin)  # noqa: E741
         elif text == "+":
             base_branch = cl.GetCommonAncestorWithUpstream()
             text = _create_description_from_log([base_branch])
@@ -6040,7 +6037,6 @@ def CMDlint(parser, args):
         return 1
 
     # Access to a protected member _XX of a client class
-    # pylint: disable=protected-access
     try:
         import cpplint
         import cpplint_chromium
@@ -6147,7 +6143,7 @@ def CMDpresubmit(parser, args):
 
     start = time.time()
     try:
-        if not "PRESUBMIT_SKIP_NETWORK" in os.environ and cl.GetIssue():
+        if "PRESUBMIT_SKIP_NETWORK" not in os.environ and cl.GetIssue():
             description = cl.FetchDescription()
         else:
             description = _create_description_from_log([base_branch])
@@ -6255,9 +6251,7 @@ def GetTargetRef(remote, remote_branch, target_branch) -> Optional[str]:
             if not match:
                 # This is a branch path but not one we recognize; use as-is.
                 remote_branch = target_branch
-    # pylint: disable=consider-using-get
     elif remote_branch in REFS_THAT_ALIAS_TO_OTHER_REFS:
-        # pylint: enable=consider-using-get
         # Handle the refs that need to land in different refs.
         remote_branch = REFS_THAT_ALIAS_TO_OTHER_REFS[remote_branch]
 
@@ -6278,7 +6272,7 @@ def GetTargetRef(remote, remote_branch, target_branch) -> Optional[str]:
     return remote_branch
 
 
-def cleanup_list(l):
+def cleanup_list(l):  # noqa: E741
     """Fixes a list so that comma separated items are put as individual items.
 
     So that "--reviewers joe@c,john@c --reviewers joa@c" results in
@@ -8684,7 +8678,7 @@ FormatterFunction = Callable[
 ]
 
 
-def _SplitDiffsByFile(diff_string: str) -> Dict[str, str]:
+def _SplitDiffsByFile(diff_string: str) -> Dict[str, str]:  # noqa: F821
     """Split a given diff string into per-file patches.
 
     This function expects that the diff_string was generated with a prefix.
@@ -8720,7 +8714,7 @@ def _SplitDiffsByFile(diff_string: str) -> Dict[str, str]:
 
 def _FindFilesToFormat(
     opts: optparse.Values, files: list[str] | None, upstream_commit: str | None
-) -> Tuple[List[str], Dict[str, str] | None]:
+) -> Tuple[List[str], Dict[str, str] | None]:  # noqa: F821
     """Returns a list of files to format and the diffs.
 
     If opts.full, returns None for the diffs.
@@ -9067,7 +9061,7 @@ class OptionParser(optparse.OptionParser):
     ) -> tuple[optparse.Values, list[str]]: ...
 
     @typing.overload
-    def parse_args(  # pylint: disable=signature-differs
+    def parse_args(
         self, args: Sequence[AnyStr], values: Optional[optparse.Values] = None
     ) -> tuple[optparse.Values, list[AnyStr]]: ...
 

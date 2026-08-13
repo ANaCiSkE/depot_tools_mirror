@@ -56,7 +56,7 @@ def _gn_lines(output_dir, path):
                         )
                 else:
                     if os.path.isabs(raw_import_path):
-                        raise Execption(
+                        raise Execption(  # noqa: F821
                             'Absolute path "%s" should start with "/" in GN'
                             % raw_import_path
                         )

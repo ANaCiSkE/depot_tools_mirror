@@ -12,9 +12,7 @@ import os
 import sys
 import unittest
 
-from unittest import mock
 import gclient_smoketest_base
-import subprocess2
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

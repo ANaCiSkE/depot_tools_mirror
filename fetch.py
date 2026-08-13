@@ -261,7 +261,7 @@ def handle_args(argv):
     args = parser.parse_args(argv[1:])
 
     # props passed to config must be of the format --<name>=<value>
-    looks_like_arg = lambda arg: arg.startswith("--") and arg.count("=") == 1
+    looks_like_arg = lambda arg: arg.startswith("--") and arg.count("=") == 1  # noqa: E731
     bad_param = [x for x in args.props if not looks_like_arg(x)]
     if bad_param:
         print("Error: Got bad arguments %s" % bad_param)

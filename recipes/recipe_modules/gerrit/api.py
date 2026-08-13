@@ -273,7 +273,7 @@ class GerritApi(recipe_api.RecipeApi):
           https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
     """
     if not step_test_data:
-      step_test_data = lambda: self.test_api.get_one_change_response_data()
+      step_test_data = lambda: self.test_api.get_one_change_response_data()  # noqa: E731
 
     step_name = kwargs.pop("name", "changes")
 
@@ -358,7 +358,7 @@ class GerritApi(recipe_api.RecipeApi):
       args.append("--verbose")
 
     if not step_test_data:
-      step_test_data = lambda: self.m.raw_io.test_api.stream_output_text(
+      step_test_data = lambda: self.m.raw_io.test_api.stream_output_text(  # noqa: E731
         "example content"
       )
 
@@ -405,7 +405,7 @@ class GerritApi(recipe_api.RecipeApi):
     if verbose:
       args.append("--verbose")
     if not step_test_data:
-      step_test_data = lambda: self.test_api.get_related_changes_response_data()
+      step_test_data = lambda: self.test_api.get_related_changes_response_data()  # noqa: E731
 
     return self(
       "relatedchanges", args, step_test_data=step_test_data
@@ -434,7 +434,7 @@ class GerritApi(recipe_api.RecipeApi):
     if verbose:
       args.append("--verbose")
     if not step_test_data:
-      step_test_data = lambda: self.test_api.get_one_change_response_data(
+      step_test_data = lambda: self.test_api.get_one_change_response_data(  # noqa: E731
         status="ABANDONED", _number=str(change)
       )
 
@@ -467,7 +467,7 @@ class GerritApi(recipe_api.RecipeApi):
     if verbose:
       args.append("--verbose")
     if not step_test_data:
-      step_test_data = lambda: self.test_api.get_one_change_response_data(
+      step_test_data = lambda: self.test_api.get_one_change_response_data(  # noqa: E731
         status="NEW", _number=str(change)
       )
 
@@ -557,7 +557,7 @@ class GerritApi(recipe_api.RecipeApi):
     if verbose:
       args.append("--verbose")
     if not step_test_data:
-      step_test_data = lambda: self.m.json.test_api.output({})
+      step_test_data = lambda: self.m.json.test_api.output({})  # noqa: E731
     return self(
       step_name or "add message",
       args,
@@ -592,7 +592,7 @@ class GerritApi(recipe_api.RecipeApi):
       args.append("--verbose")
 
     if not step_test_data:
-      step_test_data = lambda: self.test_api.get_one_change_response_data(
+      step_test_data = lambda: self.test_api.get_one_change_response_data(  # noqa: E731
         branch=to_branch
       )
 

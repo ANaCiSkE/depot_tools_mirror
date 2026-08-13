@@ -13,9 +13,9 @@ DEPS = [
   "tryserver",
 ]
 
-from .config import config_ctx as CONFIG_CTX
+from .config import config_ctx as CONFIG_CTX  # noqa: E402
 
-from .api import GclientApi as API
-from .test_api import GclientTestApi as TEST_API
+from .api import GclientApi as API  # noqa: E402
+from .test_api import GclientTestApi as TEST_API  # noqa: E402
 
 __all__ = ["CONFIG_CTX", "API", "TEST_API"]

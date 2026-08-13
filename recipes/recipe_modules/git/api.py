@@ -423,7 +423,7 @@ class GitApi(recipe_api.RecipeApi):
     """Find and return the timestamp of the given commit."""
     step_test_data = None
     if test_data is not None:
-      step_test_data = lambda: self.m.raw_io.test_api.stream_output(test_data)
+      step_test_data = lambda: self.m.raw_io.test_api.stream_output(test_data)  # noqa: E731
     return (
       self(
         "show",
@@ -572,7 +572,7 @@ class GitApi(recipe_api.RecipeApi):
           stdout=self.m.raw_io.output_text(add_output_log=True),
           step_test_data=step_test_data,
         )
-    return [l.strip() for l in step_result.stdout.strip().splitlines()]
+    return [l.strip() for l in step_result.stdout.strip().splitlines()]  # noqa: E741
 
   def ls_remote(self, url, ref, name=None, **kwargs):
     """Request the head revision for a given ref using ls-remote. Raise a

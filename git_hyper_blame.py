@@ -420,7 +420,7 @@ def main(args, outbuf):
     for c in ignored_list:
         try:
             ignored.add(git_common.hash_one(c))
-        except subprocess2.CalledProcessError as e:
+        except subprocess2.CalledProcessError:
             # Custom warning string (the message from git-rev-parse is
             # inappropriate).
             sys.stderr.write("warning: unknown revision '%s'.\n" % c)

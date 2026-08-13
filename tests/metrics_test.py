@@ -12,12 +12,9 @@ from unittest import mock
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import metrics
-import metrics_utils
-import utils
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
+import metrics  # noqa: E402
+import metrics_utils  # noqa: E402
+import utils  # noqa: E402
 
 
 class TimeMock(object):

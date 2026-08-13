@@ -7,4 +7,4 @@ import sys
 import time
 
 time.sleep(6)
-print(f"I ran too long without writing output!!", file=sys.stderr)
+print("I ran too long without writing output!!", file=sys.stderr)

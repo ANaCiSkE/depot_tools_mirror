@@ -17,9 +17,6 @@ from dataclasses import dataclass
 
 import subprocess2
 
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
-
 # This is what most GAE apps require for authentication.
 OAUTH_SCOPE_EMAIL = "https://www.googleapis.com/auth/userinfo.email"
 # Gerrit and Git on *.googlesource.com require this scope.
@@ -378,7 +375,7 @@ class GerritAuthenticator(object):
         )
         return None
 
-    def _parse_creds_helper_out(self, out_bytes: str) -> Dict[str, str]:
+    def _parse_creds_helper_out(self, out_bytes: str) -> Dict[str, str]:  # noqa: F821
         """Parse credential helper's output to a dictionary.
 
         Note, this function doesn't handle arrays (e.g. key[]=value).

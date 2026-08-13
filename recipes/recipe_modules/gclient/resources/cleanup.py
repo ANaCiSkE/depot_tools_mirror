@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import os, sys
+import os
+import sys
 
 build_path = sys.argv[1]
 if os.path.exists(build_path):

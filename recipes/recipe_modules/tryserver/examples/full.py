@@ -15,7 +15,7 @@ DEPS = [
   "tryserver",
 ]
 
-from PB.go.chromium.org.luci.buildbucket.proto.common import GerritChange
+from PB.go.chromium.org.luci.buildbucket.proto.common import GerritChange  # noqa: E402
 
 
 def RunSteps(api):

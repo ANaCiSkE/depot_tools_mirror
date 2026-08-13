@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 from recipe_engine import post_process
-from recipe_engine import recipe_api
 
 
 DEPS = [
@@ -19,10 +18,9 @@ DEPS = [
   "recipe_engine/runtime",
 ]
 
-from recipe_engine import engine_types
 
-from RECIPE_MODULES.depot_tools import gclient
-from PB.go.chromium.org.luci.buildbucket.proto.build import Build
+from RECIPE_MODULES.depot_tools import gclient  # noqa: E402
+from PB.go.chromium.org.luci.buildbucket.proto.build import Build  # noqa: E402
 
 
 def RunSteps(api):

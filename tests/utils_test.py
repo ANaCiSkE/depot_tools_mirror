@@ -14,8 +14,8 @@ from unittest import mock
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-from testing_support import coverage_utils
-import utils
+from testing_support import coverage_utils  # noqa: E402
+import utils  # noqa: E402
 
 
 class GitCacheTest(unittest.TestCase):
@@ -36,7 +36,7 @@ class GitCacheTest(unittest.TestCase):
 
     @mock.patch("subprocess.check_output")
     @mock.patch("os.path.getmtime")
-    def testVersionWithNoGit(self, mock_subprocess, mock_getmtime):
+    def testVersionWithNoGit(self, mock_subprocess, mock_getmtime):  # noqa: F811
         mock_subprocess.side_effect = Exception
         mock_getmtime.side_effect = Exception
         version = utils.depot_tools_version()

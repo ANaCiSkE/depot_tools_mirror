@@ -13,7 +13,7 @@ from unittest import mock
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-from testing_support.presubmit_canned_checks_test_mocks import (
+from testing_support.presubmit_canned_checks_test_mocks import (  # noqa: E402
     MockFile,
     MockAffectedFile,
     MockInputApi,
@@ -21,11 +21,8 @@ from testing_support.presubmit_canned_checks_test_mocks import (
     MockChange,
 )
 
-import presubmit_canned_checks
-import run_alint
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
+import presubmit_canned_checks  # noqa: E402
+import run_alint  # noqa: E402
 
 
 class InclusiveLanguageCheckTest(unittest.TestCase):
@@ -1327,7 +1324,7 @@ class CheckPatchFormattedTest(unittest.TestCase):
         self.input_api.files = [file1, file2]
 
         # Filter to only include python files
-        file_filter = lambda f: f.LocalPath().endswith(".py")
+        file_filter = lambda f: f.LocalPath().endswith(".py")  # noqa: E731
 
         presubmit_canned_checks.CheckPatchFormatted(
             self.input_api, MockOutputApi(), file_filter=file_filter

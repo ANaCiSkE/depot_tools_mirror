@@ -113,7 +113,7 @@ class MockInputApi(object):
         self.os_path.exists = lambda x: x in f_list
 
     def AffectedFiles(self, file_filter=None, include_deletes=True):
-        for file in self.files:  # pylint: disable=redefined-builtin
+        for file in self.files:
             if file_filter and not file_filter(file):
                 continue
             if not include_deletes and file.Action() == "D":
@@ -125,7 +125,7 @@ class MockInputApi(object):
 
     def FilterSourceFile(
         self,
-        file,  # pylint: disable=redefined-builtin
+        file,
         files_to_check=(),
         files_to_skip=(),
     ):
@@ -153,7 +153,7 @@ class MockInputApi(object):
         return found_in_files_to_check
 
     def LocalPaths(self):
-        return [file.LocalPath() for file in self.files]  # pylint: disable=redefined-builtin
+        return [file.LocalPath() for file in self.files]
 
     def PresubmitLocalPath(self):
         return self.presubmit_local_path
@@ -266,7 +266,8 @@ class MockFile(object):
         self._local_path = local_path
         self._new_contents = new_contents
         self._changed_contents = [
-            (i + 1, l) for i, l in enumerate(new_contents)
+            (i + 1, l)
+            for i, l in enumerate(new_contents)  # noqa: E741
         ]
         self._action = action
         if scm_diff:
@@ -276,7 +277,7 @@ class MockFile(object):
                 local_path,
                 len(new_contents),
             )
-            for l in new_contents:
+            for l in new_contents:  # noqa: E741
                 self._scm_diff += "+%s\n" % l
         self._old_contents = old_contents
 

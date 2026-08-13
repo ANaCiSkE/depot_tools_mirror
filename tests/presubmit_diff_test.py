@@ -147,8 +147,6 @@ Binary files a/deleted_binary and /dev/null differ
             {"deleted_binary": expected_diff},
         )
 
-    # pylint: disable=line-too-long
-
     def test_create_diffs_with_modified_files(self):
         expected_diff = """diff --git a/modified.txt b/modified.txt
 index a7dd0b00..12d68703 100644

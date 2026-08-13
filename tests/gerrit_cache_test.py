@@ -13,8 +13,8 @@ import unittest
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import gerrit_cache
-import unittest.mock as mock
+import gerrit_cache  # noqa: E402
+import unittest.mock as mock  # noqa: E402
 
 
 class AtomicFileWriterTest(unittest.TestCase):

@@ -10,5 +10,5 @@ DEPS = [
   "recipe_engine/step",
 ]
 
-from .api import GitApi as API
-from .test_api import GitTestApi as TEST_API
+from .api import GitApi as API  # noqa: E402, F401
+from .test_api import GitTestApi as TEST_API  # noqa: E402, F401

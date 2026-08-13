@@ -54,7 +54,6 @@ def _bootstrap_concurrency():
 GSUTIL_CP_SEMAPHORE = threading.Semaphore(_bootstrap_concurrency())
 
 try:
-    # pylint: disable=undefined-variable
     WinErr = WindowsError
 except NameError:
 
@@ -257,8 +256,7 @@ class Mirror(object):
 
     def Rename(self, src, dst):
         # This is somehow racy on Windows.
-        # Catching OSError because WindowsError isn't portable and
-        # pylint complains.
+        # Catching OSError because WindowsError isn't portable.
         gclient_utils.exponential_backoff_retry(
             lambda: os.rename(src, dst),
             excs=(OSError,),

@@ -13,11 +13,11 @@ from unittest import mock
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-from testing_support import git_test_utils
+from testing_support import git_test_utils  # noqa: E402
 
-import git_squash_branch
-import git_common
-import subprocess2
+import git_squash_branch  # noqa: E402
+import git_common  # noqa: E402
+import subprocess2  # noqa: E402
 
 git_common.TEST_MODE = True
 

@@ -11,12 +11,11 @@ possible.
 It is intended to used strictly outside of the chroot.
 """
 
-import enum
 import os
 from pathlib import Path
 import subprocess
 import sys
-from typing import List, NamedTuple, Optional, Tuple
+from typing import NamedTuple, Optional
 
 # Min version of Python that we *want*.  We warn for older versions.
 MIN_PYTHON_VER_SOFT = (3, 11)

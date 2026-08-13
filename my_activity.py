@@ -53,7 +53,7 @@ import gclient_utils
 import gerrit_util
 
 try:
-    import dateutil  # pylint: disable=import-error
+    import dateutil
     import dateutil.parser
     from dateutil.relativedelta import relativedelta
 except ImportError:
@@ -776,7 +776,7 @@ class MyActivity(object):
             return output
 
         class PythonObjectEncoder(json.JSONEncoder):
-            def default(self, o):  # pylint: disable=method-hidden
+            def default(self, o):
                 if isinstance(o, datetime):
                     return o.isoformat()
                 if isinstance(o, set):
@@ -1011,7 +1011,7 @@ def main():
     )
 
     # Remove description formatting
-    parser.format_description = lambda _: parser.description  # pylint: disable=no-member
+    parser.format_description = lambda _: parser.description
 
     options, args = parser.parse_args()
     options.local_user = os.environ.get("USER")
@@ -1027,7 +1027,7 @@ def main():
 
     # python-keyring provides easy access to the system keyring.
     try:
-        import keyring  # pylint: disable=unused-import,unused-variable,F0401
+        import keyring  # noqa: F401
     except ImportError:
         logging.warning("Consider installing python-keyring")
 

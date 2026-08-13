@@ -12,7 +12,7 @@ import unittest
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-from testing_support import coverage_utils
+from testing_support import coverage_utils  # noqa: E402
 
 
 class GitDatesTestBase(unittest.TestCase):

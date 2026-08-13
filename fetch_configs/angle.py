@@ -5,11 +5,9 @@
 import ast
 import sys
 
-import config_util  # pylint: disable=import-error
+import config_util
 
 
-# This class doesn't need an __init__ method, so we disable the warning
-# pylint: disable=no-init
 class ANGLE(config_util.Config):
     """Basic Config class for ANGLE."""
 

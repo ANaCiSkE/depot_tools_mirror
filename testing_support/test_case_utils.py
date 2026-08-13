@@ -56,8 +56,7 @@ class TestCaseUtils(object):
             diff = [i for i in actual_members if i not in expected_members] + [
                 i for i in expected_members if i not in actual_members
             ]
-            print(diff, file=sys.stderr)
-        # pylint: disable=no-member
+            print(diff, file=sys.stderr)  # noqa: F821
         self.assertEqual(actual_members, expected_members)
 
     def setUp(self):

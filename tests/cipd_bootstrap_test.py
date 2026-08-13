@@ -10,9 +10,6 @@ import sys
 import unittest
 import tempfile
 
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
-
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # CIPD client version to use for self-update from an "old" checkout to the tip.
@@ -57,7 +54,6 @@ windows-386      sha256  cd2148e390a5eddc078d6dd2cdfcd9d4624515d24482a1fa255fdcb
 windows-amd64    sha256  e88f9268c536bb88a7b45a73308a70cbc93438b771f2ad2b54e385e132dbc146
 windows-arm64    sha256  45d2ae5ae31b9ac25277f25fde7eb26edf22458b89a55cffa5d9dccf6f117c44
 """
-
 
 class CipdBootstrapTest(unittest.TestCase):
     """Tests that CIPD client can bootstrap from scratch and self-update from some
@@ -133,7 +129,6 @@ class CipdBootstrapTest(unittest.TestCase):
             self.fail(
                 "Update from %s to the tip fails:\n%s" % (OLD_VERSION, out)
             )
-
 
 if __name__ == "__main__":
     unittest.main()

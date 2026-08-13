@@ -15,10 +15,10 @@ from unittest import mock
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-from testing_support import git_test_utils
+from testing_support import git_test_utils  # noqa: E402
 
-import git_map
-import git_common
+import git_map  # noqa: E402
+import git_common  # noqa: E402
 
 git_common.TEST_MODE = True
 GitRepo = git_test_utils.GitRepo
@@ -47,7 +47,7 @@ class GitMapTest(git_test_utils.GitRepoReadOnlyTestBase):
         )
         self.origin = origin_schema.reify()
         self.origin.git("checkout", "main")
-        self.origin.git("branch", "-d", *["branch_" + l for l in "KLG"])
+        self.origin.git("branch", "-d", *["branch_" + l for l in "KLG"])  # noqa: E741
 
         self.repo.git("remote", "add", "origin", self.origin.repo_path)
         self.repo.git(

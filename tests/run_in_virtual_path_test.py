@@ -6,13 +6,12 @@
 import io
 import os
 import sys
-from pathlib import Path
 from typing import Any
 import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
-import run_in_virtual_path
+import run_in_virtual_path  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="Virtual path is not supported on Windows"

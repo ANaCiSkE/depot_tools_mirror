@@ -325,7 +325,6 @@ def workspace_is_cog():
     )
 
 
-# pylint: disable=line-too-long
 def reclient_setup_docs_url():
     if sys.platform == "darwin":
         return "https://chromium.googlesource.com/chromium/src/+/main/docs/mac_build_instructions.md#use-reclient"

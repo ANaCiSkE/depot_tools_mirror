@@ -9,8 +9,8 @@ details on the presubmit API built into depot_tools.
 
 PRESUBMIT_VERSION = "2.0.0"
 
-import fnmatch
-import sys
+import fnmatch  # noqa: E402
+import sys  # noqa: E402
 
 # CIPD ensure manifest for checking CIPD client itself.
 CIPD_CLIENT_ENSURE_FILE_TEMPLATE = r"""
@@ -28,109 +28,44 @@ $VerifiedPlatform linux-mips64 linux-mips64le linux-mipsle
 TEST_TIMEOUT_S = 450  # 7m 30s
 
 
-def CheckPylint(input_api, output_api):
-    """Run Pylint 3.X on supported python files."""
-    files_to_check = [
-        r"^mcp/.*\.py$",
-        r"^[^/]*\.py$",
-        r"^testing_support/[^/]*\.py$",
-        r"^tests/[^/]*\.py$",
-        r"^recipe_modules/.*\.py$",  # Allow recursive search in recipe modules.
-    ]
-    disabled_warnings = [
-        "anomalous-backslash-in-string",
-        "arguments-differ",
-        "bad-super-call",
-        "cell-var-from-loop",
-        "consider-using-dict-items",
-        "consider-using-enumerate",
-        "consider-using-from-import",
-        "consider-using-generator",
-        "consider-using-max-builtin",
-        "consider-using-with",
-        "cyclic-import",
-        "deprecated-method",
-        "deprecated-module",
-        "duplicate-code",  # Tends to flag false positives.
-        "eval-used",
-        "exec-used",
-        "format-string-without-interpolation",
-        "function-redefined",
-        "import-outside-toplevel",
-        "inconsistent-return-statements",
-        "line-too-long",
-        "logging-not-lazy",
-        "method-cache-max-size-none",
-        "missing-module-docstring",
-        "multiple-imports",
-        "no-self-argument",
-        "no-value-for-parameter",
-        "not-an-iterable",
-        "not-callable",
-        "pointless-exception-statement",
-        "possibly-used-before-assignment",
-        "protected-access",
-        "raise-missing-from",
-        "singleton-comparison",
-        "stop-iteration-return",
-        "subprocess-run-check",
-        "superfluous-parens",
-        "undefined-variable",
-        "unnecessary-dunder-call",
-        "unnecessary-lambda-assignment",
-        "unnecessary-negation",
-        "unspecified-encoding",
-        "unsubscriptable-object",
-        "unused-argument",
-        "unused-import",
-        "unused-variable",
-        "use-dict-literal",
-        "use-implicit-booleaness-not-comparison",
-        "use-maxsplit-arg",
-        "use-yield-from",
-        "used-before-assignment",
-        "useless-object-inheritance",
-        "useless-option-value",
-    ]
+def CheckRuff(input_api, output_api):
+    """Run ruff check on python files."""
     return input_api.RunTests(
-        input_api.canned_checks.GetPylint(
+        input_api.canned_checks.GetRuff(
             input_api,
             output_api,
-            files_to_check=files_to_check,
-            files_to_skip=_GetPylintFilesToSkip(input_api),
-            disabled_warnings=disabled_warnings,
-            version="3.2",
+            files_to_skip=_GetRuffFilesToSkip(input_api),
         )
     )
 
 
-def _GetPylintFilesToSkip(input_api):
+def _GetRuffFilesToSkip(input_api):
     files_to_skip = list(input_api.DEFAULT_FILES_TO_SKIP)
     if input_api.os_path.exists(".gitignore"):
         with open(".gitignore", encoding="utf-8") as fh:
-            lines = [l.strip() for l in fh.readlines()]
+            lines = [line.strip() for line in fh.readlines()]
             files_to_skip.extend(
                 [
-                    fnmatch.translate(l)
-                    for l in lines
-                    if l and not l.startswith("#")
+                    fnmatch.translate(line)
+                    for line in lines
+                    if line and not line.startswith("#")
                 ]
             )
     if input_api.os_path.exists(".git/info/exclude"):
         with open(".git/info/exclude", encoding="utf-8") as fh:
-            lines = [l.strip() for l in fh.readlines()]
+            lines = [line.strip() for line in fh.readlines()]
             files_to_skip.extend(
                 [
-                    fnmatch.translate(l)
-                    for l in lines
-                    if l and not l.startswith("#")
+                    fnmatch.translate(line)
+                    for line in lines
+                    if line and not line.startswith("#")
                 ]
             )
     return files_to_skip
 
 
 def CheckRecipes(input_api, output_api):
-    file_filter = lambda x: x.LocalPath() == "infra/config/recipes.cfg"
+    file_filter = lambda x: x.LocalPath() == "infra/config/recipes.cfg"  # noqa: E731
     return input_api.canned_checks.CheckJsonParses(
         input_api, output_api, file_filter=file_filter
     )
@@ -191,7 +126,7 @@ def CheckCIPDManifest(input_api, output_api):
     root = input_api.os_path.normpath(
         input_api.os_path.abspath(input_api.PresubmitLocalPath())
     )
-    rel_file = lambda rel: input_api.os_path.join(root, rel)
+    rel_file = lambda rel: input_api.os_path.join(root, rel)  # noqa: E731
     cipd_manifests = set(
         rel_file(input_api.os_path.join(*x))
         for x in (

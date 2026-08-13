@@ -57,7 +57,7 @@ def main(argv):
 
     # This import has to happen after PYLINTRC is set because the module tries
     # to resolve the config file location on load.
-    from pylint import lint  # pylint: disable=bad-option-value,import-outside-toplevel
+    from pylint import lint
 
     lint.Run(argv)
 

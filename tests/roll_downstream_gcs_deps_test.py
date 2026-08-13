@@ -11,7 +11,7 @@ import unittest
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import roll_downstream_gcs_deps
+import roll_downstream_gcs_deps  # noqa: E402
 
 
 class CopyPackageTest(unittest.TestCase):

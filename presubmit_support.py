@@ -45,7 +45,6 @@ import gclient_utils
 import git_footers
 import gerrit_util
 from gerrit_cache import GerritCache
-import lockfile
 import owners_client
 import owners_finder
 import presubmit_canned_checks
@@ -53,9 +52,6 @@ import presubmit_diff
 import rdb_wrapper
 import scm
 import subprocess2 as subprocess  # Exposed through the API.
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 # Ask for feedback only once in program lifetime.
 _ASKED_FOR_FEEDBACK = False
@@ -728,9 +724,6 @@ class InputApi(object):
     know stuff about the change they're looking at.
     """
 
-    # Method could be a function
-    # pylint: disable=no-self-use
-
     # File extensions that are considered source files from a style guide
     # perspective. Don't modify this list from a presubmit script!
     #
@@ -883,7 +876,7 @@ class InputApi(object):
         self._named_temporary_files = []
 
         self.owners_client = None
-        if self.gerrit and not "PRESUBMIT_SKIP_NETWORK" in self.environ:
+        if self.gerrit and "PRESUBMIT_SKIP_NETWORK" not in self.environ:
             try:
                 self.owners_client = owners_client.GetCodeOwnersClient(
                     host=self.gerrit.host,
@@ -900,7 +893,6 @@ class InputApi(object):
         # Replace <hash_map> and <hash_set> as headers that need to be included
         # with 'base/containers/hash_tables.h' instead.
         # Access to a protected member _XX of a client class
-        # pylint: disable=protected-access
         self.cpplint._re_pattern_templates = [
             (a, b, "base/containers/hash_tables.h")
             if header in ("<hash_map>", "<hash_set>")
@@ -979,7 +971,6 @@ class InputApi(object):
                 category=DeprecationWarning,
                 stacklevel=2,
             )
-        # pylint: disable=consider-using-generator
         return [
             x
             for x in self.AffectedFiles(include_deletes=False, **kwargs)
@@ -1083,7 +1074,6 @@ class InputApi(object):
             input_api.subprocess.check_output(['script-that', '--reads-from',
                                             f.name])
 
-
         Note that callers of CreateTemporaryFile() should not worry about removing
         any temporary file; this is done transparently by the presubmit handling
         code.
@@ -1158,7 +1148,7 @@ class _GitDiffCache(_DiffCache):
     def GetDiff(self, path, local_root):
         # Compare against None to distinguish between None and an initialized
         # but empty dictionary.
-        if self._diffs_by_file == None:
+        if self._diffs_by_file == None:  # noqa: E711
             # Don't specify any filenames below, because there are command line
             # length limits on some platforms and GenerateDiff would fail.
             unified_diff = scm.GIT.GenerateDiff(
@@ -1198,7 +1188,7 @@ class _ProvidedDiffCache(_DiffCache):
 
     def GetDiff(self, path, local_root):
         """Get the diff for a particular path."""
-        if self._diffs_by_file == None:
+        if self._diffs_by_file == None:  # noqa: E711
             self._diffs_by_file = _parse_unified_diff(self._diff)
         return self._diffs_by_file.get(path, "")
 
@@ -1259,8 +1249,6 @@ class AffectedFile(object):
 
     DIFF_CACHE = _DiffCache
 
-    # Method could be a function
-    # pylint: disable=no-self-use
     def __init__(self, path, action, repository_root, diff_cache):
         self._path = path
         self._action = action
@@ -1414,7 +1402,6 @@ class GitAffectedFile(AffectedFile):
     """Representation of a file in a change out of a git checkout."""
 
     # Method 'NNN' is abstract in class 'NNN' but is not overridden
-    # pylint: disable=abstract-method
 
     DIFF_CACHE = _GitDiffCache
 

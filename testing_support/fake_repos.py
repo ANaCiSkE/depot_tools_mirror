@@ -6,25 +6,16 @@
 """Generate fake repositories for testing."""
 
 import atexit
-import datetime
-import errno
 import io
 import logging
 import os
-import pprint
-import random
-import re
-import socket
 import sys
 import tarfile
-import tempfile
 import textwrap
-import time
 
 # trial_dir must be first for non-system libraries.
 from testing_support import trial_dir
 import gclient_utils
-import scm
 import subprocess2
 
 DEFAULT_BRANCH = "main"
@@ -1296,7 +1287,7 @@ class FakeReposTestBase(trial_dir.TestCase):
 
     def setUp(self):
         super(FakeReposTestBase, self).setUp()
-        if not self.FAKE_REPOS_CLASS in self.CACHED_FAKE_REPOS:
+        if self.FAKE_REPOS_CLASS not in self.CACHED_FAKE_REPOS:
             self.CACHED_FAKE_REPOS[self.FAKE_REPOS_CLASS] = (
                 self.FAKE_REPOS_CLASS()
             )

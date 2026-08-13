@@ -22,8 +22,8 @@ DEPS = [
   "tryserver",
 ]
 
-from recipe_engine.recipe_api import Property
-from recipe_engine.config import ConfigGroup, Single
+from recipe_engine.recipe_api import Property  # noqa: E402
+from recipe_engine.config import ConfigGroup, Single  # noqa: E402
 
 PROPERTIES = {
   # Gerrit patches will have all properties about them prefixed with patch_.
@@ -37,7 +37,7 @@ PROPERTIES = {
 }
 
 # Forward these types so that they can be used without importing api
-from .api import RelativeRoot, Result
+from .api import RelativeRoot, Result  # noqa: E402, F401
 
-from .api import BotUpdateApi as API
-from .test_api import BotUpdateTestApi as TEST_API
+from .api import BotUpdateApi as API  # noqa: E402, F401
+from .test_api import BotUpdateTestApi as TEST_API  # noqa: E402, F401

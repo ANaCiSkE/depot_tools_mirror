@@ -15,9 +15,9 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.known as known_fields
-import metadata.dependency_metadata as dm
-import metadata.fields.custom.mitigated
+import metadata.fields.known as known_fields  # noqa: E402
+import metadata.dependency_metadata as dm  # noqa: E402
+import metadata.fields.custom.mitigated  # noqa: E402
 
 # Line used to separate dependencies within the same metadata file.
 DEPENDENCY_DIVIDER = re.compile(r"^-{20} DEPENDENCY DIVIDER -{20}$")

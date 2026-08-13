@@ -26,7 +26,7 @@ DEPOT_TOOLS = os.path.abspath(
 )
 sys.path.insert(0, DEPOT_TOOLS)
 
-from gerrit_util import CreateHttpConn, ReadHttpResponse, ReadHttpJsonResponse
+from gerrit_util import CreateHttpConn, ReadHttpResponse, ReadHttpJsonResponse  # noqa: E402
 
 
 def reparse_url(parsed_url, query_params):

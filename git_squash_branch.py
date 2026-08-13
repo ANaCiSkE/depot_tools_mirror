@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Optional
 
 import gclient_utils
 import git_common

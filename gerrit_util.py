@@ -30,7 +30,7 @@ import urllib.parse
 from dataclasses import dataclass
 from io import StringIO
 from multiprocessing.pool import ThreadPool
-from typing import Any, Container, Dict, Mapping
+from typing import Any, Container, Dict
 from typing import NamedTuple, List, Optional
 from typing import Tuple, TypedDict, cast
 from typing import Generator
@@ -88,8 +88,8 @@ def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
         host = host.split(b" ")[1]
         endpt = endpt.split(b" ")
         if (
-            self._socksocket__proxy[4] != None
-            and self._socksocket__proxy[5] != None
+            self._socksocket__proxy[4] != None  # noqa: E711
+            and self._socksocket__proxy[5] != None  # noqa: E711
         ):
             hdrs.insert(0, self._socksocket__getauthheader())
         hdrs.insert(0, b"Host: %s" % host)
@@ -100,9 +100,6 @@ def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
 
 
 httplib2.socks.socksocket._socksocket__rewriteproxy = __fixed_rewrite_proxy
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 LOGGER = logging.getLogger()
 # With a starting sleep time of 12.0 seconds, x <= [1.8-2.2]x backoff, and six

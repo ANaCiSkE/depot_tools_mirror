@@ -17,7 +17,6 @@ def prefer_git_wrapper(func):
 
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        # pylint: disable=protected-access
         if not hasattr(self, "_prefer_git"):
             git_path = pathlib.Path(self.checkout_path, ".git")
             jj_path = pathlib.Path(self.checkout_path, ".jj")

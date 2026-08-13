@@ -23,7 +23,7 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEPOT_TOOLS_DIR = os.path.dirname(THIS_DIR)
 sys.path.append(DEPOT_TOOLS_DIR)
 
-import gsutil
+import gsutil  # noqa: E402
 
 
 class TestError(Exception):

@@ -16,8 +16,8 @@ _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.discover
-import metadata.validate
+import metadata.discover  # noqa: E402
+import metadata.validate  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

@@ -154,7 +154,7 @@ def generate_commit_message(
     ).rstrip()
     logs = re.sub(r"(?m)^(\d\d\d\d-\d\d-\d\d [^@]+)@[^ ]+( .*)$", r"\1\2", logs)
     lines = logs.splitlines()
-    cleaned_lines = [l for l in lines if not _ROLL_SUBJECT.match(l)]
+    cleaned_lines = [l for l in lines if not _ROLL_SUBJECT.match(l)]  # noqa: E741
     logs = "\n".join(cleaned_lines) + "\n"
 
     nb_commits = len(lines)
@@ -416,7 +416,7 @@ def main():
             itertools.chain(*[r.split(",") for r in args.reviewer])
         )
         for i, r in enumerate(reviewers):
-            if not "@" in r:
+            if "@" not in r:
                 reviewers[i] = r + "@chromium.org"
 
     gclient_root = gclient(["root"])

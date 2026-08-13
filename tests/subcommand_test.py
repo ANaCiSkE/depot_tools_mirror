@@ -11,7 +11,7 @@ from unittest import mock
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
-import subcommand
+import subcommand  # noqa: E402
 
 
 class SubcommandTest(unittest.TestCase):

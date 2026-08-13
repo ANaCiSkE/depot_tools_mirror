@@ -16,4 +16,15 @@ extend-include = [
     "yapf",
 ]
 
-extend-exclude = ["*pb2.py"]
+extend-exclude = [
+    "*pb2.py",
+    "third_party",
+]
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # Line length is handled by formatter
+]
+
+

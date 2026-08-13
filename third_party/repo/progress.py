@@ -123,5 +123,5 @@ class Progress(object):
                 )
                 _, columns, _, _ = struct.unpack("HHHH", packed)
                 return columns
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return sys.maxsize

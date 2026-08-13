@@ -18,11 +18,8 @@ import gclient_smoketest_base
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import scm
-from testing_support import fake_repos
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
+import scm  # noqa: E402
+from testing_support import fake_repos  # noqa: E402
 
 
 class SkiaDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
@@ -163,49 +160,49 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
             scm.GIT.Capture(["config", "remote.origin.url"], self.blink),
             self.blink_git_url,
         )
-        self.assertTrue(os.path.exists(join(self.blink, ".git")))
-        self.assertTrue(os.path.exists(join(self.blink, "OWNERS")))
-        with open(join(self.blink, "OWNERS")) as f:
+        self.assertTrue(os.path.exists(join(self.blink, ".git")))  # noqa: F821
+        self.assertTrue(os.path.exists(join(self.blink, "OWNERS")))  # noqa: F821
+        with open(join(self.blink, "OWNERS")) as f:  # noqa: F821
             owners_content = f.read()
             self.assertEqual("OWNERS-pre", owners_content, "OWNERS not updated")
         self.assertTrue(
-            os.path.exists(join(self.blink, "Source", "exists_always"))
+            os.path.exists(join(self.blink, "Source", "exists_always"))  # noqa: F821
         )
         self.assertTrue(
             os.path.exists(
-                join(self.blink, "Source", "exists_before_but_not_after")
+                join(self.blink, "Source", "exists_before_but_not_after")  # noqa: F821
             )
         )
         self.assertFalse(
             os.path.exists(
-                join(self.blink, "Source", "exists_after_but_not_before")
+                join(self.blink, "Source", "exists_after_but_not_before")  # noqa: F821
             )
         )
 
     def CheckStatusPostMergePoint(self):
         # Check that the contents still exists
-        self.assertTrue(os.path.exists(join(self.blink, "OWNERS")))
-        with open(join(self.blink, "OWNERS")) as f:
+        self.assertTrue(os.path.exists(join(self.blink, "OWNERS")))  # noqa: F821
+        with open(join(self.blink, "OWNERS")) as f:  # noqa: F821
             owners_content = f.read()
             self.assertEqual(
                 "OWNERS-post", owners_content, "OWNERS not updated"
             )
         self.assertTrue(
-            os.path.exists(join(self.blink, "Source", "exists_always"))
+            os.path.exists(join(self.blink, "Source", "exists_always"))  # noqa: F821
         )
         # Check that file removed between the branch point are actually deleted.
         self.assertTrue(
             os.path.exists(
-                join(self.blink, "Source", "exists_after_but_not_before")
+                join(self.blink, "Source", "exists_after_but_not_before")  # noqa: F821
             )
         )
         self.assertFalse(
             os.path.exists(
-                join(self.blink, "Source", "exists_before_but_not_after")
+                join(self.blink, "Source", "exists_before_but_not_after")  # noqa: F821
             )
         )
         # But not the .git folder
-        self.assertFalse(os.path.exists(join(self.blink, ".git")))
+        self.assertFalse(os.path.exists(join(self.blink, ".git")))  # noqa: F821
 
     @unittest.skip("flaky")
     def testBlinkDEPSChangeUsingGclient(self):
@@ -270,7 +267,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
 
         # Go back and forth two times.
         for _ in range(2):
-            subprocess2.check_call(
+            subprocess2.check_call(  # noqa: F821
                 ["git", "checkout", "-q", self.pre_merge_sha],
                 cwd=self.checkout_path,
             )
@@ -278,7 +275,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
             self.assertEqual(res[2], 0, "gclient sync failed.")
             self.CheckStatusPreMergePoint()
 
-            subprocess2.check_call(
+            subprocess2.check_call(  # noqa: F821
                 ["git", "checkout", "-q", self.post_merge_sha],
                 cwd=self.checkout_path,
             )
@@ -306,7 +303,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
         self.CheckStatusPreMergePoint()
 
         # Create a branch named "foo".
-        subprocess2.check_call(
+        subprocess2.check_call(  # noqa: F821
             ["git", "checkout", "-qB", "foo"], cwd=self.blink
         )
 
@@ -317,7 +314,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
         # Go backwards and check that we still have the foo branch.
         self.gclient(["sync", "--revision", "src@%s" % self.pre_merge_sha])
         self.CheckStatusPreMergePoint()
-        subprocess2.check_call(
+        subprocess2.check_call(  # noqa: F821
             ["git", "show-ref", "-q", "--verify", "refs/heads/foo"],
             cwd=self.blink,
         )

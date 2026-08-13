@@ -9,5 +9,5 @@ DEPS = [
   "recipe_engine/time",
 ]
 
-from .api import GerritApi as API
-from .test_api import GerritTestApi as TEST_API
+from .api import GerritApi as API  # noqa: E402, F401
+from .test_api import GerritTestApi as TEST_API  # noqa: E402, F401

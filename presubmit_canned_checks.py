@@ -12,9 +12,6 @@ import time
 import metadata.discover
 import metadata.validate
 
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
-
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 
 # These filters will be disabled if callers do not explicitly supply a
@@ -68,11 +65,9 @@ OFF_UNLESS_MANUALLY_ENABLED_LINT_FILTERS = [
     "-whitespace/tab",
 ]
 
-
 # Git Tree Mode for a "gitlink" (submodule).
 # See https://git-scm.com/docs/git-ls-tree#_output_format
 _GIT_MODE_SUBMODULE = b"160000"
-
 
 ### Description checks
 
@@ -229,10 +224,8 @@ def CheckAuthorizedAuthor(input_api, output_api, bot_allowlist=None):
         return [
             error_type(
                 (
-                    # pylint: disable=line-too-long
                     "%s is not in AUTHORS file. If you are a new contributor, please visit\n"
                     "https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/contributing.md#Legal-stuff\n"
-                    # pylint: enable=line-too-long
                     'and read the "Legal stuff" section.\n'
                     "If you are a chromite, verify that the contributor "
                     "signed the CLA."
@@ -246,7 +239,7 @@ def CheckAuthorizedAuthor(input_api, output_api, bot_allowlist=None):
 def CheckDoNotSubmitInFiles(input_api, output_api):
     """Checks that the user didn't add 'DO NOT ''SUBMIT' to any files."""
     # We want to check every text file, not just source files.
-    file_filter = lambda x: x
+    file_filter = lambda x: x  # noqa: E731
 
     # Keyword is concatenated to avoid presubmit check rejecting the CL.
     keyword = "DO NOT " + "SUBMIT"
@@ -285,7 +278,7 @@ def CheckLargeScaleChange(input_api, output_api):
         output_api.PresubmitPromptWarning(
             f"This change contains {size} files.\n"
             "Consider using the LSC (large scale change) process.\n"
-            "See https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/lsc/lsc_workflow.md."  # pylint: disable=line-too-long
+            "See https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/lsc/lsc_workflow.md."
         )
     ]
 
@@ -311,7 +304,6 @@ def CheckChangeLintsClean(
 
     cpplint = input_api.cpplint
     # Access to a protected member _XX of a client class
-    # pylint: disable=protected-access
     cpplint._cpplint_state.ResetErrorCounts()
 
     cpplint._SetFilters(",".join(GetCppLintFilters(lint_filters)))
@@ -321,11 +313,11 @@ def CheckChangeLintsClean(
     if input_api.is_windows:
         cpplint._SetOutputFormat("vs7")
 
-    if source_file_filter == None:
+    if source_file_filter == None:  # noqa: E711
         # The only valid extensions for cpplint are .cc, .h, .cpp, .cu, and .ch.
         # Only process those extensions which are used in Chromium.
         INCLUDE_CPP_FILES_ONLY = (r".*\.(cc|h|cpp)$",)
-        source_file_filter = lambda x: input_api.FilterSourceFile(
+        source_file_filter = lambda x: input_api.FilterSourceFile(  # noqa: E731
             x,
             files_to_check=INCLUDE_CPP_FILES_ONLY,
             files_to_skip=input_api.DEFAULT_FILES_TO_SKIP,
@@ -1070,7 +1062,7 @@ def CheckChromiumDependencyMetadata(input_api, output_api, file_filter=None):
     # If the file filter is unspecified, filter to known Chromium metadata
     # files.
     if file_filter is None:
-        file_filter = lambda f: metadata.discover.is_metadata_file(
+        file_filter = lambda f: metadata.discover.is_metadata_file(  # noqa: E731
             f.LocalPath()
         )
 
@@ -1100,7 +1092,6 @@ def CheckChromiumDependencyMetadata(input_api, output_api, file_filter=None):
 
 
 ### Other checks
-
 
 _IGNORE_FREEZE_FOOTER = "Ignore-Freeze"
 
@@ -1585,7 +1576,7 @@ def GetPylint(
         )
         return input_api.re.escape(prefix) + regex
 
-    src_filter = lambda x: input_api.FilterSourceFile(
+    src_filter = lambda x: input_api.FilterSourceFile(  # noqa: E731
         x, map(rel_path, files_to_check), map(rel_path, files_to_skip)
     )
     if not input_api.AffectedSourceFiles(src_filter):
@@ -1710,7 +1701,7 @@ def GetRuff(
     else:
         error_type = output_api.PresubmitPromptWarning
 
-    src_filter = lambda x: input_api.FilterSourceFile(
+    src_filter = lambda x: input_api.FilterSourceFile(  # noqa: E731
         x, files_to_check, files_to_skip
     )
     affected_files = [
@@ -1778,7 +1769,7 @@ def RunRuff(input_api, *args, **kwargs):
 def CheckDirMetadataFormat(input_api, output_api, dirmd_bin=None):
     # TODO(crbug.com/1102997): Remove OWNERS once DIR_METADATA migration is
     # complete.
-    file_filter = lambda f: (
+    file_filter = lambda f: (  # noqa: E731
         input_api.basename(f.LocalPath()) in ("DIR_METADATA", "OWNERS")
     )
     affected_files = {
@@ -1868,7 +1859,7 @@ def CheckOwnersDirMetadataExclusive(input_api, output_api):
         r"^#\s*(TEAM|COMPONENT|OS|WPT-NOTIFY)+\s*:\s*\S+$",
         input_api.re.MULTILINE,
     )
-    file_filter = lambda f: (
+    file_filter = lambda f: (  # noqa: E731
         input_api.basename(f.LocalPath()) in ("OWNERS", "DIR_METADATA")
     )
     affected_dirs = {
@@ -2048,10 +2039,10 @@ def PanProjectChecks(
     # presubmit_support.py InputApi.FilterSourceFile for the (simple) usage.
     files_to_skip = input_api.DEFAULT_FILES_TO_SKIP + excluded_paths
     files_to_check = input_api.DEFAULT_FILES_TO_CHECK + text_files
-    sources = lambda x: input_api.FilterSourceFile(
+    sources = lambda x: input_api.FilterSourceFile(  # noqa: E731
         x, files_to_skip=files_to_skip
     )
-    text_files = lambda x: input_api.FilterSourceFile(
+    text_files = lambda x: input_api.FilterSourceFile(  # noqa: E731
         x, files_to_skip=files_to_skip, files_to_check=files_to_check
     )
 
@@ -2071,7 +2062,7 @@ def PanProjectChecks(
 
     snapshot("checking owners files format")
     try:
-        if not "PRESUBMIT_SKIP_NETWORK" in _os.environ and owners_check:
+        if "PRESUBMIT_SKIP_NETWORK" not in _os.environ and owners_check:
             snapshot("checking owners")
             results.extend(
                 input_api.canned_checks.CheckOwnersFormat(input_api, output_api)
@@ -2310,7 +2301,7 @@ def CheckCIPDManifest(input_api, output_api, path=None, content=None):
         # quick and dirty parser to extract checked packages.
         packages = [
             l.split()[0]
-            for l in (ll.strip() for ll in content.splitlines())
+            for l in (ll.strip() for ll in content.splitlines())  # noqa: E741
             if " " in l and not l.startswith("$")
         ]
         name = "Check CIPD packages from string: %r" % (packages,)
@@ -3280,7 +3271,7 @@ def CheckJsonParses(input_api, output_api, file_filter=None):
     import json
 
     if file_filter is None:
-        file_filter = lambda x: x.LocalPath().endswith(".json")
+        file_filter = lambda x: x.LocalPath().endswith(".json")  # noqa: E731
     affected_files = input_api.AffectedFiles(
         include_deletes=False, file_filter=file_filter
     )

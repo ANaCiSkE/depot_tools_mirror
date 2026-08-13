@@ -6,7 +6,7 @@
 import os
 import re
 import sys
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -20,14 +20,11 @@ BAD_DELIMITERS_REGEX = re.compile(
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
-import metadata.fields.field_types as field_types
-import metadata.fields.util as util
-import metadata.validation_result as vr
-import metadata.fields.custom.license_allowlist as allowlist_util
+import metadata.fields.field_types as field_types  # noqa: E402
+import metadata.fields.util as util  # noqa: E402
+import metadata.validation_result as vr  # noqa: E402
+import metadata.fields.custom.license_allowlist as allowlist_util  # noqa: E402
 
-import json
-import logging
-import subprocess
 
 RESTRICTED_APPROVAL_FILENAME = "restrictive_license_approval.textproto"
 

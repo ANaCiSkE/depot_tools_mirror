@@ -502,7 +502,6 @@ def EnableCrashDumpCollection():
             # Disable the WER UI, as documented here:
             # https://msdn.microsoft.com/en-us/library/windows/desktop/bb513638.aspx
             winreg.SetValueEx(key, "DontShowUI", 0, winreg.REG_DWORD, 1)
-        # Trap OSError instead of WindowsError so pylint will succeed on Linux.
         # Catching errors is important because some build machines are not
         # elevated and writing to HKLM requires elevation.
         except OSError:
@@ -522,7 +521,7 @@ def SetupJunction(target_dir):
         try:
             if os.path.samefile(os.readlink(junction_dir), target_dir):
                 return junction_dir
-        except:
+        except:  # noqa: E722
             # os.readlink may fail if junction_dir is not junction or symlink
             pass
         RmDir(junction_dir)

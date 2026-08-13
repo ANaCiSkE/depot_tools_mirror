@@ -10,4 +10,4 @@ DEPS = [
   "recipe_engine/runtime",
 ]
 
-from .api import DepotToolsApi as API
+from .api import DepotToolsApi as API  # noqa: E402, F401

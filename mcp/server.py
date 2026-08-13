@@ -18,7 +18,7 @@ sys.path.insert(
     ),
 )
 from absl import app
-from mcp.server import fastmcp  # pylint: disable=import-self
+from mcp.server import fastmcp
 import telemetry
 
 import buildbucket

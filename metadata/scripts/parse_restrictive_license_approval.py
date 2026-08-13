@@ -23,8 +23,8 @@ _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 _METADATA_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 sys.path.insert(0, _METADATA_DIR)
 
-import restrictive_license_approval_pb2 as rla_pb2
-from google.protobuf import text_format
+import restrictive_license_approval_pb2 as rla_pb2  # noqa: E402
+from google.protobuf import text_format  # noqa: E402
 
 
 def main():

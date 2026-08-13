@@ -15,15 +15,12 @@ from unittest import mock
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
 
-from testing_support import coverage_utils
-from testing_support import git_test_utils
+from testing_support import coverage_utils  # noqa: E402
+from testing_support import git_test_utils  # noqa: E402
 
-import gclient_utils
+import gclient_utils  # noqa: E402
 
 GitRepo = git_test_utils.GitRepo
-
-# TODO: Should fix these warnings.
-# pylint: disable=line-too-long
 
 
 class GitHyperBlameTestBase(git_test_utils.GitRepoReadOnlyTestBase):

@@ -8,13 +8,12 @@ import unittest
 import sys
 import os
 import io
-import tempfile
 from unittest.mock import patch
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-import create_temp_file
+import create_temp_file  # noqa: E402
 
 
 class TestCreateTempFileFromStdin(unittest.TestCase):

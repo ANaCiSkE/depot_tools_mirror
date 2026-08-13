@@ -383,5 +383,5 @@ class GerritAuthenticatorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     if "-v" in sys.argv:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG)  # noqa: F821
     unittest.main()
