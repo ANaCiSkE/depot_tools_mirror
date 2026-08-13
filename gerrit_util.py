@@ -36,7 +36,28 @@ from typing import Tuple, TypedDict, cast
 from typing import Generator
 
 import httplib2
-import httplib2.socks
+
+try:
+    import httplib2.socks
+
+    _HAS_SOCKS = True
+except ImportError:
+    _HAS_SOCKS = False
+    logging.warning(
+        "httplib2.socks is missing. SOCKS proxy support will be unavailable."
+    )
+
+    class DummyProxyError(Exception):
+        pass
+
+    class DummySocks:
+        ProxyError = DummyProxyError
+        PROXY_TYPE_HTTP_NO_TUNNEL = 0
+
+        class socksocket:
+            pass
+
+    httplib2.socks = DummySocks()
 
 import auth
 import gclient_utils
@@ -99,7 +120,8 @@ def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
     return b"\r\n".join(hdrs)
 
 
-httplib2.socks.socksocket._socksocket__rewriteproxy = __fixed_rewrite_proxy
+if _HAS_SOCKS:
+    httplib2.socks.socksocket._socksocket__rewriteproxy = __fixed_rewrite_proxy
 
 LOGGER = logging.getLogger()
 # With a starting sleep time of 12.0 seconds, x <= [1.8-2.2]x backoff, and six
