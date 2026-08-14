@@ -23,8 +23,13 @@ import subprocess
 import json
 import difflib
 import tomllib
+import tempfile
 from typing import NamedTuple
 
+if "RUFF_CACHE_DIR" not in os.environ:
+    os.environ["RUFF_CACHE_DIR"] = os.path.join(
+        tempfile.gettempdir(), ".ruff_cache"
+    )
 
 KNOWN_SUBCOMMANDS = {
     "check",

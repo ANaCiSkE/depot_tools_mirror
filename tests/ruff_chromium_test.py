@@ -1175,6 +1175,11 @@ class TestSubcommands(unittest.TestCase):
             args_passed, ["ruff", "rule", "F401", "--force-exclude"]
         )
 
+    def test_ruff_cache_dir_default(self):
+        self.assertIn("RUFF_CACHE_DIR", os.environ)
+        expected_cache = os.path.join(tempfile.gettempdir(), ".ruff_cache")
+        self.assertEqual(os.environ["RUFF_CACHE_DIR"], expected_cache)
+
 
 if __name__ == "__main__":
     unittest.main()
