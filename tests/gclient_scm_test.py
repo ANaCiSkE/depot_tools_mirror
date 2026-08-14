@@ -2268,6 +2268,26 @@ class Submodules(BaseGitWrapperTestCase):
 
         self.assertEqual(git_wrapper.GetSubmoduleDiff(), {})
 
+    def testGetSubmoduleAssumeUnchanged(self):
+        git_wrapper = gclient_scm.GitWrapper(
+            self.url, self.root_dir, self.relpath
+        )
+        options = self.Options()
+        git_wrapper.update(options, None, [])
+        subprocess2.check_output(
+            [
+                "git",
+                "-C",
+                self.root_dir,
+                "update-index",
+                "--assume-unchanged",
+                "submodule",
+            ]
+        )
+        self.assertEqual(git_wrapper.GetSubmoduleStateFromIndex(), {})
+        self.assertEqual(git_wrapper.GetSubmoduleDiff(), {})
+
+
 if "unittest.util" in __import__("sys").modules:
     # Show full diff in self.assertEqual.
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999

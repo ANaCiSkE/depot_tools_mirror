@@ -321,14 +321,19 @@ class GitWrapper(SCMWrapper):
     def GetSubmoduleStateFromIndex(self):
         """Returns a map where keys are submodule names and values are commit
         hashes. It reads data from the Git index, so only committed values are
-        present."""
-        out = self._Capture(["ls-files", "-s"])
+        present. Submodules marked as assume-unchanged or skip-worktree are
+        excluded because git diff will not detect working tree modifications
+        for them."""
+        out = self._Capture(
+            ["-c", "core.quotePath=false", "ls-files", "-s", "-v"]
+        )
         result = {}
         for l in out.split("\n"):  # noqa: E741
-            if not l.startswith("160000"):
-                # Not a submodule
+            if not l.startswith("H 160000"):
+                # Not a submodule, or has been marked as assume-unchanged (h)
+                # or skip-worktree (S/s).
                 continue
-            (_, commit, _, filepath) = l.split(maxsplit=3)
+            (_, _, commit, _, filepath) = l.split(maxsplit=4)
             result[filepath] = commit
         return result
 
@@ -339,6 +344,8 @@ class GitWrapper(SCMWrapper):
         hash."""
         out = self._Capture(
             [
+                "-c",
+                "core.quotePath=false",
                 "diff",
                 "--no-prefix",
                 "--no-ext-diff",
