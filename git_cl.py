@@ -8060,7 +8060,7 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
     except clang_format.NotFoundError as e:
         DieWithError(e)
 
-    cmd = ["vpython3", script, "-p1"]
+    cmd = [sys.executable, script, "-p1"]
     if not opts.dry_run and not opts.diff:
         cmd.append("-i")
 
