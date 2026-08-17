@@ -589,7 +589,6 @@ def translate_args(args: list[str]) -> list[str]:
             i += 1
         elif arg == "-":
             has_stdin = True
-            yapf_args.append(arg)
             i += 1
         elif arg.startswith("--stdin-filename="):
             i += 1

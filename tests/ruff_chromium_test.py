@@ -53,6 +53,7 @@ spec = importlib.util.spec_from_loader(
 )
 assert spec is not None, f"Failed to load spec from {ruff_path}"
 depot_tools_ruff = importlib.util.module_from_spec(spec)
+depot_tools_ruff.__file__ = ruff_path
 sys.modules["depot_tools_ruff_chromium"] = depot_tools_ruff
 loader.exec_module(depot_tools_ruff)
 
@@ -228,7 +229,7 @@ class TestTranslateArgs(unittest.TestCase):
 
     def test_translate_diff_and_stdin(self):
         got = translate_args(["format", "--diff", "--range=1:10-3:20", "-"])
-        self.assertEqual(got, ["--diff", "--line", "1-3", "-"])
+        self.assertEqual(got, ["--diff", "--line", "1-3"])
 
     def test_translate_single_line_range(self):
         got = translate_args(["format", "--range=1:10-1:20", "foo.py"])
@@ -238,13 +239,13 @@ class TestTranslateArgs(unittest.TestCase):
         got = translate_args(
             ["format", "--stdin-filename=/path/to/foo.py", "-"]
         )
-        self.assertEqual(got, ["-"])
+        self.assertEqual(got, [])
 
     def test_translate_stdin_filename_space(self):
         got = translate_args(
             ["format", "--stdin-filename", "/path/to/foo.py", "-"]
         )
-        self.assertEqual(got, ["-"])
+        self.assertEqual(got, [])
 
 
 class TestBatchMode(unittest.TestCase):
@@ -1179,6 +1180,45 @@ class TestSubcommands(unittest.TestCase):
         self.assertIn("RUFF_CACHE_DIR", os.environ)
         expected_cache = os.path.join(tempfile.gettempdir(), ".ruff_cache")
         self.assertEqual(os.environ["RUFF_CACHE_DIR"], expected_cache)
+
+
+class TestYapfFallback(unittest.TestCase):
+    def setUp(self):
+        depot_tools_ruff._dir_config_cache.clear()
+        self.test_dir = tempfile.mkdtemp(prefix="ruff_yapf_test_")
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+
+    def tearDown(self):
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def write_file(self, rel_path, content=""):
+        abs_path = os.path.join(self.test_dir, rel_path)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return abs_path
+
+    @patch("subprocess.call")
+    def test_yapf_fallback_stdin_strips_dash(self, mock_call):
+        mock_call.return_value = 0
+        self.write_file(
+            "sub/.style.yapf", "[style]\nbased_on_style = pep8\n"
+        )
+        test_file = os.path.join(self.test_dir, "sub/foo.py")
+
+        with patch(
+            "sys.argv",
+            ["ruff_chromium", f"--stdin-filename={test_file}", "-"],
+        ):
+            ret = depot_tools_ruff.main()
+
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        cmd = mock_call.call_args[0][0]
+        # Verify yapf was invoked without '-'
+        self.assertNotIn("-", cmd)
 
 
 if __name__ == "__main__":
