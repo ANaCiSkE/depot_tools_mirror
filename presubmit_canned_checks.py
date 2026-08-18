@@ -1522,22 +1522,6 @@ def _FetchAllFiles(input_api, files_to_check, files_to_skip):
     return files
 
 
-_RUFF_LINT_FAILURE_HINT = (
-    "------------------------------------------------------------\n"
-    "Lint errors found in affected files.\n"
-    "Hint: Run 'git cl lint' to re-run lint checks locally,\n"
-    "and run 'git cl lint --fix' to auto-fix detected issues.\n"
-    "------------------------------------------------------------"
-)
-
-_PYLINT_LINT_FAILURE_HINT = (
-    "------------------------------------------------------------\n"
-    "Lint errors found in affected files.\n"
-    "Hint: Run 'git cl lint' to re-run lint checks locally.\n"
-    "------------------------------------------------------------"
-)
-
-
 def GetPylint(
     input_api,
     output_api,
@@ -1665,19 +1649,12 @@ def GetPylint(
 
         kwargs["stdin"] = "\n".join(args + flist).encode("utf-8")
 
-        def output_parser(stdout):
-            if not stdout or not stdout.strip():
-                return []
-            msg = f"{stdout.strip()}\n\n{_PYLINT_LINT_FAILURE_HINT}"
-            return [error_type(msg)]
-
         return input_api.Command(
             name="Pylint (%s)" % description,
             cmd=cmd,
             kwargs=kwargs,
             message=error_type,
             python3=True,
-            output_parser=output_parser,
         )
 
     # pylint's cycle detection doesn't work in parallel, so spawn a second,
@@ -1750,20 +1727,11 @@ def GetRuff(
         for i in range(0, len(affected_files), chunk_size)
     ]
 
-    def output_parser(stdout):
-        if not stdout or not stdout.strip():
-            return []
-        cleaned = stdout.strip()
-        if cleaned == "All checks passed!":
-            return []
-        msg = f"{cleaned}\n\n{_RUFF_LINT_FAILURE_HINT}"
-        return [error_type(msg)]
-
     commands = []
     processed_count = 0
     total_files = len(affected_files)
     for chunk in chunks:
-        cmd = ["vpython3", tool, "check", "--quiet"]
+        cmd = ["vpython3", tool, "check"]
         if extra_args:
             cmd.extend(extra_args)
         cmd.extend(chunk)
@@ -1787,7 +1755,6 @@ def GetRuff(
                 kwargs={},
                 message=error_type,
                 python3=True,
-                output_parser=output_parser,
             )
         )
 

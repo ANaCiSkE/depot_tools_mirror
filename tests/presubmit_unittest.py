@@ -4046,8 +4046,7 @@ the current line as well!
         self.assertEqual(cmd.name, "Ruff (1 file)")
         expected_tool = os.path.join(_ROOT, "ruff_chromium")
         self.assertEqual(
-            cmd.cmd,
-            ["vpython3", expected_tool, "check", "--quiet", "/path/to/file1.py"],
+            cmd.cmd, ["vpython3", expected_tool, "check", "/path/to/file1.py"]
         )
 
     def testCannedRunRuffWindowsChunking(self):
@@ -4069,9 +4068,9 @@ the current line as well!
         self.assertEqual(commands[0].name, "Ruff (1-50 of 150 files)")
         self.assertEqual(commands[1].name, "Ruff (51-100 of 150 files)")
         self.assertEqual(commands[2].name, "Ruff (101-150 of 150 files)")
-        self.assertEqual(len(commands[0].cmd), 4 + 50)
-        self.assertEqual(len(commands[1].cmd), 4 + 50)
-        self.assertEqual(len(commands[2].cmd), 4 + 50)
+        self.assertEqual(len(commands[0].cmd), 3 + 50)
+        self.assertEqual(len(commands[1].cmd), 3 + 50)
+        self.assertEqual(len(commands[2].cmd), 3 + 50)
 
     def testCannedRunRuffMissingTool(self):
         affected_file = mock.Mock()
@@ -4093,86 +4092,6 @@ the current line as well!
             results[0], presubmit.OutputApi.PresubmitPromptWarning
         )
         self.assertIn("ruff_chromium wrapper not found", results[0]._message)
-
-    def testCannedGetRuffFailureHint(self):
-        affected_file = mock.Mock()
-        affected_file.AbsoluteLocalPath.return_value = "/path/to/file1.py"
-        input_api = self.MockInputApi(mock.Mock(), True)
-        input_api.is_windows = False
-        input_api.AffectedSourceFiles = mock.Mock(return_value=[affected_file])
-        input_api.is_committing = False
-        input_api.no_diffs = False
-
-        commands = presubmit_canned_checks.GetRuff(
-            input_api, presubmit.OutputApi
-        )
-        self.assertEqual(len(commands), 1)
-        cmd = commands[0]
-        self.assertIn("--quiet", cmd.cmd)
-        self.assertIsNotNone(cmd.output_parser)
-        results = cmd.output_parser(
-            "file1.py:1:1: F401 'os' imported but unused"
-        )
-        self.assertEqual(len(results), 1)
-        self.assertIn(
-            "file1.py:1:1: F401 'os' imported but unused", results[0]._message
-        )
-        self.assertIn(
-            "Hint: Run 'git cl lint' to re-run lint checks locally",
-            results[0]._message,
-        )
-        self.assertIn(
-            "and run 'git cl lint --fix' to auto-fix detected issues.",
-            results[0]._message,
-        )
-        # Empty stdout or 'All checks passed!' returns no errors
-        self.assertEqual(cmd.output_parser(""), [])
-        self.assertEqual(cmd.output_parser("   \n"), [])
-        self.assertEqual(cmd.output_parser("All checks passed!\n"), [])
-
-    def testCannedGetPylintFailureHint(self):
-        change = mock.Mock()
-        change.RepositoryRoot.return_value = "CWD"
-        input_api = self.MockInputApi(change, True)
-        input_api.environ = mock.MagicMock(os.environ)
-        input_api.environ.copy.return_value = {}
-        input_api.AffectedSourceFiles.return_value = True
-        input_api.PresubmitLocalPath.return_value = "CWD"
-        input_api.os_walk.return_value = [("CWD", [], ["file1.py"])]
-
-        commands = presubmit_canned_checks.GetPylint(
-            input_api, presubmit.OutputApi, version="2.7"
-        )
-        self.assertEqual(len(commands), 1)
-        cmd = commands[0]
-        self.assertIsNotNone(cmd.output_parser)
-        results = cmd.output_parser(
-            "file1.py:1:0: C0114: Missing module docstring"
-        )
-        self.assertEqual(len(results), 1)
-        self.assertIn(
-            "file1.py:1:0: C0114: Missing module docstring", results[0]._message
-        )
-        self.assertIn(
-            "Hint: Run 'git cl lint' to re-run lint checks locally",
-            results[0]._message,
-        )
-        self.assertNotIn(
-            "--fix",
-            results[0]._message,
-        )
-        # Empty stdout returns no errors
-        self.assertEqual(cmd.output_parser(""), [])
-        self.assertEqual(cmd.output_parser("   \n"), [])
-        self.assertIn(b"--score=no", cmd.stdin)
-        results_combined = cmd.output_parser(
-            "file1.py:1:0: C0114: Missing module docstring\n"
-        )
-        self.assertEqual(len(results_combined), 1)
-        self.assertIn(
-            "file1.py:1:0: C0114: Missing module docstring",
-            results_combined[0]._message,
-        )
 
     def GetInputApiWithFiles(self, files):
         change = mock.MagicMock(presubmit.Change)
