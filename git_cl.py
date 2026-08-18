@@ -6020,6 +6020,7 @@ def FindFilesForLint(options, args):
 class PythonLinterConfig(typing.NamedTuple):
     engine: str  # "ruff" or "pylint"
     version: str | None = None
+    pylintrc: str | None = None
 
 
 _dir_linter_cache: dict[tuple[str, str | None], PythonLinterConfig | None] = {}
@@ -6036,8 +6037,8 @@ def _InspectPresubmitForPythonLinter(
     """Inspects a PRESUBMIT.py file to detect configured Python linter.
 
     Returns:
-        PythonLinterConfig(engine="ruff", version=None) if Ruff is configured.
-        PythonLinterConfig(engine="pylint", version=version_str) if Pylint is configured.
+        PythonLinterConfig(engine="ruff", version=None, pylintrc=None) if Ruff is configured.
+        PythonLinterConfig(engine="pylint", version=version_str, pylintrc=pylintrc_path) if Pylint is configured.
         None if neither is configured.
     """
     try:
@@ -6051,6 +6052,7 @@ def _InspectPresubmitForPythonLinter(
         tree = ast.parse(content, filename=presubmit_path)
         has_ruff = False
         pylint_version = None
+        pylint_rcfile = None
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -6069,28 +6071,53 @@ def _InspectPresubmitForPythonLinter(
                     has_ruff = True
                 elif func_name in ("RunPylint", "GetPylint", "CheckPylint"):
                     version = None
+                    rcfile = None
                     for kw in node.keywords:
                         if kw.arg == "version":
                             try:
                                 version = str(ast.literal_eval(kw.value))
                             except (ValueError, SyntaxError):
                                 pass
+                        elif kw.arg == "pylintrc":
+                            try:
+                                rcfile = str(ast.literal_eval(kw.value))
+                            except (ValueError, SyntaxError):
+                                pass
                     if version is not None:
                         pylint_version = version
                     elif pylint_version is None:
                         pylint_version = "2.7"
+                    if rcfile is not None:
+                        pylint_rcfile = rcfile
 
         if has_ruff:
             return PythonLinterConfig(engine="ruff", version=None)
         if pylint_version is not None:
-            return PythonLinterConfig(engine="pylint", version=pylint_version)
+            resolved_rcfile = None
+            if pylint_rcfile:
+                resolved_rcfile = (
+                    pylint_rcfile
+                    if os.path.isabs(pylint_rcfile)
+                    else os.path.normpath(
+                        os.path.join(
+                            os.path.dirname(presubmit_path), pylint_rcfile
+                        )
+                    )
+                )
+            return PythonLinterConfig(
+                engine="pylint",
+                version=pylint_version,
+                pylintrc=resolved_rcfile,
+            )
     except Exception:
         pass
 
     # Regex fallback in case of syntax issues or dynamic AST structures.
     # Exclude comment lines to avoid matching commented-out checks.
     non_comment_lines = "\n".join(
-        line for line in content.splitlines() if not line.strip().startswith("#")
+        line
+        for line in content.splitlines()
+        if not line.strip().startswith("#")
     )
     if re.search(r"\b(?:RunRuff|GetRuff|CheckRuff)\b", non_comment_lines):
         return PythonLinterConfig(engine="ruff", version=None)
@@ -6099,13 +6126,29 @@ def _InspectPresubmitForPythonLinter(
         r"\b(?:RunPylint|GetPylint)\s*\([^)]*version\s*=\s*['\"]?([0-9.]+)['\"]?",
         non_comment_lines,
     )
+    pylint_rcfile_match = re.search(
+        r"\b(?:RunPylint|GetPylint)\s*\([^)]*pylintrc\s*=\s*['\"]?([^'\",\)]+)['\"]?",
+        non_comment_lines,
+    )
+    pylint_rcfile = None
+    if pylint_rcfile_match:
+        pylint_rcfile = pylint_rcfile_match.group(1).strip()
+        if not os.path.isabs(pylint_rcfile):
+            pylint_rcfile = os.path.normpath(
+                os.path.join(os.path.dirname(presubmit_path), pylint_rcfile)
+            )
+
     if pylint_version_match:
         return PythonLinterConfig(
-            engine="pylint", version=pylint_version_match.group(1)
+            engine="pylint",
+            version=pylint_version_match.group(1),
+            pylintrc=pylint_rcfile,
         )
 
     if re.search(r"\b(?:RunPylint|GetPylint|CheckPylint)\b", non_comment_lines):
-        return PythonLinterConfig(engine="pylint", version="2.7")
+        return PythonLinterConfig(
+            engine="pylint", version="2.7", pylintrc=pylint_rcfile
+        )
 
     return None
 
@@ -6268,7 +6311,8 @@ def CMDlint(parser, args):
             if linter_config.engine == "ruff":
                 ruff_files.append(f)
             elif linter_config.engine == "pylint":
-                pylint_files[linter_config.version or "2.7"].append(f)
+                key = (linter_config.version or "2.7", linter_config.pylintrc)
+                pylint_files[key].append(f)
 
         if skipped_py_files:
             for f in skipped_py_files:
@@ -6305,7 +6349,7 @@ def CMDlint(parser, args):
                 " Pylint."
             )
 
-        for version, flist in pylint_files.items():
+        for (version, pylintrc), flist in pylint_files.items():
             tool = os.path.join(DEPOT_TOOLS, f"pylint-{version}")
             if not os.path.exists(tool):
                 print(f"Error: Pylint wrapper not found at {tool}")
@@ -6313,8 +6357,11 @@ def CMDlint(parser, args):
                 continue
 
             stdin_data = "\n".join(flist).encode("utf-8")
+            cmd = ["vpython3", tool, "--args-on-stdin"]
+            if pylintrc:
+                cmd.append(f"--rcfile={pylintrc}")
             p = subprocess2.Popen(
-                ["vpython3", tool, "--args-on-stdin"],
+                cmd,
                 stdin=subprocess2.PIPE,
                 cwd=root_path,
             )

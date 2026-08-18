@@ -8273,6 +8273,23 @@ class InspectPresubmitTestCase(unittest.TestCase):
                 ),
             )
 
+            # Presubmit 1.0 with RunPylint (version 3.2, pylintrc)
+            pylint32_rc_presubmit = os.path.join(
+                temp_dir, "pylint32_rc_PRESUBMIT.py"
+            )
+            with open(pylint32_rc_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def CheckChangeOnUpload(input_api, output_api):\n"
+                    "    return input_api.canned_checks.RunPylint(\n"
+                    "        input_api, output_api, version='3.2', pylintrc='pylintrc-3.2')\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig(
+                    "pylint", "3.2", os.path.join(temp_dir, "pylintrc-3.2")
+                ),
+                git_cl._InspectPresubmitForPythonLinter(pylint32_rc_presubmit),
+            )
+
             empty_presubmit = os.path.join(temp_dir, "empty_PRESUBMIT.py")
             with open(empty_presubmit, "w", encoding="utf-8") as f:
                 f.write("# No python checks\n")
