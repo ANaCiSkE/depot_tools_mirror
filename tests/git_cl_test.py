@@ -8060,6 +8060,405 @@ class CMDLintTestCase(CMDTestCaseBase):
             git_cl.sys.stderr.getvalue(),
         )
 
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("ruff", None),
+    )
+    @mock.patch("git_cl.subprocess2.call", return_value=0)
+    def testLintPythonRuff(self, mock_call, _mock_linter):
+        self.assertEqual(0, git_cl.main(["lint", "test.py"]))
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        mock_call.assert_called_once_with(
+            ["vpython3", expected_tool, "check", "test.py"],
+            cwd=mock.ANY,
+        )
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("ruff", None),
+    )
+    @mock.patch("git_cl.subprocess2.call", return_value=0)
+    def testLintPythonRuffFix(self, mock_call, _mock_linter):
+        self.assertEqual(0, git_cl.main(["lint", "--fix", "test.py"]))
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        mock_call.assert_called_once_with(
+            ["vpython3", expected_tool, "check", "--fix", "test.py"],
+            cwd=mock.ANY,
+        )
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("ruff", None),
+    )
+    @mock.patch(
+        "os.path.exists",
+        side_effect=lambda p: False if "ruff_chromium" in str(p) else True,
+    )
+    def testLintPythonRuffMissingTool(self, _mock_exists, _mock_linter):
+        self.assertEqual(1, git_cl.main(["lint", "test.py"]))
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("ruff", None),
+    )
+    @mock.patch("git_cl.subprocess2.call", return_value=0)
+    def testLintMixedCppAndPython(self, mock_call, _mock_linter):
+        codecs.open().read.return_value = self.bad_indent
+        self.assertEqual(1, git_cl.main(["lint", "test.h", "test.py"]))
+        self.assertIn(
+            "test.h:3:  (cpplint) Do not indent within a namespace",
+            git_cl.sys.stderr.getvalue(),
+        )
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        mock_call.assert_called_once_with(
+            ["vpython3", expected_tool, "check", "test.py"],
+            cwd=mock.ANY,
+        )
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("pylint", "3.2"),
+    )
+    @mock.patch("git_cl.subprocess2.Popen")
+    def testLintPythonPylint(self, mock_popen, _mock_linter):
+        proc = mock.MagicMock()
+        proc.returncode = 0
+        mock_popen.return_value = proc
+        self.assertEqual(0, git_cl.main(["lint", "test.py"]))
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "pylint-3.2")
+        mock_popen.assert_called_once_with(
+            ["vpython3", expected_tool, "--args-on-stdin"],
+            stdin=git_cl.subprocess2.PIPE,
+            cwd=mock.ANY,
+        )
+        proc.communicate.assert_called_once_with(b"test.py")
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("pylint", "2.7"),
+    )
+    @mock.patch("git_cl.subprocess2.Popen")
+    def testLintPythonPylintFixDormant(self, mock_popen, _mock_linter):
+        proc = mock.MagicMock()
+        proc.returncode = 0
+        mock_popen.return_value = proc
+        self.assertEqual(0, git_cl.main(["lint", "--fix", "test.py"]))
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "pylint-2.7")
+        mock_popen.assert_called_once_with(
+            ["vpython3", expected_tool, "--args-on-stdin"],
+            stdin=git_cl.subprocess2.PIPE,
+            cwd=mock.ANY,
+        )
+        proc.communicate.assert_called_once_with(b"test.py")
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("ruff", None),
+    )
+    @mock.patch("git_cl.subprocess2.call", return_value=1)
+    def testLintPythonNonZeroExit(self, mock_call, _mock_linter):
+        self.assertEqual(1, git_cl.main(["lint", "test.py"]))
+
+    @mock.patch(
+        "git_cl._GetPythonLinterForFile",
+        return_value=git_cl.PythonLinterConfig("ruff", None),
+    )
+    @mock.patch("git_cl.subprocess2.call", return_value=0)
+    @mock.patch("sys.platform", "win32")
+    def testLintPythonRuffWindowsChunking(self, mock_call, _mock_linter):
+        files = [f"file_{i}.py" for i in range(150)]
+        self.assertEqual(0, git_cl.main(["lint"] + files))
+        self.assertEqual(mock_call.call_count, 3)
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        # Each chunk has 50 files
+        self.assertEqual(
+            mock_call.call_args_list[0][0][0],
+            ["vpython3", expected_tool, "check"] + files[:50],
+        )
+        self.assertEqual(
+            mock_call.call_args_list[1][0][0],
+            ["vpython3", expected_tool, "check"] + files[50:100],
+        )
+        self.assertEqual(
+            mock_call.call_args_list[2][0][0],
+            ["vpython3", expected_tool, "check"] + files[100:150],
+        )
+
+    @mock.patch("git_cl._GetPythonLinterForFile", return_value=None)
+    @mock.patch("git_cl.subprocess2.call")
+    def testLintPythonSkippedNoConfig(self, mock_call, _mock_linter):
+        self.assertEqual(0, git_cl.main(["lint", "test.py"]))
+        mock_call.assert_not_called()
+
+    @mock.patch(
+        "git_cl.Changelist.GetAffectedFiles",
+        return_value=["deleted.py"],
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        return_value="upstream",
+    )
+    @mock.patch("git_cl.Settings.GetRoot", return_value=".")
+    @mock.patch("git_cl.FindCodereviewSettingsFile", return_value=None)
+    @mock.patch("git_cl._GetPythonLinterForFile")
+    @mock.patch("git_cl.subprocess2.call")
+    @mock.patch(
+        "os.path.isfile",
+        side_effect=lambda p: False if "deleted.py" in str(p) else True,
+    )
+    def testLintPythonSkipsDeletedFiles(
+        self, _mock_isfile, mock_call, mock_linter, *_mock
+    ):
+        self.assertEqual(0, git_cl.main(["lint"]))
+        mock_linter.assert_not_called()
+        mock_call.assert_not_called()
+
+
+class InspectPresubmitTestCase(unittest.TestCase):
+    def testInspectPresubmitForPythonLinter(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Presubmit 2.0 with GetRuff
+            ruff_20_presubmit = os.path.join(temp_dir, "ruff_20_PRESUBMIT.py")
+            with open(ruff_20_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "PRESUBMIT_VERSION = '2.0.0'\n"
+                    "def CheckRuff(input_api, output_api):\n"
+                    "    return input_api.RunTests(input_api.canned_checks.GetRuff(input_api, output_api))\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._InspectPresubmitForPythonLinter(ruff_20_presubmit),
+            )
+
+            # Presubmit 1.0 with RunRuff
+            ruff_10_presubmit = os.path.join(temp_dir, "ruff_10_PRESUBMIT.py")
+            with open(ruff_10_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def CheckChangeOnUpload(input_api, output_api):\n"
+                    "    results = []\n"
+                    "    results.extend(input_api.canned_checks.RunRuff(input_api, output_api))\n"
+                    "    return results\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._InspectPresubmitForPythonLinter(ruff_10_presubmit),
+            )
+
+            # Presubmit 1.0 with RunPylint (version 3.2)
+            pylint32_presubmit = os.path.join(temp_dir, "pylint32_PRESUBMIT.py")
+            with open(pylint32_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def CheckChangeOnUpload(input_api, output_api):\n"
+                    "    return input_api.canned_checks.RunPylint(input_api, output_api, version='3.2')\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("pylint", "3.2"),
+                git_cl._InspectPresubmitForPythonLinter(pylint32_presubmit),
+            )
+
+            # Presubmit 2.0 with GetPylint (default version 2.7)
+            pylint_default_presubmit = os.path.join(
+                temp_dir, "pylint_default_PRESUBMIT.py"
+            )
+            with open(pylint_default_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "PRESUBMIT_VERSION = '2.0.0'\n"
+                    "def CheckPylint(input_api, output_api):\n"
+                    "    return input_api.RunTests(input_api.canned_checks.GetPylint(input_api, output_api))\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("pylint", "2.7"),
+                git_cl._InspectPresubmitForPythonLinter(
+                    pylint_default_presubmit
+                ),
+            )
+
+            empty_presubmit = os.path.join(temp_dir, "empty_PRESUBMIT.py")
+            with open(empty_presubmit, "w", encoding="utf-8") as f:
+                f.write("# No python checks\n")
+            self.assertIsNone(
+                git_cl._InspectPresubmitForPythonLinter(empty_presubmit)
+            )
+
+    def testInspectPresubmitMultiplePylintCalls(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            multi_pylint_presubmit = os.path.join(
+                temp_dir, "multi_pylint_PRESUBMIT.py"
+            )
+            with open(multi_pylint_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def Check1(input_api, output_api):\n"
+                    "    return input_api.canned_checks.RunPylint(input_api, output_api, version='3.2')\n"
+                    "def Check2(input_api, output_api):\n"
+                    "    return input_api.canned_checks.RunPylint(input_api, output_api)\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("pylint", "3.2"),
+                git_cl._InspectPresubmitForPythonLinter(multi_pylint_presubmit),
+            )
+
+    def testInspectPresubmitCommentedOutChecksIgnored(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            commented_presubmit = os.path.join(
+                temp_dir, "commented_PRESUBMIT.py"
+            )
+            with open(commented_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def invalid_syntax(\n"
+                    "# RunRuff(input_api, output_api)\n"
+                    "# RunPylint(input_api, output_api)\n"
+                )
+            self.assertIsNone(
+                git_cl._InspectPresubmitForPythonLinter(commented_presubmit)
+            )
+
+    def testInspectPresubmitFunctionDefWithoutCannedCall(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ruff_func_presubmit = os.path.join(
+                temp_dir, "ruff_func_PRESUBMIT.py"
+            )
+            with open(ruff_func_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "PRESUBMIT_VERSION = '2.0.0'\n"
+                    "def CheckRuff(input_api, output_api):\n"
+                    "    return []\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._InspectPresubmitForPythonLinter(ruff_func_presubmit),
+            )
+
+            pylint_func_presubmit = os.path.join(
+                temp_dir, "pylint_func_PRESUBMIT.py"
+            )
+            with open(pylint_func_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "PRESUBMIT_VERSION = '2.0.0'\n"
+                    "def CheckPylint(input_api, output_api):\n"
+                    "    return []\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("pylint", "2.7"),
+                git_cl._InspectPresubmitForPythonLinter(pylint_func_presubmit),
+            )
+
+    def testInspectPresubmitNumericVersion(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pylint_num_presubmit = os.path.join(
+                temp_dir, "pylint_num_PRESUBMIT.py"
+            )
+            with open(pylint_num_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def CheckChangeOnUpload(input_api, output_api):\n"
+                    "    return input_api.canned_checks.RunPylint(input_api,"
+                    " output_api, version=3.2)\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("pylint", "3.2"),
+                git_cl._InspectPresubmitForPythonLinter(pylint_num_presubmit),
+            )
+
+    def testInspectPresubmitSyntaxErrorFallback(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            syntax_err_presubmit = os.path.join(
+                temp_dir, "syntax_err_PRESUBMIT.py"
+            )
+            with open(syntax_err_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def invalid_syntax(\n"  # unclosed parenthesis
+                    "RunRuff(input_api, output_api)\n"
+                )
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._InspectPresubmitForPythonLinter(syntax_err_presubmit),
+            )
+
+    def testGetPythonLinterForFileAncestorWalk(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            top_presubmit = os.path.join(temp_dir, "PRESUBMIT.py")
+            with open(top_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def Check(input_api, output_api): return"
+                    " input_api.canned_checks.RunRuff(input_api, output_api)\n"
+                )
+            sub_dir = os.path.join(temp_dir, "sub", "dir")
+            os.makedirs(sub_dir)
+            target_file = os.path.join(sub_dir, "target.py")
+            with open(target_file, "w", encoding="utf-8") as f:
+                f.write("print('hello')\n")
+
+            git_cl._ClearDirLinterCache()
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._GetPythonLinterForFile(target_file, root_dir=temp_dir),
+            )
+
+    def testGetPythonLinterForFileIntermediateCacheHit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            top_presubmit = os.path.join(temp_dir, "PRESUBMIT.py")
+            with open(top_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def Check(input_api, output_api): return"
+                    " input_api.canned_checks.RunRuff(input_api, output_api)\n"
+                )
+            mid_dir = os.path.join(temp_dir, "mid")
+            sub_dir = os.path.join(mid_dir, "sub")
+            os.makedirs(sub_dir)
+            target1 = os.path.join(mid_dir, "file1.py")
+            target2 = os.path.join(sub_dir, "file2.py")
+            with open(target1, "w") as f:
+                f.write("")
+            with open(target2, "w") as f:
+                f.write("")
+
+            git_cl._ClearDirLinterCache()
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._GetPythonLinterForFile(target1, root_dir=temp_dir),
+            )
+            # Intermediate dir `mid` is now cached
+            self.assertIn((mid_dir, temp_dir), git_cl._dir_linter_cache)
+            # Querying target2 should hit the cached intermediate dir `mid`
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._GetPythonLinterForFile(target2, root_dir=temp_dir),
+            )
+
+    def testGetPythonLinterForFileStopsAtGitBorder(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Parent directory outside repo has a PRESUBMIT.py with Ruff
+            parent_presubmit = os.path.join(temp_dir, "PRESUBMIT.py")
+            with open(parent_presubmit, "w", encoding="utf-8") as f:
+                f.write(
+                    "def Check(input_api, output_api): return"
+                    " input_api.canned_checks.RunRuff(input_api, output_api)\n"
+                )
+
+            # Repo directory with .git
+            repo_dir = os.path.join(temp_dir, "repo")
+            os.makedirs(os.path.join(repo_dir, ".git"))
+            sub_dir = os.path.join(repo_dir, "sub")
+            os.makedirs(sub_dir)
+            target_file = os.path.join(sub_dir, "target.py")
+            with open(target_file, "w", encoding="utf-8") as f:
+                f.write("print('hello')\n")
+
+            git_cl._ClearDirLinterCache()
+            # Climbing should stop at repo_dir (.git border) and NOT find parent_presubmit
+            self.assertIsNone(git_cl._GetPythonLinterForFile(target_file))
+
+            # If inherit-review-settings-ok is present in repo_dir, it can climb past .git
+            with open(
+                os.path.join(repo_dir, "inherit-review-settings-ok"), "w"
+            ) as f:
+                f.write("")
+
+            git_cl._ClearDirLinterCache()
+            self.assertEqual(
+                git_cl.PythonLinterConfig("ruff", None),
+                git_cl._GetPythonLinterForFile(target_file),
+            )
+
 
 class CMDCherryPickTestCase(CMDTestCaseBase):
     def testCreateCommitMessage(self):
