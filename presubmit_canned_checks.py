@@ -1607,7 +1607,7 @@ def GetPylint(
         pylintrc = input_api.os_path.join(_HERE, "pylintrc")
         if input_api.os_path.exists(f"{pylintrc}-{version}"):
             pylintrc += f"-{version}"
-    extra_args = ["--rcfile=%s" % pylintrc]
+    extra_args = [f"--rcfile={pylintrc}", "--score=no"]
     if disabled_warnings:
         extra_args.extend(["-d", ",".join(disabled_warnings)])
 

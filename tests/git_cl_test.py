@@ -8127,7 +8127,7 @@ class CMDLintTestCase(CMDTestCaseBase):
         self.assertEqual(0, git_cl.main(["lint", "test.py"]))
         expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "pylint-3.2")
         mock_popen.assert_called_once_with(
-            ["vpython3", expected_tool, "--args-on-stdin"],
+            ["vpython3", expected_tool, "--args-on-stdin", "--score=no"],
             stdin=git_cl.subprocess2.PIPE,
             cwd=mock.ANY,
         )
@@ -8145,7 +8145,7 @@ class CMDLintTestCase(CMDTestCaseBase):
         self.assertEqual(0, git_cl.main(["lint", "--fix", "test.py"]))
         expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "pylint-2.7")
         mock_popen.assert_called_once_with(
-            ["vpython3", expected_tool, "--args-on-stdin"],
+            ["vpython3", expected_tool, "--args-on-stdin", "--score=no"],
             stdin=git_cl.subprocess2.PIPE,
             cwd=mock.ANY,
         )

@@ -6360,6 +6360,8 @@ def CMDlint(parser, args):
             cmd = ["vpython3", tool, "--args-on-stdin"]
             if pylintrc:
                 cmd.append(f"--rcfile={pylintrc}")
+            # Add --score=no after --rcfile so that it clobbers rcfile values.
+            cmd.append("--score=no")
             p = subprocess2.Popen(
                 cmd,
                 stdin=subprocess2.PIPE,

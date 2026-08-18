@@ -4020,7 +4020,9 @@ the current line as well!
             [
                 mock.call(
                     process,
-                    ("--rcfile=%s\nfile1.py" % pylintrc).encode("utf-8"),
+                    ("--rcfile=%s\n--score=no\nfile1.py" % pylintrc).encode(
+                        "utf-8"
+                    ),
                 ),
             ],
         )
@@ -4162,6 +4164,15 @@ the current line as well!
         # Empty stdout returns no errors
         self.assertEqual(cmd.output_parser(""), [])
         self.assertEqual(cmd.output_parser("   \n"), [])
+        self.assertIn(b"--score=no", cmd.stdin)
+        results_combined = cmd.output_parser(
+            "file1.py:1:0: C0114: Missing module docstring\n"
+        )
+        self.assertEqual(len(results_combined), 1)
+        self.assertIn(
+            "file1.py:1:0: C0114: Missing module docstring",
+            results_combined[0]._message,
+        )
 
     def GetInputApiWithFiles(self, files):
         change = mock.MagicMock(presubmit.Change)
