@@ -210,7 +210,7 @@ def fetch_log_snippet(res_name, raw=False):
         "luci.resultdb.v1.ResultDB.ListArtifacts",
         payload,
     )
-    if not result or "artifacts" not in result:
+    if not result or not result.get("artifacts"):
         msg = "No artifacts found. This can happen if the build failed early or the logs were purged."
         if not is_authenticated():
             msg += " If the build is private, the user must run `bb auth-login` to authenticate."
@@ -306,7 +306,7 @@ def check_test(build_id, test_regex):
             "luci.resultdb.v1.ResultDB.QueryTestResults",
             payload,
         )
-        if not result:
+        if result is None:
             print("Error: Failed to query ResultDB", file=sys.stderr)
             break
 
