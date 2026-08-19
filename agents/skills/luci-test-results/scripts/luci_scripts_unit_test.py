@@ -2,7 +2,7 @@
 # Copyright 2026 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-"""Unit tests for luci_triage.py."""
+"""Unit tests for modular luci-test-results scripts."""
 
 import io
 import os
@@ -11,7 +11,12 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import luci_triage
+import check_test
+import fetch_log
+import find_cl_builds
+import list_failures
+import luci_client
+import test_history
 
 SAMPLE_BUILD_ID = "8000000000000000001"
 SAMPLE_BUILD_ID_SUCCESS = "8000000000000000002"
@@ -32,43 +37,43 @@ SAMPLE_RESULT_NAME = (
 )
 
 
-class TestLuciTriage(unittest.TestCase):
-    @mock.patch("luci_triage.subprocess.Popen")
+class TestLuciScripts(unittest.TestCase):
+    @mock.patch("luci_client.subprocess.Popen")
     def test_run_prpc_success(self, mock_popen):
         mock_proc = mock.MagicMock()
         mock_proc.communicate.return_value = ('{"foo": "bar"}', "")
         mock_proc.returncode = 0
         mock_popen.return_value.__enter__.return_value = mock_proc
 
-        res = luci_triage.run_prpc("service.example.com", "Method", {"k": "v"})
+        res = luci_client.run_prpc("service.example.com", "Method", {"k": "v"})
         self.assertEqual(res, {"foo": "bar"})
 
     @mock.patch("sys.stderr", new_callable=io.StringIO)
-    @mock.patch("luci_triage.subprocess.Popen")
+    @mock.patch("luci_client.subprocess.Popen")
     def test_run_prpc_error(self, mock_popen, mock_stderr):
         mock_proc = mock.MagicMock()
         mock_proc.communicate.return_value = ("", "rpc error")
         mock_proc.returncode = 1
         mock_popen.return_value.__enter__.return_value = mock_proc
 
-        res = luci_triage.run_prpc("service.example.com", "Method", {"k": "v"})
+        res = luci_client.run_prpc("service.example.com", "Method", {"k": "v"})
         self.assertIsNone(res)
 
-    @mock.patch("luci_triage.subprocess.run")
+    @mock.patch("luci_client.subprocess.run")
     def test_is_authenticated(self, mock_run):
         mock_run.return_value.returncode = 0
-        self.assertTrue(luci_triage.is_authenticated())
+        self.assertTrue(luci_client.is_authenticated())
 
         mock_run.return_value.returncode = 1
-        self.assertFalse(luci_triage.is_authenticated())
+        self.assertFalse(luci_client.is_authenticated())
 
         mock_run.side_effect = FileNotFoundError()
-        self.assertFalse(luci_triage.is_authenticated())
+        self.assertFalse(luci_client.is_authenticated())
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("luci_client.run_prpc")
     def test_resolve_build_id(self, mock_prpc):
         mock_prpc.return_value = {"id": SAMPLE_BUILD_ID_SUCCESS}
-        build_id = luci_triage.resolve_build_id(
+        build_id = luci_client.resolve_build_id(
             "chromium", "ci", SAMPLE_BUILDER, SAMPLE_BUILD_NUM
         )
         self.assertEqual(build_id, SAMPLE_BUILD_ID_SUCCESS)
@@ -85,13 +90,13 @@ class TestLuciTriage(unittest.TestCase):
             },
         )
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("luci_client.run_prpc")
     def test_get_build(self, mock_prpc):
         mock_prpc.return_value = {
             "id": SAMPLE_BUILD_ID_SUCCESS,
             "status": "SUCCESS",
         }
-        data = luci_triage.get_build(f"b{SAMPLE_BUILD_ID_SUCCESS}")
+        data = luci_client.get_build(f"b{SAMPLE_BUILD_ID_SUCCESS}")
         self.assertEqual(data["status"], "SUCCESS")
         mock_prpc.assert_called_once_with(
             "cr-buildbucket.appspot.com",
@@ -104,7 +109,7 @@ class TestLuciTriage(unittest.TestCase):
             },
         )
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("find_cl_builds.run_prpc")
     def test_find_cl_builds_with_patchset(self, mock_prpc):
         mock_prpc.return_value = {
             "builds": [
@@ -125,17 +130,17 @@ class TestLuciTriage(unittest.TestCase):
                 },
             ]
         }
-        failed = luci_triage.find_cl_builds(SAMPLE_CL, patchset=1)
+        failed = find_cl_builds.find_cl_builds(SAMPLE_CL, patchset=1)
         self.assertEqual(len(failed), 1)
         self.assertEqual(failed[0]["builder"], "linux-rel")
 
-        all_builds = luci_triage.find_cl_builds(
+        all_builds = find_cl_builds.find_cl_builds(
             SAMPLE_CL, patchset=1, show_all=True
         )
         self.assertEqual(len(all_builds), 3)
 
-    @mock.patch("luci_triage.subprocess.check_output")
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("find_cl_builds.subprocess.check_output")
+    @mock.patch("find_cl_builds.run_prpc")
     def test_find_cl_builds_default_patchset(
         self, mock_prpc, mock_check_output
     ):
@@ -153,7 +158,7 @@ class TestLuciTriage(unittest.TestCase):
                 }
             ]
         }
-        builds = luci_triage.find_cl_builds(SAMPLE_CL)
+        builds = find_cl_builds.find_cl_builds(SAMPLE_CL)
         self.assertEqual(len(builds), 1)
         mock_prpc.assert_called_once_with(
             "cr-buildbucket.appspot.com",
@@ -171,7 +176,7 @@ class TestLuciTriage(unittest.TestCase):
             },
         )
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("list_failures.run_prpc")
     def test_list_failures_grouped_by_task(self, mock_prpc):
         mock_prpc.return_value = {
             "testVariants": [
@@ -218,30 +223,30 @@ class TestLuciTriage(unittest.TestCase):
         }
 
         # Default excludes EXONERATED, includes FLAKY and UNEXPECTED
-        res = luci_triage.list_failures(f"b{SAMPLE_BUILD_ID}")
+        res = list_failures.list_failures(f"b{SAMPLE_BUILD_ID}")
         self.assertIn(SAMPLE_TASK_ID, res)
         self.assertEqual(len(res[SAMPLE_TASK_ID]), 2)
         self.assertEqual(res[SAMPLE_TASK_ID][0]["id"], SAMPLE_TEST_ID)
         self.assertEqual(res[SAMPLE_TASK_ID][0]["err"], "AssertionError")
 
         # Ignore flaky
-        res_no_flake = luci_triage.list_failures(
+        res_no_flake = list_failures.list_failures(
             SAMPLE_BUILD_ID, ignore_flaky=True
         )
         self.assertEqual(len(res_no_flake[SAMPLE_TASK_ID]), 1)
         self.assertEqual(res_no_flake[SAMPLE_TASK_ID][0]["id"], SAMPLE_TEST_ID)
 
         # Include exonerated
-        res_exonerated = luci_triage.list_failures(
+        res_exonerated = list_failures.list_failures(
             SAMPLE_BUILD_ID, include_exonerated=True
         )
         self.assertEqual(len(res_exonerated[SAMPLE_TASK_ID]), 3)
 
         # Limit results
-        res_limit = luci_triage.list_failures(SAMPLE_BUILD_ID, limit=1)
+        res_limit = list_failures.list_failures(SAMPLE_BUILD_ID, limit=1)
         self.assertEqual(len(res_limit[SAMPLE_TASK_ID]), 1)
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("list_failures.run_prpc")
     def test_list_failures_pagination(self, mock_prpc):
         mock_prpc.side_effect = [
             {
@@ -278,13 +283,13 @@ class TestLuciTriage(unittest.TestCase):
                 ]
             },
         ]
-        res = luci_triage.list_failures(SAMPLE_BUILD_ID)
+        res = list_failures.list_failures(SAMPLE_BUILD_ID)
         self.assertEqual(len(res), 2)
         self.assertIn("task1", res)
         self.assertIn("task2", res)
 
-    @mock.patch("luci_triage.subprocess.check_output")
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("fetch_log.subprocess.check_output")
+    @mock.patch("fetch_log.run_prpc")
     def test_fetch_log_snippet_regex(self, mock_prpc, mock_check_output):
         mock_prpc.return_value = {
             "artifacts": [
@@ -303,11 +308,11 @@ class TestLuciTriage(unittest.TestCase):
         )
         mock_check_output.return_value = sample_log.encode("utf-8")
 
-        output = luci_triage.fetch_log_snippet(SAMPLE_RESULT_NAME)
+        output = fetch_log.fetch_log_snippet(SAMPLE_RESULT_NAME)
         self.assertIn("[ RUN      ]", output)
 
-    @mock.patch("luci_triage.subprocess.check_output")
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("fetch_log.subprocess.check_output")
+    @mock.patch("fetch_log.run_prpc")
     def test_fetch_log_snippet_raw(self, mock_prpc, mock_check_output):
         mock_prpc.return_value = {
             "artifacts": [
@@ -320,11 +325,11 @@ class TestLuciTriage(unittest.TestCase):
         sample_log = "Raw log output without matches"
         mock_check_output.return_value = sample_log.encode("utf-8")
 
-        output = luci_triage.fetch_log_snippet(SAMPLE_RESULT_NAME, raw=True)
+        output = fetch_log.fetch_log_snippet(SAMPLE_RESULT_NAME, raw=True)
         self.assertEqual(output, sample_log)
 
-    @mock.patch("luci_triage.is_authenticated")
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("fetch_log.is_authenticated")
+    @mock.patch("fetch_log.run_prpc")
     def test_fetch_log_snippet_no_artifacts(
         self, mock_prpc, mock_is_authenticated
     ):
@@ -332,13 +337,13 @@ class TestLuciTriage(unittest.TestCase):
 
         for empty_val in ({}, {"artifacts": []}, None):
             mock_prpc.return_value = empty_val
-            output = luci_triage.fetch_log_snippet(
+            output = fetch_log.fetch_log_snippet(
                 "invocations/task-123/tests/foo/results/1"
             )
             self.assertIn("No artifacts found", output)
             self.assertIn("bb auth-login", output)
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("check_test.run_prpc")
     def test_check_test(self, mock_prpc):
         mock_prpc.return_value = {
             "testResults": [
@@ -349,7 +354,7 @@ class TestLuciTriage(unittest.TestCase):
                 }
             ]
         }
-        res = luci_triage.check_test(f"b{SAMPLE_BUILD_ID}", SAMPLE_TEST_QUERY)
+        res = check_test.check_test(f"b{SAMPLE_BUILD_ID}", SAMPLE_TEST_QUERY)
         self.assertEqual(len(res), 1)
         self.assertEqual(res[0]["status"], "PASS")
         mock_prpc.assert_called_once_with(
@@ -365,7 +370,7 @@ class TestLuciTriage(unittest.TestCase):
             },
         )
 
-    @mock.patch("luci_triage.run_prpc")
+    @mock.patch("test_history.run_prpc")
     def test_test_history(self, mock_prpc):
         mock_prpc.return_value = {
             "verdicts": [
@@ -375,7 +380,7 @@ class TestLuciTriage(unittest.TestCase):
                 }
             ]
         }
-        verdicts = luci_triage.test_history(
+        verdicts = test_history.test_history(
             "chromium",
             SAMPLE_TEST_ID,
             limit=5,

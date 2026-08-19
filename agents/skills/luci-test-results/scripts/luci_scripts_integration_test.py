@@ -2,7 +2,7 @@
 # Copyright 2026 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-"""Live integration tests for luci_triage.py.
+"""Live integration tests for modular luci-test-results scripts.
 
 Dynamically discovers fresh CI builds and tests against live endpoints.
 Prints structured test results for LLM agent confirmation.
@@ -14,7 +14,12 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import luci_triage
+import check_test
+import fetch_log
+import find_cl_builds
+import list_failures
+import luci_client
+import test_history
 
 SAMPLE_BUILDER = "android-13-x64-rel"
 SAMPLE_CL = "8260911"
@@ -29,7 +34,7 @@ SAMPLE_CPP_TEST_ID = (
 )
 
 
-class TestLuciTriageIntegration(unittest.TestCase):
+class TestLuciScriptsIntegration(unittest.TestCase):
     success_build_id = None
     success_build_num = None
     failure_build_id = None
@@ -41,12 +46,12 @@ class TestLuciTriageIntegration(unittest.TestCase):
         print("[LUCI Integration Test] Starting live endpoint validation")
         print("=" * 80)
 
-        if not luci_triage.is_authenticated():
+        if not luci_client.is_authenticated():
             print("[AUTH] Not authenticated to LUCI (run 'bb auth-login')")
             return
 
         # Dynamically discover the latest SUCCESS CI build
-        res_success = luci_triage.run_prpc(
+        res_success = luci_client.run_prpc(
             "cr-buildbucket.appspot.com",
             "buildbucket.v2.Builds.SearchBuilds",
             {
@@ -73,7 +78,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
             cls.success_build_num = None
 
         # Dynamically discover the latest FAILURE CI build
-        res_fail = luci_triage.run_prpc(
+        res_fail = luci_client.run_prpc(
             "cr-buildbucket.appspot.com",
             "buildbucket.v2.Builds.SearchBuilds",
             {
@@ -106,13 +111,13 @@ class TestLuciTriageIntegration(unittest.TestCase):
         print("-" * 80)
 
     def setUp(self):
-        if not luci_triage.is_authenticated():
+        if not luci_client.is_authenticated():
             self.skipTest("Not authenticated to LUCI (run 'bb auth-login')")
         if not self.success_build_id:
             self.skipTest("Could not discover latest CI build for builder")
 
     def test_resolve_build_id(self):
-        build_id = luci_triage.resolve_build_id(
+        build_id = luci_client.resolve_build_id(
             "chromium", "ci", SAMPLE_BUILDER, self.success_build_num
         )
         self.assertEqual(build_id, self.success_build_id)
@@ -122,7 +127,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
         )
 
     def test_get_build(self):
-        data = luci_triage.get_build(f"b{self.success_build_id}")
+        data = luci_client.get_build(f"b{self.success_build_id}")
         self.assertEqual(data.get("status"), "SUCCESS")
         self.assertEqual(data.get("id"), self.success_build_id)
         print(
@@ -132,7 +137,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
 
     def test_find_cl_builds(self):
         # Test default behavior: queries Gerrit REST API for latest patchset
-        builds_latest = luci_triage.find_cl_builds(SAMPLE_CL)
+        builds_latest = find_cl_builds.find_cl_builds(SAMPLE_CL)
         self.assertIsInstance(builds_latest, list)
         self.assertTrue(
             all("builder" in b and "id" in b for b in builds_latest)
@@ -143,7 +148,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
         )
 
         # Test show_all=True: returns all builds including SUCCESS/STARTED
-        builds_all = luci_triage.find_cl_builds(SAMPLE_CL, show_all=True)
+        builds_all = find_cl_builds.find_cl_builds(SAMPLE_CL, show_all=True)
         self.assertGreater(len(builds_all), 0)
         self.assertGreaterEqual(len(builds_all), len(builds_latest))
         print(
@@ -156,7 +161,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
             (SAMPLE_JAVA_TEST_QUERY, "Java"),
             (SAMPLE_CPP_TEST_QUERY, "C++"),
         ]:
-            res = luci_triage.check_test(f"b{self.success_build_id}", query)
+            res = check_test.check_test(f"b{self.success_build_id}", query)
             self.assertGreater(len(res), 0)
             self.assertTrue(any(query in r.get("id", "") for r in res))
             print(
@@ -171,7 +176,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
             (SAMPLE_JAVA_TEST_ID, "chrome_public_test_apk", "Java JUnit"),
             (SAMPLE_CPP_TEST_ID, "base_unittests", "C++ GTest"),
         ]:
-            verdicts = luci_triage.test_history(
+            verdicts = test_history.test_history(
                 "chromium",
                 test_id,
                 limit=5,
@@ -189,7 +194,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
         if not self.failure_build_id:
             self.skipTest("No recent failing build found for builder")
 
-        res = luci_triage.list_failures(f"b{self.failure_build_id}")
+        res = list_failures.list_failures(f"b{self.failure_build_id}")
         if not res:
             self.skipTest(
                 f"Build {self.failure_build_id} has no failed test variants in"
@@ -201,7 +206,7 @@ class TestLuciTriageIntegration(unittest.TestCase):
 
         first_res_name = res[first_task][0]["res"]
         first_test_id = res[first_task][0]["id"]
-        output = luci_triage.fetch_log_snippet(first_res_name)
+        output = fetch_log.fetch_log_snippet(first_res_name)
         self.assertGreater(len(output), 0)
 
         preview = output.strip().split("\n")[0][:100]
