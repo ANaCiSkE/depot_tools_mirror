@@ -826,13 +826,6 @@ class TestRunRuffWithRanges(unittest.TestCase):
             ),
             1,
         )
-        # Stdin ('-') is rejected for multiple ranges
-        self.assertEqual(
-            run_ruff_with_ranges(
-                ["format", "--range=1:1-2:1", "--range=5:1-6:1", "-"]
-            ),
-            1,
-        )
         # Missing target is rejected
         self.assertEqual(
             run_ruff_with_ranges(
@@ -972,6 +965,50 @@ class TestRunRuffWithRanges(unittest.TestCase):
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
+
+    @patch("subprocess.run")
+    @patch("sys.stdout")
+    @patch("sys.stdin")
+    def test_sequential_chaining_stdin(self, mock_stdin, mock_stdout, mock_run):
+        mock_stdin.buffer.read.return_value = (
+            b"line1\nline2\nline3\nline4\nline5\nline6\nline7\n"
+        )
+        proc1 = Mock(returncode=0, stdout=b"int_out\n")
+        proc2 = Mock(returncode=0, stdout=b"final_out\n")
+        mock_run.side_effect = [proc1, proc2]
+
+        ret = run_ruff_with_ranges(
+            [
+                "format",
+                "--range=1:1-3:1",
+                "--range=5:1-7:1",
+                "--stdin-filename=/path/to/foo.py",
+                "-",
+            ]
+        )
+        self.assertEqual(ret, 0)
+        self.assertEqual(mock_run.call_count, 2)
+        # Verify bottom-up execution (5:1-7:1 first, then 1:1-3:1) and --stdin-filename injection
+        self.assertIn("--range=5:1-7:1", mock_run.call_args_list[0][0][0])
+        self.assertIn(
+            "--stdin-filename=/path/to/foo.py",
+            mock_run.call_args_list[0][0][0],
+        )
+        self.assertIn("--force-exclude", mock_run.call_args_list[0][0][0])
+        self.assertEqual(
+            mock_run.call_args_list[0][1]["input"],
+            b"line1\nline2\nline3\nline4\nline5\nline6\nline7\n",
+        )
+        self.assertIn("--range=1:1-3:1", mock_run.call_args_list[1][0][0])
+        self.assertIn(
+            "--stdin-filename=/path/to/foo.py",
+            mock_run.call_args_list[1][0][0],
+        )
+        self.assertIn("--force-exclude", mock_run.call_args_list[1][0][0])
+        self.assertEqual(
+            mock_run.call_args_list[1][1]["input"], b"int_out\n"
+        )
+        mock_stdout.buffer.write.assert_called_once_with(b"final_out\n")
 
     @patch("subprocess.run")
     @patch("sys.stdout")

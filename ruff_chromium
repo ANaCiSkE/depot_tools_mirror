@@ -505,35 +505,52 @@ def run_ruff_with_ranges(args: list[str]) -> int:
             "multiple ranges are only supported for the 'format' subcommand\n"
         )
         return 1
-    if len(opts.target_files) != 1 or "-" in parsed_args.pass_through_args:
+    is_stdin = "-" in parsed_args.pass_through_args
+    if not is_stdin and len(opts.target_files) != 1:
         sys.stderr.write(
-            "multi-range formatting requires exactly one target file on disk (stdin '-' is not supported)\n"
+            "multi-range formatting requires either stdin '-' or exactly one target file on disk\n"
         )
         return 1
 
-    target = opts.target_files[0]
-
-    try:
-        with open(target, "rb") as f:
-            original_val = f.read()
-    except Exception as e:
-        sys.stderr.write(f"failed to read {target}: {e}\n")
-        return 1
+    if is_stdin:
+        original_val = sys.stdin.buffer.read()
+        target = opts.target_files[0] if opts.target_files else "stdin"
+    else:
+        target = opts.target_files[0]
+        try:
+            with open(target, "rb") as f:
+                original_val = f.read()
+        except Exception as e:
+            sys.stderr.write(f"failed to read {target}: {e}\n")
+            return 1
 
     has_stdin_filename = any(
         a == "--stdin-filename" or a.startswith("--stdin-filename=")
         for a in opts.chain_base_args
     )
-    if not has_stdin_filename:
+    if not has_stdin_filename and not is_stdin:
         opts.chain_base_args.append(f"--stdin-filename={target}")
-    opts.chain_base_args.append("--force-exclude")
-    opts.chain_base_args.append("-")
+    if "--force-exclude" not in opts.chain_base_args:
+        opts.chain_base_args.append("--force-exclude")
+    if not is_stdin:
+        opts.chain_base_args.append("-")
 
     exit_code, formatted_val = execute_ranges_chain(
         opts.chain_base_args, opts.subcmd_idx, parsed_args.ranges, original_val
     )
     if exit_code != 0:
         return exit_code
+
+    if is_stdin:
+        if opts.has_diff:
+            return dispatch_output(
+                target, original_val, formatted_val, opts.has_check, opts.has_diff
+            )
+        if opts.has_check:
+            return 1 if formatted_val != original_val else 0
+        sys.stdout.buffer.write(formatted_val)
+        sys.stdout.buffer.flush()
+        return 0
 
     return dispatch_output(
         target, original_val, formatted_val, opts.has_check, opts.has_diff
