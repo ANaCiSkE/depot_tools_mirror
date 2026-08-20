@@ -1251,6 +1251,7 @@ class TestGitCl(unittest.TestCase):
         ref_to_push="abcdef0123456789",
         external_parent=None,
         push_opts=None,
+        trace=False,
     ):
         if post_amend_description is None:
             post_amend_description = description
@@ -1481,132 +1482,145 @@ class TestGitCl(unittest.TestCase):
 
         final_description = final_description or post_amend_description.strip()
 
-        trace_name = os.path.join("TRACES_DIR", "20170316T200041.000000")
+        if trace or os.environ.get("GIT_CL_TRACE") == "1":
+            trace_name = os.path.join("TRACES_DIR", "20170316T200041.000000")
 
-        # Trace-related calls
-        calls += [
-            # Write a description with context for the current trace.
-            (
-                (
-                    [
-                        "FileWrite",
-                        trace_name + "-README",
-                        "%(date)s\n"
-                        "%(short_hostname)s-review.googlesource.com\n"
-                        "%(change_id)s\n"
-                        "%(title)s\n"
-                        "%(description)s\n"
-                        "1000\n"
-                        "0\n"
-                        "%(trace_name)s"
-                        % {
-                            "date": "2017-03-16T20:00:41.000000",
-                            "short_hostname": short_hostname,
-                            "change_id": change_id,
-                            "description": final_description,
-                            "title": title or "<untitled>",
-                            "trace_name": trace_name,
-                        },
-                    ],
-                ),
-                None,
-            ),
-            # Read traces and shorten git hashes.
-            (
-                (["os.path.isfile", os.path.join("TEMP_DIR", "trace-packet")],),
-                True,
-            ),
-            (
-                (["FileRead", os.path.join("TEMP_DIR", "trace-packet")],),
-                (
-                    "git-hash: 0123456789012345678901234567890123456789\n"
-                    "git-hash: abcdeabcdeabcdeabcdeabcdeabcdeabcdeabcde\n"
-                ),
-            ),
-            (
-                (
-                    [
-                        "FileWrite",
-                        os.path.join("TEMP_DIR", "trace-packet"),
-                        "git-hash: 012345\ngit-hash: abcdea\n",
-                    ],
-                ),
-                None,
-            ),
-            # Make zip file for the git traces.
-            (
-                (["make_archive", trace_name + "-traces", "zip", "TEMP_DIR"],),
-                None,
-            ),
-            # Collect git config and gitcookies.
-            #
-            # We accept ANY for the git-config file because it's just reflecting
-            # our mocked git config in scm.GIT anyway.
-            (
-                (
-                    [
-                        "FileWrite",
-                        os.path.join("TEMP_DIR", "git-config"),
-                        mock.ANY,
-                    ],
-                ),
-                None,
-            ),
-            (
-                (["os.path.isfile", os.path.join("~", ".gitcookies")],),
-                gitcookies_exists,
-            ),
-        ]
-        if gitcookies_exists:
+            # Trace-related calls
             calls += [
+                # Write a description with context for the current trace.
                 (
-                    (["FileRead", os.path.join("~", ".gitcookies")],),
-                    "gitcookies 1/SECRET",
+                    (
+                        [
+                            "FileWrite",
+                            trace_name + "-README",
+                            "%(date)s\n"
+                            "%(short_hostname)s-review.googlesource.com\n"
+                            "%(change_id)s\n"
+                            "%(title)s\n"
+                            "%(description)s\n"
+                            "1000\n"
+                            "0\n"
+                            "%(trace_name)s"
+                            % {
+                                "date": "2017-03-16T20:00:41.000000",
+                                "short_hostname": short_hostname,
+                                "change_id": change_id,
+                                "description": final_description,
+                                "title": title or "<untitled>",
+                                "trace_name": trace_name,
+                            },
+                        ],
+                    ),
+                    None,
+                ),
+                # Read traces and shorten git hashes.
+                (
+                    (
+                        [
+                            "os.path.isfile",
+                            os.path.join("TEMP_DIR", "trace-packet"),
+                        ],
+                    ),
+                    True,
+                ),
+                (
+                    (["FileRead", os.path.join("TEMP_DIR", "trace-packet")],),
+                    (
+                        "git-hash: 0123456789012345678901234567890123456789\n"
+                        "git-hash: abcdeabcdeabcdeabcdeabcdeabcdeabcdeabcde\n"
+                    ),
                 ),
                 (
                     (
                         [
                             "FileWrite",
-                            os.path.join(
-                                "TEMP_DIR",
-                                "CookiesAuthenticatorMock.debug_summary_state",
-                            ),
-                            "gitcookies REDACTED",
+                            os.path.join("TEMP_DIR", "trace-packet"),
+                            "git-hash: 012345\ngit-hash: abcdea\n",
                         ],
                     ),
                     None,
                 ),
-            ]
-        else:
-            calls += [
+                # Make zip file for the git traces.
+                (
+                    (
+                        [
+                            "make_archive",
+                            trace_name + "-traces",
+                            "zip",
+                            "TEMP_DIR",
+                        ],
+                    ),
+                    None,
+                ),
+                # Collect git config and gitcookies.
+                #
+                # We accept ANY for the git-config file because it's just reflecting
+                # our mocked git config in scm.GIT anyway.
                 (
                     (
                         [
                             "FileWrite",
-                            os.path.join(
-                                "TEMP_DIR",
-                                "CookiesAuthenticatorMock.debug_summary_state",
-                            ),
-                            "",
+                            os.path.join("TEMP_DIR", "git-config"),
+                            mock.ANY,
+                        ],
+                    ),
+                    None,
+                ),
+                (
+                    (["os.path.isfile", os.path.join("~", ".gitcookies")],),
+                    gitcookies_exists,
+                ),
+            ]
+            if gitcookies_exists:
+                calls += [
+                    (
+                        (["FileRead", os.path.join("~", ".gitcookies")],),
+                        "gitcookies 1/SECRET",
+                    ),
+                    (
+                        (
+                            [
+                                "FileWrite",
+                                os.path.join(
+                                    "TEMP_DIR",
+                                    "CookiesAuthenticatorMock.debug_summary_state",
+                                ),
+                                "gitcookies REDACTED",
+                            ],
+                        ),
+                        None,
+                    ),
+                ]
+            else:
+                calls += [
+                    (
+                        (
+                            [
+                                "FileWrite",
+                                os.path.join(
+                                    "TEMP_DIR",
+                                    "CookiesAuthenticatorMock.debug_summary_state",
+                                ),
+                                "",
+                            ],
+                        ),
+                        None,
+                    ),
+                ]
+            calls += [
+                # Make zip file for the git config and gitcookies.
+                (
+                    (
+                        [
+                            "make_archive",
+                            trace_name + "-git-info",
+                            "zip",
+                            "TEMP_DIR",
                         ],
                     ),
                     None,
                 ),
             ]
-        calls += [
-            # Make zip file for the git config and gitcookies.
-            (
-                (
-                    [
-                        "make_archive",
-                        trace_name + "-git-info",
-                        "zip",
-                        "TEMP_DIR",
-                    ],
-                ),
-                None,
-            ),
-        ]
 
         # TODO(crbug/877717): this should never be used.
         if squash and short_hostname != "chromium":
@@ -1655,6 +1669,7 @@ class TestGitCl(unittest.TestCase):
         external_parent=None,
         push_opts=None,
         reset_issue=False,
+        trace=False,
     ):
         """Generic gerrit upload test framework."""
         if squash_mode is None:
@@ -1812,6 +1827,7 @@ class TestGitCl(unittest.TestCase):
                 ref_to_push=ref_to_push,
                 external_parent=external_parent,
                 push_opts=push_opts,
+                trace=trace,
             )
         # Uncomment when debugging.
         # print('\n'.join(map(lambda x: '%2i: %s' % x, enumerate(self.calls))))
@@ -8743,6 +8759,100 @@ class TestFindGitDir(unittest.TestCase):
             "builtins.open", side_effect=OSError("permission denied")
         ):
             self.assertIsNone(git_cl.FindGitDir(wt_root))
+
+    @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        return_value=b"remote: ok",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_success(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        _mock_call,
+        _mock_superproject,
+    ) -> None:
+        cl = git_cl.Changelist()
+        metadata = {}
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GIT_CL_TRACE", None)
+            out = cl._RunGitPushWithTraces("refspec", [], metadata)
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_write_traces.call_count, 0)
+        self.assertEqual(mock_cleanup.call_count, 0)
+        self.assertEqual(mock_rmtree.call_count, 1)
+
+    @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        return_value=b"remote: ok",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_trace_env(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        _mock_call,
+        _mock_superproject,
+    ) -> None:
+        cl = git_cl.Changelist()
+        metadata = {}
+        with mock.patch.dict(os.environ, {"GIT_CL_TRACE": "1"}):
+            out = cl._RunGitPushWithTraces("refspec", [], metadata)
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_write_traces.call_count, 1)
+        self.assertEqual(mock_cleanup.call_count, 1)
+        self.assertEqual(mock_rmtree.call_count, 1)
+
+    @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        side_effect=subprocess2.CalledProcessError(
+            1, ["git", "push"], "repo", b"error", b"error"
+        ),
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_failure(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        _mock_call,
+        _mock_superproject,
+    ) -> None:
+        cl = git_cl.Changelist()
+        metadata = {}
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GIT_CL_TRACE", None)
+            with self.assertRaises(git_cl.GitPushError):
+                cl._RunGitPushWithTraces("refspec", [], metadata)
+        self.assertEqual(mock_write_traces.call_count, 1)
+        self.assertEqual(mock_cleanup.call_count, 1)
+        self.assertEqual(mock_rmtree.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -3566,6 +3566,7 @@ class Changelist(object):
 
         push_returncode = 0
         before_push = time_time()
+        has_error = True
         try:
             # Combine user-provided push options with the potential
             # superproject push option.
@@ -3590,6 +3591,7 @@ class Changelist(object):
                 filter_fn=lambda _: sys.stdout.flush(),
             )
             push_stdout = push_stdout.decode("utf-8", "replace")
+            has_error = False
         except subprocess2.CalledProcessError as e:
             push_returncode = e.returncode
             if "blocked keyword" in str(e.stdout) or "banned word" in str(
@@ -3664,9 +3666,12 @@ class Changelist(object):
 
             git_push_metadata["execution_time"] = execution_time
             git_push_metadata["exit_code"] = push_returncode
-            self._WriteGitPushTraces(trace_name, traces_dir, git_push_metadata)
+            if has_error or os.environ.get("GIT_CL_TRACE") == "1":
+                self._WriteGitPushTraces(
+                    trace_name, traces_dir, git_push_metadata
+                )
+                self._CleanUpOldTraces()
 
-            self._CleanUpOldTraces()
             gclient_utils.rmtree(traces_dir)
 
         return push_stdout
