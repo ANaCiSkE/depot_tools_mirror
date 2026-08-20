@@ -1440,9 +1440,7 @@ class Change(object):
     _AFFECTED_FILES = AffectedFile
 
     # Matches key/value (or 'tag') lines in changelist descriptions.
-    TAG_LINE_RE = re.compile(
-        "^[ \t]*(?P<key>[A-Z][A-Z_0-9]*)[ \t]*=[ \t]*(?P<value>.*?)[ \t]*$"
-    )
+    TAG_LINE_RE = git_footers.TAG_LINE_RE
     scm = ""
 
     def __init__(

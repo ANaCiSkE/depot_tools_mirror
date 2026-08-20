@@ -46,33 +46,21 @@ from typing import Tuple
 from typing import TypedDict
 
 import auth
-import clang_format
 import gclient_paths
 import gclient_utils
 import gerrit_util
 import git_auth
 import git_common
 import git_footers
-import git_new_branch
-import git_squash_branch
-import google_java_format
-import ktfmt
 import metrics
 import metrics_utils
-import metrics_xml_format
 import newauth
 import owners_client
-import owners_finder
-import presubmit_canned_checks
-import presubmit_support
-import rustfmt
 import scm
 import setup_color
-import split_cl
 import subcommand
 import subprocess2
 import utils
-import swift_format
 import watchlists
 import from_third_party
 
@@ -1557,9 +1545,9 @@ class ChangeDescription(object):
             separator = []  # No need for separator if there are no gerrit_footers.
 
         prev_line = top_lines[-1] if top_lines else ""
-        if not presubmit_support.Change.TAG_LINE_RE.match(
+        if not git_footers.TAG_LINE_RE.match(
             prev_line
-        ) or not presubmit_support.Change.TAG_LINE_RE.match(line):
+        ) or not git_footers.TAG_LINE_RE.match(line):
             top_lines.append("")
         top_lines.append(line)
         self._description_lines = top_lines + separator + gerrit_footers
@@ -5172,6 +5160,8 @@ def CMDsquash_closed(parser, args):
             print("Aborted.")
             return 1
 
+    import git_squash_branch
+
     # scm.GIT.GetBranch does not work for detached HEAD situations.
     reset_branch = git_common.current_branch()
     for branch in proposal:
@@ -6045,6 +6035,7 @@ def CMDlint(parser, args):
     try:
         import cpplint
         import cpplint_chromium
+        import presubmit_canned_checks
 
         # Process cpplint arguments, if any.
         filters = presubmit_canned_checks.GetCppLintFilters(options.filter)
@@ -7150,6 +7141,8 @@ def CMDsplit(parser, args):
     def WrappedCMDupload(args):
         return CMDupload(OptionParser(), args)
 
+    import split_cl
+
     return split_cl.SplitCl(
         options.description_file,
         options.comment_file,
@@ -7358,6 +7351,8 @@ def CMDpatch(parser, args):
                 stderr=subprocess2.PIPE,
                 error_ok=True,
             )
+        import git_new_branch
+
         err = git_new_branch.create_new_branch(options.newbranch)
         if err:
             return err
@@ -7948,6 +7943,8 @@ def CMDowners(parser, args):
         print("\n".join(owners))
         return 0
 
+    import owners_finder
+
     return owners_finder.OwnersFinder(
         affected_files,
         author,
@@ -8028,6 +8025,8 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
     # Set to 2 to signal to CheckPatchFormatted() that this patch isn't
     # formatted. This is used to block during the presubmit.
     return_value = 0
+
+    import clang_format
 
     # Locate the clang-format binary in the checkout
     try:
@@ -8110,6 +8109,8 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
 
 def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
     """Runs google-java-format and sets a return value if necessary."""
+    import google_java_format
+
     tool = google_java_format.FindGoogleJavaFormat()
     if tool is None:
         # Fail silently. It could be we are on an old chromium revision, or that
@@ -8199,6 +8200,8 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
 
 def _RunKtfmt(opts, paths, top_dir, diffs):
     """Runs ktfmt and sets a return value if necessary."""
+    import ktfmt
+
     tool = ktfmt.FindKtfmt()
     if tool is None:
         print("ktfmt not found, skipping kotlin formatting.")
@@ -8240,6 +8243,8 @@ def _RunKtfmt(opts, paths, top_dir, diffs):
 def _RunRustFmt(opts, paths, top_dir, diffs):
     """Runs rustfmt.  Just like _RunClangFormatDiff returns 2 to indicate that
     presubmit checks have failed (and returns 0 otherwise)."""
+    import rustfmt
+
     # Locate the rustfmt binary.
     try:
         rustfmt_tool = rustfmt.FindRustfmtToolInChromiumTree()
@@ -8268,6 +8273,8 @@ def _RunSwiftFormat(opts, paths, top_dir, diffs):
     that presubmit checks have failed (and returns 0 otherwise)."""
     if sys.platform != "darwin":
         DieWithError("swift-format is only supported on macOS.")
+    import swift_format
+
     # Locate the swift-format binary.
     try:
         swift_format_tool = swift_format.FindSwiftFormatToolInChromiumTree()
@@ -8631,6 +8638,8 @@ def _RunMetricsXMLFormat(opts, paths, top_dir, diffs):
         return 0
 
     return_value = 0
+    import metrics_xml_format
+
     for path in paths:
         pretty_print_tool = metrics_xml_format.FindMetricsXMLFormatterTool(path)
         if not pretty_print_tool:
@@ -8753,6 +8762,9 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
       - Markdown: .style.mdformat
       - Lit HTML templates (.html.ts): .style.lit_template_formatter
     """
+    import rustfmt
+    import swift_format
+
     clang_exts = [".cc", ".cpp", ".h", ".m", ".mm", ".proto"]
     GN_EXTS = [".gn", ".gni", ".typemap"]
     parser.add_option(

@@ -446,6 +446,20 @@ My commit message is my best friend. It is my life.
                 js = json.load(f)
         self.assertEqual(js, {"Foo": ["3", "1"], "Bar": ["2"]})
 
+    def testTagLineRe(self):
+        m = git_footers.TAG_LINE_RE.match("BUG=123")
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group("key"), "BUG")
+        self.assertEqual(m.group("value"), "123")
+
+        m = git_footers.TAG_LINE_RE.match("  TEST = none  ")
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group("key"), "TEST")
+        self.assertEqual(m.group("value"), "none")
+
+        self.assertIsNone(git_footers.TAG_LINE_RE.match("Not a tag line"))
+        self.assertIsNone(git_footers.TAG_LINE_RE.match("foo=bar"))
+
 
 if __name__ == "__main__":
     unittest.main()

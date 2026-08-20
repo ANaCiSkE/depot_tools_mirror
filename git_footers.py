@@ -16,6 +16,10 @@ import git_common as git
 FOOTER_PATTERN = re.compile(r"^\s*([\w-]+): *(.*)$")
 CHROME_COMMIT_POSITION_PATTERN = re.compile(r"^([\w/\-\.]+)@{#(\d+)}$")
 FOOTER_KEY_BLOCKLIST = set(["http", "https"])
+# Matches legacy key/value (or 'tag') lines in changelist descriptions (e.g. BUG=123).
+TAG_LINE_RE = re.compile(
+    r"^[ \t]*(?P<key>[A-Z][A-Z_0-9]*)[ \t]*=[ \t]*(?P<value>.*?)[ \t]*$"
+)
 
 
 def normalize_name(header):

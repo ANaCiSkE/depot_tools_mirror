@@ -8,7 +8,6 @@ from __future__ import annotations
 import collections
 import datetime
 import functools
-import httplib2
 import json
 import logging
 import os
@@ -230,6 +229,8 @@ class Authenticator(object):
         Returns:
             A modified instance of http that was passed in.
         """
+        import httplib2
+
         # Adapted from oauth2client.OAuth2Credentials.authorize.
         request_orig = http.request
 
