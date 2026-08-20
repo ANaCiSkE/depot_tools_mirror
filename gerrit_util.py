@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import functools
+import http.client
 import http.cookiejar
 import json
 import logging
@@ -20,6 +21,7 @@ import random
 import re
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -31,7 +33,7 @@ from dataclasses import dataclass
 from io import StringIO
 from multiprocessing.pool import ThreadPool
 from typing import Any, Container, Dict
-from typing import NamedTuple, List, Optional
+from typing import NamedTuple, List, Optional, Union
 from typing import Tuple, TypedDict, cast
 from typing import Generator
 
@@ -1250,6 +1252,73 @@ class ReqParams(TypedDict):
     body: Optional[str]
 
 
+class _ThreadLocalConnectionPool(threading.local):
+    """Thread-local connection pool for reusing Keep-Alive TLS connections."""
+
+    def __init__(self):
+        super().__init__()
+        self._clients: Dict[Tuple, httplib2.Http] = {}
+
+    def get_client(
+        self,
+        cache: Any = None,
+        timeout: Optional[Union[int, float]] = None,
+        proxy_info: Optional[httplib2.ProxyInfo] = None,
+        ca_certs: Optional[str] = None,
+        disable_ssl_certificate_validation: bool = False,
+    ) -> httplib2.Http:
+        proxy_key = None
+        if proxy_info:
+            proxy_key = (
+                getattr(proxy_info, "proxy_type", None),
+                getattr(proxy_info, "proxy_host", None),
+                getattr(proxy_info, "proxy_port", None),
+                getattr(proxy_info, "proxy_user", None),
+                getattr(proxy_info, "proxy_pass", None),
+            )
+        cache_key = getattr(cache, "cache", cache)
+        try:
+            hash(cache_key)
+        except TypeError:
+            cache_key = id(cache)
+        key = (
+            cache_key,
+            timeout,
+            proxy_key,
+            ca_certs,
+            disable_ssl_certificate_validation,
+        )
+        if key not in self._clients:
+            self._clients[key] = httplib2.Http(
+                cache=cache,
+                timeout=timeout,
+                proxy_info=proxy_info,
+                ca_certs=ca_certs,
+                disable_ssl_certificate_validation=disable_ssl_certificate_validation,
+            )
+        return self._clients[key]
+
+    def close_host_connection(self, host: str) -> None:
+        """Evicts and closes stale sockets for a host upon network/socket error."""
+        for client in self._clients.values():
+            for conn_key in list(client.connections.keys()):
+                # httplib2 connection keys are formatted as "<scheme>:<host>[:<port>]".
+                # Match the exact host or host with port to avoid prefix collisions.
+                authority = str(conn_key).split(":", 1)[-1]
+                if authority != host and not authority.startswith(host + ":"):
+                    continue
+                conn = client.connections.pop(conn_key, None)
+                if not conn:
+                    continue
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+
+_POOL = _ThreadLocalConnectionPool()
+
+
 class HttpConn(httplib2.Http):
     """HttpConn is an httplib2.Http with additional request-specific fields."""
 
@@ -1269,6 +1338,16 @@ class HttpConn(httplib2.Http):
         self.req_headers = req_headers
         self.req_body = req_body
         super().__init__(*args, **kwargs)
+
+    def request(self, uri, *args, **kwargs):
+        client = _POOL.get_client(
+            cache=self.cache,
+            timeout=self.timeout,
+            proxy_info=self.proxy_info,
+            ca_certs=self.ca_certs,
+            disable_ssl_certificate_validation=self.disable_ssl_certificate_validation,
+        )
+        return client.request(uri, *args, **kwargs)
 
     @property
     def req_params(self) -> ReqParams:
@@ -1292,8 +1371,8 @@ class HttpConn(httplib2.Http):
         return self.req_uri
 
     def get_header(
-        self, header: str, default: Optional[str] = None
-    ) -> Optional[str]:
+        self, header: str, default: Optional[Any] = None
+    ) -> Optional[Any]:
         return self.req_headers.get(header, default)
 
     def add_unredirected_header(self, header: str, value: str):
@@ -1323,7 +1402,7 @@ def CreateHttpConn(
     reqtype="GET",
     headers: Optional[Dict[str, str]] = None,
     body: Optional[Dict] = None,
-    timeout=300,
+    timeout: Optional[Union[int, float]] = 300,
     *,
     authenticator: Optional[_Authenticator] = None,
     reauth_context: Optional[auth.ReAuthContext] = None,
@@ -1426,7 +1505,15 @@ def ReadHttpResponse(
         before_response = time.time()
         try:
             response, contents = conn.request(**conn.req_params)
-        except socket.timeout:
+        except (
+            socket.timeout,
+            socket.error,
+            http.client.HTTPException,
+            httplib2.ServerNotFoundError,
+            ssl.SSLError,
+        ) as e:
+            LOGGER.debug("Request failed with network/socket error: %s", e)
+            _POOL.close_host_connection(conn.req_host)
             if idx < max_tries - 1:
                 sleep_time = log_retry_and_sleep(sleep_time, idx, max_tries)
                 continue
