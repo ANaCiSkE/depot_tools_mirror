@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import base64
+import posixpath
 import urllib.parse
 
 from recipe_engine import recipe_api
@@ -172,15 +173,16 @@ class Gitiles(recipe_api.RecipeApi):
     Returns:
       Raw file content.
     """
-    fetch_url = self.m.url.join(repository_url, "+/%s/%s" % (branch, file_path))
+    rel_path = posixpath.normpath(file_path)
+    if posixpath.isabs(rel_path) or rel_path.startswith(".."):
+      raise ValueError(
+        f"Invalid file_path {file_path!r}: must be a relative path from repo root."
+      )
+
+    fetch_url = self.m.url.join(repository_url, "+/%s/%s" % (branch, rel_path))
     step_result = self._fetch(
       fetch_url,
-      step_name
-      or "fetch %s:%s"
-      % (
-        branch,
-        file_path,
-      ),
+      step_name or "fetch %s:%s" % (branch, rel_path),
       attempts=attempts,
       fmt="text",
       add_json_log=False,

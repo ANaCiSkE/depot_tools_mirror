@@ -34,6 +34,7 @@
   * [git:tests/number](#recipes-git_tests_number)
   * [git_cl:examples/full](#recipes-git_cl_examples_full)
   * [gitiles:examples/full](#recipes-gitiles_examples_full)
+  * [gitiles:tests/download_file](#recipes-gitiles_tests_download_file)
   * [gitiles:tests/parse_repo_url](#recipes-gitiles_tests_parse_repo_url)
   * [gsutil:examples/custom_boto](#recipes-gsutil_examples_custom_boto)
   * [gsutil:examples/full](#recipes-gsutil_examples_full)
@@ -659,15 +660,15 @@ If you set `path` to None, this will remove the default.
 [DEPS](/recipes/recipe_modules/gitiles/__init__.py#5): [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [recipe\_engine/url][recipe_engine/recipe_modules/url]
 
 
-#### **class [Gitiles](/recipes/recipe_modules/gitiles/api.py#11)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
+#### **class [Gitiles](/recipes/recipe_modules/gitiles/api.py#12)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
 
 Module for polling a git repository using the Gitiles web interface.
 
-&mdash; **def [canonicalize\_repo\_url](/recipes/recipe_modules/gitiles/api.py#264)(self, repo_url):**
+&mdash; **def [canonicalize\_repo\_url](/recipes/recipe_modules/gitiles/api.py#266)(self, repo_url):**
 
 Returns a canonical form of repo_url. If not recognized, returns as is.
 
-&mdash; **def [commit\_log](/recipes/recipe_modules/gitiles/api.py#137)(self, url, commit, step_name=None, attempts=None):**
+&mdash; **def [commit\_log](/recipes/recipe_modules/gitiles/api.py#138)(self, url, commit, step_name=None, attempts=None):**
 
 Returns: (dict) the Gitiles commit log structure for a given commit.
 
@@ -677,7 +678,7 @@ Args:
   * step_name (str): If not None, override the step name.
   * attempts (int): Number of times to try the request before failing.
 
-&mdash; **def [download\_archive](/recipes/recipe_modules/gitiles/api.py#199)(self, repository_url, destination, revision='refs/heads/main'):**
+&mdash; **def [download\_archive](/recipes/recipe_modules/gitiles/api.py#201)(self, repository_url, destination, revision='refs/heads/main'):**
 
 Downloads an archive of the repo and extracts it to `destination`.
 
@@ -693,7 +694,7 @@ Args:
   * revision (str): The ref or revision in the repo to download. Defaults to
     'refs/heads/main'.
 
-&mdash; **def [download\_file](/recipes/recipe_modules/gitiles/api.py#154)(self, repository_url, file_path, branch='main', step_name=None, attempts=None, \*\*kwargs):**
+&mdash; **def [download\_file](/recipes/recipe_modules/gitiles/api.py#155)(self, repository_url, file_path, branch='main', step_name=None, attempts=None, \*\*kwargs):**
 
 Downloads raw file content from a Gitiles repository.
 
@@ -707,7 +708,7 @@ Args:
 Returns:
   Raw file content.
 
-&mdash; **def [log](/recipes/recipe_modules/gitiles/api.py#79)(self, url, ref, limit=0, cursor=None, step_name=None, attempts=None, \*\*kwargs):**
+&mdash; **def [log](/recipes/recipe_modules/gitiles/api.py#80)(self, url, ref, limit=0, cursor=None, step_name=None, attempts=None, \*\*kwargs):**
 
 Returns the most recent commits under the given ref with properties.
 
@@ -730,17 +731,17 @@ Returns:
   Cursor can be used for subsequent calls to log for paging. If None,
   signals that there are no more commits to fetch.
 
-&mdash; **def [parse\_repo\_url](/recipes/recipe_modules/gitiles/api.py#253)(self, repo_url):**
+&mdash; **def [parse\_repo\_url](/recipes/recipe_modules/gitiles/api.py#255)(self, repo_url):**
 
 Returns (host, project) pair.
 
 Returns (None, None) if repo_url is not recognized.
 
-&mdash; **def [refs](/recipes/recipe_modules/gitiles/api.py#69)(self, url, step_name='refs', attempts=None):**
+&mdash; **def [refs](/recipes/recipe_modules/gitiles/api.py#70)(self, url, step_name='refs', attempts=None):**
 
 Returns a list of refs in the remote repository.
 
-&mdash; **def [unparse\_repo\_url](/recipes/recipe_modules/gitiles/api.py#260)(self, host, project):**
+&mdash; **def [unparse\_repo\_url](/recipes/recipe_modules/gitiles/api.py#262)(self, host, project):**
 
 Generates a Gitiles repo URL. See also parse_repo_url.
 ### *recipe_modules* / [gsutil](/recipes/recipe_modules/gsutil)
@@ -1230,6 +1231,12 @@ Raises:
 
 
 &mdash; **def [RunSteps](/recipes/recipe_modules/gitiles/examples/full.py#15)(api):**
+### *recipes* / [gitiles:tests/download\_file](/recipes/recipe_modules/gitiles/tests/download_file.py)
+
+[DEPS](/recipes/recipe_modules/gitiles/tests/download_file.py#8): [gitiles](#recipe_modules-gitiles), [recipe\_engine/assertions][recipe_engine/recipe_modules/assertions], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/step][recipe_engine/recipe_modules/step]
+
+
+&mdash; **def [RunSteps](/recipes/recipe_modules/gitiles/tests/download_file.py#16)(api):**
 ### *recipes* / [gitiles:tests/parse\_repo\_url](/recipes/recipe_modules/gitiles/tests/parse_repo_url.py)
 
 [DEPS](/recipes/recipe_modules/gitiles/tests/parse_repo_url.py#8): [gitiles](#recipe_modules-gitiles), [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/step][recipe_engine/recipe_modules/step]
