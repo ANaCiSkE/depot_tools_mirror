@@ -131,7 +131,7 @@ class GclientGitCheckout(GclientCheckout, GitCheckout):
             )
             soln_strings.append("  {\n%s\n  }," % soln_string)
         gclient_spec = "solutions = [\n%s\n]\n" % "\n".join(soln_strings)
-        extra_keys = ["target_os", "target_os_only", "cache_dir"]
+        extra_keys = ["target_os", "target_os_only", "cache_dir", "cache_mode"]
         gclient_spec += "".join(
             "%s = %s\n" % (key, _format_literal(self.spec[key]))
             for key in extra_keys
@@ -223,9 +223,11 @@ def handle_args(argv):
         "--git-cache",
         action="store_true",
         default=False,
-        help="Speed up the initial checkout by using a shared git cache that "
-        "is bootstrapped from a prebuilt snapshot. The cache directory is "
-        "chosen automatically unless $GIT_CACHE_PATH is set.",
+        help="Speed up the initial checkout by bootstrapping each clone from "
+        "a local git cache seeded with a prebuilt snapshot. The resulting "
+        "checkout is configured like a normal one and does not depend on the "
+        "cache afterwards. The cache directory is chosen automatically "
+        "unless $GIT_CACHE_PATH is set.",
     )
     parser.add_argument(
         "--force",
@@ -318,10 +320,16 @@ def run(options, spec, root):
     checkout_type = spec["type"]
     checkout_spec = spec["%s_spec" % checkout_type]
 
-    if options.git_cache and "cache_dir" not in checkout_spec:
-        checkout_spec["cache_dir"] = os.environ.get(
-            "GIT_CACHE_PATH"
-        ) or os.path.join(utils.depot_tools_cache_dir(), "git_cache")
+    if options.git_cache:
+        checkout_spec.setdefault(
+            "cache_dir",
+            os.environ.get("GIT_CACHE_PATH")
+            or os.path.join(utils.depot_tools_cache_dir(), "git_cache"),
+        )
+        # Detach dev checkouts from the cache (see GitWrapper.cache_mode). Set
+        # unconditionally so a config-provided cache_dir still gets bootstrap
+        # mode, unless the config picked a mode itself.
+        checkout_spec.setdefault("cache_mode", "bootstrap")
 
     # Update solutions with protocol_override field
     if options.protocol_override is not None:

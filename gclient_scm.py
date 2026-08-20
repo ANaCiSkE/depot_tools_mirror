@@ -5,6 +5,7 @@
 
 import collections
 import contextlib
+import enum
 import errno
 import glob
 import json
@@ -269,11 +270,26 @@ def _canonical_git_repo(url):
     )
 
 
+class CacheMode(enum.StrEnum):
+    """How checkouts relate to the git cache when cache_dir is set."""
+
+    # clone --shared, fetch URL stays on the mirror; the checkout only works
+    # while the cache exists (bot topology).
+    SHARED = "shared"
+
+    # The mirror only seeds checkouts that do not exist yet (objects
+    # hardlinked or copied, fetch URL on the real remote); the cache is
+    # deletable.
+    BOOTSTRAP = "bootstrap"
+
+
 class GitWrapper(SCMWrapper):
     """Wrapper for Git"""
 
     name = "git"
     remote = "origin"
+
+    cache_mode = CacheMode.SHARED
 
     @property
     def cache_dir(self):
@@ -951,10 +967,6 @@ class GitWrapper(SCMWrapper):
         if revision_ref.startswith("refs/branch-heads"):
             options.with_branch_heads = True
 
-        mirror = self._GetMirror(url, options, revision, revision_ref)
-        if mirror:
-            url = mirror.mirror_path
-
         remote_ref = scm.GIT.RefToRemoteRef(revision, self.remote)
         if remote_ref:
             # Rewrite remote refs to their local equivalents.
@@ -985,6 +997,12 @@ class GitWrapper(SCMWrapper):
             # Reset to a clean state
             self._Scrub("HEAD", options)
 
+        # Resolve the mirror after a possible .git backup restore; bootstrap
+        # mode must see the restored checkout.
+        mirror = self._GetMirror(url, options, revision, revision_ref)
+        if mirror:
+            url = mirror.mirror_path
+
         if not os.path.exists(self.checkout_path) or (
             os.path.isdir(self.checkout_path)
             and not os.path.exists(os.path.join(self.checkout_path, ".git"))
@@ -1007,9 +1025,13 @@ class GitWrapper(SCMWrapper):
                     [os.path.join(self.checkout_path, f) for f in files]
                 )
             if mirror:
-                self._Capture(
-                    ["remote", "set-url", "--push", "origin", mirror.url]
-                )
+                if self.cache_mode == CacheMode.BOOTSTRAP:
+                    # Detach: point all remote access at the real remote.
+                    self._Capture(["remote", "set-url", "origin", mirror.url])
+                else:
+                    self._Capture(
+                        ["remote", "set-url", "--push", "origin", mirror.url]
+                    )
             if not verbose:
                 # Make the output a little prettier. It's nice to have some
                 # whitespace between projects when cloning.
@@ -1553,6 +1575,17 @@ class GitWrapper(SCMWrapper):
         """Get a git_cache.Mirror object for the argument url."""
         if not self.cache_dir:
             return None
+        if self.cache_mode == CacheMode.BOOTSTRAP and os.path.exists(
+            os.path.join(self.checkout_path, ".git")
+        ):
+            # Bootstrap seeds only new checkouts, but a checkout borrowing the
+            # mirror via alternates must stay shared or deleting the cache
+            # corrupts it.
+            alternates = os.path.join(
+                self.checkout_path, ".git", "objects", "info", "alternates"
+            )
+            if not os.path.exists(alternates):
+                return None
         mirror_kwargs = {
             "print_func": self.filter,
             "refs": [],
@@ -1660,7 +1693,9 @@ class GitWrapper(SCMWrapper):
         else:
             cfg = gclient_utils.DefaultIndexPackConfig(url)
             clone_cmd = cfg + ["clone", "--no-checkout", "--progress"]
-            if self.cache_dir:
+            # --shared borrows objects via alternates and breaks if the
+            # cache is deleted; bootstrap mode hardlinks/copies instead.
+            if self.cache_dir and self.cache_mode != CacheMode.BOOTSTRAP:
                 clone_cmd.append("--shared")
             if options.verbose:
                 clone_cmd.append("--verbose")

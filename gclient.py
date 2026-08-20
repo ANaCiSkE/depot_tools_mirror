@@ -2105,6 +2105,21 @@ it or fix the checkout.
 
             git_cache.Mirror.SetCachePath(cache_dir)
 
+        # cache_mode lives on the GitWrapper class, so it persists across every
+        # checkout and across repeated SetConfig calls in one process (e.g.
+        # tests). Assign unconditionally with a default so a config that omits
+        # cache_mode resets it to the default instead of inheriting a prior
+        # load's value.
+        cache_mode = config_dict.get("cache_mode", gclient_scm.CacheMode.SHARED)
+        valid_modes = [mode.value for mode in gclient_scm.CacheMode]
+        if cache_mode not in valid_modes:
+            expected = ", ".join(repr(mode) for mode in valid_modes)
+            raise gclient_utils.Error(
+                f"Unknown cache_mode {cache_mode!r} in .gclient; expected one "
+                f"of {expected}."
+            )
+        gclient_scm.GitWrapper.cache_mode = gclient_scm.CacheMode(cache_mode)
+
         if not target_os and config_dict.get("target_os_only", False):
             raise gclient_utils.Error(
                 "Can't use target_os_only if target_os is not specified"
