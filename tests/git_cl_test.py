@@ -974,6 +974,8 @@ class TestGitCl(unittest.TestCase):
         git_cl.Changelist._ASYNC_DETAIL_THREADS.clear()
         self.addCleanup(git_cl.Changelist._DETAIL_CACHE.clear)
         self.addCleanup(git_cl.Changelist._ASYNC_DETAIL_THREADS.clear)
+        git_cl._get_superproject_push_option.cache_clear()
+        self.addCleanup(git_cl._get_superproject_push_option.cache_clear)
         mock.patch("gerrit_util.GetChangeDetail").start()
         mock.patch(
             "git_cl.gerrit_util.GetChangeComments",
@@ -5465,6 +5467,396 @@ class TestGitCl(unittest.TestCase):
         cl = git_cl.Changelist(issue=123456)
         self.assertEqual(cl._GerritChangeIdentifier(), "123456")
 
+    def test_prepare_superproject_push_option_no_gclient_root(self):
+        with mock.patch(
+            "git_cl.gclient_paths.FindGclientRoot",
+            autospec=True,
+            return_value=None,
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_no_solution_url(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value=None,
+            ),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_invalid_solution_url(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://",
+            ),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_urlparse_value_error(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://[invalid-ipv6/repo",
+            ),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_no_solution_path(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://chromium.googlesource.com/chromium/src.git",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value=None,
+            ),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_solution_path_not_dir(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://chromium.googlesource.com/chromium/src.git",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value="/nonexistent/path",
+            ),
+            mock.patch("git_cl.os.path.isdir", return_value=False),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_empty_rev(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://chromium.googlesource.com/chromium/src.git",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value="/soln/path",
+            ),
+            mock.patch("git_cl.os.path.isdir", return_value=True),
+            mock.patch("git_cl.RunGitWithCode", return_value=(0, "")),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_git_rev_none(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://chromium.googlesource.com/chromium/src.git",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value="/soln/path",
+            ),
+            mock.patch("git_cl.os.path.isdir", return_value=True),
+            mock.patch("git_cl.RunGitWithCode", return_value=(0, None)),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_git_error_code(self):
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value="/gclient/root",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://chromium.googlesource.com/chromium/src.git",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value="/soln/path",
+            ),
+            mock.patch("git_cl.os.path.isdir", return_value=True),
+            mock.patch(
+                "git_cl.RunGitWithCode", return_value=(128, "refs/heads/main\n")
+            ),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_os_error(self):
+        with mock.patch(
+            "git_cl.gclient_paths.FindGclientRoot",
+            autospec=True,
+            side_effect=OSError("Disk read error"),
+        ):
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/some/dir")
+            )
+
+    def test_prepare_superproject_push_option_getcwd_os_error(self):
+        with mock.patch(
+            "git_cl.os.getcwd",
+            side_effect=OSError("Working directory deleted"),
+        ):
+            self.assertIsNone(git_cl._prepare_superproject_push_option())
+
+    def test_prepare_superproject_push_option_os_error_not_cached_and_retries(
+        self,
+    ):
+        expected_canonical_path = os.path.realpath("/my/project/src")
+        expected_gclient_root = os.path.realpath("/gclient/root")
+        expected_soln_path = os.path.realpath("/soln/path")
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                side_effect=[
+                    OSError("Transient disk error"),
+                    expected_gclient_root,
+                ],
+            ) as mock_find_root,
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://user@chromium.googlesource.com/chromium/src.git",
+            ),
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value=expected_soln_path,
+            ),
+            mock.patch("git_cl.os.path.isdir", return_value=True),
+            mock.patch("git_cl.RunGitWithCode", return_value=(0, "d3adb33f\n")),
+        ):
+            # First call fails with OSError and returns None without caching
+            self.assertIsNone(
+                git_cl._prepare_superproject_push_option("/my/project/src")
+            )
+            self.assertEqual(mock_find_root.call_count, 1)
+            mock_find_root.assert_called_with(expected_canonical_path)
+
+            # Subsequent call retries resolution and succeeds
+            opt = git_cl._prepare_superproject_push_option("/my/project/src")
+            mock_find_root.assert_called_with(expected_canonical_path)
+            self.assertEqual(
+                opt,
+                "custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
+            )
+            self.assertEqual(mock_find_root.call_count, 2)
+
+    def test_prepare_superproject_push_option_programming_error_raises(self):
+        with mock.patch(
+            "git_cl.gclient_paths.FindGclientRoot",
+            autospec=True,
+            side_effect=TypeError("Unexpected type"),
+        ):
+            with self.assertRaises(TypeError):
+                git_cl._prepare_superproject_push_option("/some/dir")
+
+    def test_prepare_superproject_push_option_success_and_cached(self):
+        expected_canonical_path = os.path.realpath("/my/project/src")
+        expected_gclient_root = os.path.realpath("/gclient/root")
+        expected_soln_path = os.path.realpath("/soln/path")
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value=expected_gclient_root,
+            ) as mock_find_root,
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://user@chromium.googlesource.com/chromium/src.git",
+            ) as mock_get_url,
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value=expected_soln_path,
+            ) as mock_get_soln,
+            mock.patch("git_cl.os.path.isdir", return_value=True),
+            mock.patch(
+                "git_cl.RunGitWithCode", return_value=(0, "d3adb33f\n")
+            ) as mock_run_git,
+        ):
+            opt1 = git_cl._prepare_superproject_push_option("/my/project/src")
+            self.assertEqual(
+                opt1,
+                "custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
+            )
+            self.assertEqual(mock_find_root.call_count, 1)
+            mock_find_root.assert_called_with(expected_canonical_path)
+            self.assertEqual(mock_get_url.call_count, 1)
+            mock_get_url.assert_called_with(expected_gclient_root)
+            self.assertEqual(mock_get_soln.call_count, 1)
+            mock_get_soln.assert_called_with(expected_canonical_path)
+            self.assertEqual(mock_run_git.call_count, 1)
+            mock_run_git.assert_called_with(
+                ["rev-parse", "--verify", "refs/heads/main"],
+                suppress_stderr=True,
+                cwd=expected_soln_path,
+            )
+
+            # Second call for the same path hits the lru cache without invoking subprocesses again
+            opt2 = git_cl._prepare_superproject_push_option("/my/project/src")
+            self.assertEqual(opt2, opt1)
+            self.assertEqual(mock_find_root.call_count, 1)
+            self.assertEqual(mock_get_url.call_count, 1)
+            self.assertEqual(mock_get_soln.call_count, 1)
+            self.assertEqual(mock_run_git.call_count, 1)
+
+            # Relative equivalent path also hits the normalized cache
+            opt3 = git_cl._prepare_superproject_push_option(
+                "/my/project/sub/../src"
+            )
+            self.assertEqual(opt3, opt1)
+            self.assertEqual(mock_find_root.call_count, 1)
+            self.assertEqual(mock_get_url.call_count, 1)
+            self.assertEqual(mock_get_soln.call_count, 1)
+            self.assertEqual(mock_run_git.call_count, 1)
+
+    def test_prepare_superproject_push_option_symlink_cached(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            real_path = os.path.join(temp_dir, "real")
+            symlink_path = os.path.join(temp_dir, "link")
+            os.makedirs(real_path)
+            try:
+                os.symlink(real_path, symlink_path)
+            except OSError:
+                self.skipTest("Skip on systems without symlink support")
+
+            with (
+                mock.patch(
+                    "git_cl.gclient_paths.FindGclientRoot",
+                    autospec=True,
+                    return_value=real_path,
+                ) as mock_find_root,
+                mock.patch(
+                    "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                    autospec=True,
+                    return_value="https://chromium.googlesource.com/chromium/src.git",
+                ),
+                mock.patch(
+                    "git_cl.gclient_paths.GetPrimarySolutionPath",
+                    autospec=True,
+                    return_value=real_path,
+                ),
+                mock.patch("git_cl.os.path.isdir", return_value=True),
+                mock.patch(
+                    "git_cl.RunGitWithCode", return_value=(0, "d3adb33f\n")
+                ),
+            ):
+                opt1 = git_cl._prepare_superproject_push_option(real_path)
+                self.assertIsNotNone(opt1)
+                self.assertEqual(mock_find_root.call_count, 1)
+
+                # Calling via symlink path resolves to real_path and hits the cache
+                opt2 = git_cl._prepare_superproject_push_option(symlink_path)
+                self.assertEqual(opt2, opt1)
+                self.assertEqual(mock_find_root.call_count, 1)
+
+    def test_prepare_superproject_push_option_default_cwd(self):
+        expected_gclient_root = os.path.realpath("/gclient/root")
+        expected_soln_path = os.path.realpath("/soln/path")
+        with (
+            mock.patch(
+                "git_cl.gclient_paths.FindGclientRoot",
+                autospec=True,
+                return_value=expected_gclient_root,
+            ) as mock_find_root,
+            mock.patch(
+                "git_cl.gclient_paths.GetGClientPrimarySolutionURL",
+                autospec=True,
+                return_value="https://chromium.googlesource.com/chromium/src.git",
+            ) as mock_get_url,
+            mock.patch(
+                "git_cl.gclient_paths.GetPrimarySolutionPath",
+                autospec=True,
+                return_value=expected_soln_path,
+            ) as mock_get_soln,
+            mock.patch("git_cl.os.path.isdir", return_value=True),
+            mock.patch(
+                "git_cl.RunGitWithCode", return_value=(0, "d3adb33f\n")
+            ) as mock_run_git,
+        ):
+            opt = git_cl._prepare_superproject_push_option()
+            self.assertEqual(
+                opt,
+                "custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
+            )
+            expected_cwd = os.path.realpath(os.getcwd())
+            mock_find_root.assert_called_with(expected_cwd)
+            mock_get_url.assert_called_with(expected_gclient_root)
+            mock_get_soln.assert_called_with(expected_cwd)
+            mock_run_git.assert_called_with(
+                ["rev-parse", "--verify", "refs/heads/main"],
+                suppress_stderr=True,
+                cwd=expected_soln_path,
+            )
+
 
 class ChangelistTest(unittest.TestCase):
     LAST_COMMIT_SUBJECT = "Fixes goat teleporter destination to be Australia"
@@ -9042,6 +9434,8 @@ class TestFindGitDir(unittest.TestCase):
         ):
             self.assertIsNone(git_cl.FindGitDir(wt_root))
 
+
+class TestRunGitPushWithTraces(unittest.TestCase):
     @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
     @mock.patch(
         "git_cl.gclient_utils.CheckCallAndFilter",
@@ -9135,6 +9529,50 @@ class TestFindGitDir(unittest.TestCase):
         self.assertEqual(mock_write_traces.call_count, 1)
         self.assertEqual(mock_cleanup.call_count, 1)
         self.assertEqual(mock_rmtree.call_count, 1)
+
+    @mock.patch(
+        "git_cl._prepare_superproject_push_option",
+        return_value="custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
+    )
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        return_value=b"remote: ok",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_with_superproject_push_option(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        mock_call,
+        _mock_superproject,
+    ) -> None:
+        cl = git_cl.Changelist()
+        metadata = {}
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GIT_CL_TRACE", None)
+            out = cl._RunGitPushWithTraces(
+                "refspec",
+                [],
+                metadata,
+                git_push_options=["user_opt=1"],
+            )
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_call.call_count, 1)
+        push_cmd = mock_call.call_args[0][0]
+        self.assertEqual(push_cmd.count("-o"), 2)
+        self.assertIn("user_opt=1", push_cmd)
+        self.assertIn(
+            "custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
+            push_cmd,
+        )
 
 
 if __name__ == "__main__":
