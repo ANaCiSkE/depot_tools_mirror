@@ -233,16 +233,19 @@ class CachedGitConfigState(object):
 
         # Actual cached configuration from the point of view of this root.
         self._config: Optional[GitFlatConfigData] = None
+        self._lock = threading.Lock()
 
     def _maybe_load_config(self) -> GitFlatConfigData:
-        if self._config is None:
-            # NOTE: Implementations of self._impl must already ensure that all
-            # keys are canonicalized.
-            self._config = self._impl.load_config()
-        return self._config
+        with self._lock:
+            if self._config is None:
+                # NOTE: Implementations of self._impl must already ensure that all
+                # keys are canonicalized.
+                self._config = self._impl.load_config()
+            return self._config
 
     def clear_cache(self):
-        self._config = None
+        with self._lock:
+            self._config = None
 
     def GetConfig(
         self,
@@ -430,7 +433,14 @@ class GitConfigStateReal(GitConfigStateBase):
 
         i = 0
         while i < len(entries):
-            if entries[i] in ["local", "global", "system"]:
+            if entries[i] in [
+                "local",
+                "global",
+                "system",
+                "worktree",
+                "command",
+                "submodule",
+            ]:
                 scope = entries[i]
                 i += 1
                 if i < len(entries):
@@ -713,8 +723,13 @@ class GIT(object):
         return GitConfigStateReal(root)
 
     @classmethod
-    def _get_config_state(cls, cwd: str) -> CachedGitConfigState:
-        key = pathlib.Path(cwd).absolute()
+    def _get_config_state(
+        cls, cwd: Optional[str] = None
+    ) -> CachedGitConfigState:
+        if cwd:
+            key = pathlib.Path(cwd).resolve()
+        else:
+            key = pathlib.Path(os.getcwd()).resolve()
         with cls._CONFIG_CACHE_LOCK:
             cur = GIT._CONFIG_CACHE.get(key, None)
             if cur is not None:

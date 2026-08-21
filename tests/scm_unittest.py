@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 import sys
 import tempfile
 import threading
@@ -1111,6 +1112,68 @@ class CachedGitConfigStateTest(unittest.TestCase):
                 "true",
             ],
         )
+
+    def test_get_config_state_path_canonicalization(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            real_path = os.path.join(temp_dir, "real")
+            os.makedirs(real_path)
+            symlink_path = os.path.join(temp_dir, "link")
+            try:
+                os.symlink(real_path, symlink_path)
+            except OSError:
+                self.skipTest("Symlinks not supported on this platform")
+
+            state1 = scm.GIT._get_config_state(real_path)
+            state2 = scm.GIT._get_config_state(symlink_path)
+            self.assertIs(state1, state2)
+
+            sub_path = os.path.join(real_path, "sub", "..")
+            state3 = scm.GIT._get_config_state(sub_path)
+            self.assertIs(state1, state3)
+
+    def test_get_config_thread_safety(self):
+        lock = threading.Lock()
+        state = scm.CachedGitConfigState(
+            scm.GitConfigStateTest(lock, {"user.email": ["user@example.com"]})
+        )
+        barrier = threading.Barrier(5)
+        results = []
+        errors = []
+
+        def worker():
+            try:
+                barrier.wait()
+                results.append(state.GetConfig("user.email"))
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(results, ["user@example.com"] * 5)
+
+    def test_git_config_state_real_all_scopes(self):
+        raw_output = (
+            "system\x00system.key\nval1\x00"
+            "global\x00global.key\nval2\x00"
+            "local\x00local.key\nval3\x00"
+            "worktree\x00worktree.key\nval4\x00"
+            "command\x00command.key\nval5\x00"
+        )
+        with mock.patch("scm.git_common.get_git_version", return_value=(2, 40)):
+            with mock.patch("scm.GIT.Capture", return_value=raw_output):
+                real_state = scm.GitConfigStateReal(pathlib.Path("/dummy/repo"))
+                cfg = real_state.load_config()
+                self.assertEqual(cfg["system"]["system.key"], ["val1"])
+                self.assertEqual(cfg["global"]["global.key"], ["val2"])
+                self.assertEqual(cfg["local"]["local.key"], ["val3"])
+                self.assertEqual(cfg["worktree"]["worktree.key"], ["val4"])
+                self.assertEqual(cfg["command"]["command.key"], ["val5"])
+                self.assertEqual(cfg["default"]["worktree.key"], ["val4"])
 
 
 if __name__ == "__main__":
