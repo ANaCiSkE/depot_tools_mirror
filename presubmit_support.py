@@ -1144,6 +1144,7 @@ class _GitDiffCache(_DiffCache):
         self._upstream = upstream
         self._end_commit = end_commit
         self._diffs_by_file = None
+        self._old_contents_by_file = {}
 
     def GetDiff(self, path, local_root):
         # Compare against None to distinguish between None and an initialized
@@ -1174,7 +1175,11 @@ class _GitDiffCache(_DiffCache):
         return self._diffs_by_file[path]
 
     def GetOldContents(self, path, local_root):
-        return scm.GIT.GetOldContents(local_root, path, branch=self._upstream)
+        if path not in self._old_contents_by_file:
+            self._old_contents_by_file[path] = scm.GIT.GetOldContents(
+                local_root, path, branch=self._upstream
+            )
+        return self._old_contents_by_file[path]
 
 
 class _ProvidedDiffCache(_DiffCache):
@@ -1184,6 +1189,7 @@ class _ProvidedDiffCache(_DiffCache):
         """Stores all diffs and diffs per file."""
         super(_ProvidedDiffCache, self).__init__()
         self._diffs_by_file = None
+        self._old_contents_by_file = {}
         self._diff = diff
 
     def GetDiff(self, path, local_root):
@@ -1194,13 +1200,19 @@ class _ProvidedDiffCache(_DiffCache):
 
     def GetOldContents(self, path, local_root):
         """Get the old version for a particular path."""
+        if path in self._old_contents_by_file:
+            return self._old_contents_by_file[path]
+
         full_path = os.path.join(local_root, path)
         diff = self.GetDiff(path, local_root)
         is_file = os.path.isfile(full_path)
         if not diff:
             if is_file:
-                return gclient_utils.FileRead(full_path)
-            return ""
+                res = gclient_utils.FileRead(full_path)
+            else:
+                res = ""
+            self._old_contents_by_file[path] = res
+            return res
 
         with gclient_utils.temporary_file() as diff_file:
             gclient_utils.FileWrite(diff_file, diff)
@@ -1240,8 +1252,11 @@ class _ProvidedDiffCache(_DiffCache):
                 # full_path was deleted, so check if the new file at copy_dst
                 # exists.
                 if os.path.isfile(copy_dst):
-                    return gclient_utils.FileRead(copy_dst)
-                return ""
+                    res = gclient_utils.FileRead(copy_dst)
+                else:
+                    res = ""
+                self._old_contents_by_file[path] = res
+                return res
 
 
 class AffectedFile(object):
@@ -1256,6 +1271,7 @@ class AffectedFile(object):
         self._diff_cache = diff_cache
         self._cached_changed_contents = None
         self._cached_new_contents = None
+        self._cached_old_contents = None
         self._extension = None
         self._is_testable_file = None
         logging.debug("%s(%s)", self.__class__.__name__, self._path)
@@ -1313,9 +1329,11 @@ class AffectedFile(object):
         Contents will be empty if the file is a directory or does not exist.
         Note: The carriage returns (LF or CR) are stripped off.
         """
-        return self._diff_cache.GetOldContents(
-            self.LocalPath(), self._local_root
-        ).splitlines()
+        if self._cached_old_contents is None:
+            self._cached_old_contents = self._diff_cache.GetOldContents(
+                self.LocalPath(), self._local_root
+            ).splitlines()
+        return self._cached_old_contents[:]
 
     def NewContents(self, flush_cache=False):
         """Returns an iterator over the lines in the new version of file.

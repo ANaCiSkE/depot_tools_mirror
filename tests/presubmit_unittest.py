@@ -2350,6 +2350,50 @@ class AffectedFileUnittest(PresubmitTestsBase):
             ).Extension()
             self.assertEqual(expectedExtension, extension)
 
+    def testOldContentsCached(self):
+        diff_cache = mock.MagicMock()
+        diff_cache.GetOldContents.return_value = "old line 1\nold line 2"
+        af = presubmit.GitAffectedFile(
+            "foo/blat.cc", "M", self.fake_root_dir, diff_cache
+        )
+        self.assertEqual(["old line 1", "old line 2"], af.OldContents())
+        self.assertEqual(["old line 1", "old line 2"], af.OldContents())
+        diff_cache.GetOldContents.assert_called_once_with(
+            presubmit.normpath("foo/blat.cc"), self.fake_root_dir
+        )
+
+    def testGitDiffCacheGetOldContentsCached(self):
+        with mock.patch.object(
+            presubmit.scm.GIT, "GetOldContents", return_value="content"
+        ) as mock_get:
+            diff_cache = presubmit._GitDiffCache("upstream", "HEAD")
+            res1 = diff_cache.GetOldContents("foo.cc", self.fake_root_dir)
+            res2 = diff_cache.GetOldContents("foo.cc", self.fake_root_dir)
+            self.assertEqual("content", res1)
+            self.assertEqual("content", res2)
+            mock_get.assert_called_once_with(
+                self.fake_root_dir, "foo.cc", branch="upstream"
+            )
+
+    def testProvidedDiffCacheGetOldContentsCached(self):
+        gclient_utils.FileRead.return_value = "file content"
+        os.path.isfile.return_value = True
+        diff_cache = presubmit._ProvidedDiffCache("")
+        self.assertNotIn("foo.cc", diff_cache._old_contents_by_file)
+
+        # First call: cache miss, computes content and populates cache.
+        res1 = diff_cache.GetOldContents("foo.cc", self.fake_root_dir)
+        self.assertEqual("file content", res1)
+        self.assertEqual(
+            "file content", diff_cache._old_contents_by_file.get("foo.cc")
+        )
+
+        # Second call: returns cached content without calling FileRead.
+        gclient_utils.FileRead.reset_mock()
+        res2 = diff_cache.GetOldContents("foo.cc", self.fake_root_dir)
+        self.assertEqual("file content", res2)
+        gclient_utils.FileRead.assert_not_called()
+
 
 class ChangeUnittest(PresubmitTestsBase):
     def testAffectedFiles(self):
