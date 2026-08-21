@@ -16,6 +16,7 @@ import io
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
 
 from unittest import mock
@@ -969,6 +970,10 @@ class TestGitCl(unittest.TestCase):
         mock.patch("git_cl.watchlists.Watchlists", WatchlistsMock).start()
         mock.patch("git_cl.auth.Authenticator", AuthenticatorMock).start()
         mock.patch("git_cl.subprocess2.call", return_value=0).start()
+        git_cl.Changelist._DETAIL_CACHE.clear()
+        git_cl.Changelist._ASYNC_DETAIL_THREADS.clear()
+        self.addCleanup(git_cl.Changelist._DETAIL_CACHE.clear)
+        self.addCleanup(git_cl.Changelist._ASYNC_DETAIL_THREADS.clear)
         mock.patch("gerrit_util.GetChangeDetail").start()
         mock.patch(
             "git_cl.gerrit_util.GetChangeComments",
@@ -4720,6 +4725,245 @@ class TestGitCl(unittest.TestCase):
         )
         self.assertEqual(cl.FetchDescription(), "desc1")
         self.assertEqual(cl.FetchDescription(), "desc1")  # cache hit.
+
+    def test_gerrit_async_warm_change_detail_no_issue(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        cl = git_cl.Changelist()
+        join_fn = cl.AsyncWarmChangeDetail()
+        join_fn()
+        gerrit_util.GetChangeDetail.assert_not_called()
+
+    def test_gerrit_async_warm_change_detail_success(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.return_value = {
+            "current_revision": "rev1",
+            "revisions": {
+                "rev1": {"commit": {"message": "desc1"}},
+            },
+        }
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        join_fn()
+        # Ensure that GetChangeDetail was called once
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+        # Subsequent sync call hits cache without invoking GetChangeDetail again
+        detail = cl._GetChangeDetail(options=["CURRENT_REVISION"])
+        self.assertEqual(detail["current_revision"], "rev1")
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+
+    def test_gerrit_async_warm_change_detail_empty_options(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.return_value = {"id": "123"}
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl.AsyncWarmChangeDetail(options=[])
+        join_fn()
+        gerrit_util.GetChangeDetail.assert_called_once_with(
+            "host", "my%2Frepo~1", frozenset()
+        )
+
+    def test_gerrit_async_warm_change_detail_already_cached(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.return_value = {"id": "123"}
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        cl._GetChangeDetail(options=["DETAILED_ACCOUNTS", "CURRENT_REVISION"])
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+        # Async warming for a subset of cached options is a no-op
+        join_fn = cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        join_fn()
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+
+    def test_gerrit_async_warm_change_detail_error_propagation(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.side_effect = gerrit_util.GerritError(
+            404, "Not Found"
+        )
+        cl = git_cl.Changelist(issue=999)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        with self.assertRaises(git_cl.GerritChangeNotExists):
+            join_fn()
+
+    def test_gerrit_async_warm_change_detail_cross_instance_sharing(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.return_value = {
+            "current_revision": "rev1",
+            "revisions": {"rev1": {"commit": {"message": "desc1"}}},
+        }
+        cl1 = git_cl.Changelist(issue=100)
+        cl1._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl1.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        join_fn()
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+
+        # A separate Changelist instance for the same issue gets a cache hit
+        cl2 = git_cl.Changelist(issue=100)
+        cl2._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        detail = cl2._GetChangeDetail(options=["CURRENT_REVISION"])
+        self.assertEqual(detail["current_revision"], "rev1")
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+
+    def test_gerrit_async_warm_change_detail_superset_options_refetches(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.side_effect = [
+            {"current_revision": "rev1"},
+            {"current_revision": "rev1", "messages": ["msg1"]},
+        ]
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        join_fn()
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+
+        # Requesting superset options fetches the broader set
+        detail = cl._GetChangeDetail(options=["CURRENT_REVISION", "MESSAGES"])
+        self.assertEqual(detail["messages"], ["msg1"])
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 2)
+
+    def test_gerrit_async_warm_change_detail_retry_after_failure(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        gerrit_util.GetChangeDetail.side_effect = [
+            gerrit_util.GerritError(500, "Transient Server Error"),
+            {"current_revision": "rev1"},
+        ]
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        with self.assertRaises(gerrit_util.GerritError):
+            join_fn()
+
+        # Subsequent call retries cleanly and succeeds
+        detail = cl._GetChangeDetail(options=["CURRENT_REVISION"])
+        self.assertEqual(detail["current_revision"], "rev1")
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 2)
+
+    def test_gerrit_async_warm_change_detail_realistic_concurrency_barrier(
+        self,
+    ):
+        self._mock_gerrit_changes_for_detail_cache()
+        in_flight_event = threading.Event()
+        release_event = threading.Event()
+
+        def _mock_get_change_detail(host, change, options):
+            in_flight_event.set()
+            if not release_event.wait(timeout=5.0):
+                raise RuntimeError("Timeout waiting for release_event")
+            return {"status": "NEW", "options": list(options)}
+
+        gerrit_util.GetChangeDetail.side_effect = _mock_get_change_detail
+
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join_fn = cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+
+        self.assertTrue(
+            in_flight_event.wait(timeout=5.0),
+            "Background thread did not enter GetChangeDetail",
+        )
+
+        results = []
+        barrier = threading.Barrier(5)
+
+        def _worker():
+            barrier.wait(timeout=5.0)
+            results.append(cl._GetChangeDetail(options=["CURRENT_REVISION"]))
+
+        threads = [threading.Thread(target=_worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+
+        barrier.wait(timeout=5.0)
+        release_event.set()
+
+        for t in threads:
+            t.join(timeout=5.0)
+        join_fn()
+
+        self.assertEqual(len(results), 4)
+        for res in results:
+            self.assertEqual(res["status"], "NEW")
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 1)
+
+    def test_gerrit_async_warm_change_detail_multi_host_isolation(self):
+        gerrit_util.GetChangeDetail.side_effect = [
+            {"host": "chromium"},
+            {"host": "webrtc"},
+        ]
+        cl1 = git_cl.Changelist(
+            issue=1, codereview_host="chromium-review.googlesource.com"
+        )
+        cl1._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        join1 = cl1.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        join1()
+
+        cl2 = git_cl.Changelist(
+            issue=1, codereview_host="webrtc-review.googlesource.com"
+        )
+        cl2._cached_remote_url = (
+            True,
+            "https://webrtc.googlesource.com/a/src.git/",
+        )
+        join2 = cl2.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+        join2()
+
+        self.assertEqual(
+            cl1._GetChangeDetail(options=["CURRENT_REVISION"])["host"],
+            "chromium",
+        )
+        self.assertEqual(
+            cl2._GetChangeDetail(options=["CURRENT_REVISION"])["host"],
+            "webrtc",
+        )
+        self.assertEqual(gerrit_util.GetChangeDetail.call_count, 2)
+
+    def test_gerrit_async_warm_change_detail_thread_start_failure_no_leak(self):
+        self._mock_gerrit_changes_for_detail_cache()
+        cl = git_cl.Changelist(issue=1)
+        cl._cached_remote_url = (
+            True,
+            "https://chromium.googlesource.com/a/my/repo.git/",
+        )
+        with mock.patch(
+            "threading.Thread.start",
+            side_effect=RuntimeError("Cannot start thread"),
+        ):
+            with self.assertRaises(RuntimeError):
+                cl.AsyncWarmChangeDetail(options=["CURRENT_REVISION"])
+
+        cache_key = (cl.GetGerritHost(), str(cl.GetIssue()))
+        self.assertNotIn(cache_key, git_cl.Changelist._ASYNC_DETAIL_THREADS)
 
     def test_print_current_creds(self):
         class CookiesAuthenticatorMock(object):
