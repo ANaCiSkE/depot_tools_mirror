@@ -10,16 +10,16 @@ import os
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import unittest
 
+import io
 from io import StringIO
 from pathlib import Path
 from typing import Optional
 from unittest import mock
-
-import httplib2
+import urllib.error
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -246,7 +246,17 @@ class CookiesAuthenticatorTest(unittest.TestCase):
 class GceAuthenticatorTest(unittest.TestCase):
     def setUp(self):
         super(GceAuthenticatorTest, self).setUp()
-        mock.patch("httplib2.Http").start()
+        default_resp = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={"metadata-flavor": "Google"},
+            read=mock.Mock(return_value=b""),
+        )
+        default_resp.__enter__.return_value = default_resp
+        self.mock_open = mock.patch(
+            "urllib.request.OpenerDirector.open",
+            return_value=default_resp,
+        ).start()
         mock.patch("os.getenv", return_value=None).start()
         mock.patch("gerrit_util.time_sleep").start()
         mock.patch("gerrit_util.time_time").start()
@@ -273,78 +283,118 @@ class GceAuthenticatorTest(unittest.TestCase):
         os.getenv.assert_called_once_with("SKIP_GCE_AUTH_FOR_GIT")
 
     def testIsGce_Error(self):
-        httplib2.Http().request.side_effect = httplib2.HttpLib2Error
+        self.mock_open.side_effect = urllib.error.URLError("error")
         self.assertFalse(self.GceAuthenticator.is_applicable())
 
     def testIsGce_500(self):
-        httplib2.Http().request.return_value = (mock.Mock(status=500), None)
+        self.mock_open.side_effect = urllib.error.HTTPError(
+            "", 500, "Server Error", {}, io.BytesIO(b"")
+        )
         self.assertFalse(self.GceAuthenticator.is_applicable())
         last_call = gerrit_util.time_sleep.mock_calls[-1]
         self.assertLessEqual(last_call, mock.call(43.0))
 
     def testIsGce_FailsThenSucceeds(self):
-        response = mock.Mock(status=200)
-        response.get.return_value = "Google"
-        httplib2.Http().request.side_effect = [
-            (mock.Mock(status=500), None),
-            (response, "who cares"),
+        response = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={"metadata-flavor": "Google"},
+            read=mock.Mock(return_value=b"who cares"),
+        )
+        response.__enter__.return_value = response
+        self.mock_open.side_effect = [
+            urllib.error.HTTPError(
+                "", 500, "Server Error", {}, io.BytesIO(b"")
+            ),
+            response,
         ]
         self.assertTrue(self.GceAuthenticator.is_applicable())
 
     def testIsGce_MetadataFlavorIsNotGoogle(self):
-        response = mock.Mock(status=200)
-        response.get.return_value = None
-        httplib2.Http().request.return_value = (response, "who cares")
+        response = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={},
+            read=mock.Mock(return_value=b"who cares"),
+        )
+        response.__enter__.return_value = response
+        self.mock_open.return_value = response
         self.assertFalse(self.GceAuthenticator.is_applicable())
-        response.get.assert_called_once_with("metadata-flavor")
 
     def testIsGce_ResultIsCached(self):
-        response = mock.Mock(status=200)
-        response.get.return_value = "Google"
-        httplib2.Http().request.side_effect = [(response, "who cares")]
+        response = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={"metadata-flavor": "Google"},
+            read=mock.Mock(return_value=b"who cares"),
+        )
+        response.__enter__.return_value = response
+        self.mock_open.side_effect = [response]
         self.assertTrue(self.GceAuthenticator.is_applicable())
         self.assertTrue(self.GceAuthenticator.is_applicable())
-        httplib2.Http().request.assert_called_once()
+        self.mock_open.assert_called_once()
 
     def testGetAuthHeader_Error(self):
-        httplib2.Http().request.side_effect = httplib2.HttpLib2Error
+        self.mock_open.side_effect = urllib.error.URLError("error")
         self.assertAuthenticatedToken(None)
 
     def testGetAuthHeader_500(self):
-        httplib2.Http().request.return_value = (mock.Mock(status=500), None)
+        self.mock_open.side_effect = urllib.error.HTTPError(
+            "", 500, "Server Error", {}, io.BytesIO(b"")
+        )
         self.assertAuthenticatedToken(None)
 
     def testGetAuthHeader_Non200(self):
-        httplib2.Http().request.return_value = (mock.Mock(status=403), None)
+        self.mock_open.side_effect = urllib.error.HTTPError(
+            "", 403, "Forbidden", {}, io.BytesIO(b"")
+        )
         self.assertAuthenticatedToken(None)
 
     def testGetAuthHeader_OK(self):
-        httplib2.Http().request.return_value = (
-            mock.Mock(status=200),
-            '{"expires_in": 125, "token_type": "TYPE", "access_token": "TOKEN"}',
+        response = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={},
+            read=mock.Mock(
+                return_value=b'{"expires_in": 125, "token_type": "TYPE", "access_token": "TOKEN"}'
+            ),
         )
+        response.__enter__.return_value = response
+        self.mock_open.return_value = response
         gerrit_util.time_time.return_value = 0
         self.assertAuthenticatedToken("TYPE TOKEN")
 
     def testGetAuthHeader_Cache(self):
-        httplib2.Http().request.return_value = (
-            mock.Mock(status=200),
-            '{"expires_in": 125, "token_type": "TYPE", "access_token": "TOKEN"}',
+        response = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={},
+            read=mock.Mock(
+                return_value=b'{"expires_in": 125, "token_type": "TYPE", "access_token": "TOKEN"}'
+            ),
         )
+        response.__enter__.return_value = response
+        self.mock_open.return_value = response
         gerrit_util.time_time.return_value = 0
         self.assertAuthenticatedToken("TYPE TOKEN")
         self.assertAuthenticatedToken("TYPE TOKEN")
-        httplib2.Http().request.assert_called_once()
+        self.mock_open.assert_called_once()
 
     def testGetAuthHeader_CacheOld(self):
-        httplib2.Http().request.return_value = (
-            mock.Mock(status=200),
-            '{"expires_in": 125, "token_type": "TYPE", "access_token": "TOKEN"}',
+        response = mock.MagicMock(
+            status=200,
+            reason="OK",
+            headers={},
+            read=mock.Mock(
+                return_value=b'{"expires_in": 125, "token_type": "TYPE", "access_token": "TOKEN"}'
+            ),
         )
+        response.__enter__.return_value = response
+        self.mock_open.return_value = response
         gerrit_util.time_time.side_effect = [0, 100, 200]
         self.assertAuthenticatedToken("TYPE TOKEN")
         self.assertAuthenticatedToken("TYPE TOKEN")
-        self.assertEqual(2, len(httplib2.Http().request.mock_calls))
+        self.assertEqual(2, self.mock_open.call_count)
 
     def testAttemptAuthenticateWithReAuth(self):
         authn = self.GceAuthenticator()
@@ -770,195 +820,6 @@ class GerritUtilTest(unittest.TestCase):
         self.assertEqual(2, len(conn.request.mock_calls))
         gerrit_util.time_sleep.assert_called_once_with(12.0)
 
-    def testReadHttpResponse_SocketErrorAndSuccess(self):
-        conn = mock.Mock(
-            req_host="example.com",
-            req_params={"uri": "uri", "method": "method"},
-        )
-        conn.request.side_effect = [
-            ConnectionResetError("connection reset"),
-            (mock.Mock(status=200), b"content\xe2\x9c\x94"),
-        ]
-
-        with mock.patch.object(
-            gerrit_util._POOL, "close_host_connection"
-        ) as mock_close:
-            self.assertEqual(
-                "content✔", gerrit_util.ReadHttpResponse(conn).getvalue()
-            )
-            mock_close.assert_called_once_with("example.com")
-        self.assertEqual(2, len(conn.request.mock_calls))
-        gerrit_util.time_sleep.assert_called_once_with(12.0)
-
-    def testReadHttpResponse_SocketErrorMaxTries(self):
-        conn = mock.Mock(
-            req_host="example.com",
-            req_params={"uri": "uri", "method": "method"},
-        )
-        conn.request.side_effect = ConnectionResetError("connection reset")
-
-        with mock.patch.object(
-            gerrit_util._POOL, "close_host_connection"
-        ) as mock_close:
-            with self.assertRaises(ConnectionResetError):
-                gerrit_util.ReadHttpResponse(conn, max_tries=2)
-            self.assertEqual(2, mock_close.call_count)
-        self.assertEqual(2, len(conn.request.mock_calls))
-        gerrit_util.time_sleep.assert_called_once_with(12.0)
-
-    def testReadHttpResponse_ServerNotFoundErrorAndSuccess(self):
-        conn = mock.Mock(
-            req_host="example.com",
-            req_params={"uri": "uri", "method": "method"},
-        )
-        conn.request.side_effect = [
-            httplib2.ServerNotFoundError("Unable to find server"),
-            (mock.Mock(status=200), b"content\xe2\x9c\x94"),
-        ]
-
-        with mock.patch.object(
-            gerrit_util._POOL, "close_host_connection"
-        ) as mock_close:
-            self.assertEqual(
-                "content✔", gerrit_util.ReadHttpResponse(conn).getvalue()
-            )
-            mock_close.assert_called_once_with("example.com")
-        self.assertEqual(2, len(conn.request.mock_calls))
-        gerrit_util.time_sleep.assert_called_once_with(12.0)
-
-    def testReadHttpResponse_DeterministicErrorNoRetry(self):
-        conn = mock.Mock(
-            req_host="example.com",
-            req_params={"uri": "uri", "method": "method"},
-        )
-        conn.request.side_effect = httplib2.RelativeURIError(
-            "Relative URI error"
-        )
-
-        with self.assertRaises(httplib2.RelativeURIError):
-            gerrit_util.ReadHttpResponse(conn, max_tries=3)
-        self.assertEqual(1, len(conn.request.mock_calls))
-
-    def testThreadLocalConnectionPool_GetClient(self):
-        pool = gerrit_util._ThreadLocalConnectionPool()
-        client1 = pool.get_client(timeout=30, proxy_info=None)
-        client2 = pool.get_client(timeout=30, proxy_info=None)
-        self.assertIs(client1, client2)
-
-        client3 = pool.get_client(timeout=60, proxy_info=None)
-        self.assertIsNot(client1, client3)
-
-    def testThreadLocalConnectionPool_ProxyCaching(self):
-        pool = gerrit_util._ThreadLocalConnectionPool()
-        proxy1 = httplib2.ProxyInfo(
-            httplib2.socks.PROXY_TYPE_HTTP_NO_TUNNEL, "proxy.example.com", 8080
-        )
-        proxy2 = httplib2.ProxyInfo(
-            httplib2.socks.PROXY_TYPE_HTTP_NO_TUNNEL, "proxy.example.com", 8080
-        )
-        client1 = pool.get_client(timeout=30, proxy_info=proxy1)
-        client2 = pool.get_client(timeout=30, proxy_info=proxy2)
-        self.assertIs(client1, client2)
-
-    def testThreadLocalConnectionPool_SslAndCertCaching(self):
-        pool = gerrit_util._ThreadLocalConnectionPool()
-        client1 = pool.get_client(
-            timeout=30, proxy_info=None, ca_certs="/path/to/ca.pem"
-        )
-        client2 = pool.get_client(
-            timeout=30, proxy_info=None, ca_certs="/path/to/ca.pem"
-        )
-        client3 = pool.get_client(
-            timeout=30, proxy_info=None, disable_ssl_certificate_validation=True
-        )
-        self.assertIs(client1, client2)
-        self.assertIsNot(client1, client3)
-        self.assertEqual(client1.ca_certs, "/path/to/ca.pem")
-        self.assertTrue(client3.disable_ssl_certificate_validation)
-
-    def testThreadLocalConnectionPool_CacheCaching(self):
-        pool = gerrit_util._ThreadLocalConnectionPool()
-        with (
-            tempfile.TemporaryDirectory() as td1,
-            tempfile.TemporaryDirectory() as td2,
-        ):
-            client1 = pool.get_client(cache=td1, timeout=30)
-            client2 = pool.get_client(cache=td1, timeout=30)
-            client3 = pool.get_client(cache=td2, timeout=30)
-            self.assertIs(client1, client2)
-            self.assertIsNot(client1, client3)
-            self.assertEqual(client1.cache.cache, td1)
-
-        # Unhashable dict / Mapping-like cache objects
-        dict_cache1 = {}
-        dict_cache2 = {}
-        client_dict1 = pool.get_client(cache=dict_cache1, timeout=30)
-        client_dict2 = pool.get_client(cache=dict_cache1, timeout=30)
-        client_dict3 = pool.get_client(cache=dict_cache2, timeout=30)
-        self.assertIs(client_dict1, client_dict2)
-        self.assertIsNot(client_dict1, client_dict3)
-
-    def testThreadLocalConnectionPool_CloseHostConnection(self):
-        pool = gerrit_util._ThreadLocalConnectionPool()
-        client = pool.get_client(timeout=30, proxy_info=None)
-        mock_conn1 = mock.Mock()
-        mock_conn2 = mock.Mock()
-        mock_conn3 = mock.Mock()
-        mock_conn4 = mock.Mock()
-        mock_conn3.close.side_effect = Exception("socket close error")
-
-        client.connections["https:host1.example.com:443"] = mock_conn1
-        client.connections["https:host2.example.com:443"] = mock_conn2
-        client.connections["https:host1.example.com:8443"] = mock_conn3
-        client.connections["https:host1.example.com.evil.com:443"] = mock_conn4
-
-        pool.close_host_connection("host1.example.com")
-        mock_conn1.close.assert_called_once()
-        mock_conn3.close.assert_called_once()
-        mock_conn2.close.assert_not_called()
-        mock_conn4.close.assert_not_called()
-        self.assertNotIn("https:host1.example.com:443", client.connections)
-        self.assertNotIn("https:host1.example.com:8443", client.connections)
-        self.assertIn("https:host2.example.com:443", client.connections)
-        self.assertIn(
-            "https:host1.example.com.evil.com:443", client.connections
-        )
-
-    def testHttpConn_PoolDelegation(self):
-        mock_cache = mock.Mock()
-        conn = gerrit_util.HttpConn(
-            mock_cache,
-            45,
-            req_host="example.com",
-            req_uri="https://example.com/test",
-            req_method="GET",
-            req_headers={},
-            req_body=None,
-            ca_certs="/custom/ca.pem",
-            disable_ssl_certificate_validation=True,
-        )
-        with mock.patch.object(
-            gerrit_util._POOL, "get_client"
-        ) as mock_get_client:
-            mock_client = mock.Mock()
-            expected_response = (mock.Mock(status=200), b"ok")
-            mock_client.request.return_value = expected_response
-            mock_get_client.return_value = mock_client
-
-            result = conn.request("https://example.com/test", method="GET")
-            self.assertEqual(result, expected_response)
-            mock_get_client.assert_called_once_with(
-                cache=mock_cache,
-                timeout=45,
-                proxy_info=conn.proxy_info,
-                ca_certs="/custom/ca.pem",
-                disable_ssl_certificate_validation=True,
-            )
-            mock_client.request.assert_called_once_with(
-                "https://example.com/test",
-                method="GET",
-            )
-
     def testReadHttpResponse_SetMaxTries(self):
         conn = mock.Mock(
             req_host="example.com",
@@ -1381,8 +1242,8 @@ class SSOAuthenticatorTest(unittest.TestCase):
                 "Authorization": "Basic REALLY_COOL_TOKEN",
             },
         )
-        self.assertEqual(parsed.proxy.proxy_host, b"localhost")
-        self.assertEqual(parsed.proxy.proxy_port, 12345)
+        self.assertEqual(parsed.proxy_host, "localhost")
+        self.assertEqual(parsed.proxy_port, 12345)
 
         c = parsed.cookies._cookies
         self.assertEqual(
@@ -1406,8 +1267,8 @@ class SSOAuthenticatorTest(unittest.TestCase):
                 "Authorization": "Basic REALLY_COOL_TOKEN",
             },
         )
-        self.assertEqual(info.proxy.proxy_host, b"localhost")
-        self.assertEqual(info.proxy.proxy_port, 12345)
+        self.assertEqual(info.proxy_host, "localhost")
+        self.assertEqual(info.proxy_port, 12345)
         c = info.cookies._cookies
         self.assertEqual(
             c["login.example.com"]["/"]["SSO"].value, "TUVFUE1PUlAK"

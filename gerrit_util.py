@@ -22,45 +22,20 @@ import random
 import re
 import shutil
 import socket
-import ssl
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 
 from dataclasses import dataclass
 from io import StringIO
 from multiprocessing.pool import ThreadPool
-from typing import Any, Callable, Container, Dict
-from typing import NamedTuple, List, Optional, Union
-from typing import Tuple, TypedDict, cast
-from typing import Generator
-
-import httplib2
-
-try:
-    import httplib2.socks
-
-    _HAS_SOCKS = True
-except ImportError:
-    _HAS_SOCKS = False
-    logging.warning(
-        "httplib2.socks is missing. SOCKS proxy support will be unavailable."
-    )
-
-    class DummyProxyError(Exception):
-        pass
-
-    class DummySocks:
-        ProxyError = DummyProxyError
-        PROXY_TYPE_HTTP_NO_TUNNEL = 0
-
-        class socksocket:
-            pass
-
-    httplib2.socks = DummySocks()
+from typing import Any, Callable, Container, Dict, Generator, List, NamedTuple
+from typing import Optional, Tuple, TypedDict, Union, cast
 
 import auth
 import gclient_utils
@@ -70,61 +45,6 @@ import newauth
 import scm
 import subprocess2
 
-
-# HACK: httplib2 has significant bugs with its proxy support in
-# python3. All httplib2 code should be rewritten to just use python
-# stdlib which does not have these bugs.
-#
-# Prior to that, however, we will directly patch the buggy
-# implementation of httplib2.socks.socksocket.__rewriteproxy which does
-# not properly expect bytes as its argument instead of str.
-#
-# Note that __rewriteproxy is inherently buggy, as it relies on the
-# python stdlib client to send the entire request header in a single
-# call to socket.sendall, which is not explicitly guaranteed.
-#
-# Changes:
-#   * all string literals changed to bytes literals.
-#   * added more http methods to recognize.
-#   * all __symbols changed to _socksocket__symbols (Python __ munging).
-#   * Type annotations added to function signature.
-def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
-    """rewrite HTTP request headers to support non-tunneling proxies
-    (i.e. those which do not support the CONNECT method).
-    This only works for HTTP (not HTTPS) since HTTPS requires tunneling.
-    """
-    host, endpt = None, None
-    hdrs = header.split(b"\r\n")
-    for hdr in hdrs:
-        if hdr.lower().startswith(b"host:"):
-            host = hdr
-        elif hdr.lower().split(b" ")[0] in (
-            b"get",
-            b"head",
-            b"post",
-            b"put",
-            b"patch",
-        ):
-            endpt = hdr
-    if host and endpt:
-        hdrs.remove(host)
-        hdrs.remove(endpt)
-        host = host.split(b" ")[1]
-        endpt = endpt.split(b" ")
-        if (
-            self._socksocket__proxy[4] != None  # noqa: E711
-            and self._socksocket__proxy[5] != None  # noqa: E711
-        ):
-            hdrs.insert(0, self._socksocket__getauthheader())
-        hdrs.insert(0, b"Host: %s" % host)
-        hdrs.insert(
-            0, b"%s http://%s%s %s" % (endpt[0], host, endpt[1], endpt[2])
-        )
-    return b"\r\n".join(hdrs)
-
-
-if _HAS_SOCKS:
-    httplib2.socks.socksocket._socksocket__rewriteproxy = __fixed_rewrite_proxy
 
 LOGGER = logging.getLogger()
 # With a starting sleep time of 12.0 seconds, x <= [1.8-2.2]x backoff, and six
@@ -258,6 +178,22 @@ def CheckShouldUseSSO(host: str, email: str) -> SSOCheckResult:
     if any(email == r["email"] for r in records):
         return SSOCheckResult(True, "email is linked to @google.com email")
     return SSOCheckResult(False, "email is not linked to @google.com email")
+
+
+class HttpResponse(NamedTuple):
+    status: int
+    reason: str
+    headers: Any
+
+    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        if hasattr(self.headers, "get"):
+            return self.headers.get(key, default)
+        if isinstance(self.headers, dict):
+            key_lower = key.lower()
+            for k, v in self.headers.items():
+                if k.lower() == key_lower:
+                    return v
+        return default
 
 
 class _Authenticator(object):
@@ -435,9 +371,14 @@ class SSOAuthenticator(_Authenticator):
 
     @dataclass
     class SSOInfo:
-        proxy: httplib2.ProxyInfo
+        proxy_host: str
+        proxy_port: int
         cookies: http.cookiejar.CookieJar
         headers: Dict[str, str]
+
+        @property
+        def proxy_url(self) -> str:
+            return f"http://{self.proxy_host}:{self.proxy_port}"
 
     # SSOInfo is a cached blob of information used by the `authenticate` method.
     _sso_info: Optional[SSOInfo] = None
@@ -508,11 +449,8 @@ class SSOAuthenticator(_Authenticator):
         )
 
         return cls.SSOInfo(
-            proxy=httplib2.ProxyInfo(
-                httplib2.socks.PROXY_TYPE_HTTP_NO_TUNNEL,
-                proxy_host.encode(),
-                int(proxy_port),
-            ),
+            proxy_host=proxy_host,
+            proxy_port=int(proxy_port),
             cookies=cj,
             headers=headers,
         )
@@ -649,7 +587,7 @@ class SSOAuthenticator(_Authenticator):
 
     def authenticate(self, conn: HttpConn):
         sso_info = self._get_sso_info()
-        conn.proxy_info = sso_info.proxy
+        conn.proxy = sso_info.proxy_url
         conn.req_headers.update(sso_info.headers)
 
         # Now we must rewrite:
@@ -677,7 +615,7 @@ class SSOAuthenticator(_Authenticator):
 
         # Finally, add cookies
         sso_info.cookies.add_cookie_header(conn)
-        assert "Cookie" in conn.req_headers, (
+        assert conn.has_header("Cookie"), (
             "sso_info.cookies.add_cookie_header failed to add Cookie."
         )
 
@@ -921,26 +859,45 @@ class GceAuthenticator(_Authenticator):
     @staticmethod
     def _get(url, **kwargs):
         next_delay_sec = 1.0
+        headers = kwargs.get("headers", {})
         for i in range(TRY_LIMIT):
             p = urllib.parse.urlparse(url)
             if p.scheme not in ("http", "https"):
                 raise RuntimeError(
                     "Don't know how to work with protocol '%s'" % p.scheme
                 )
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({})
+            )
             try:
-                resp, contents = httplib2.Http().request(url, "GET", **kwargs)
+                with opener.open(req, timeout=30) as resp:
+                    response = HttpResponse(
+                        status=resp.status,
+                        reason=resp.reason,
+                        headers=resp.headers,
+                    )
+                    contents = resp.read()
+            except urllib.error.HTTPError as e:
+                response = HttpResponse(
+                    status=e.code,
+                    reason=e.reason,
+                    headers=e.headers,
+                )
+                contents = e.read()
             except (
+                urllib.error.URLError,
                 socket.error,
-                httplib2.HttpLib2Error,
-                httplib2.socks.ProxyError,
+                TimeoutError,
+                OSError,
             ) as e:
                 LOGGER.debug("GET [%s] raised %s", url, e)
                 return None, None
             LOGGER.debug(
-                "GET [%s] #%d/%d (%d)", url, i + 1, TRY_LIMIT, resp.status
+                "GET [%s] #%d/%d (%d)", url, i + 1, TRY_LIMIT, response.status
             )
-            if resp.status < 500:
-                return (resp, contents)
+            if response.status < 500:
+                return (response, contents)
 
             # Retry server error status codes.
             LOGGER.warning("Encountered server error")
@@ -1218,102 +1175,28 @@ class ReqParams(TypedDict):
     body: Optional[str]
 
 
-class _ThreadLocalConnectionPool(threading.local):
-    """Thread-local connection pool for reusing Keep-Alive TLS connections."""
-
-    def __init__(self):
-        super().__init__()
-        self._clients: Dict[Tuple, httplib2.Http] = {}
-
-    def get_client(
-        self,
-        cache: Any = None,
-        timeout: Optional[Union[int, float]] = None,
-        proxy_info: Optional[httplib2.ProxyInfo] = None,
-        ca_certs: Optional[str] = None,
-        disable_ssl_certificate_validation: bool = False,
-    ) -> httplib2.Http:
-        proxy_key = None
-        if proxy_info:
-            proxy_key = (
-                getattr(proxy_info, "proxy_type", None),
-                getattr(proxy_info, "proxy_host", None),
-                getattr(proxy_info, "proxy_port", None),
-                getattr(proxy_info, "proxy_user", None),
-                getattr(proxy_info, "proxy_pass", None),
-            )
-        cache_key = getattr(cache, "cache", cache)
-        try:
-            hash(cache_key)
-        except TypeError:
-            cache_key = id(cache)
-        key = (
-            cache_key,
-            timeout,
-            proxy_key,
-            ca_certs,
-            disable_ssl_certificate_validation,
-        )
-        if key not in self._clients:
-            self._clients[key] = httplib2.Http(
-                cache=cache,
-                timeout=timeout,
-                proxy_info=proxy_info,
-                ca_certs=ca_certs,
-                disable_ssl_certificate_validation=disable_ssl_certificate_validation,
-            )
-        return self._clients[key]
-
-    def close_host_connection(self, host: str) -> None:
-        """Evicts and closes stale sockets for a host upon network/socket error."""
-        for client in self._clients.values():
-            for conn_key in list(client.connections.keys()):
-                # httplib2 connection keys are formatted as "<scheme>:<host>[:<port>]".
-                # Match the exact host or host with port to avoid prefix collisions.
-                authority = str(conn_key).split(":", 1)[-1]
-                if authority != host and not authority.startswith(host + ":"):
-                    continue
-                conn = client.connections.pop(conn_key, None)
-                if not conn:
-                    continue
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-
-_POOL = _ThreadLocalConnectionPool()
-
-
-class HttpConn(httplib2.Http):
-    """HttpConn is an httplib2.Http with additional request-specific fields."""
+class HttpConn:
+    """HttpConn holds request parameters and performs HTTP requests."""
 
     def __init__(
         self,
-        *args,
+        *,
         req_host: str,
         req_uri: str,
         req_method: str,
         req_headers: Dict[str, str],
         req_body: Optional[str],
-        **kwargs,
+        timeout: int = 300,
+        proxy: Optional[str] = None,
     ) -> None:
         self.req_host = req_host
         self.req_uri = req_uri
         self.req_method = req_method
         self.req_headers = req_headers
+        self.unredirected_headers: Dict[str, str] = {}
         self.req_body = req_body
-        super().__init__(*args, **kwargs)
-
-    def request(self, uri, *args, **kwargs):
-        client = _POOL.get_client(
-            cache=self.cache,
-            timeout=self.timeout,
-            proxy_info=self.proxy_info,
-            ca_certs=self.ca_certs,
-            disable_ssl_certificate_validation=self.disable_ssl_certificate_validation,
-        )
-        return client.request(uri, *args, **kwargs)
+        self.timeout = timeout
+        self.proxy = proxy
 
     @property
     def req_params(self) -> ReqParams:
@@ -1324,26 +1207,79 @@ class HttpConn(httplib2.Http):
             "body": self.req_body,
         }
 
-    # NOTE: We want to use HttpConn with CookieJar.add_cookie_header, so have
-    # compatible interface for that here.
-    #
-    # NOTE: Someone should really normalize this 'HttpConn' and httplib2
-    # implementation to just be plain python3 stdlib instead. All of this was
-    # written during the bad old days of python2.6/2.7, pre-vpython.
+    def request(
+        self,
+        uri: Optional[str] = None,
+        method: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        body: Optional[Union[str, bytes]] = None,
+    ) -> Tuple[HttpResponse, bytes]:
+        uri = uri or self.req_uri
+        method = method or self.req_method
+        req_headers = headers if headers is not None else self.req_headers
+        body_data = body if body is not None else self.req_body
+        if isinstance(body_data, str):
+            data: Optional[bytes] = body_data.encode("utf-8")
+        else:
+            data = body_data
+
+        req = urllib.request.Request(
+            url=uri,
+            data=data,
+            headers=req_headers,
+            method=method,
+        )
+        for k, v in self.unredirected_headers.items():
+            req.add_unredirected_header(k, v)
+
+        handlers: list[urllib.request.BaseHandler] = []
+        if self.proxy:
+            handlers.append(
+                urllib.request.ProxyHandler(
+                    {"http": self.proxy, "https": self.proxy}
+                )
+            )
+        opener = urllib.request.build_opener(*handlers)
+        try:
+            with opener.open(req, timeout=self.timeout) as resp:
+                return (
+                    HttpResponse(
+                        status=resp.status,
+                        reason=resp.reason,
+                        headers=resp.headers,
+                    ),
+                    resp.read(),
+                )
+        except urllib.error.HTTPError as e:
+            return (
+                HttpResponse(
+                    status=e.code,
+                    reason=e.reason,
+                    headers=e.headers,
+                ),
+                e.read(),
+            )
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, (socket.timeout, TimeoutError)):
+                raise socket.timeout(str(e.reason)) from e
+            raise
+
+    # Interface for CookieJar.add_cookie_header
     def has_header(self, header: str) -> bool:
-        return header in self.req_headers
+        return header in self.req_headers or header in self.unredirected_headers
 
     def get_full_url(self) -> str:
         return self.req_uri
 
     def get_header(
-        self, header: str, default: Optional[Any] = None
-    ) -> Optional[Any]:
-        return self.req_headers.get(header, default)
+        self, header: str, default: Optional[str] = None
+    ) -> Optional[str]:
+        return self.req_headers.get(
+            header, self.unredirected_headers.get(header, default)
+        )
 
     def add_unredirected_header(self, header: str, value: str):
-        # NOTE: httplib2 does not support unredirected headers.
-        self.req_headers[header] = value
+        self.unredirected_headers[header] = value
 
     @property
     def unverifiable(self) -> bool:
@@ -1439,7 +1375,7 @@ def CreateHttpConn(
 
     if LOGGER.isEnabledFor(logging.DEBUG):
         LOGGER.debug("%s %s", conn.req_method, conn.req_uri)
-        LOGGER.debug("conn.proxy_info=%r", conn.proxy_info)
+        LOGGER.debug("conn.proxy=%r", conn.proxy)
         for key, val in conn.req_headers.items():
             if key in ("Authorization", "Cookie"):
                 val = "HIDDEN"
@@ -1471,15 +1407,7 @@ def ReadHttpResponse(
         before_response = time.time()
         try:
             response, contents = conn.request(**conn.req_params)
-        except (
-            socket.timeout,
-            socket.error,
-            http.client.HTTPException,
-            httplib2.ServerNotFoundError,
-            ssl.SSLError,
-        ) as e:
-            LOGGER.debug("Request failed with network/socket error: %s", e)
-            _POOL.close_host_connection(conn.req_host)
+        except socket.timeout:
             if idx < max_tries - 1:
                 sleep_time = log_retry_and_sleep(sleep_time, idx, max_tries)
                 continue
@@ -1521,17 +1449,11 @@ def ReadHttpResponse(
             break
 
         # A status >=500 is assumed to be a possible transient error; retry.
-        http_version = "HTTP/%s" % ("1.1" if response.version == 11 else "1.0")
         LOGGER.warning(
-            "A transient error occurred while querying %s:\n"
-            "%s %s %s\n"
-            "%s %d %s\n"
-            "%s",
+            "A transient error occurred while querying %s:\n%s %s\n%d %s\n%s",
             conn.req_host,
             conn.req_params["method"],
             conn.req_params["uri"],
-            http_version,
-            http_version,
             response.status,
             response.reason,
             contents,
