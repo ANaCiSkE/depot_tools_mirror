@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 from io import StringIO
@@ -398,6 +399,57 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
         mock_get_access_token.assert_called_once()
         self.assertTrue(bypassable, msg=err_msg)
         self.assertEqual(err_msg, "")
+
+    @mock.patch("gerrit_util.EnsureAccountExists")
+    def testGerritAccountExists_Success(self, mock_ensure_account):
+        self.assertTrue(
+            gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
+                "example.com"
+            )
+        )
+
+    @mock.patch(
+        "gerrit_util.EnsureAccountExists",
+        side_effect=auth.GitLoginRequiredError(),
+    )
+    def testGerritAccountExists_GitLoginRequired(self, mock_ensure_account):
+        self.assertFalse(
+            gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
+                "example.com"
+            )
+        )
+
+    @mock.patch(
+        "gerrit_util.EnsureAccountExists",
+        side_effect=gerrit_util.GerritError(400, "Account missing"),
+    )
+    def testGerritAccountExists_400Error(self, mock_ensure_account):
+        self.assertFalse(
+            gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
+                "example.com"
+            )
+        )
+
+    @mock.patch(
+        "gerrit_util.EnsureAccountExists",
+        side_effect=gerrit_util.GerritError(404, "Account missing"),
+    )
+    def testGerritAccountExists_404Error(self, mock_ensure_account):
+        self.assertFalse(
+            gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
+                "example.com"
+            )
+        )
+
+    @mock.patch(
+        "gerrit_util.EnsureAccountExists",
+        side_effect=gerrit_util.GerritError(500, "Internal Server Error"),
+    )
+    def testGerritAccountExists_500ErrorRaises(self, mock_ensure_account):
+        with self.assertRaises(gerrit_util.GerritError):
+            gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
+                "example.com"
+            )
 
     @mock.patch(
         "gerrit_util.GitCredsAuthenticator._is_usehttppath_set",
@@ -1507,6 +1559,599 @@ class ShouldUseSSOTest(unittest.TestCase):
         email.assert_called_with(
             "fake-host.googlesource.com", "self", authenticator=mock.ANY
         )
+
+
+class EnsureAccountExistsTest(unittest.TestCase):
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList", return_value=["example.com:user@example.com"]
+    )
+    @mock.patch("gerrit_util.GetAccountDetails")
+    def testEnsureAccountExists_CachedWithEmail(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_config_list.assert_called_once_with(
+            mock.ANY, "depot-tools.hosthasaccount"
+        )
+        mock_get_account.assert_not_called()
+
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=["example.com"])
+    @mock.patch("gerrit_util.GetAccountDetails")
+    def testEnsureAccountExists_CachedLegacyHostOnly(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_config_list.assert_called_once_with(
+            mock.ANY, "depot-tools.hosthasaccount"
+        )
+        mock_get_account.assert_not_called()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="new_user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:old_user@example.com"],
+    )
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "new_user@example.com"},
+    )
+    def testEnsureAccountExists_AccountSwitchMiss(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_account.assert_called_once_with(
+            "example.com", authenticator=None
+        )
+        mock_set_config.assert_called_once_with(
+            mock.ANY,
+            "depot-tools.hosthasaccount",
+            "example.com:new_user@example.com",
+            append=True,
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testEnsureAccountExists_UncachedSuccessWithEmail(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_account.assert_called_once_with(
+            "example.com", authenticator=None
+        )
+        mock_set_config.assert_called_once_with(
+            mock.ANY,
+            "depot-tools.hosthasaccount",
+            "example.com:user@example.com",
+            append=True,
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testEnsureAccountExists_UncachedSuccessNoLocalEmail(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_account.assert_called_once_with(
+            "example.com", authenticator=None
+        )
+        mock_set_config.assert_called_once_with(
+            mock.ANY,
+            "depot-tools.hosthasaccount",
+            "example.com",
+            append=True,
+        )
+
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        side_effect=gerrit_util.GerritError(400, "Bad Request"),
+    )
+    def testEnsureAccountExists_NotFound400(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        with self.assertRaises(gerrit_util.GerritError) as ctx:
+            gerrit_util.EnsureAccountExists("example.com")
+        self.assertEqual(ctx.exception.http_status, 400)
+        self.assertIn(
+            "Account does not exist on Gerrit host 'example.com'",
+            str(ctx.exception),
+        )
+
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch("gerrit_util.GetAccountDetails", return_value={})
+    def testEnsureAccountExists_NotFound404(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        with self.assertRaises(gerrit_util.GerritError) as ctx:
+            gerrit_util.EnsureAccountExists("example.com")
+        self.assertEqual(ctx.exception.http_status, 404)
+        self.assertIn(
+            "Account not found on Gerrit host 'example.com'", str(ctx.exception)
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:user@example.com", "other.com"],
+    )
+    @mock.patch("gerrit_util.GetAccountDetails", return_value=None)
+    def testEnsureAccountExists_NotFound404InvalidatesCache(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        with self.assertRaises(gerrit_util.GerritError) as ctx:
+            gerrit_util.EnsureAccountExists("example.com", force=True)
+        self.assertEqual(ctx.exception.http_status, 404)
+        self.assertIn(
+            "Account not found on Gerrit host 'example.com'", str(ctx.exception)
+        )
+        mock_set_config.assert_has_calls(
+            [
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    None,
+                    modify_all=True,
+                ),
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    "other.com",
+                    append=True,
+                ),
+            ]
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList", return_value=["example.com:user@example.com"]
+    )
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testEnsureAccountExists_ForceBypassesCache(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        gerrit_util.EnsureAccountExists("example.com", force=True)
+        mock_get_account.assert_called_once_with(
+            "example.com", authenticator=None
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:user@example.com", "other.com"],
+    )
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        side_effect=gerrit_util.GerritError(400, "Bad Request"),
+    )
+    def testEnsureAccountExists_InvalidatesCacheOnError(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        with self.assertRaises(gerrit_util.GerritError):
+            gerrit_util.EnsureAccountExists("example.com", force=True)
+        mock_set_config.assert_has_calls(
+            [
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    None,
+                    modify_all=True,
+                ),
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    "other.com",
+                    append=True,
+                ),
+            ]
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=[
+            "example.com:user@example.com",
+            "example.com:user@example.com.uk",
+            "other.com",
+        ],
+    )
+    def testInvalidateAccountCache(
+        self, mock_get_config_list, mock_get_config, mock_set_config
+    ):
+        gerrit_util.InvalidateAccountCache("example.com")
+        mock_set_config.assert_has_calls(
+            [
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    None,
+                    modify_all=True,
+                ),
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    "example.com:user@example.com.uk",
+                    append=True,
+                ),
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    "other.com",
+                    append=True,
+                ),
+            ]
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="User@Example.COM")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:user@example.com"],
+    )
+    def testInvalidateAccountCache_CaseInsensitive(
+        self, mock_get_config_list, mock_get_config, mock_set_config
+    ):
+        gerrit_util.InvalidateAccountCache("HTTPS://EXAMPLE.COM/")
+        mock_set_config.assert_called_once_with(
+            mock.ANY, "depot-tools.hosthasaccount", None, modify_all=True
+        )
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=[
+            "host1.com:user1@example.com",
+            "host2.com:user2@example.com",
+            "example.com:user@example.com",
+        ],
+    )
+    def testInvalidateAccountCache_MultipleValuesUsesModifyAll(
+        self, mock_get_config_list, mock_get_config, mock_set_config
+    ):
+        gerrit_util.InvalidateAccountCache("example.com")
+        mock_set_config.assert_has_calls(
+            [
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    None,
+                    modify_all=True,
+                ),
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    "host1.com:user1@example.com",
+                    append=True,
+                ),
+                mock.call(
+                    mock.ANY,
+                    "depot-tools.hosthasaccount",
+                    "host2.com:user2@example.com",
+                    append=True,
+                ),
+            ]
+        )
+
+    @mock.patch("scm.GIT.GetConfig", return_value="User@Example.COM")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:user@example.com"],
+    )
+    @mock.patch("gerrit_util.GetAccountDetails")
+    def testEnsureAccountExists_CaseInsensitiveHit(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        gerrit_util.EnsureAccountExists("HTTPS://EXAMPLE.COM/")
+        mock_get_account.assert_not_called()
+
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:8080:user@example.com"],
+    )
+    @mock.patch("gerrit_util.GetAccountDetails")
+    def testEnsureAccountExists_BareHostWithPort(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        gerrit_util.EnsureAccountExists("example.com:8080")
+        mock_get_account.assert_not_called()
+
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList",
+        return_value=["example.com:user@example.com"],
+    )
+    @mock.patch("gerrit_util.GetAccountDetails")
+    def testEnsureAccountExists_ExplicitCwdPassed(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        gerrit_util.EnsureAccountExists("example.com", cwd="/custom/repo/path")
+        mock_get_config.assert_called_once_with(
+            "/custom/repo/path", "user.email"
+        )
+        mock_get_config_list.assert_called_once_with(
+            "/custom/repo/path", "depot-tools.hosthasaccount"
+        )
+        mock_get_account.assert_not_called()
+
+    @mock.patch(
+        "scm.GIT.SetConfig",
+        side_effect=subprocess2.CalledProcessError(
+            1, ["git", "config"], None, None, None
+        ),
+    )
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"_account_id": 12345},
+    )
+    def testEnsureAccountExists_SetConfigFailureGraceful(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_account.assert_called_once()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    def testInvalidateAccountCache_EmptyConfig(
+        self, mock_get_config_list, mock_set_config
+    ):
+        gerrit_util.InvalidateAccountCache("example.com")
+        mock_set_config.assert_not_called()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", side_effect=Exception("git error"))
+    @mock.patch("scm.GIT.GetConfigList", return_value=["other.com"])
+    def testInvalidateAccountCache_NoMatchingHost(
+        self, mock_get_config_list, mock_get_config, mock_set_config
+    ):
+        gerrit_util.InvalidateAccountCache("example.com")
+        mock_set_config.assert_not_called()
+
+    @mock.patch(
+        "scm.GIT.GetConfigList", side_effect=Exception("fatal git error")
+    )
+    def testInvalidateAccountCache_ExceptionSwallowed(
+        self, mock_get_config_list
+    ):
+        gerrit_util.InvalidateAccountCache("example.com")
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", side_effect=Exception("config error"))
+    @mock.patch("scm.GIT.GetConfigList", side_effect=Exception("config error"))
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testEnsureAccountExists_GetConfigExceptionsSwallowed(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        gerrit_util.EnsureAccountExists("example.com")
+        mock_get_account.assert_called_once()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList", return_value=["example.com:user@example.com"]
+    )
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        side_effect=gerrit_util.GerritError(500, "Internal Server Error"),
+    )
+    def testEnsureAccountExists_Non400GerritErrorDoesNotInvalidate(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        with self.assertRaises(gerrit_util.GerritError) as ctx:
+            gerrit_util.EnsureAccountExists("example.com", force=True)
+        self.assertEqual(ctx.exception.http_status, 500)
+        mock_set_config.assert_not_called()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList", return_value=["example.com:user@example.com"]
+    )
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        side_effect=auth.GitLoginRequiredError(),
+    )
+    def testEnsureAccountExists_AuthExceptionDoesNotInvalidate(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        with self.assertRaises(auth.GitLoginRequiredError):
+            gerrit_util.EnsureAccountExists("example.com", force=True)
+        mock_set_config.assert_not_called()
+
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch(
+        "scm.GIT.GetConfigList", return_value=["example.com:user@example.com"]
+    )
+    @mock.patch("gerrit_util.GetAccountDetails")
+    def testAsyncEnsureAccountExists_CachedFastReturn(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        join_fn()
+        mock_get_account.assert_not_called()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testAsyncEnsureAccountExists_UncachedSuccess(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        join_fn()
+        mock_get_account.assert_called_once()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testAsyncEnsureAccountExists_MultipleJoinCallsIdempotent(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        join_fn()
+        join_fn()
+        mock_get_account.assert_called_once()
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testAsyncEnsureAccountExists_ConcurrentJoinThreadSafe(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        barrier = threading.Barrier(4)
+        errors = []
+
+        def _caller():
+            try:
+                barrier.wait()
+                join_fn()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=_caller) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
+        mock_get_account.assert_called_once()
+
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        side_effect=gerrit_util.GerritError(400, "Bad Request"),
+    )
+    def testAsyncEnsureAccountExists_RaisesExceptionOnJoin(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        with self.assertRaises(gerrit_util.GerritError):
+            join_fn()
+
+    @mock.patch("scm.GIT.GetConfig", return_value="user@example.com")
+    @mock.patch("scm.GIT.GetConfigList", return_value=[])
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        side_effect=SystemExit(1),
+    )
+    def testAsyncEnsureAccountExists_SystemExitPropagates(
+        self, mock_get_account, mock_get_config_list, mock_get_config
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        with self.assertRaises(SystemExit) as ctx:
+            join_fn()
+        self.assertEqual(ctx.exception.code, 1)
+
+    @mock.patch("scm.GIT.SetConfig")
+    @mock.patch("scm.GIT.GetConfig", side_effect=Exception("config error"))
+    @mock.patch("scm.GIT.GetConfigList", side_effect=Exception("config error"))
+    @mock.patch(
+        "gerrit_util.GetAccountDetails",
+        return_value={"email": "user@example.com"},
+    )
+    def testAsyncEnsureAccountExists_GetConfigExceptionsSwallowed(
+        self,
+        mock_get_account,
+        mock_get_config_list,
+        mock_get_config,
+        mock_set_config,
+    ):
+        join_fn = gerrit_util.AsyncEnsureAccountExists("example.com")
+        join_fn()
+        mock_get_account.assert_called_once()
 
 
 if __name__ == "__main__":

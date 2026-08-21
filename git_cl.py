@@ -6560,11 +6560,14 @@ def CMDupload(parser, args):
     #
     # 1. EnsureAuthenticated ensures we have a credential that satisfies ReAuth
     #    requirement, so our upload is "trusted" for review enforcement.
-    # 2. GetAccountDetails ensures the user's Gerrit account exists. This is
-    #    required on-top of EnsureAuthenticated check, because Gerrit accounts
-    #    exists independently of the OAuth-ed account.
+    # 2. AsyncEnsureAccountExists ensures the user's Gerrit account exists (cached
+    #    in Git config). On cold cache misses or --force, verification runs in a
+    #    background thread concurrently with local git status checks and options
+    #    parsing below to hide network latency.
     cl.EnsureAuthenticated(force=options.force)
-    gerrit_util.GetAccountDetails(cl.GetGerritHost())
+    wait_for_account = gerrit_util.AsyncEnsureAccountExists(
+        cl.GetGerritHost(), force=options.force
+    )
 
     # Check whether git should be updated.
     recommendation = git_common.check_git_version()
@@ -6642,6 +6645,11 @@ def CMDupload(parser, args):
     if options.retry_failed and not cl.GetIssue():
         print("No previous patchsets, so --retry-failed has no effect.")
         options.retry_failed = False
+
+    # Block until background Gerrit account verification finishes (if not
+    # already completed or cached) before proceeding to interactive description
+    # prompt, presubmit checks, or git push.
+    wait_for_account()
 
     if options.squash:
         if options.cherry_pick_stacked:
