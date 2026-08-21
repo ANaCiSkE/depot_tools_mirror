@@ -2135,7 +2135,7 @@ class Changelist(object):
         committing: bool,
         may_prompt: bool,
         verbose: bool,
-        parallel: bool,
+        parallel: Optional[bool],
         upstream: str,
         description: str,
         all_files: bool,
@@ -2151,8 +2151,10 @@ class Changelist(object):
             args.extend(["--end_commit", end_commit])
         if may_prompt:
             args.append("--may_prompt")
-        if parallel:
+        if parallel is True:
             args.append("--parallel")
+        elif parallel is False:
+            args.append("--no-parallel")
         if all_files:
             args.append("--all_files")
         if files:
@@ -6270,8 +6272,15 @@ def CMDpresubmit(parser, args):
         "--parallel",
         action="store_true",
         help="Run all tests specified by input_api.RunTests in all "
-        "PRESUBMIT files in parallel.",
+        "PRESUBMIT files in parallel (default: True).",
     )
+    parser.add_option(
+        "--no-parallel",
+        action="store_false",
+        dest="parallel",
+        help="Do not run presubmit tests in parallel.",
+    )
+    parser.set_defaults(parallel=True)
     parser.add_option(
         "--resultdb",
         action="store_true",
@@ -6616,8 +6625,15 @@ def CMDupload(parser, args):
         "--parallel",
         action="store_true",
         help="Run all tests specified by input_api.RunTests in all "
-        "PRESUBMIT files in parallel.",
+        "PRESUBMIT files in parallel (default: True).",
     )
+    parser.add_option(
+        "--no-parallel",
+        action="store_false",
+        dest="parallel",
+        help="Do not run presubmit tests in parallel.",
+    )
+    parser.set_defaults(parallel=True)
     parser.add_option(
         "--no-autocc",
         action="store_true",
@@ -7372,8 +7388,15 @@ def CMDland(parser, args):
         "--parallel",
         action="store_true",
         help="Run all tests specified by input_api.RunTests in all "
-        "PRESUBMIT files in parallel.",
+        "PRESUBMIT files in parallel (default: True).",
     )
+    parser.add_option(
+        "--no-parallel",
+        action="store_false",
+        dest="parallel",
+        help="Do not run presubmit tests in parallel.",
+    )
+    parser.set_defaults(parallel=True)
     parser.add_option(
         "--resultdb",
         action="store_true",
