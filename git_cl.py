@@ -2452,8 +2452,9 @@ class Changelist(object):
             options, [parent, end_commit], files
         )
 
-        watchlist = watchlists.Watchlists(settings.GetRoot())
-        self.ExtendCC(watchlist.GetWatchersForPaths(files))
+        if not getattr(options, "bypass_watchlists", False):
+            watchlist = watchlists.Watchlists(settings.GetRoot())
+            self.ExtendCC(watchlist.GetWatchersForPaths(files))
         if not options.bypass_hooks:
             hook_results = self.RunHook(
                 committing=False,
@@ -2574,9 +2575,9 @@ class Changelist(object):
         print(f"Processing {_GetCommitCountSummary(*git_diff_args)}...")
 
         # Apply watchlists on upload.
-        watchlist = watchlists.Watchlists(settings.GetRoot())
         files = self.GetAffectedFiles(base_branch)
-        if not options.bypass_watchlists:
+        if not getattr(options, "bypass_watchlists", False):
+            watchlist = watchlists.Watchlists(settings.GetRoot())
             self.ExtendCC(watchlist.GetWatchersForPaths(files))
 
         change_desc = self._GetDescriptionForUpload(

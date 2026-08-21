@@ -5843,6 +5843,44 @@ class ChangelistTest(unittest.TestCase):
             end_commit="420latest_tree",
         )
 
+    @mock.patch("git_cl.watchlists.Watchlists")
+    @mock.patch("git_cl.Changelist.GetAffectedFiles", return_value=["foo.cc"])
+    @mock.patch("git_cl.Changelist.GetIssue", return_value=None)
+    @mock.patch("git_cl.ChangeDescription.prompt")
+    @mock.patch("git_cl.Changelist.RunHook", return_value={"more_cc": []})
+    @mock.patch("git_cl.Changelist._GetDescriptionForUpload")
+    @mock.patch("git_cl.Changelist.EnsureCanUploadPatchset")
+    def testPrepareChange_bypassWatchlists(
+        self,
+        mockEnsureCanUploadPatchset,
+        mockGetDescriptionForupload,
+        mockRunHook,
+        mockPrompt,
+        mockGetIssue,
+        mockGetAffectedFiles,
+        mockWatchlists,
+    ):
+        cl = git_cl.Changelist()
+        options = optparse.Values()
+        options.force = True
+        options.bypass_hooks = True
+        options.bypass_watchlists = True
+        options.verbose = False
+        options.parallel = False
+        options.edit_description = False
+        options.preserve_tryjobs = False
+        options.private = False
+        options.no_autocc = False
+        options.message_file = None
+        options.commit_description = None
+        options.cc = []
+        mockGetDescriptionForupload.return_value = git_cl.ChangeDescription(
+            "title\n\nChange-Id: 1a2b3c"
+        )
+
+        cl._PrepareChange(options, "parent", "latest_tree")
+        mockWatchlists.assert_not_called()
+
     @mock.patch("git_cl.Changelist.GetAffectedFiles", return_value=[])
     @mock.patch("git_cl.Changelist.GetIssue", return_value="123")
     @mock.patch("git_cl.ChangeDescription.prompt")
