@@ -624,20 +624,50 @@ def freeze():
 
 
 def get_branch_tree(use_limit=False):
-    """Get the dictionary of {branch: parent}, compatible with topo_iter.
+    """Returns a tuple of (skipped, branch_tree) compatible with topo_iter.
 
-    Returns a tuple of (skipped, <branch_tree dict>) where skipped is a set of
-    branches without upstream branches defined.
+    Queries all local branch refs and upstreams in a single `git for-each-ref`
+    plumbing call.
+
+    Returns:
+        skipped: Set of local branches that have no upstream configured or
+                 whose upstream tracking ref is gone.
+        branch_tree: Dict mapping {branch: upstream_parent}.
     """
+    key = "depot-tools.branch-limit"
+    limit = get_config_int(key, 20)
+
+    data = run(
+        "for-each-ref",
+        "--format=%(refname:short)%00%(upstream:short)%00%(upstream:track,nobracket)",
+        "refs/heads",
+    )
+    assert isinstance(data, str)
+    raw_lines = [line for line in data.splitlines() if line]
+
+    num_branches = len(raw_lines)
+    if use_limit and num_branches > limit:
+        die(
+            f"""\
+      Your git repo has too many branches ({num_branches}/{limit}) for this tool to work well.
+
+      You may adjust this limit by running:
+      git config {key} <new_limit>
+
+      You may also try cleaning up your old branches by running:
+      git cl archive
+      """
+        )
+
     skipped = set()
     branch_tree = {}
 
-    for branch in branches(use_limit=use_limit):
-        parent = upstream(branch)
-        if not parent:
+    for line in raw_lines:
+        branch, parent, track = line.split("\0", 2)
+        if not parent or track.startswith("gone"):
             skipped.add(branch)
-            continue
-        branch_tree[branch] = parent
+        else:
+            branch_tree[branch] = parent
 
     return skipped, branch_tree
 
@@ -871,6 +901,54 @@ def rebase(parent, start, branch, abort=False, allow_gc=False):
             cpe.stdout.decode("utf-8", "replace"),
             cpe.stderr.decode("utf-8", "replace"),
         )
+
+
+def replay_rebase(parent: str, start: str, branch: str) -> Optional[str]:
+    """Attempts an in-memory rebase of `branch` onto `parent` from `start` using `git replay`.
+
+    Note:
+        `git replay` is marked as EXPERIMENTAL in upstream Git documentation (introduced
+        in Git 2.44, with `--ref-action=print` and `--ref` added in Git 2.55), but is safe to use here because:
+          1. It is powered by Git's standard `merge-ort` engine.
+          2. It operates entirely in memory and does not modify the working tree, index,
+             or refs, leaving the repository completely clean on failure.
+          3. Any failure, merge conflict, or Git version < 2.55 safely returns None so callers
+             can fall back to porcelain `git rebase`.
+
+    Args:
+        parent: The new upstream parent ref or commit SHA to rebase onto.
+        start: The merge-base commit SHA representing the start of the commit range.
+        branch: The branch name or ref to rebase.
+
+    Returns the new tip commit SHA if successful on Git >= 2.55, or None if conflicts occur or replay fails.
+    Does not modify the working tree or index.
+
+    Note:
+        Callers should ensure `start` does not equal the commit SHA of `branch`.
+        For branches with no commits beyond `start` (pure fast-forwards), `git replay`
+        produces no ref updates for an empty revision range and returns None.
+    """
+    if not meets_git_version((2, 55)):
+        return None
+    try:
+        ref = branch if branch.startswith("refs/") else f"refs/heads/{branch}"
+        out = run(
+            "replay",
+            "--ref-action=print",
+            "--onto",
+            parent,
+            f"{start}..{branch}",
+            "--ref",
+            ref,
+        )
+        assert isinstance(out, str)
+        for line in out.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 3 and parts[0] == "update" and parts[1] == ref:
+                return parts[2]
+        return None
+    except subprocess2.CalledProcessError:
+        return None
 
 
 def remove_merge_base(branch):

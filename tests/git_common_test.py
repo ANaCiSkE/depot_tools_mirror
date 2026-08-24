@@ -561,6 +561,10 @@ class GitMutableFunctionsTest(
 
         self.repo.git("checkout", "-t", "-b", "to_delete", "main")
         self.repo.git("checkout", "-t", "-b", "parent_gone", "to_delete")
+        with self.repo.open("parent_gone_file", "w") as f:
+            f.write("real work")
+        self.repo.git("add", "parent_gone_file")
+        self.repo.git_commit("real commit on parent_gone")
         self.repo.git("branch", "-D", "to_delete")
 
         self.repo.git("checkout", "-t", "-b", "frozen_branch", "main")
@@ -612,6 +616,10 @@ class GitMutableFunctionsTest(
             "to_delete": None,
         }
         self.assertEqual(expected, actual)
+
+        skipped, tree = self.repo.run(self.gc.get_branch_tree)
+        self.assertIn("parent_gone", skipped)
+        self.assertNotIn("parent_gone", tree)
 
     def testGetBranchesInfoWithReset(self):
         self.repo.git("commit", "--allow-empty", "-am", "foooooo")

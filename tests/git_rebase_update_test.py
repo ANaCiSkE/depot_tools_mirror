@@ -134,7 +134,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         with self.repo.open("bob", "wb") as f:
             f.write(b"testing auto-freeze/thaw")
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
         self.assertIn("Cannot rebase-update", output)
 
         self.repo.run(self.nb.main, ["empty_branch"])
@@ -142,7 +142,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
 
         self.repo.git("checkout", "branch_K")
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
 
         self.assertIn("Rebasing: branch_G", output)
         self.assertIn("Rebasing: branch_K", output)
@@ -164,7 +164,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
     A old_file
     """)
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
         self.assertIn("branch_K up-to-date", output)
         self.assertIn("branch_L up-to-date", output)
         self.assertIn("foobar up-to-date", output)
@@ -307,16 +307,16 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         # start on a branch which will be deleted
         self.repo.git("checkout", "branch_G")
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
         self.assertIn("branch.branch_K.dormant true", output)
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
         self.assertIn("Rebase in progress", output)
 
         self.repo.git("checkout", "--theirs", "M")
         self.repo.git("rebase", "--skip")
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
         self.assertIn("Failed! Attempting to squash", output)
         self.assertIn("Deleted branch branch_G", output)
         self.assertIn("Deleted branch branch_L", output)
@@ -439,7 +439,7 @@ branch refs/heads/empty_branch_in_worktree
         self.assertEqual(self.repo["A"], self.origin["A"])
         self.assertEqual(self.repo["G"], self.origin["G"])
 
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
         self.assertIn("Rebasing: branch_G", output)
         self.assertIn("Rebasing: branch_K", output)
         self.assertIn("Rebasing: branch_L", output)
@@ -491,6 +491,46 @@ branch refs/heads/empty_branch_in_worktree
         _, err = self.repo.capture_stdio(self.rp.main, ["branch_K"])
 
         self.assertIn("Unable to determine nerp@{upstream}", err)
+
+    def testReplayRebase(self):
+        if not self.repo.run(self.gc.meets_git_version, (2, 55)):
+            self.skipTest(
+                "git replay with --ref-action=print requires Git >= 2.55"
+            )
+
+        self.repo.git("checkout", "branch_K")
+        self.repo.run(self.nb.main, ["feature_branch"])
+        with self.repo.open("feat", "w") as f:
+            f.write("feature work")
+        self.repo.git("add", "feat")
+        self.repo.git_commit("feat1")
+
+        start_hash = self.repo.git("rev-parse", "branch_K").stdout.strip()
+        new_sha = self.repo.run(
+            self.gc.replay_rebase, "origin/main", start_hash, "feature_branch"
+        )
+        self.assertIsNotNone(new_sha)
+        old_sha = self.repo.git("rev-parse", "feature_branch").stdout.strip()
+        self.repo.run(
+            self.gc.update_refs_atomic,
+            [("feature_branch", new_sha, old_sha)],
+            "test-rebase",
+        )
+        self.assertEqual(
+            self.repo.git("rev-parse", "feature_branch~").stdout.strip(),
+            self.repo.git("rev-parse", "origin/main").stdout.strip(),
+        )
+
+    def testFetchRemotesWithUnresolvableParent(self):
+        # branch_tree contains a valid upstream parent ("origin/main") and an
+        # unresolvable parent ref ("origin/nonexistent_parent").
+        branch_tree = {
+            "branch_K": "origin/main",
+            "stale_branch": "origin/nonexistent_parent",
+        }
+        # Calling fetch_remotes should cleanly fetch origin for valid refs
+        # without crashing on the unresolvable parent.
+        self.repo.run(self.reup.fetch_remotes, branch_tree)
 
 
 if __name__ == "__main__":
