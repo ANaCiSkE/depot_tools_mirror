@@ -796,7 +796,7 @@ class InputApi(object):
         gerrit_obj,
         dry_run=None,
         thread_pool=None,
-        parallel=False,
+        parallel=True,
         no_diffs=False,
     ):
         """Builds an InputApi object.
@@ -872,8 +872,9 @@ class InputApi(object):
         # We carry the canned checks so presubmit scripts can easily use them.
         self.canned_checks = presubmit_canned_checks
 
-        # Temporary files we must manually remove at the end of a run.
+        # Temporary files and directories we must manually remove at the end of a run.
         self._named_temporary_files = []
+        self._temporary_directories = []
 
         self.owners_client = None
         if self.gerrit and "PRESUBMIT_SKIP_NETWORK" not in self.environ:
@@ -1092,6 +1093,14 @@ class InputApi(object):
         self._named_temporary_files.append(temp_file.name)
         return temp_file
 
+    def CreateTemporaryDirectory(self, **kwargs):
+        """Returns a temporary directory name that is automatically cleaned up
+        after all presubmit checks (including deferred parallel tests) finish.
+        """
+        temp_dir = self.tempfile.TemporaryDirectory(**kwargs)
+        self._temporary_directories.append(temp_dir)
+        return temp_dir.name
+
     def ListSubmodules(self):
         """Returns submodule paths for current change's repo."""
         return self.change._repo_submodules()
@@ -1113,13 +1122,27 @@ class InputApi(object):
                     t.info = _PresubmitNotifyResult
                 if not t.kwargs.get("cwd"):
                     t.kwargs["cwd"] = self.PresubmitLocalPath()
-        self.thread_pool.AddTests(tests, parallel)
-        # When self.parallel is True (i.e. --parallel is passed as an option)
-        # RunTests doesn't actually run tests. It adds them to a ThreadPool that
-        # will run all tests once all PRESUBMIT files are processed.
-        # Otherwise, it will run them and return the results.
+        # When global self.parallel is False, execute tests immediately and
+        # synchronously via the ThreadPool.
+        # When global self.parallel is True but local parallel is False, execute
+        # only these specific tests directly without adding them to the
+        # ThreadPool, avoiding premature execution of previously queued parallel
+        # tests.
+        # Otherwise, queue tests in the ThreadPool for deferred execution at the
+        # end of presubmit.
         if not self.parallel:
+            self.thread_pool.AddTests(tests, parallel)
             msgs.extend(self.thread_pool.RunAsync())
+        elif not parallel:
+            for test in tests:
+                result = self.thread_pool.CallCommand(test)
+                if result:
+                    if isinstance(result, (list, tuple)):
+                        msgs.extend(result)
+                    else:
+                        msgs.append(result)
+        else:
+            self.thread_pool.AddTests(tests, parallel)
         return msgs
 
 
@@ -1981,7 +2004,7 @@ class PresubmitExecuter(object):
         gerrit_obj,
         dry_run=None,
         thread_pool=None,
-        parallel=False,
+        parallel=True,
         no_diffs=False,
     ):
         """
@@ -2005,6 +2028,7 @@ class PresubmitExecuter(object):
         self.thread_pool = thread_pool
         self.parallel = parallel
         self.no_diffs = no_diffs
+        self.input_apis = []
 
     def ExecPresubmitScript(self, script_text, presubmit_path):
         """Executes a single presubmit script.
@@ -2046,6 +2070,7 @@ class PresubmitExecuter(object):
             parallel=self.parallel,
             no_diffs=self.no_diffs,
         )
+        self.input_apis.append(input_api)
         output_api = OutputApi(self.committing)
         context = {}
 
@@ -2080,69 +2105,74 @@ class PresubmitExecuter(object):
         # Perform all the desired presubmit checks.
         results = []
 
-        try:
-            version = [
-                int(x)
-                for x in context.get("PRESUBMIT_VERSION", "0.0.0").split(".")
-            ]
+        version = [
+            int(x) for x in context.get("PRESUBMIT_VERSION", "0.0.0").split(".")
+        ]
 
-            with rdb_wrapper.client(prefix) as sink:
-                if version >= [2, 0, 0]:
-                    # Copy the keys to prevent "dictionary changed size during
-                    # iteration" exception if checks add globals to context.
-                    # E.g. sometimes the Python runtime will add
-                    # __warningregistry__.
-                    for function_name in list(context.keys()):
-                        if not function_name.startswith("Check"):
-                            continue
-                        if (
-                            function_name.endswith("Commit")
-                            and not self.committing
-                        ):
-                            continue
-                        if function_name.endswith("Upload") and self.committing:
-                            continue
-                        logging.debug(
-                            "Running %s in %s", function_name, presubmit_path
+        with rdb_wrapper.client(prefix) as sink:
+            if version >= [2, 0, 0]:
+                # Copy the keys to prevent "dictionary changed size during
+                # iteration" exception if checks add globals to context.
+                # E.g. sometimes the Python runtime will add
+                # __warningregistry__.
+                for function_name in list(context.keys()):
+                    if not function_name.startswith("Check"):
+                        continue
+                    if function_name.endswith("Commit") and not self.committing:
+                        continue
+                    if function_name.endswith("Upload") and self.committing:
+                        continue
+                    logging.debug(
+                        "Running %s in %s", function_name, presubmit_path
+                    )
+                    results.extend(
+                        self._run_check_function(
+                            function_name, context, sink, presubmit_path
                         )
-                        results.extend(
-                            self._run_check_function(
-                                function_name, context, sink, presubmit_path
-                            )
-                        )
-                        logging.debug("Running %s done.", function_name)
-                        self.more_cc.extend(output_api.more_cc)
-                        # Clear the CC list between running each presubmit check
-                        # to prevent CCs from being repeatedly appended.
-                        output_api.more_cc = []
+                    )
+                    logging.debug("Running %s done.", function_name)
+                    self.more_cc.extend(output_api.more_cc)
+                    # Clear the CC list between running each presubmit check
+                    # to prevent CCs from being repeatedly appended.
+                    output_api.more_cc = []
 
-                else:  # Old format
-                    if self.committing:
-                        function_name = "CheckChangeOnCommit"
-                    else:
-                        function_name = "CheckChangeOnUpload"
-                    if function_name in list(context.keys()):
-                        logging.debug(
-                            "Running %s in %s", function_name, presubmit_path
+            else:  # Old format
+                if self.committing:
+                    function_name = "CheckChangeOnCommit"
+                else:
+                    function_name = "CheckChangeOnUpload"
+                if function_name in list(context.keys()):
+                    logging.debug(
+                        "Running %s in %s", function_name, presubmit_path
+                    )
+                    results.extend(
+                        self._run_check_function(
+                            function_name, context, sink, presubmit_path
                         )
-                        results.extend(
-                            self._run_check_function(
-                                function_name, context, sink, presubmit_path
-                            )
-                        )
-                        logging.debug("Running %s done.", function_name)
-                        self.more_cc.extend(output_api.more_cc)
-                        # Clear the CC list between running each presubmit check
-                        # to prevent CCs from being repeatedly appended.
-                        output_api.more_cc = []
-
-        finally:
-            for f in input_api._named_temporary_files:
-                os.remove(f)
+                    )
+                    logging.debug("Running %s done.", function_name)
+                    self.more_cc.extend(output_api.more_cc)
+                    # Clear the CC list between running each presubmit check
+                    # to prevent CCs from being repeatedly appended.
+                    output_api.more_cc = []
 
         self.more_cc = sorted(set(self.more_cc))
 
         return results
+
+    def Cleanup(self):
+        """Cleans up temporary files and directories created by presubmit checks."""
+        for input_api in self.input_apis:
+            for f in input_api._named_temporary_files:
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+            for d in input_api._temporary_directories:
+                try:
+                    d.cleanup()
+                except OSError:
+                    pass
 
     def _run_check_function(self, function_name, context, sink, presubmit_path):
         """Evaluates and returns the result of a given presubmit function.
@@ -2241,7 +2271,7 @@ def DoPresubmitChecks(
     may_prompt,
     gerrit_obj,
     dry_run=None,
-    parallel=False,
+    parallel=True,
     json_output=None,
     no_diffs=False,
 ):
@@ -2301,24 +2331,31 @@ def DoPresubmitChecks(
             parallel,
             no_diffs,
         )
-        if default_presubmit:
-            if verbose:
-                sys.stdout.write("Running default presubmit script.\n")
-            fake_path = os.path.join(change.RepositoryRoot(), "PRESUBMIT.py")
-            results += executer.ExecPresubmitScript(
-                default_presubmit, fake_path
-            )
-        for filename in presubmit_files:
-            filename = os.path.abspath(filename)
-            # Accept CRLF presubmit script.
-            presubmit_script = gclient_utils.FileRead(filename).replace(
-                "\r\n", "\n"
-            )
-            if verbose:
-                sys.stdout.write("Running %s\n" % filename)
-            results += executer.ExecPresubmitScript(presubmit_script, filename)
+        try:
+            if default_presubmit:
+                if verbose:
+                    sys.stdout.write("Running default presubmit script.\n")
+                fake_path = os.path.join(
+                    change.RepositoryRoot(), "PRESUBMIT.py"
+                )
+                results += executer.ExecPresubmitScript(
+                    default_presubmit, fake_path
+                )
+            for filename in presubmit_files:
+                filename = os.path.abspath(filename)
+                # Accept CRLF presubmit script.
+                presubmit_script = gclient_utils.FileRead(filename).replace(
+                    "\r\n", "\n"
+                )
+                if verbose:
+                    sys.stdout.write("Running %s\n" % filename)
+                results += executer.ExecPresubmitScript(
+                    presubmit_script, filename
+                )
 
-        results += thread_pool.RunAsync()
+            results += thread_pool.RunAsync()
+        finally:
+            executer.Cleanup()
 
         messages = {}
         should_prompt = False
@@ -2783,8 +2820,15 @@ def main(argv=None):
         "--parallel",
         action="store_true",
         help="Run all tests specified by input_api.RunTests in "
-        "all PRESUBMIT files in parallel.",
+        "all PRESUBMIT files in parallel (default: True).",
     )
+    parser.add_argument(
+        "--no-parallel",
+        action="store_false",
+        dest="parallel",
+        help="Do not run presubmit tests in parallel.",
+    )
+    parser.set_defaults(parallel=True)
     parser.add_argument(
         "--json_output",
         help="Write presubmit results to json output. If '-' "
