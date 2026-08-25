@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import collections
+import concurrent.futures
 import datetime
 import functools
 import itertools
@@ -2204,6 +2205,7 @@ class Changelist(object):
         options: optparse.Values,
         new_upload: _NewUpload,
         change_number: str,
+        update_reviewers: bool = True,
     ) -> None:
         """Makes necessary post upload changes to the local and remote cl."""
         if not self.GetIssue():
@@ -2225,7 +2227,7 @@ class Changelist(object):
                 new_upload.change_desc.description,
             )
 
-        if new_upload.reviewers or new_upload.ccs:
+        if update_reviewers and (new_upload.reviewers or new_upload.ccs):
             gerrit_util.AddReviewers(
                 self.GetGerritHost(),
                 self._GerritChangeIdentifier(),
@@ -6559,8 +6561,34 @@ def UploadAllSquashed(
             )
         )
 
+    # Update local Git configurations sequentially to prevent .git/config.lock collisions.
     for i, (cl, new_upload) in enumerate(uploads_by_cl):
-        cl.PostUploadUpdates(options, new_upload, change_numbers[i])
+        cl.PostUploadUpdates(
+            options, new_upload, change_numbers[i], update_reviewers=False
+        )
+
+    # Run remote Gerrit reviewer updates concurrently across worker threads.
+    def _AddRemoteReviewers(item):
+        cl, new_upload = item
+        if new_upload.reviewers or new_upload.ccs:
+            gerrit_util.AddReviewers(
+                cl.GetGerritHost(),
+                cl._GerritChangeIdentifier(),
+                reviewers=new_upload.reviewers,
+                ccs=new_upload.ccs,
+                notify=bool(options.send_mail),
+            )
+
+    pending_reviewer_updates = [
+        item for item in uploads_by_cl if item[1].reviewers or item[1].ccs
+    ]
+    if len(pending_reviewer_updates) == 1:
+        _AddRemoteReviewers(pending_reviewer_updates[0])
+    elif len(pending_reviewer_updates) > 1:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(pending_reviewer_updates), 8)
+        ) as executor:
+            list(executor.map(_AddRemoteReviewers, pending_reviewer_updates))
 
     return 0
 
