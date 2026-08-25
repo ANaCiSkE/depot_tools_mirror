@@ -691,8 +691,83 @@ class PresubmitUnittest(PresubmitTestsBase):
         executer.Cleanup()
 
         self.assertEqual(
-            os.remove.mock_calls, [mock.call("baz"), mock.call("quux")]
+            os.remove.mock_calls, [mock.call("quux"), mock.call("baz")]
         )
+
+    def testExecPresubmitScriptTemporaryFilesDeferredToThreadPool(self):
+        tempfile.NamedTemporaryFile.side_effect = [
+            MockTemporaryFile("baz"),
+            MockTemporaryFile("quux"),
+        ]
+
+        fake_presubmit = os.path.join(self.fake_root_dir, "PRESUBMIT.py")
+        mock_pool = mock.Mock()
+        mock_pool.RegisterTemporaryFiles = mock.Mock()
+
+        executer = presubmit.PresubmitExecuter(
+            self.fake_change,
+            False,
+            None,
+            presubmit.GerritAccessor(),
+            thread_pool=mock_pool,
+        )
+
+        executer.ExecPresubmitScript(
+            (
+                "def CheckChangeOnUpload(input_api, output_api):\n"
+                "  with input_api.CreateTemporaryFile():\n"
+                "    pass\n"
+                "  with input_api.CreateTemporaryFile():\n"
+                "    pass\n"
+                "  return []\n"
+            ),
+            fake_presubmit,
+        )
+
+        # Files should be registered with the thread pool.
+        mock_pool.RegisterTemporaryFiles.assert_called_once_with(
+            ["quux", "baz"]
+        )
+        # Files should be popped from input_api, so Cleanup does not remove them.
+        self.assertEqual([], executer.input_apis[0]._named_temporary_files)
+        os.remove.reset_mock()
+        executer.Cleanup()
+        self.assertEqual([], os.remove.mock_calls)
+
+    def testExecPresubmitScriptTemporaryDirectoriesDeferredToThreadPool(self):
+        fake_presubmit = os.path.join(self.fake_root_dir, "PRESUBMIT.py")
+        mock_pool = mock.Mock()
+        mock_pool.RegisterTemporaryDirectories = mock.Mock()
+
+        executer = presubmit.PresubmitExecuter(
+            self.fake_change,
+            False,
+            None,
+            presubmit.GerritAccessor(),
+            thread_pool=mock_pool,
+        )
+
+        executer.ExecPresubmitScript(
+            (
+                "def CheckChangeOnUpload(input_api, output_api):\n"
+                "  input_api.CreateTemporaryDirectory()\n"
+                "  input_api.CreateTemporaryDirectory()\n"
+                "  return []\n"
+            ),
+            fake_presubmit,
+        )
+
+        # Directories should be registered with the thread pool.
+        self.assertEqual(1, mock_pool.RegisterTemporaryDirectories.call_count)
+        registered_dirs = mock_pool.RegisterTemporaryDirectories.call_args[0][0]
+        self.assertEqual(2, len(registered_dirs))
+        # Directories should be popped from input_api, so Cleanup does not cleanup them.
+        self.assertEqual([], executer.input_apis[0]._temporary_directories)
+        # Cleanup should be a no-op since list was drained into thread pool.
+        executer.Cleanup()
+        # Clean up the actual temporary directories created on disk.
+        for d in registered_dirs:
+            d.cleanup()
 
     def testExecPresubmitScriptInSourceDirectory(self):
         """Tests that the presubmits are executed with the current working
@@ -2173,7 +2248,6 @@ class InputApiUnittest(PresubmitTestsBase):
         )
         # Queue a parallel test first.
         input_api.RunTests([queued_parallel_test], parallel=True)
-        self.assertEqual(1, len(input_api.thread_pool._tests))
 
         sync_test1 = presubmit.CommandData(
             name="sync_test1",
@@ -2187,26 +2261,38 @@ class InputApiUnittest(PresubmitTestsBase):
             kwargs={},
             message=presubmit.OutputApi.PresubmitError,
         )
+
+        def fake_call(test):
+            if test.name == "sync_test1":
+                return [
+                    presubmit.OutputApi.PresubmitError("error 1"),
+                    presubmit.OutputApi.PresubmitPromptWarning("warning 1"),
+                ]
+            if test.name == "sync_test2":
+                return [presubmit.OutputApi.PresubmitError("error 2")]
+            return []
+
         with mock.patch.object(
             input_api.thread_pool,
             "CallCommand",
-            side_effect=[
-                [
-                    presubmit.OutputApi.PresubmitError("error 1"),
-                    presubmit.OutputApi.PresubmitPromptWarning("warning 1"),
-                ],
-                presubmit.OutputApi.PresubmitError("error 2"),
-            ],
+            side_effect=fake_call,
         ) as mock_call:
-            msgs = input_api.RunTests([sync_test1, sync_test2], parallel=False)
-            self.assertEqual(3, len(msgs))
-            self.assertEqual(2, mock_call.call_count)
-            # The queued parallel test should remain untouched in the pool.
-            self.assertEqual(1, len(input_api.thread_pool._tests))
-            self.assertEqual(
-                queued_parallel_test, input_api.thread_pool._tests[0]
-            )
-            self.assertEqual(0, len(input_api.thread_pool._nonparallel_tests))
+            with mock.patch.object(
+                input_api.thread_pool,
+                "DrainInFlightParallelTasks",
+                wraps=input_api.thread_pool.DrainInFlightParallelTasks,
+            ) as mock_drain:
+                msgs = input_api.RunTests(
+                    [sync_test1, sync_test2], parallel=False
+                )
+                mock_drain.assert_called_once()
+                mock_call.assert_any_call(sync_test1)
+                mock_call.assert_any_call(sync_test2)
+                self.assertEqual(3, len(msgs))
+                # The nonparallel tests list should be empty.
+                self.assertEqual(
+                    0, len(input_api.thread_pool._nonparallel_tests)
+                )
 
 
 class OutputApiUnittest(PresubmitTestsBase):
@@ -5108,6 +5194,4 @@ the current line as well!
 
 
 if __name__ == "__main__":
-    import unittest
-
     unittest.main()

@@ -59,7 +59,6 @@ from presubmit_thread_pool import (
     time_time,  # noqa: F401
 )
 
-# Local imports.
 import gclient_paths  # Exposed through the API
 import gclient_utils
 import git_footers
@@ -686,6 +685,8 @@ class InputApi(object):
             self.thread_pool.AddTests(tests, parallel)
             msgs.extend(self.thread_pool.RunAsync())
         elif not parallel:
+            if hasattr(self.thread_pool, "DrainInFlightParallelTasks"):
+                self.thread_pool.DrainInFlightParallelTasks()
             for test in tests:
                 result = self.thread_pool.CallCommand(test)
                 if result:
@@ -1657,56 +1658,77 @@ class PresubmitExecuter(object):
         # Perform all the desired presubmit checks.
         results = []
 
-        version = [
-            int(x) for x in context.get("PRESUBMIT_VERSION", "0.0.0").split(".")
-        ]
+        try:
+            version = [
+                int(x)
+                for x in context.get("PRESUBMIT_VERSION", "0.0.0").split(".")
+            ]
 
-        with rdb_wrapper.client(prefix) as sink:
-            if version >= [2, 0, 0]:
-                # Copy the keys to prevent "dictionary changed size during
-                # iteration" exception if checks add globals to context.
-                # E.g. sometimes the Python runtime will add
-                # __warningregistry__.
-                for function_name in list(context.keys()):
-                    if not function_name.startswith("Check"):
-                        continue
-                    if function_name.endswith("Commit") and not self.committing:
-                        continue
-                    if function_name.endswith("Upload") and self.committing:
-                        continue
-                    logging.debug(
-                        "Running %s in %s", function_name, presubmit_path
-                    )
-                    results.extend(
-                        self._run_check_function(
-                            function_name, context, sink, presubmit_path
+            with rdb_wrapper.client(prefix) as sink:
+                if version >= [2, 0, 0]:
+                    # Copy the keys to prevent "dictionary changed size during
+                    # iteration" exception if checks add globals to context.
+                    # E.g. sometimes the Python runtime will add
+                    # __warningregistry__.
+                    for function_name in list(context.keys()):
+                        if not function_name.startswith("Check"):
+                            continue
+                        if (
+                            function_name.endswith("Commit")
+                            and not self.committing
+                        ):
+                            continue
+                        if function_name.endswith("Upload") and self.committing:
+                            continue
+                        logging.debug(
+                            "Running %s in %s", function_name, presubmit_path
                         )
-                    )
-                    logging.debug("Running %s done.", function_name)
-                    self.more_cc.extend(output_api.more_cc)
-                    # Clear the CC list between running each presubmit check
-                    # to prevent CCs from being repeatedly appended.
-                    output_api.more_cc = []
+                        results.extend(
+                            self._run_check_function(
+                                function_name, context, sink, presubmit_path
+                            )
+                        )
+                        logging.debug("Running %s done.", function_name)
+                        self.more_cc.extend(output_api.more_cc)
+                        # Clear the CC list between running each presubmit check
+                        # to prevent CCs from being repeatedly appended.
+                        output_api.more_cc = []
 
-            else:  # Old format
-                if self.committing:
-                    function_name = "CheckChangeOnCommit"
-                else:
-                    function_name = "CheckChangeOnUpload"
-                if function_name in list(context.keys()):
-                    logging.debug(
-                        "Running %s in %s", function_name, presubmit_path
-                    )
-                    results.extend(
-                        self._run_check_function(
-                            function_name, context, sink, presubmit_path
+                else:  # Old format
+                    if self.committing:
+                        function_name = "CheckChangeOnCommit"
+                    else:
+                        function_name = "CheckChangeOnUpload"
+                    if function_name in list(context.keys()):
+                        logging.debug(
+                            "Running %s in %s", function_name, presubmit_path
                         )
-                    )
-                    logging.debug("Running %s done.", function_name)
-                    self.more_cc.extend(output_api.more_cc)
-                    # Clear the CC list between running each presubmit check
-                    # to prevent CCs from being repeatedly appended.
-                    output_api.more_cc = []
+                        results.extend(
+                            self._run_check_function(
+                                function_name, context, sink, presubmit_path
+                            )
+                        )
+                        logging.debug("Running %s done.", function_name)
+                        self.more_cc.extend(output_api.more_cc)
+                        # Clear the CC list between running each presubmit check
+                        # to prevent CCs from being repeatedly appended.
+                        output_api.more_cc = []
+
+        finally:
+            if self.thread_pool and hasattr(
+                self.thread_pool, "RegisterTemporaryFiles"
+            ):
+                temp_files = []
+                while input_api._named_temporary_files:
+                    temp_files.append(input_api._named_temporary_files.pop())
+                self.thread_pool.RegisterTemporaryFiles(temp_files)
+            if self.thread_pool and hasattr(
+                self.thread_pool, "RegisterTemporaryDirectories"
+            ):
+                temp_dirs = []
+                while input_api._temporary_directories:
+                    temp_dirs.append(input_api._temporary_directories.pop())
+                self.thread_pool.RegisterTemporaryDirectories(temp_dirs)
 
         self.more_cc = sorted(set(self.more_cc))
 
@@ -1715,12 +1737,14 @@ class PresubmitExecuter(object):
     def Cleanup(self):
         """Cleans up temporary files and directories created by presubmit checks."""
         for input_api in self.input_apis:
-            for f in input_api._named_temporary_files:
+            while input_api._named_temporary_files:
+                f = input_api._named_temporary_files.pop()
                 try:
                     os.remove(f)
                 except OSError:
                     pass
-            for d in input_api._temporary_directories:
+            while input_api._temporary_directories:
+                d = input_api._temporary_directories.pop()
                 try:
                     d.cleanup()
                 except OSError:
@@ -1872,42 +1896,42 @@ def DoPresubmitChecks(
         if not presubmit_files and verbose:
             sys.stdout.write("Warning, no PRESUBMIT.py found.\n")
         results = []
-        thread_pool = ThreadPool()
-        executer = PresubmitExecuter(
-            change,
-            committing,
-            verbose,
-            gerrit_obj,
-            dry_run,
-            thread_pool,
-            parallel,
-            no_diffs,
-        )
-        try:
-            if default_presubmit:
-                if verbose:
-                    sys.stdout.write("Running default presubmit script.\n")
-                fake_path = os.path.join(
-                    change.RepositoryRoot(), "PRESUBMIT.py"
-                )
-                results += executer.ExecPresubmitScript(
-                    default_presubmit, fake_path
-                )
-            for filename in presubmit_files:
-                filename = os.path.abspath(filename)
-                # Accept CRLF presubmit script.
-                presubmit_script = gclient_utils.FileRead(filename).replace(
-                    "\r\n", "\n"
-                )
-                if verbose:
-                    sys.stdout.write("Running %s\n" % filename)
-                results += executer.ExecPresubmitScript(
-                    presubmit_script, filename
-                )
+        with ThreadPool() as thread_pool:
+            executer = PresubmitExecuter(
+                change,
+                committing,
+                verbose,
+                gerrit_obj,
+                dry_run,
+                thread_pool,
+                parallel,
+                no_diffs,
+            )
+            try:
+                if default_presubmit:
+                    if verbose:
+                        sys.stdout.write("Running default presubmit script.\n")
+                    fake_path = os.path.join(
+                        change.RepositoryRoot(), "PRESUBMIT.py"
+                    )
+                    results += executer.ExecPresubmitScript(
+                        default_presubmit, fake_path
+                    )
+                for filename in presubmit_files:
+                    filename = os.path.abspath(filename)
+                    # Accept CRLF presubmit script.
+                    presubmit_script = gclient_utils.FileRead(filename).replace(
+                        "\r\n", "\n"
+                    )
+                    if verbose:
+                        sys.stdout.write("Running %s\n" % filename)
+                    results += executer.ExecPresubmitScript(
+                        presubmit_script, filename
+                    )
 
-            results += thread_pool.RunAsync()
-        finally:
-            executer.Cleanup()
+                results += thread_pool.RunAsync()
+            finally:
+                executer.Cleanup()
 
         messages = {}
         should_prompt = False
