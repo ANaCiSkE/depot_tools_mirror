@@ -9,7 +9,10 @@ from __future__ import annotations
 import collections
 import fnmatch
 import json
+import concurrent.futures
+import io
 import multiprocessing
+import threading
 import optparse
 import os
 import re
@@ -891,6 +894,120 @@ FormatterFunction = Callable[
 ]
 
 
+class _ThreadLocalStream:
+    """Thread-local stream proxy that routes text and binary writes to a per-thread buffer.
+
+    When multiple formatters run concurrently (e.g. clang-format, ruff, gn format),
+    each worker thread may write diffs, status messages, or warnings directly to
+    sys.stdout or sys.stderr (via print(), sys.stdout.write(), or sys.stdout.buffer.write()).
+    This proxy intercepts writes in each worker thread and redirects them into an
+    isolated thread-local memory buffer (io.BytesIO).
+
+    Note: This proxy buffers Python-level stream writes. Subprocesses that write
+    directly to inherited OS-level file descriptors (FD 1/2) without piping stdout/stderr
+    will write directly to the underlying terminal rather than this in-memory buffer.
+
+    Any write from an unmanaged thread (or the main thread when no buffer is active)
+    transparently falls back to the underlying default stream.
+    """
+
+    class _BufferProxy:
+        """Proxy for binary writes (e.g. sys.stdout.buffer.write)."""
+
+        def __init__(self, parent):
+            self._parent = parent
+
+        def write(self, b):
+            return self._parent.write(b)
+
+        def writelines(self, lines):
+            return self._parent.writelines(lines)
+
+        def flush(self):
+            return self._parent.flush()
+
+        def __getattr__(self, name):
+            fallback_buf = getattr(self._parent._fallback, "buffer", None)
+            if fallback_buf is not None:
+                return getattr(fallback_buf, name)
+            raise AttributeError(
+                f"'_BufferProxy' object has no attribute {name!r}"
+            )
+
+    def __init__(self, fallback_stream):
+        self._fallback = fallback_stream
+        self._local = threading.local()
+        self._buffer = self._BufferProxy(self)
+
+    def set_buffer(self, buf: Optional[io.BytesIO]):
+        self._local.buf = buf
+
+    def get_buffer(self) -> Optional[io.BytesIO]:
+        return getattr(self._local, "buf", None)
+
+    def write(self, s):
+        buf = self.get_buffer()
+        if buf is not None:
+            if isinstance(s, str):
+                encoding = getattr(self._fallback, "encoding", None) or "utf-8"
+                errors = getattr(self._fallback, "errors", None) or "replace"
+                buf.write(s.encode(encoding, errors))
+                return len(s)
+            return buf.write(s)
+        if isinstance(s, bytes):
+            if hasattr(self._fallback, "buffer"):
+                return self._fallback.buffer.write(s)
+            encoding = getattr(self._fallback, "encoding", None) or "utf-8"
+            errors = getattr(self._fallback, "errors", None) or "replace"
+            self._fallback.write(s.decode(encoding, errors))
+            return len(s)
+        return self._fallback.write(s)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def flush(self):
+        buf = self.get_buffer()
+        if buf is None:
+            self._fallback.flush()
+
+    @property
+    def buffer(self):
+        return self._buffer
+
+    def __getattr__(self, name):
+        # Delegate unknown stream attributes (e.g. isatty(), encoding, fileno())
+        # to the fallback stream so formatters and libraries inspect stream
+        # capabilities transparently.
+        return getattr(self._fallback, name)
+
+
+def _RunFormatWorker(formatter, opts, paths, top_dir, diffs):
+    """Executes a single formatter while capturing stdout and stderr in thread-local buffers."""
+    out_buf = io.BytesIO()
+    err_buf = io.BytesIO()
+
+    if isinstance(sys.stdout, _ThreadLocalStream):
+        sys.stdout.set_buffer(out_buf)
+    if isinstance(sys.stderr, _ThreadLocalStream):
+        sys.stderr.set_buffer(err_buf)
+
+    ret = 0
+    exc = None
+    try:
+        ret = formatter(opts, paths, top_dir, diffs)
+    except (Exception, SystemExit) as e:
+        exc = e
+    finally:
+        if isinstance(sys.stdout, _ThreadLocalStream):
+            sys.stdout.set_buffer(None)
+        if isinstance(sys.stderr, _ThreadLocalStream):
+            sys.stderr.set_buffer(None)
+
+    return ret, out_buf.getvalue(), err_buf.getvalue(), exc
+
+
 def _SplitDiffsByFile(diff_string: str) -> dict[str, str]:
     """Split a given diff string into per-file patches.
 
@@ -1168,19 +1285,78 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     if opts.lucicfg:
         formatters.append(([".star"], _RunLUCICfgFormat, []))
 
-    return_value = 0
+    active_tasks = []
     for item in formatters:
         file_types, format_func, exclude_types = item
-
         paths = [
             p
             for p in diff_files
             if p.lower().endswith(tuple(file_types))
             and not p.lower().endswith(tuple(exclude_types))
         ]
-        if not paths:
-            continue
-        ret = format_func(opts, paths, top_dir, diffs)
+        if paths:
+            active_tasks.append((format_func, paths))
+
+    if not active_tasks:
+        return 0
+
+    if len(active_tasks) == 1:
+        formatter, paths = active_tasks[0]
+        return formatter(opts, paths, top_dir, diffs)
+
+    orig_stdout = sys.stdout
+    orig_stderr = sys.stderr
+    stream_out = _ThreadLocalStream(orig_stdout)
+    stream_err = _ThreadLocalStream(orig_stderr)
+    sys.stdout = stream_out
+    sys.stderr = stream_err
+
+    futures = []
+    max_workers = min(len(active_tasks), 8)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            for formatter, paths in active_tasks:
+                futures.append(
+                    executor.submit(
+                        _RunFormatWorker,
+                        formatter,
+                        opts,
+                        paths,
+                        top_dir,
+                        diffs,
+                    )
+                )
+            results = [f.result() for f in futures]
+    finally:
+        sys.stdout = orig_stdout
+        sys.stderr = orig_stderr
+
+    return_value = 0
+    first_exc = None
+    for ret, out_bytes, err_bytes, exc in results:
+        if out_bytes:
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout.buffer.write(out_bytes)
+            else:
+                encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+                errors = getattr(sys.stdout, "errors", None) or "replace"
+                sys.stdout.write(out_bytes.decode(encoding, errors))
+            sys.stdout.flush()
+        if err_bytes:
+            if hasattr(sys.stderr, "buffer"):
+                sys.stderr.buffer.write(err_bytes)
+            else:
+                encoding = getattr(sys.stderr, "encoding", None) or "utf-8"
+                errors = getattr(sys.stderr, "errors", None) or "replace"
+                sys.stderr.write(err_bytes.decode(encoding, errors))
+            sys.stderr.flush()
+        if exc is not None and first_exc is None:
+            first_exc = exc
         return_value = return_value or ret
+
+    if first_exc is not None:
+        raise first_exc
 
     return return_value

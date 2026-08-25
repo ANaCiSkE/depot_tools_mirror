@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -99,11 +100,16 @@ test_format_input_diff_windows = "\r\n".join(
 class CMDFormatTestCase(unittest.TestCase):
     def setUp(self):
         super(CMDFormatTestCase, self).setUp()
+        self._top_dir = tempfile.mkdtemp()
         mock.patch("cl_format.RunCommand", return_value="").start()
+        mock.patch("cl_format.RunGit", return_value="dummy_commit").start()
         mock.patch("clang_format.FindClangFormatToolInChromiumTree").start()
         mock.patch("clang_format.FindClangFormatScriptInChromiumTree").start()
-        mock.patch("cl_format.settings").start()
-        self._top_dir = tempfile.mkdtemp()
+        mock_settings = mock.patch("cl_format.settings").start()
+        mock_settings.GetRelativeRoot.return_value = ""
+        mock_settings.GetRoot.return_value = self._top_dir
+        mock_settings.GetFormatJs.return_value = False
+        mock_settings.GetFormatFullByDefault.return_value = False
         self.addCleanup(mock.patch.stopall)
 
     def tearDown(self):
@@ -1049,6 +1055,148 @@ diff --git a/ui/webui/resources/tools/bar.html.ts b/ui/webui/resources/tools/bar
         self.assertIsInstance(files, list)
         self.assertEqual(["baz.gn"], files)
         self.assertIsNone(diffs)
+
+    @mock.patch("cl_format._RunClangFormatDiff")
+    @mock.patch("cl_format._RunPythonFormat")
+    def testConcurrentMultiLanguageFormat(self, mock_py, mock_clang):
+        """Tests concurrent execution when formatting multi-language changes."""
+        mock_py_event = threading.Event()
+        mock_clang_event = threading.Event()
+
+        def py_side_effect(*args, **kwargs):
+            mock_py_event.set()
+            mock_clang_event.wait(timeout=2.0)
+            print("python formatted")
+            return 0
+
+        def clang_side_effect(*args, **kwargs):
+            mock_clang_event.set()
+            mock_py_event.wait(timeout=2.0)
+            sys.stdout.buffer.write(b"clang formatted\n")
+            return 0
+
+        mock_py.side_effect = py_side_effect
+        mock_clang.side_effect = clang_side_effect
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as input_diff:
+            input_diff.write(
+                "diff --git a/foo.cc b/foo.cc\n"
+                "+++ b/foo.cc\n"
+                "@@ -0,0 +1 @@\n"
+                "+int x;\n"
+                "diff --git a/bar.py b/bar.py\n"
+                "+++ b/bar.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            )
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            ret = git_cl.main(
+                [
+                    "format",
+                    "--input_diff_file",
+                    input_diff.name,
+                    "--presubmit",
+                    "--python",
+                ]
+            )
+            self.assertEqual(0, ret)
+            mock_clang.assert_called_once()
+            mock_py.assert_called_once()
+        finally:
+            os.remove(input_diff.name)
+            os.chdir(previous_cwd)
+
+    @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
+    @mock.patch("cl_format._RunPythonFormat", return_value=2)
+    def testConcurrentMultiLanguageFormatNonZeroReturn(
+        self, mock_py, mock_clang
+    ):
+        """Tests that non-zero return code from any formatter is propagated."""
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as input_diff:
+            input_diff.write(
+                "diff --git a/foo.cc b/foo.cc\n"
+                "+++ b/foo.cc\n"
+                "@@ -0,0 +1 @@\n"
+                "+int x;\n"
+                "diff --git a/bar.py b/bar.py\n"
+                "+++ b/bar.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            )
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            ret = git_cl.main(
+                [
+                    "format",
+                    "--input_diff_file",
+                    input_diff.name,
+                    "--presubmit",
+                    "--python",
+                ]
+            )
+            self.assertEqual(2, ret)
+            mock_clang.assert_called_once()
+            mock_py.assert_called_once()
+        finally:
+            os.remove(input_diff.name)
+            os.chdir(previous_cwd)
+
+    @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
+    @mock.patch("cl_format._RunPythonFormat")
+    def testConcurrentMultiLanguageFormatSystemExit(self, mock_py, mock_clang):
+        """Tests that SystemExit from a formatter flushes output and re-raises."""
+
+        def py_side_effect(*args, **kwargs):
+            sys.stderr.write("python formatter error\n")
+            raise SystemExit(1)
+
+        mock_py.side_effect = py_side_effect
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as input_diff:
+            input_diff.write(
+                "diff --git a/foo.cc b/foo.cc\n"
+                "+++ b/foo.cc\n"
+                "@@ -0,0 +1 @@\n"
+                "+int x;\n"
+                "diff --git a/bar.py b/bar.py\n"
+                "+++ b/bar.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            )
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            with mock.patch("sys.stderr", io.StringIO()) as mock_err:
+                with self.assertRaises(SystemExit) as cm:
+                    git_cl.main(
+                        [
+                            "format",
+                            "--input_diff_file",
+                            input_diff.name,
+                            "--presubmit",
+                            "--python",
+                        ]
+                    )
+                self.assertEqual(1, cm.exception.code)
+                self.assertIn("python formatter error", mock_err.getvalue())
+        finally:
+            os.remove(input_diff.name)
+            os.chdir(previous_cwd)
+
+    def testThreadLocalStreamCustomEncoding(self):
+        """Tests that _ThreadLocalStream uses the fallback stream's encoding."""
+        fallback = mock.Mock(encoding="iso-8859-1", errors="replace")
+        stream = cl_format._ThreadLocalStream(fallback)
+        buf = io.BytesIO()
+        stream.set_buffer(buf)
+        stream.write("café")
+        self.assertEqual("café".encode("iso-8859-1"), buf.getvalue())
 
 
 class TestRuffBatchIntegration(unittest.TestCase):
