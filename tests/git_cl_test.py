@@ -3328,13 +3328,67 @@ class TestGitCl(unittest.TestCase):
                 (["git", "var", "GIT_COMMITTER_IDENT"],),
                 "C D <c@d.org> 1456858326 +0100",
             ),
+        ]
+        change_id = git_cl.GenerateGerritChangeId("line1\nline2\n")
+        self.assertEqual(change_id, "Ied144e9f47cb1522a09e2bbf4c4824255973ff53")
+
+    def test_gerrit_change_id_initial_commit(self):
+        """Tests Change-Id generation when HEAD~0 does not exist (root commit)."""
+        self.calls = [
+            ((["git", "write-tree"],), "hashtree"),
+            ((["git", "rev-parse", "HEAD~0"],), CERR1),
             (
-                (["git", "hash-object", "-t", "commit", "--stdin"],),
-                "hashchange",
+                (["git", "var", "GIT_AUTHOR_IDENT"],),
+                "A B <a@b.org> 1456848326 +0100",
+            ),
+            (
+                (["git", "var", "GIT_COMMITTER_IDENT"],),
+                "C D <c@d.org> 1456858326 +0100",
+            ),
+        ]
+        change_id = git_cl.GenerateGerritChangeId("initial commit\n")
+        self.assertEqual(change_id, "I35c843e461cacf1a8a20af8f6c7307bc221886d8")
+
+    def test_gerrit_change_id_utf8_multibyte(self):
+        """Tests that multibyte UTF-8 messages use exact byte-length in the commit header."""
+        self.calls = [
+            ((["git", "write-tree"],), "hashtree"),
+            ((["git", "rev-parse", "HEAD~0"],), "branch-parent"),
+            (
+                (["git", "var", "GIT_AUTHOR_IDENT"],),
+                "A B <a@b.org> 1456848326 +0100",
+            ),
+            (
+                (["git", "var", "GIT_COMMITTER_IDENT"],),
+                "C D <c@d.org> 1456858326 +0100",
+            ),
+        ]
+        msg = "Feature with emoji 🚀 and accents: café\n"
+        change_id = git_cl.GenerateGerritChangeId(msg)
+        self.assertEqual(change_id, "Ibc994371bc1b328858a1dcc1dfcf48e9a5a02f74")
+
+    def test_gerrit_change_id_sha256(self):
+        """Tests that 64-character tree hashes automatically use SHA-256."""
+        sha256_tree = (
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
+        self.calls = [
+            ((["git", "write-tree"],), sha256_tree),
+            ((["git", "rev-parse", "HEAD~0"],), "branch-parent"),
+            (
+                (["git", "var", "GIT_AUTHOR_IDENT"],),
+                "A B <a@b.org> 1456848326 +0100",
+            ),
+            (
+                (["git", "var", "GIT_COMMITTER_IDENT"],),
+                "C D <c@d.org> 1456858326 +0100",
             ),
         ]
         change_id = git_cl.GenerateGerritChangeId("line1\nline2\n")
-        self.assertEqual(change_id, "Ihashchange")
+        self.assertEqual(
+            change_id,
+            "I102fa6c23d397531ba7821e07a2ab103a1125f6c58e1d5afc1c1306e0c9b4001",
+        )
 
     @mock.patch("gerrit_util.IsCodeOwnersEnabledOnHost")
     @mock.patch("git_cl.Settings.GetBugPrefix")
