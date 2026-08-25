@@ -188,8 +188,12 @@ index fe3de7b..54ae6e1 100755
         mock.patch(
             "presubmit_support.rdb_wrapper.client", return_value=self.rdb_client
         ).start()
-        mock.patch("presubmit_support.sigint_handler").start()
-        mock.patch("presubmit_support.time_time", return_value=0).start()
+        mock_sigint = mock.patch("presubmit_thread_pool.sigint_handler").start()
+        mock.patch("presubmit_support.sigint_handler", new=mock_sigint).start()
+        mock_time = mock.patch(
+            "presubmit_thread_pool.time_time", return_value=0
+        ).start()
+        mock.patch("presubmit_support.time_time", new=mock_time).start()
         mock.patch("presubmit_support.warn").start()
         mock.patch("random.randint").start()
         mock.patch("scm.GIT.GenerateDiff").start()
@@ -5101,112 +5105,6 @@ the current line as well!
         )
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0].name, "Verify script.py")
-
-
-class ThreadPoolTest(unittest.TestCase):
-    def setUp(self):
-        super(ThreadPoolTest, self).setUp()
-        mock.patch("subprocess2.Popen").start()
-        mock.patch("presubmit_support.sigint_handler").start()
-        mock.patch("presubmit_support.time_time", return_value=0).start()
-        presubmit.sigint_handler.wait.return_value = (b"stdout", "")
-        self.addCleanup(mock.patch.stopall)
-
-    def testSurfaceExceptions(self):
-        def FakePopen(cmd, **kwargs):
-            if cmd[0] == "3":
-                raise TypeError("TypeError")
-            if cmd[0] == "4":
-                raise OSError("OSError")
-            if cmd[0] == "5":
-                return mock.Mock(returncode=1)
-            return mock.Mock(returncode=0)
-
-        subprocess.Popen.side_effect = FakePopen
-
-        mock_tests = [
-            presubmit.CommandData(
-                name=str(i),
-                cmd=[str(i)],
-                kwargs={},
-                message=presubmit.OutputApi.PresubmitError,
-            )
-            for i in range(10)
-        ]
-
-        t = presubmit.ThreadPool(1)
-        t.AddTests(mock_tests)
-        messages = sorted(t.RunAsync(), key=lambda x: x._message)
-
-        self.assertEqual(3, len(messages))
-        self.assertIn(
-            "3\n3 exec failure (0.00s)\nTraceback (most recent call last):",
-            messages[0]._message,
-        )
-        self.assertIn(
-            "4\n4 exec failure (0.00s)\nTraceback (most recent call last):",
-            messages[1]._message,
-        )
-        self.assertEqual(
-            "5\n5 exit code 1 (0.00s)\nstdout", messages[2]._message
-        )
-
-    def testOutputParser(self):
-        def FakePopen(cmd, **kwargs):
-            if cmd[0] == "multiple":
-                return mock.Mock(returncode=0)
-            if cmd[0] == "empty_pass":
-                return mock.Mock(returncode=0)
-            if cmd[0] == "empty_fail":
-                return mock.Mock(returncode=1)
-            return mock.Mock(returncode=0)
-
-        subprocess.Popen.side_effect = FakePopen
-
-        def parse_multiple(output):
-            return [
-                presubmit.OutputApi.PresubmitError("error 1"),
-                presubmit.OutputApi.PresubmitError("error 2"),
-                presubmit.OutputApi.PresubmitPromptWarning("warning 1"),
-            ]
-
-        def parse_empty(output):
-            return []
-
-        mock_tests = [
-            presubmit.CommandData(
-                name="multiple",
-                cmd=["multiple"],
-                kwargs={},
-                output_parser=parse_multiple,
-            ),
-            presubmit.CommandData(
-                name="empty_pass",
-                cmd=["empty_pass"],
-                kwargs={},
-                output_parser=parse_empty,
-            ),
-            presubmit.CommandData(
-                name="empty_fail",
-                cmd=["empty_fail"],
-                kwargs={},
-                message=presubmit.OutputApi.PresubmitError,
-                output_parser=parse_empty,
-            ),
-        ]
-
-        t = presubmit.ThreadPool(1)
-        t.AddTests(mock_tests)
-        messages = t.RunAsync()
-        message_strs = [r._message for r in messages]
-
-        self.assertEqual(4, len(messages))
-        self.assertIn(
-            "empty_fail\nempty_fail exit code 1 (0.00s)\nstdout", message_strs
-        )
-        self.assertIn("error 1", message_strs)
-        self.assertIn("error 2", message_strs)
-        self.assertIn("warning 1", message_strs)
 
 
 if __name__ == "__main__":

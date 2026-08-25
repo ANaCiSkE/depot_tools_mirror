@@ -25,7 +25,6 @@ import os  # Somewhat exposed through the API.
 import random
 import re  # Exposed through the API.
 import shutil
-import signal
 import sys  # Parts exposed through API.
 import tempfile  # Exposed through the API.
 import threading
@@ -35,9 +34,30 @@ import unittest  # Exposed through the API.
 import urllib.parse as urlparse
 import urllib.request as urllib_request
 import urllib.error as urllib_error
-from dataclasses import asdict, dataclass
-from typing import ClassVar, Mapping
+from typing import Mapping
 from warnings import warn
+
+# Presubmit result types re-exported for backwards compatibility.
+import presubmit_results
+from presubmit_results import (
+    _MailTextResult,  # noqa: F401
+    _PresubmitError,  # noqa: F401
+    _PresubmitNotifyResult,  # noqa: F401
+    _PresubmitPromptWarning,  # noqa: F401
+    _PresubmitResult,  # noqa: F401
+    _PresubmitResultLocation,  # noqa: F401
+)
+
+# Subprocess and thread pool primitives re-exported for
+# backwards compatibility with external callers.
+from presubmit_thread_pool import (
+    CommandData,  # noqa: F401
+    SigintHandler,  # noqa: F401
+    ThreadPool,  # noqa: F401
+    Timer,  # noqa: F401
+    sigint_handler,  # noqa: F401
+    time_time,  # noqa: F401
+)
 
 # Local imports.
 import gclient_paths  # Exposed through the API
@@ -56,277 +76,13 @@ import subprocess2 as subprocess  # Exposed through the API.
 # Ask for feedback only once in program lifetime.
 _ASKED_FOR_FEEDBACK = False
 
-# Set if super-verbose mode is requested, for tracking where presubmit messages
-# are coming from.
-_SHOW_CALLSTACKS = False
 
 # This is the default branch name.
 _NO_BRANCH_NAME = "no name"
 
 
-def time_time():
-    # Use this so that it can be mocked in tests without interfering with python
-    # system machinery.
-    return time.time()
-
-
 class PresubmitFailure(Exception):
     pass
-
-
-class CommandData(object):
-    def __init__(
-        self,
-        name,
-        cmd,
-        kwargs,
-        message=None,
-        python3=True,
-        output_parser=None,
-    ):
-        # The python3 argument is ignored but has to be retained because of the
-        # many callers in other repos that pass it in.
-        del python3
-        self.name = name
-        self.cmd = cmd
-        self.stdin = kwargs.get("stdin", None)
-        self.kwargs = kwargs.copy()
-        self.kwargs["stdout"] = subprocess.PIPE
-        self.kwargs["stderr"] = subprocess.STDOUT
-        self.kwargs["stdin"] = subprocess.PIPE
-        self.message = message
-        self.info = None
-        self.output_parser = output_parser
-
-        assert output_parser or message
-        if message:
-            assert issubclass(message, _PresubmitResult)
-
-
-# Adapted from
-# https://github.com/google/gtest-parallel/blob/master/gtest_parallel.py#L37
-#
-# An object that catches SIGINT sent to the Python process and notices
-# if processes passed to wait() die by SIGINT (we need to look for
-# both of those cases, because pressing Ctrl+C can result in either
-# the main process or one of the subprocesses getting the signal).
-#
-# Before a SIGINT is seen, wait(p) will simply call p.wait() and
-# return the result. Once a SIGINT has been seen (in the main process
-# or a subprocess, including the one the current call is waiting for),
-# wait(p) will call p.terminate().
-class SigintHandler(object):
-    sigint_returncodes = {
-        -signal.SIGINT,  # Unix
-        -1073741510,  # Windows
-    }
-
-    def __init__(self):
-        self.__lock = threading.Lock()
-        self.__processes = set()
-        self.__got_sigint = False
-        self.__previous_signal = signal.signal(signal.SIGINT, self.interrupt)
-
-    def __on_sigint(self):
-        self.__got_sigint = True
-        while self.__processes:
-            try:
-                self.__processes.pop().terminate()
-            except OSError:
-                pass
-
-    def interrupt(self, signal_num, frame):
-        with self.__lock:
-            self.__on_sigint()
-        self.__previous_signal(signal_num, frame)
-
-    def got_sigint(self):
-        with self.__lock:
-            return self.__got_sigint
-
-    def wait(self, p, stdin):
-        with self.__lock:
-            if self.__got_sigint:
-                p.terminate()
-            self.__processes.add(p)
-        stdout, stderr = p.communicate(stdin)
-        code = p.returncode
-        with self.__lock:
-            self.__processes.discard(p)
-            if code in self.sigint_returncodes:
-                self.__on_sigint()
-        return stdout, stderr
-
-
-sigint_handler = SigintHandler()
-
-
-class Timer(object):
-    def __init__(self, timeout, fn):
-        self.completed = False
-        self._fn = fn
-        self._timer = (
-            threading.Timer(timeout, self._onTimer) if timeout else None
-        )
-
-    def __enter__(self):
-        if self._timer:
-            self._timer.start()
-        return self
-
-    def __exit__(self, _type, _value, _traceback):
-        if self._timer:
-            self._timer.cancel()
-
-    def _onTimer(self):
-        self._fn()
-        self.completed = True
-
-
-class ThreadPool(object):
-    def __init__(self, pool_size=None, timeout=None):
-        self.timeout = timeout
-        self._pool_size = pool_size or multiprocessing.cpu_count()
-        if sys.platform == "win32":
-            # TODO(crbug.com/1190269) - we can't use more than 56 child
-            # processes on Windows or Python3 may hang.
-            self._pool_size = min(self._pool_size, 56)
-        self._messages = []
-        self._messages_lock = threading.Lock()
-        self._tests = []
-        self._tests_lock = threading.Lock()
-        self._nonparallel_tests = []
-
-    def _GetCommand(self, test):
-        vpython = "vpython3"
-        if sys.platform == "win32":
-            vpython += ".bat"
-
-        cmd = test.cmd
-        if cmd[0] == "python":
-            cmd = list(cmd)
-            cmd[0] = vpython
-        elif cmd[0].endswith(".py"):
-            cmd = [vpython] + cmd
-
-        # On Windows, scripts on the current directory take precedence over
-        # PATH, so that when testing depot_tools on Windows, calling
-        # `vpython3.bat` will execute the copy of vpython of the depot_tools
-        # under test instead of the one in the bot. As a workaround, we run the
-        # tests from the parent directory instead.
-        if (
-            cmd[0] == vpython
-            and "cwd" in test.kwargs
-            and os.path.basename(test.kwargs["cwd"]) == "depot_tools"
-        ):
-            test.kwargs["cwd"] = os.path.dirname(test.kwargs["cwd"])
-            cmd[1] = os.path.join("depot_tools", cmd[1])
-
-        return cmd
-
-    def _RunWithTimeout(self, cmd, stdin, kwargs):
-        p = subprocess.Popen(cmd, **kwargs)
-        with Timer(self.timeout, p.terminate) as timer:
-            stdout, _ = sigint_handler.wait(p, stdin)
-            stdout = stdout.decode("utf-8", "ignore")
-            if timer.completed:
-                stdout = "Process timed out after %ss\n%s" % (
-                    self.timeout,
-                    stdout,
-                )
-            return p.returncode, stdout
-
-    def CallCommand(self, test, show_callstack=None):
-        """Runs an external program.
-
-        This function converts invocation of .py files and invocations of 'python'
-        to vpython invocations.
-        """
-        cmd = self._GetCommand(test)
-        start = time_time()
-
-        def error_results(msg, exception=""):
-            duration = time_time() - start
-            msg_type = test.message or _PresubmitError
-            return msg_type(
-                "%s\n%s %s (%4.2fs)\n%s"
-                % (test.name, " ".join(cmd), msg, duration, exception),
-                show_callstack=show_callstack,
-            )
-
-        try:
-            returncode, stdout = self._RunWithTimeout(
-                cmd, test.stdin, test.kwargs
-            )
-        except Exception:
-            return error_results("exec failure", traceback.format_exc())
-
-        if test.output_parser:
-            try:
-                results = test.output_parser(stdout)
-                if results:
-                    return results
-            except Exception:
-                return error_results(
-                    f"Exception while parsing:\n{stdout}",
-                    traceback.format_exc(),
-                )
-
-        if returncode != 0:
-            return error_results(f"exit code {returncode}", stdout)
-
-        if test.info:
-            duration = time_time() - start
-            return test.info(
-                "%s\n%s (%4.2fs)" % (test.name, " ".join(cmd), duration),
-                show_callstack=show_callstack,
-            )
-
-    def AddTests(self, tests, parallel=True):
-        if parallel:
-            self._tests.extend(tests)
-        else:
-            self._nonparallel_tests.extend(tests)
-
-    def RunAsync(self):
-        self._messages = []
-
-        def _WorkerFn():
-            while True:
-                test = None
-                with self._tests_lock:
-                    if not self._tests:
-                        break
-                    test = self._tests.pop()
-                result = self.CallCommand(test, show_callstack=False)
-                if result:
-                    with self._messages_lock:
-                        if isinstance(result, (list, tuple)):
-                            self._messages.extend(result)
-                        else:
-                            self._messages.append(result)
-
-        def _StartDaemon():
-            t = threading.Thread(target=_WorkerFn)
-            t.daemon = True
-            t.start()
-            return t
-
-        while self._nonparallel_tests:
-            test = self._nonparallel_tests.pop()
-            result = self.CallCommand(test)
-            if result:
-                if isinstance(result, (list, tuple)):
-                    self._messages.extend(result)
-                else:
-                    self._messages.append(result)
-
-        if self._tests:
-            threads = [_StartDaemon() for _ in range(self._pool_size)]
-            for worker in threads:
-                worker.join()
-
-        return self._messages
 
 
 def normpath(path):
@@ -352,210 +108,6 @@ def prompt_should_continue(prompt_string):
     sys.stdout.flush()
     response = sys.stdin.readline().strip().lower()
     return response in ("y", "yes")
-
-
-# Top level object so multiprocessing can pickle
-# Public access through OutputApi object.
-@dataclass
-class _PresubmitResultLocation:
-    COMMIT_MSG_PATH: ClassVar[str] = "/COMMIT_MSG"
-    # path to the file where errors/warnings are reported.
-    #
-    # path MUST either be COMMIT_MSG_PATH or relative to the repo root to
-    # indicate the errors/warnings are against the commit message
-    # (a.k.a cl description).
-    file_path: str
-    # The range in the file defined by (start_line, start_col) -
-    # (end_line, end_col) where errors/warnings are reported.
-    # The semantic are the same as Gerrit comment range:
-    # https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-range
-    #
-    # To specify the entire line, make start_line == end_line and
-    # start_col == end_col == 0.
-    start_line: int = 0  # inclusive 1-based
-    start_col: int = 0  # inclusive 0-based
-    end_line: int = 0  # exclusive 1-based
-    end_col: int = 0  # exclusive 0-based
-
-    def validate(self):
-        if not self.file_path:
-            raise ValueError("file path is required")
-        if self.file_path != self.COMMIT_MSG_PATH and os.path.isabs(
-            self.file_path
-        ):
-            raise ValueError(
-                f"file path must be relative path, got {self.file_path}"
-            )
-        if not self.start_line:
-            if self.end_line:
-                raise ValueError(
-                    "end_line must be empty if start line is not specified"
-                )
-            if self.start_col:
-                raise ValueError(
-                    "start_col must be empty if start line is not specified"
-                )
-            if self.end_col:
-                raise ValueError(
-                    "end_col must be empty if start line is not specified"
-                )
-        elif self.start_line < 0:
-            raise ValueError(
-                f"start_line MUST not be negative, got {self.start_line}"
-            )
-        elif self.end_line < 1:
-            raise ValueError(
-                "start_line is specified so end_line must be "
-                f"positive, got {self.end_line}"
-            )
-        elif self.start_col < 0:
-            raise ValueError(
-                f"start_col MUST not be negative, got {self.start_col}"
-            )
-        elif self.end_col < 0:
-            raise ValueError(
-                f"end_col MUST not be negative, got {self.end_col}"
-            )
-        elif self.start_line > self.end_line or (
-            self.start_line == self.end_line
-            and self.start_col > self.end_col
-            and self.end_col > 0
-        ):
-            raise ValueError(
-                "(start_line, start_col) must not be after (end_line, end_col"
-                f"), got ({self.start_line}, {self.start_col}) .. "
-                f"({self.end_line}, {self.end_col})"
-            )
-
-
-# Top level object so multiprocessing can pickle
-# Public access through OutputApi object.
-class _PresubmitResult(object):
-    """Base class for result objects."""
-
-    fatal = False
-    should_prompt = False
-
-    def __init__(
-        self,
-        message: str,
-        items: list[str] = None,
-        long_text: str = "",
-        locations: list[_PresubmitResultLocation] = None,
-        show_callstack: bool = None,
-    ):
-        """Inits _PresubmitResult.
-
-        Args:
-            message: A short one-line message to indicate errors.
-            items: A list of short strings to indicate where errors occurred.
-                Note that if you are using this parameter to print where errors
-                occurred, please use `locations` instead
-            long_text: multi-line text output, e.g. from another tool
-            locations: The locations indicate where the errors occurred.
-        """
-        self._message = _PresubmitResult._ensure_str(message)
-        self._items = items or []
-        self._long_text = _PresubmitResult._ensure_str(long_text.rstrip())
-        self._locations = locations or []
-        for loc in self._locations:
-            loc.validate()
-        if show_callstack is None:
-            show_callstack = _SHOW_CALLSTACKS
-        if show_callstack:
-            self._long_text += "Presubmit result call stack is:\n"
-            self._long_text += "".join(traceback.format_stack(None, 8))
-
-    @staticmethod
-    def _ensure_str(val):
-        """
-        val: A "stringish" value. Can be any of str or bytes.
-        returns: A str after applying encoding/decoding as needed.
-        Assumes/uses UTF-8 for relevant inputs/outputs.
-        """
-        if isinstance(val, str):
-            return val
-        if isinstance(val, bytes):
-            return val.decode()
-        raise ValueError("Unknown string type %s" % type(val))
-
-    def handle(self, out_file=None):
-        if not out_file:
-            out_file = sys.stdout
-        out_file.write(self._message)
-        out_file.write("\n")
-        for item in self._items:
-            out_file.write("  ")
-            # Write separately in case it's unicode.
-            out_file.write(str(item))
-            out_file.write("\n")
-        if self._locations:
-            out_file.write("Found in:\n")
-            for loc in self._locations:
-                if loc.file_path == _PresubmitResultLocation.COMMIT_MSG_PATH:
-                    out_file.write("  - Commit Message")
-                else:
-                    out_file.write(f"  - {loc.file_path}")
-                if not loc.start_line:
-                    pass
-                elif loc.start_line == loc.end_line and (
-                    loc.start_col == 0 and loc.end_col == 0
-                ):
-                    out_file.write(f" [Ln {loc.start_line}]")
-                elif loc.start_col == 0 and loc.end_col == 0:
-                    out_file.write(f" [Ln {loc.start_line} - {loc.end_line}]")
-                else:
-                    out_file.write(
-                        f" [Ln {loc.start_line}, Col {loc.start_col}"
-                        f" - Ln {loc.end_line}, Col {loc.end_col}]"
-                    )
-                out_file.write("\n")
-        if self._long_text:
-            out_file.write("\n***************\n")
-            # Write separately in case it's unicode.
-            out_file.write(self._long_text)
-            out_file.write("\n***************\n")
-
-    def json_format(self):
-        return {
-            "message": self._message,
-            "items": [str(item) for item in self._items],
-            "locations": [asdict(loc) for loc in self._locations],
-            "long_text": self._long_text,
-            "fatal": self.fatal,
-        }
-
-
-# Top level object so multiprocessing can pickle
-# Public access through OutputApi object.
-class _PresubmitError(_PresubmitResult):
-    """A hard presubmit error."""
-
-    fatal = True
-
-
-# Top level object so multiprocessing can pickle
-# Public access through OutputApi object.
-class _PresubmitPromptWarning(_PresubmitResult):
-    """An warning that prompts the user if they want to continue."""
-
-    should_prompt = True
-
-
-# Top level object so multiprocessing can pickle
-# Public access through OutputApi object.
-class _PresubmitNotifyResult(_PresubmitResult):
-    """Just print something to the screen -- but it's not even a warning."""
-
-
-# Top level object so multiprocessing can pickle
-# Public access through OutputApi object.
-class _MailTextResult(_PresubmitResult):
-    """A warning that should be included in the review request email."""
-
-    def __init__(self, *args, **kwargs):
-        super(_MailTextResult, self).__init__()
-        raise NotImplementedError()
 
 
 class GerritAccessor(object):
@@ -2877,8 +2429,7 @@ def main(argv=None):
     # Print call stacks when _PresubmitResult objects are created with -v -v is
     # specified. This helps track down where presubmit messages are coming from.
     if options.verbose >= 2:
-        global _SHOW_CALLSTACKS
-        _SHOW_CALLSTACKS = True
+        presubmit_results._SHOW_CALLSTACKS = True
 
     if options.description_file:
         options.description = gclient_utils.FileRead(options.description_file)
