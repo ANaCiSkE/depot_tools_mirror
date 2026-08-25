@@ -19,6 +19,7 @@ import urllib.parse
 
 from download_from_google_storage import Gsutil
 import gclient_utils
+import git_common
 import lockfile
 import metrics
 import scm
@@ -29,6 +30,15 @@ GC_AUTOPACKLIMIT = 50
 
 GIT_CACHE_CORRUPT_MESSAGE = "WARNING: The Git cache is corrupt."
 INIT_SENTIENT_FILE = ".mirror_init"
+
+# git 2.45 is the first version where `reftable` is a valid ref format.
+MIN_REFTABLE_GIT_VERSION = (2, 45, 0)
+
+
+def _ref_format_args(ref_format="files"):
+    if not git_common.meets_git_version(MIN_REFTABLE_GIT_VERSION):
+        return []
+    return [f"--ref-format={ref_format}"]
 
 
 def _bootstrap_concurrency():
@@ -393,10 +403,14 @@ class Mirror(object):
             tempdir = tempfile.mkdtemp(
                 prefix="_cache_tmp", dir=self.GetCachePath()
             )
-            # Create a bare repo skeleton so necessary directories (like refs/) exist.
-            # --object-format is not needed because the repo contents are overwritten
-            # by the GCS download.
-            self.RunGit(["init", "-b", "main", "--bare"], cwd=tempdir)
+            # Create a bare repo skeleton so necessary directories (like
+            # refs/) exist. The snapshot's own config supplies the object
+            # format, but the GCS copy will not replace a refs/heads
+            # placeholder *file* with the snapshot's refs/heads *directory*,
+            # so the skeleton must use the same files backend the snapshots
+            # are built with.
+            init_cmd = ["init", "-b", "main", "--bare"] + _ref_format_args()
+            self.RunGit(init_cmd, cwd=tempdir)
             self.print(
                 "Downloading files in %s/* into %s." % (latest_dir, tempdir)
             )
@@ -462,6 +476,59 @@ class Mirror(object):
             return out.decode("utf-8", "ignore").strip()
         except subprocess.CalledProcessError:
             return None
+
+    def _get_ref_format(self) -> Optional[str]:
+        """Returns the ref format ('files' or 'reftable') of the cache repo.
+
+        Returns None if the format can't be determined.
+        """
+        try:
+            out = self.RunGit(
+                ["rev-parse", "--show-ref-format"], print_stdout=False
+            )
+            return out.decode("utf-8", "ignore").strip()
+        except subprocess.CalledProcessError:
+            return None
+
+    def _ref_format_for_init(self) -> str:
+        """Returns the ref format `git init --bare` should be pinned to.
+
+        A new mirror gets `files`, matching the GCS snapshots. An existing
+        mirror keeps its own backend, since git refuses an init that would
+        change it.
+        """
+        if not self.exists() or not git_common.meets_git_version(
+            MIN_REFTABLE_GIT_VERSION
+        ):
+            return "files"
+
+        ref_format = self._get_ref_format()
+        if ref_format != "reftable":
+            return ref_format or "files"
+
+        # A `git init` that defaulted to reftable on top of a files mirror
+        # writes extensions.refStorage before it fails to replace refs/heads,
+        # leaving a config that claims reftable while every ref on disk is
+        # still files-format. git then reports no refs at all, and every later
+        # init fails the same way. The refs are intact, so drop the stale
+        # extension rather than the cache.
+        if not os.path.isdir(os.path.join(self.mirror_path, "refs", "heads")):
+            # A real reftable mirror: refs/heads is the placeholder file.
+            return "reftable"
+        reftable_dir = os.path.join(self.mirror_path, "reftable")
+        if os.path.isdir(reftable_dir) and os.listdir(reftable_dir):
+            # Real reftable data; never drop the extension out from under it.
+            return "reftable"
+
+        logging.warning(
+            "Mirror %s claims the reftable ref format but its refs are "
+            "files-format; dropping the stale extension.",
+            self.mirror_path,
+        )
+        self.RunGit(["config", "--unset", "extensions.refStorage"])
+        if os.path.isdir(reftable_dir):
+            os.rmdir(reftable_dir)
+        return "files"
 
     def supported_project(self):
         """Returns true if this repo is known to have a bootstrap zip file.
@@ -612,6 +679,7 @@ class Mirror(object):
                 # 3. Bootstrap snapshot format mismatched remote.
                 # Start with a bare git dir.
                 gitargs = ["init", "--bare"]
+                gitargs += _ref_format_args(self._ref_format_for_init())
                 if not self.exists():
                     if remote_format is None:
                         remote_format = scm.GIT.GetRemoteObjectFormat(self.url)

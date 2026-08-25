@@ -75,6 +75,18 @@ class GitCacheTest(unittest.TestCase):
     def _supportsReftable(self) -> bool:
         return git_common.meets_git_version((2, 45, 0))
 
+    def _setDefaultRefFormat(self, ref_format: str):
+        """Makes the host git default to ref_format for new/re-inits."""
+        self.git(
+            [
+                "config",
+                "--file",
+                os.path.join(self.cache_dir, ".gitconfig"),
+                "init.defaultRefFormat",
+                ref_format,
+            ]
+        )
+
     def _makeBareMirrorWithHead(
         self, head_ref: str, ref_format: str = "reftable"
     ) -> git_cache.Mirror:
@@ -411,11 +423,163 @@ class GitCacheTest(unittest.TestCase):
                 any("--object-format=sha1" in cmd for cmd in fresh_init_calls),
                 fresh_init_calls,
             )
+            if self._supportsReftable():
+                self.assertTrue(
+                    any(
+                        "--ref-format=files" in cmd for cmd in fresh_init_calls
+                    ),
+                    fresh_init_calls,
+                )
 
         with self.subTest("existing mirror omits object format"):
             self.assertTrue(existing_init_calls)
             for cmd in existing_init_calls:
                 self.assertNotIn("--object-format=sha1", cmd)
+                if self._supportsReftable():
+                    self.assertIn("--ref-format=files", cmd)
+
+    def testBootstrapRepoPinsRefFormatFiles(self):
+        mirror = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
+        init_calls = []
+        real_run_git = mirror.RunGit
+
+        def record_git(cmd, *args, **kwargs):
+            if cmd[:1] == ["init"]:
+                init_calls.append(list(cmd))
+            return real_run_git(cmd, *args, **kwargs)
+
+        with (
+            mock.patch.object(
+                git_cache.Gsutil,
+                "check_call",
+                return_value=(
+                    0,
+                    "gs://chromium-git-cache/v2/foo-bar/100.ready\n"
+                    "gs://chromium-git-cache/v2/foo-bar/100/\n",
+                    "",
+                ),
+            ),
+            mock.patch.object(git_cache.Gsutil, "call", return_value=0),
+            mock.patch.object(mirror, "RunGit", side_effect=record_git),
+        ):
+            target_dir = os.path.join(self.cache_dir, "test_target")
+            self.assertTrue(mirror.bootstrap_repo(target_dir))
+
+        if self._supportsReftable():
+            self.assertTrue(
+                any("--ref-format=files" in cmd for cmd in init_calls),
+                init_calls,
+            )
+
+    def testEnsureBootstrappedPreservesExistingRefFormat(self):
+        """Re-initializing an existing mirror must keep its ref backend.
+
+        git rejects an init that would change the ref storage format, so
+        pinning files unconditionally would permanently break mirrors created
+        before the files pin landed -- e.g. by an older depot_tools on a host
+        whose git defaults to reftable.
+        """
+        if not self._supportsReftable():
+            self.skipTest("git is too old for --ref-format")
+
+        mirror = self._makeBareMirrorWithHead(
+            "refs/heads/main", ref_format="reftable"
+        )
+        self.assertEqual("reftable", mirror._get_ref_format())
+
+        with (
+            mock.patch.object(
+                git_cache.Mirror, "bootstrap_repo", return_value=False
+            ),
+            mock.patch.object(git_cache.Mirror, "_set_symbolic_ref"),
+        ):
+            mirror._ensure_bootstrapped(None, True, False)
+
+        self.assertEqual("reftable", mirror._get_ref_format())
+
+    def testEnsureBootstrappedFilesMirrorOnReftableHost(self):
+        """A files mirror must survive re-init where git defaults to reftable.
+
+        This is the reported breakage: plain `git init --bare` picks the host
+        default, then dies on the existing refs/heads directory.
+        """
+        if not self._supportsReftable():
+            self.skipTest("git is too old for --ref-format")
+
+        mirror = self._makeBareMirrorWithHead(
+            "refs/heads/main", ref_format="files"
+        )
+        self._setDefaultRefFormat("reftable")
+
+        with (
+            mock.patch.object(
+                git_cache.Mirror, "bootstrap_repo", return_value=False
+            ),
+            mock.patch.object(git_cache.Mirror, "_set_symbolic_ref"),
+        ):
+            mirror._ensure_bootstrapped(None, True, False)
+
+        self.assertEqual("files", mirror._get_ref_format())
+
+    def testEnsureBootstrappedRepairsPoisonedRefFormat(self):
+        """A failed reftable init leaves a config that hides every ref.
+
+        git writes extensions.refStorage before it fails on refs/heads, so a
+        mirror broken by a pre-fix depot_tools reports no refs and re-fails
+        every init. The refs are intact; re-init must repair rather than
+        inherit the bad format.
+        """
+        if not self._supportsReftable():
+            self.skipTest("git is too old for --ref-format")
+
+        self._makeGitRepoWithTag()
+        mirror = git_cache.Mirror(self.origin_dir)
+        gclient_utils.rmtree(mirror.mirror_path)
+        self.git(
+            [
+                "clone",
+                "--bare",
+                "--ref-format=files",
+                self.origin_dir,
+                mirror.mirror_path,
+            ]
+        )
+        self.assertTrue(self._cacheHasTag(mirror.mirror_path))
+
+        # Poison it exactly the way a pre-fix depot_tools did.
+        self._setDefaultRefFormat("reftable")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.git(["--git-dir", mirror.mirror_path, "init", "--bare"])
+        self.assertEqual("reftable", mirror._get_ref_format())
+        self.assertFalse(self._cacheHasTag(mirror.mirror_path))
+
+        with (
+            mock.patch.object(
+                git_cache.Mirror, "bootstrap_repo", return_value=False
+            ),
+            mock.patch.object(git_cache.Mirror, "_set_symbolic_ref"),
+        ):
+            mirror._ensure_bootstrapped(None, True, False)
+
+        self.assertEqual("files", mirror._get_ref_format())
+        self.assertTrue(self._cacheHasTag(mirror.mirror_path))
+
+    def testRefFormatArgsSkippedOnOldGit(self):
+        """The --ref-format flag only exists in git 2.45+."""
+        with mock.patch.object(
+            git_cache.git_common, "meets_git_version", return_value=False
+        ):
+            self.assertEqual([], git_cache._ref_format_args())
+        with mock.patch.object(
+            git_cache.git_common, "meets_git_version", return_value=True
+        ):
+            self.assertEqual(
+                ["--ref-format=files"], git_cache._ref_format_args()
+            )
+            self.assertEqual(
+                ["--ref-format=reftable"],
+                git_cache._ref_format_args("reftable"),
+            )
 
     def _makeGitRepo(self):
         self.git(["init", "-q"])
