@@ -120,8 +120,11 @@ class GSUtilApi(recipe_api.RecipeApi):
 
     if link_name:
       is_dir = "-r" in args or "--recursive" in args
+      link_dest = str(dest)
+      if link_dest.endswith("/"):
+        link_dest += self.m.path.basename(source)
       link = self._http_url(
-        bucket, dest, is_directory=is_dir, is_anonymous=unauthenticated_url
+        bucket, link_dest, is_directory=is_dir, is_anonymous=unauthenticated_url
       )
       result.presentation.links[link_name] = link
       self._upload_urls[result.name] = full_dest
