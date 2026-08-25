@@ -955,7 +955,13 @@ class TestGitCl(unittest.TestCase):
             "git_cl.gclient_utils.CheckCallAndFilter", self._mocked_call
         ).start()
         mock.patch("git_common.is_dirty_git_tree", lambda x: False).start()
-        mock.patch("git_cl.FindCodereviewSettingsFile", return_value="").start()
+        mock.patch(
+            "git_cl_core.FindCodereviewSettingsFile", return_value=""
+        ).start()
+        mock.patch(
+            "git_cl_core.SaveDescriptionBackup",
+            lambda _: self._mocked_call("SaveDescriptionBackup"),
+        ).start()
         mock.patch(
             "git_cl.SaveDescriptionBackup",
             lambda _: self._mocked_call("SaveDescriptionBackup"),
@@ -8755,7 +8761,7 @@ class CMDLintTestCase(CMDTestCaseBase):
         return_value="upstream",
     )
     @mock.patch("git_cl.Settings.GetRoot", return_value=".")
-    @mock.patch("git_cl.FindCodereviewSettingsFile", return_value=None)
+    @mock.patch("git_cl_core.FindCodereviewSettingsFile", return_value=None)
     def testLintChangelist(self, *_mock):
         codecs.open().read.return_value = self.bad_indent
         self.assertEqual(1, git_cl.main(["lint"]))
