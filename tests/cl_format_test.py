@@ -804,6 +804,100 @@ class CMDFormatTestCase(unittest.TestCase):
             os.remove(input_diff.name)
             os.chdir(previous_cwd)
 
+    @mock.patch("cl_format._IsRuffBatchSupported", return_value=False)
+    @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
+    def testInputDiffFile_Stdin(self, clang_formatter, mock_supported):
+        """Tests git cl format with --input_diff_file - reading from stdin."""
+        previous_cwd = os.getcwd()
+        os.chdir(self._top_dir)
+        try:
+            with mock.patch("sys.stdin", io.StringIO(test_format_input_diff)):
+                ret = git_cl.main(
+                    [
+                        "format",
+                        "--input_diff_file",
+                        "-",
+                        "--presubmit",
+                        "--dry-run",
+                        "--python",
+                    ]
+                )
+            self.assertEqual(0, ret)
+
+            clang_formatter.assert_called_with(
+                mock.ANY,
+                ["net/base/net_error_details.h", "net/base/net_error_list.h"],
+                mock.ANY,
+                mock.ANY,
+            )
+            cl_format.RunCommand.assert_called_with(
+                [
+                    "vpython3",
+                    mock.ANY,
+                    "--style",
+                    mock.ANY,
+                    "testing/xvfb_unittest.py",
+                    "-l",
+                    "18-24",
+                    "--diff",
+                ],
+                cwd=self._top_dir,
+                error_ok=True,
+                shell=mock.ANY,
+                stderr=-1,
+            )
+        finally:
+            os.chdir(previous_cwd)
+
+    @mock.patch("cl_format._IsRuffBatchSupported", return_value=False)
+    @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
+    def testInputDiffFile_Stdin_Buffer(self, clang_formatter, mock_supported):
+        """Tests git cl format with --input_diff_file - reading UTF-8 bytes from sys.stdin.buffer."""
+        previous_cwd = os.getcwd()
+        os.chdir(self._top_dir)
+        try:
+            mock_stdin = io.TextIOWrapper(
+                io.BytesIO(test_format_input_diff.encode("utf-8")),
+                encoding="latin-1",
+            )
+            with mock.patch("sys.stdin", mock_stdin):
+                ret = git_cl.main(
+                    [
+                        "format",
+                        "--input_diff_file",
+                        "-",
+                        "--presubmit",
+                        "--dry-run",
+                        "--python",
+                    ]
+                )
+            self.assertEqual(0, ret)
+
+            clang_formatter.assert_called_with(
+                mock.ANY,
+                ["net/base/net_error_details.h", "net/base/net_error_list.h"],
+                mock.ANY,
+                mock.ANY,
+            )
+            cl_format.RunCommand.assert_called_with(
+                [
+                    "vpython3",
+                    mock.ANY,
+                    "--style",
+                    mock.ANY,
+                    "testing/xvfb_unittest.py",
+                    "-l",
+                    "18-24",
+                    "--diff",
+                ],
+                cwd=self._top_dir,
+                error_ok=True,
+                shell=mock.ANY,
+                stderr=-1,
+            )
+        finally:
+            os.chdir(previous_cwd)
+
     @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
     def testInputDiffFileWithWindowsPatch(self, clang_formatter):
         # Windows doesn't allow a file to be reopened while it's open by

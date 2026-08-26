@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import subprocess
+import presubmit_thread_pool
 import sys
 
 from presubmit_canned_checks import _ReportErrorFileAndLine
@@ -172,17 +173,27 @@ class MockInputApi(object):
         for test in tests:
             parser = test.output_parser or output_parser
             try:
-                p = self.subprocess.Popen(test.cmd, **test.kwargs)
-                stdout, _ = p.communicate()
+                kwargs = test.kwargs.copy()
+                stdin_data = kwargs.get("stdin", None)
+                if isinstance(stdin_data, bytes):
+                    kwargs["stdin"] = self.subprocess.PIPE
+                p = self.subprocess.Popen(test.cmd, **kwargs)
+                stdout, _ = p.communicate(
+                    input=stdin_data if isinstance(stdin_data, bytes) else None
+                )
                 stdout_str = (
                     stdout.decode() if isinstance(stdout, bytes) else stdout
                 )
                 if parser:
-                    parse_results = parser(stdout_str)
-                    if parse_results:
+                    handled, parse_results = (
+                        presubmit_thread_pool.InvokeOutputParser(
+                            parser, p.returncode, stdout_str
+                        )
+                    )
+                    if handled:
                         if isinstance(parse_results, (list, tuple)):
                             results.extend(parse_results)
-                        else:
+                        elif parse_results:
                             results.append(parse_results)
                         continue
 

@@ -2167,14 +2167,13 @@ def CheckPatchFormatted(
     file_filter=None,
 ):
     result_factory = result_factory or output_api.PresubmitPromptWarning
-    import git_cl
 
     affected_files = input_api.AffectedFiles(
         include_deletes=False, file_filter=file_filter
     )
-    with input_api.CreateTemporaryFile() as diff_file:
-        for f in affected_files:
-            diff_file.write(f.GenerateScmDiff().encode("utf-8"))
+    diff_content = "".join(f.GenerateScmDiff() for f in affected_files)
+    if not diff_content:
+        return []
 
     display_args = []
     if not check_clang_format:
@@ -2193,14 +2192,13 @@ def CheckPatchFormatted(
             display_args.append("--no-python")
 
     cmd = [
-        "-C",
-        input_api.change.RepositoryRoot(),
+        "git",
         "cl",
         "format",
         "--dry-run",
         "--presubmit",
         "--input_diff_file",
-        diff_file.name,
+        "-",
     ] + display_args
 
     # Make sure the passed --upstream branch is applied to a dry run.
@@ -2212,29 +2210,50 @@ def CheckPatchFormatted(
     )
     if presubmit_subdir.startswith("..") or presubmit_subdir == ".":
         presubmit_subdir = ""
-    code, output = git_cl.RunGitWithCode(cmd, suppress_stderr=bypass_warnings)
-    # bypass_warnings? Only fail with code 2.
-    # As this is just a warning, ignore all other errors if the user
-    # happens to have a broken clang-format, doesn't use git, etc etc.
-    if code == 2 or (code and not bypass_warnings):
-        if presubmit_subdir:
-            short_path = presubmit_subdir
-        else:
-            short_path = input_api.basename(input_api.change.RepositoryRoot())
-        display_args.append(presubmit_subdir)
-        msg = f"The {short_path} directory requires source formatting.\n"
-        if output:
-            msg += output + "\n"
-        msg += (
-            "The following command may be able to fix some errors, while "
-            "others may need to be fixed manually:\n"
-            f"  git cl format {' '.join(display_args)}\n"
-            'Alternatively, if you are in Cider G, please use the "Format '
-            'Modified Lines in All Files (git cl format)" functionality in the '
-            "command palette."
-        )
-        return [result_factory(msg)]
-    return []
+
+    def parse_format_output(code, output):
+        # bypass_warnings? Only fail with code 2.
+        # As this is just a warning, ignore all other errors if the user
+        # happens to have a broken clang-format, doesn't use git, etc etc.
+        if code == 2 or (code and not bypass_warnings):
+            if presubmit_subdir:
+                short_path = presubmit_subdir
+            else:
+                short_path = input_api.basename(
+                    input_api.change.RepositoryRoot()
+                )
+            args_copy = list(display_args)
+            if presubmit_subdir:
+                args_copy.append(presubmit_subdir)
+            msg = f"The {short_path} directory requires source formatting.\n"
+            if output:
+                msg += output + "\n"
+            msg += (
+                "The following command may be able to fix some errors, while "
+                "others may need to be fixed manually:\n"
+                f"  git cl format {' '.join(args_copy)}\n"
+                'Alternatively, if you are in Cider G, please use the "Format '
+                'Modified Lines in All Files (git cl format)" functionality in the '
+                "command palette."
+            )
+            return [result_factory(msg)]
+        if code != 0:
+            return []
+        return None
+
+    return input_api.RunTests(
+        [
+            input_api.Command(
+                name="git cl format",
+                cmd=cmd,
+                kwargs={
+                    "cwd": input_api.change.RepositoryRoot(),
+                    "stdin": diff_content.encode("utf-8"),
+                },
+                output_parser=parse_format_output,
+            )
+        ]
+    )
 
 
 def CheckGNFormatted(input_api, output_api):

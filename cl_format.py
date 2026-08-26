@@ -1053,9 +1053,16 @@ def _FindFilesToFormat(
     Deleted files are always excluded in the return.
     """
     if opts.input_diff_file:
-        with open(opts.input_diff_file, encoding="utf-8") as f:
-            diffs = _SplitDiffsByFile(f.read())
-            return list(diffs.keys()), diffs
+        if opts.input_diff_file == "-":
+            if hasattr(sys.stdin, "buffer"):
+                diff_text = sys.stdin.buffer.read().decode("utf-8")
+            else:
+                diff_text = sys.stdin.read()
+        else:
+            with open(opts.input_diff_file, encoding="utf-8") as f:
+                diff_text = f.read()
+        diffs = _SplitDiffsByFile(diff_text)
+        return list(diffs.keys()), diffs
 
     if opts.full:
         files = RunGitDiffCmd(

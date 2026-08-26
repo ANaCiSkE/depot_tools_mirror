@@ -500,6 +500,117 @@ class ThreadPoolTest(unittest.TestCase):
         mock_dir2.cleanup.assert_called_once()
         self.assertEqual([], t._deferred_cleanup_dirs)
 
+    def testOutputParserWithReturncode(self):
+        def FakePopen(cmd, **kwargs):
+            if cmd[0] == "code_2":
+                return mock.Mock(returncode=2)
+            if cmd[0] == "code_1_suppressed":
+                return mock.Mock(returncode=1)
+            return mock.Mock(returncode=0)
+
+        subprocess2.Popen.side_effect = FakePopen
+        presubmit_thread_pool.sigint_handler.wait.return_value = (b"output", "")
+
+        def parse_with_code(code, output):
+            if code == 2:
+                return [
+                    presubmit_results._PresubmitPromptWarning(
+                        "custom warning for code 2"
+                    )
+                ]
+            if code == 1:
+                return []  # Suppress exit code 1
+            return []
+
+        mock_tests = [
+            presubmit_thread_pool.CommandData(
+                name="code_2",
+                cmd=["code_2"],
+                kwargs={},
+                output_parser=parse_with_code,
+            ),
+            presubmit_thread_pool.CommandData(
+                name="code_1_suppressed",
+                cmd=["code_1_suppressed"],
+                kwargs={},
+                output_parser=parse_with_code,
+            ),
+        ]
+
+        t = presubmit_thread_pool.ThreadPool(1)
+        t.AddTests(mock_tests)
+        messages = t.RunAsync()
+        message_strs = [r._message for r in messages]
+
+        self.assertEqual(1, len(messages))
+        self.assertIn("custom warning for code 2", message_strs)
+
+    def testInvokeOutputParser_CodeAware(self):
+        def code_parser(code, output):
+            if code == 2:
+                return ["custom_warning"]
+            if code == 1:
+                return []
+            return None
+
+        # code 2 -> handled, returns list
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            code_parser, 2, "out"
+        )
+        self.assertTrue(handled)
+        self.assertEqual(["custom_warning"], res)
+
+        # code 1 -> handled, returns [] (suppressed)
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            code_parser, 1, "out"
+        )
+        self.assertTrue(handled)
+        self.assertEqual([], res)
+
+        # code 0 -> not handled (None), falls through to standard exit code
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            code_parser, 0, "out"
+        )
+        self.assertFalse(handled)
+        self.assertIsNone(res)
+
+    def testInvokeOutputParser_Legacy1Arg(self):
+        def legacy_parser(output):
+            if "error" in output:
+                return ["error_found"]
+            return []
+
+        # Error found -> handled
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            legacy_parser, 1, "error here"
+        )
+        self.assertTrue(handled)
+        self.assertEqual(["error_found"], res)
+
+        # No error found -> not handled (empty list), falls through
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            legacy_parser, 1, "clean output"
+        )
+        self.assertFalse(handled)
+        self.assertEqual([], res)
+
+    def testInvokeOutputParser_LegacyWithStdoutFirstParam(self):
+        # A parser defined as def parser(stdout, context=None) should NOT be
+        # misidentified as code-aware.
+        called_with = []
+
+        def parser_with_context(stdout, context=None):
+            called_with.append((stdout, context))
+            return ["handled"]
+
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            parser_with_context, 1, "stdout_content"
+        )
+        self.assertTrue(handled)
+        self.assertEqual(["handled"], res)
+        # Verify it was called with stdout, NOT with returncode as first arg!
+        self.assertEqual([("stdout_content", None)], called_with)
+
 
 if __name__ == "__main__":
     unittest.main()

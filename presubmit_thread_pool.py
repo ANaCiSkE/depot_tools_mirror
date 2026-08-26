@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 """Thread pool and subprocess execution subsystem for presubmit checks."""
 
+import inspect
 import multiprocessing
 import os
 import queue
@@ -18,6 +19,53 @@ from presubmit_results import (
     _PresubmitError,
     _PresubmitResult,
 )
+
+
+def _AcceptsReturncode(parser) -> bool:
+    """Returns True if parser is a 2-arg returncode-aware parser (code, output)."""
+    try:
+        sig = inspect.signature(parser)
+        pos_params = [
+            p
+            for p in sig.parameters.values()
+            if p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        if (
+            len(pos_params) >= 2
+            and pos_params[1].default is inspect.Parameter.empty
+        ):
+            # Guard against def my_parser(stdout, context): where first param is stdout/output
+            if pos_params[0].name.lower() in (
+                "stdout",
+                "output",
+                "out",
+                "text",
+                "lines",
+            ):
+                return False
+            return True
+    except (ValueError, TypeError):
+        pass
+    return False
+
+
+def InvokeOutputParser(parser, returncode: int, stdout: str):
+    """Invokes parser, supporting legacy 1-arg and returncode-aware 2-arg parsers.
+
+    Returns:
+        tuple (handled: bool, results: Any)
+        - For 2-arg parsers (code, output): handled is True if results is not None.
+        - For 1-arg parsers (output): handled is True if results is truthy.
+    """
+    if _AcceptsReturncode(parser):
+        results = parser(returncode, stdout)
+        return (results is not None, results)
+    results = parser(stdout)
+    return (bool(results), results)
 
 
 def time_time():
@@ -320,8 +368,10 @@ class ThreadPool:
 
         if test.output_parser:
             try:
-                results = test.output_parser(stdout)
-                if results:
+                handled, results = InvokeOutputParser(
+                    test.output_parser, returncode, stdout
+                )
+                if handled:
                     return results
             except Exception:
                 return error_results(
