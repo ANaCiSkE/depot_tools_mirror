@@ -2256,36 +2256,76 @@ def CheckPatchFormatted(
     )
 
 
-def CheckGNFormatted(input_api, output_api):
-    import gn
-
-    affected_files = input_api.AffectedFiles(
-        include_deletes=False,
-        file_filter=lambda x: (
-            x.LocalPath().endswith(".gn")
-            or x.LocalPath().endswith(".gni")
-            or x.LocalPath().endswith(".typemap")
-        ),
+def CheckGNFormatted(input_api, output_api, chunk_size=50):
+    affected_files = list(
+        input_api.AffectedFiles(
+            include_deletes=False,
+            file_filter=lambda x: x.LocalPath().endswith(
+                (".gn", ".gni", ".typemap")
+            ),
+        )
     )
-    warnings = []
-    for f in affected_files:
+    if not affected_files:
+        return []
+
+    def norm(p):
+        return input_api.os_path.normcase(input_api.os_path.normpath(p))
+
+    affected_files_by_path = {
+        norm(f.AbsoluteLocalPath()): f for f in affected_files
+    }
+
+    def parse_output(returncode, output):
+        # If gn format exited 0, all files in the batch were formatted cleanly.
+        if returncode == 0:
+            return []
+
+        # Parse output for unformatted file paths. Non-path diagnostics (such
+        # as syntax error messages when returncode is 1) are safely ignored
+        # because affected_files_by_path.get(norm_path) returns None.
+        warnings = []
+        for line in output.splitlines():
+            raw_path = line.strip()
+            if not raw_path:
+                continue
+            norm_path = norm(raw_path)
+            f = affected_files_by_path.get(norm_path)
+            if f:
+                warnings.append(
+                    output_api.PresubmitPromptWarning(
+                        f"{f.AbsoluteLocalPath()} requires formatting. Please run:\n  gn format {f.LocalPath()}"
+                    )
+                )
+        # It's just a warning, so ignore other types of failures assuming
+        # they'll be caught elsewhere.
+        return warnings
+
+    commands = []
+    # Chunk file paths to avoid exceeding OS command line limits (e.g. Windows).
+    for i in range(0, len(affected_files), chunk_size):
+        chunk = affected_files[i : i + chunk_size]
         cmd = [
+            input_api.python3_executable,
             input_api.os_path.join(_HERE, "gn.py"),
             "format",
             "--dry-run",
-            f.AbsoluteLocalPath(),
-        ]
-        rc = gn.main(cmd)
-        if rc == 2:
-            warnings.append(
-                output_api.PresubmitPromptWarning(
-                    "%s requires formatting. Please run:\n  gn format %s"
-                    % (f.AbsoluteLocalPath(), f.LocalPath())
-                )
+        ] + [f.AbsoluteLocalPath() for f in chunk]
+
+        commands.append(
+            input_api.Command(
+                name="Check GN formatting",
+                cmd=cmd,
+                kwargs={
+                    "cwd": input_api.change.RepositoryRoot(),
+                    "stderr": input_api.subprocess.STDOUT,
+                },
+                output_parser=parse_output,
             )
-    # It's just a warning, so ignore other types of failures assuming they'll be
-    # caught elsewhere.
-    return warnings
+        )
+
+    # Use input_api.Command so that the check can run concurrently with other
+    # checks when "git cl presubmit --parallel" is used.
+    return input_api.RunTests(commands)
 
 
 def CheckCIPDManifest(input_api, output_api, path=None, content=None):

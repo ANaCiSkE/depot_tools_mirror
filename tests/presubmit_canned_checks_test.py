@@ -1168,6 +1168,166 @@ class RunAlintTest(unittest.TestCase):
             self.assertEqual(code, 3)
 
 
+class CheckGNFormattedTest(unittest.TestCase):
+    def enter_context(self, cm):
+        if hasattr(super(), "enterContext"):
+            return super().enterContext(cm)
+        val = cm.__enter__()
+        self.addCleanup(cm.__exit__, None, None, None)
+        return val
+
+    def setUp(self):
+        super().setUp()
+
+        self.input_api = MockInputApi()
+        self.input_api.change.RepositoryRoot = lambda: ROOT_DIR
+        self.input_api.presubmit_local_path = ROOT_DIR
+        self.output_api = MockOutputApi()
+
+        self.mock_proc = mock.Mock()
+        self.mock_proc.communicate.return_value = (b"", b"")
+        self.mock_proc.returncode = 0
+
+        self.mock_popen = self.enter_context(
+            mock.patch.object(self.input_api.subprocess, "Popen", autospec=True)
+        )
+        self.mock_popen.return_value = self.mock_proc
+
+    def test_gn_formatted_all_files_clean(self):
+        f1 = MockAffectedFile("BUILD.gn", ['group("a") {}'])
+        f2 = MockAffectedFile("config.gni", ["declare_args() {}"])
+        self.input_api.files = [f1, f2]
+        self.mock_proc.communicate.return_value = (b"", b"")
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_called_once()
+        cmd = self.mock_popen.call_args[0][0]
+        kwargs = self.mock_popen.call_args[1]
+        self.assertIn("format", cmd)
+        self.assertIn("--dry-run", cmd)
+        self.assertIn(f1.AbsoluteLocalPath(), cmd)
+        self.assertIn(f2.AbsoluteLocalPath(), cmd)
+        self.assertEqual(kwargs.get("cwd"), ROOT_DIR)
+        self.assertEqual(kwargs.get("stderr"), subprocess.STDOUT)
+
+    def test_gn_formatted_multiple_unformatted_files(self):
+        f1 = MockAffectedFile("BUILD.gn", ['group("a") {}'])
+        f2 = MockAffectedFile("bad1.gni", ["bad code 1"])
+        f3 = MockAffectedFile("bad2.typemap", ["bad code 2"])
+        self.input_api.files = [f1, f2, f3]
+        out_bytes = (
+            f2.AbsoluteLocalPath().encode("utf-8")
+            + b"\n"
+            + f3.AbsoluteLocalPath().encode("utf-8")
+            + b"\n"
+        )
+        self.mock_proc.communicate.return_value = (out_bytes, b"")
+        self.mock_proc.returncode = 2
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].type, "warning")
+        self.assertEqual(results[1].type, "warning")
+        self.assertIn("bad1.gni requires formatting", results[0].message)
+        self.assertIn("bad2.typemap requires formatting", results[1].message)
+
+    def test_gn_formatted_non_formatting_output_ignored(self):
+        # Verify that non-formatting diagnostics or syntax error outputs from GN
+        # are safely ignored and do not generate false-positive PresubmitErrors.
+        f1 = MockAffectedFile("BUILD.gn", ['group("a") {}'])
+        self.input_api.files = [f1]
+        self.mock_proc.communicate.return_value = (
+            b"ERROR at //BUILD.gn:10: invalid token\nSee //BUILD.gn:5",
+            b"",
+        )
+        self.mock_proc.returncode = 1
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+
+    def test_gn_formatted_combined_unformatted_and_diagnostics(self):
+        # Verify that unformatted files are warned on even if another file in
+        # the same chunk causes gn format to exit with code 1 (syntax error).
+        f1 = MockAffectedFile("BUILD.gn", ['group("a") { deps = [ ] }'])
+        f2 = MockAffectedFile("bad.gni", ["invalid syntax"])
+        self.input_api.files = [f1, f2]
+        output_bytes = (
+            f1.AbsoluteLocalPath().encode("utf-8")
+            + b"\nERROR at //bad.gni:1: Expecting assignment or function call.\ninvalid syntax\n"
+        )
+        self.mock_proc.communicate.return_value = (output_bytes, b"")
+        self.mock_proc.returncode = 1
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].type, "warning")
+        self.assertIn("BUILD.gn requires formatting", results[0].message)
+
+    def test_gn_formatted_early_exit_no_gn_files(self):
+        f1 = MockAffectedFile("foo.py", ["def foo(): pass"])
+        self.input_api.files = [f1]
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_not_called()
+
+    def test_gn_formatted_early_exit_deletions_only(self):
+        f1 = MockAffectedFile("BUILD.gn", [], action="D")
+        self.input_api.files = [f1]
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_not_called()
+
+    def test_gn_formatted_early_exit_empty_files(self):
+        self.input_api.files = []
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_not_called()
+
+    def test_gn_formatted_chunks_large_file_lists(self):
+        # Verify that files are chunked into multiple commands according to chunk_size.
+        files = [
+            MockAffectedFile(f"dir_{i}/BUILD.gn", [f'group("g_{i}") {{}}'])
+            for i in range(5)
+        ]
+        self.input_api.files = files
+        self.mock_proc.communicate.return_value = (b"", b"")
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckGNFormatted(
+            self.input_api, self.output_api, chunk_size=2
+        )
+        self.assertEqual(len(results), 0)
+        self.assertEqual(self.mock_popen.call_count, 3)
+        cmd1 = self.mock_popen.call_args_list[0][0][0]
+        cmd2 = self.mock_popen.call_args_list[1][0][0]
+        cmd3 = self.mock_popen.call_args_list[2][0][0]
+        # First chunk has 2 files (+ 4 prefix args = 6)
+        self.assertEqual(len(cmd1), 6)
+        # Second chunk has 2 files (+ 4 prefix args = 6)
+        self.assertEqual(len(cmd2), 6)
+        # Third chunk has 1 file (+ 4 prefix args = 5)
+        self.assertEqual(len(cmd3), 5)
+
+
 class CheckForCommitObjectsTest(unittest.TestCase):
     def setUp(self):
         self.input_api = MockInputApi()
