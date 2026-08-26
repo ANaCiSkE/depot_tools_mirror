@@ -3,8 +3,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import json
 import io
+import json
 import os.path
 import subprocess
 import sys
@@ -889,6 +889,15 @@ class CheckAyeAyeTest(unittest.TestCase):
         ).start()
         self.mock_repo_root.return_value = "/fake/repo/root"
 
+        self.mock_upstream_branch = mock.patch.object(
+            self.input_api.change, "UpstreamBranch", create=True
+        ).start()
+        self.mock_upstream_branch.return_value = "origin/main"
+
+        self.mock_run_tests = mock.patch.object(
+            self.input_api, "RunTests", wraps=self.input_api.RunTests
+        ).start()
+
         self.mock_popen = mock.patch.object(
             self.input_api.subprocess, "Popen", autospec=True
         ).start()
@@ -901,6 +910,8 @@ class CheckAyeAyeTest(unittest.TestCase):
             presubmit_canned_checks._os.path, "exists", autospec=True
         ).start()
         self.mock_exists.return_value = True
+
+        self.input_api.files = [MockAffectedFile("foo.py", ["def foo(): pass"])]
 
     def test_ayeaye_findings_with_errors(self):
         # Simulate run_alint JSON output containing both errors and warnings
@@ -1013,6 +1024,77 @@ class CheckAyeAyeTest(unittest.TestCase):
         self.assertEqual(results[0].type, "error")
         self.assertIn("Failed to run.", results[0].message)
 
+    def test_ayeaye_with_upstream_branch(self):
+        json_output = json.dumps({"errors": [], "warnings": []}).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+        self.mock_upstream_branch.return_value = "origin/main"
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_run_tests.assert_called_once()
+        cmd_obj = self.mock_run_tests.call_args[0][0][0]
+        self.assertEqual(cmd_obj.name, "AyeAye (alint)")
+        self.assertIn("--commit", cmd_obj.cmd)
+        self.assertIn("origin/main", cmd_obj.cmd)
+        self.mock_popen.assert_called_once()
+
+    def test_ayeaye_with_head_upstream_forwarded(self):
+        json_output = json.dumps({"errors": [], "warnings": []}).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+        self.mock_upstream_branch.return_value = "HEAD"
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_called_once()
+        called_args = self.mock_popen.call_args[0][0]
+        self.assertIn("--commit", called_args)
+        self.assertIn("HEAD", called_args)
+
+    def test_ayeaye_with_none_upstream_ignored(self):
+        json_output = json.dumps({"errors": [], "warnings": []}).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+        self.mock_upstream_branch.return_value = None
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_called_once()
+        called_args = self.mock_popen.call_args[0][0]
+        self.assertNotIn("--commit", called_args)
+
+    def test_ayeaye_runs_on_deletions_only(self):
+        # AyeAye analyzers such as IfThisThenAnalyzer must run on deletion-only
+        # changesets to detect deletions of conditional change (IFTTT) blocks.
+        json_output = json.dumps({"errors": [], "warnings": []}).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+        deleted_file = MockAffectedFile("foo.py", [], action="D")
+        self.input_api.files = [deleted_file]
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_popen.assert_called_once()
+
+    def test_ayeaye_early_exit_empty_files(self):
+        self.input_api.files = []
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 0)
+        self.mock_run_tests.assert_not_called()
+        self.mock_popen.assert_not_called()
+
 
 class RunAlintTest(unittest.TestCase):
     def test_parse_alint_output(self):
@@ -1033,6 +1115,57 @@ class RunAlintTest(unittest.TestCase):
             parsed["warnings"],
             ["This is a warning.", "Another warning."],
         )
+
+    def test_main_invocation_passes_flags_after_separator(self):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b'{"errors": [], "warnings": []}',
+            b"",
+        )
+        mock_proc.returncode = 0
+
+        with (
+            mock.patch.object(
+                subprocess, "Popen", return_value=mock_proc
+            ) as mock_popen,
+            mock.patch.object(os, "chdir") as mock_chdir,
+            mock.patch.object(
+                sys,
+                "argv",
+                [
+                    "run_alint.py",
+                    "/path/to/alint",
+                    "/fake/repo",
+                    "-t=30s",
+                    "--commit",
+                    "origin/main",
+                ],
+            ),
+            mock.patch.object(sys, "stdout", new_callable=io.StringIO),
+        ):
+            code = run_alint.main()
+            self.assertEqual(code, 0)
+            mock_chdir.assert_called_once_with("/fake/repo")
+            mock_popen.assert_called_once()
+            cmd = mock_popen.call_args[0][0]
+            self.assertEqual(
+                cmd,
+                [
+                    "/path/to/alint",
+                    "--",
+                    "-t=30s",
+                    "--commit",
+                    "origin/main",
+                ],
+            )
+
+    def test_main_insufficient_arguments(self):
+        with (
+            mock.patch.object(sys, "argv", ["run_alint.py"]),
+            mock.patch.object(sys, "stdout", new_callable=io.StringIO),
+        ):
+            code = run_alint.main()
+            self.assertEqual(code, 3)
 
 
 class CheckForCommitObjectsTest(unittest.TestCase):
