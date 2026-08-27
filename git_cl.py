@@ -6357,6 +6357,12 @@ def CMDupload(parser, args):
 
     cl = Changelist(branchref=options.target_branch)
 
+    # Launch working tree dirty check asynchronously in a background thread
+    # so that the ~350ms git status scan on large repositories (like chromium/src)
+    # runs concurrently with EnsureAuthenticated, AsyncEnsureAccountExists,
+    # option parsing, and AsyncWarmChangeDetail.
+    wait_dirty_check = git_common.async_is_dirty_git_tree("upload")
+
     # Ensure we're authenticated correctly. Otherwise `git cl upload` will:
     #   * run `git status` (slow for large repos)
     #   * run presubmit tests (likely slow)
@@ -6387,9 +6393,6 @@ def CMDupload(parser, args):
     # they have fsmonitor enabled.
     if os.path.isfile(".gitmodules"):
         git_common.warn_submodule()
-
-    if git_common.is_dirty_git_tree("upload"):
-        return 1
 
     options.reviewers = cleanup_list(options.reviewers)
     options.cc = cleanup_list(options.cc)
@@ -6451,6 +6454,13 @@ def CMDupload(parser, args):
     if options.retry_failed and not cl.GetIssue():
         print("No previous patchsets, so --retry-failed has no effect.")
         options.retry_failed = False
+
+    # Verify working tree is clean before proceeding with either squashed or
+    # non-squashed uploads. Evaluating wait_dirty_check() before wait_for_account()
+    # aborts immediately on dirty trees without blocking on network latency from
+    # remote Gerrit account verification.
+    if wait_dirty_check():
+        return 1
 
     # Block until background Gerrit account verification finishes (if not
     # already completed or cached) before proceeding to interactive description

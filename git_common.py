@@ -1163,32 +1163,119 @@ def set_config(option, value, scope: scm.GitConfigScope = "local"):
     scm.GIT.SetConfig(os.getcwd(), option, value, scope=scope)
 
 
-def get_dirty_files():
-    # Make sure index is up-to-date before running diff-index.
-    run_with_retcode("update-index", "--refresh", "-q")
+def get_dirty_files() -> str:
+    """Returns a string listing uncommitted files in the working tree or index.
+
+    Uses `git --no-optional-locks status --porcelain=v1 --no-renames -uno
+    --ignore-submodules=all`. This achieves several critical goals:
+    1. Single C Process Pass: Refreshes the index stat cache and compares
+       entries against HEAD in a single pass, avoiding the dual-process
+       overhead of `git update-index --refresh` followed by `git diff-index`.
+    2. Zero Index Write-Lock Contention: The `--no-optional-locks` flag ensures
+       Git performs stat cache updates in-memory only and never writes to disk
+       holding `.git/index.lock`, preventing race conditions with concurrent
+       Git processes, file watchers, or background hooks.
+    3. No Rename Similarity Overhead: Passing `--no-renames` avoids expensive
+       similarity hash calculations on large changesets with additions and
+       deletions, since this check only tests for the existence of modifications.
+    4. Submodule Traversal Protection: Passing `--ignore-submodules=all` ensures
+       that submodules (e.g. 960+ submodules in Chromium) are not recursively
+       scanned for untracked or uncommitted changes.
+    5. Unborn Branch Resilience: Unlike `diff-index HEAD` (which fails on an
+       empty repository before the first commit), `git status` natively handles
+       unborn branches.
+
+    Returns:
+        A string containing porcelain status lines (e.g. ' M foo.cc\nA  bar.h')
+        if there are uncommitted modifications or staged changes, or an empty
+        string if the working directory is clean.
+    """
     return run(
-        "diff-index", "--ignore-submodules", "--name-status", "HEAD", "--"
+        "--no-optional-locks",
+        "status",
+        "--porcelain=v1",
+        "--no-renames",
+        "-uno",
+        "--ignore-submodules=all",
     )
 
 
-def is_dirty_git_tree(cmd):
-    w = lambda s: sys.stderr.write(s + "\n")  # noqa: E731
+def _print_dirty_tree_error(cmd: str, dirty: str) -> None:
+    """Formats and writes dirty tree diagnostic messages to sys.stderr."""
+    sys.stderr.write(
+        "Cannot %s with a dirty tree. Commit%s or stash your changes first.\n"
+        % (cmd, "" if cmd == "upload" else ", freeze")
+    )
+    sys.stderr.write("Uncommitted files: (git status -uno)\n")
+    sys.stderr.write(dirty[:4096] + "\n")
+    if len(dirty) > 4096:  # pragma: no cover
+        sys.stderr.write('... (run "git status -uno" to see full output).\n')
 
+
+def is_dirty_git_tree(cmd: str) -> bool:
+    """Checks whether the git tree has uncommitted modifications.
+
+    Args:
+        cmd: Name of the git command invoking the check (e.g. 'upload',
+            'presubmit', 'land', 'freeze').
+
+    Returns:
+        True if the working tree or index has uncommitted changes (and prints
+        a descriptive error message to sys.stderr), or False if the tree is
+        clean.
+    """
     dirty = get_dirty_files()
     if dirty:
-        w(
-            "Cannot %s with a dirty tree. Commit%s or stash your changes first."
-            % (cmd, "" if cmd == "upload" else ", freeze")
-        )
-        w("Uncommitted files: (git diff-index --name-status HEAD)")
-        w(dirty[:4096])
-        if len(dirty) > 4096:  # pragma: no cover
-            w(
-                '... (run "git diff-index --name-status HEAD" to see full '
-                "output)."
-            )
+        _print_dirty_tree_error(cmd, dirty)
         return True
     return False
+
+
+def async_is_dirty_git_tree(cmd: str) -> Callable[[], bool]:
+    """Runs get_dirty_files() in a background daemon thread.
+
+    Allows long-running dirty checks on massive repositories (such as Chromium)
+    to run concurrently with early startup operations (such as authentication
+    verification, CLI option validation, and network metadata pre-warming).
+
+    To prevent terminal output interleaving, the background worker only queries
+    the dirty files in memory. Formatting and writing error messages to
+    `sys.stderr` is deferred until the returned callable is invoked on the
+    main thread.
+
+    Args:
+        cmd: Name of the git command invoking the check (e.g. 'upload').
+
+    Returns:
+        A parameterless callable `wait_and_check() -> bool` that joins the
+        background worker thread, safely outputs error messages to sys.stderr on
+        the main thread if dirty, and returns True if the working tree is dirty
+        (or False if clean).
+    """
+    result: Optional[str] = None
+    error: Optional[Exception] = None
+
+    def _worker():
+        nonlocal result, error
+        try:
+            result = get_dirty_files()
+        except Exception as e:
+            error = e
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+
+    def _wait_and_check() -> bool:
+        thread.join()
+        if error is not None:
+            raise error
+
+        if result:
+            _print_dirty_tree_error(cmd, result)
+            return True
+        return False
+
+    return _wait_and_check
 
 
 def status(ignore_submodules=None):

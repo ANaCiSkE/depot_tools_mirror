@@ -892,15 +892,18 @@ class GitMutableStructuredTest(
         self.assertEqual(diverged_branches, ["branch_K", "branch_L"])
 
     def testIsGitTreeDirty(self):
+        # 1. Clean repo is not dirty.
         retval = []
         self.repo.capture_stdio(
             lambda: retval.append(
                 self.repo.run(self.gc.is_dirty_git_tree, "foo")
             )
         )
-
         self.assertEqual(False, retval[0])
-        self.repo.open("test.file", "w").write("test data")
+
+        # 2. Staged file marks tree as dirty.
+        with self.repo.open("test.file", "w") as f:
+            f.write("test data")
         self.repo.git("add", "test.file")
 
         retval = []
@@ -910,6 +913,90 @@ class GitMutableStructuredTest(
             )
         )
         self.assertEqual(True, retval[0])
+
+        # 3. Commit staged file; tree is clean again.
+        self.repo.git("commit", "-m", "commit test.file")
+        retval = []
+        self.repo.capture_stdio(
+            lambda: retval.append(
+                self.repo.run(self.gc.is_dirty_git_tree, "foo")
+            )
+        )
+        self.assertEqual(False, retval[0])
+
+        # 4. Unstaged modification marks tree as dirty.
+        with self.repo.open("test.file", "w") as f:
+            f.write("modified test data")
+        retval = []
+        self.repo.capture_stdio(
+            lambda: retval.append(
+                self.repo.run(self.gc.is_dirty_git_tree, "foo")
+            )
+        )
+        self.assertEqual(True, retval[0])
+
+        # 5. Untracked file does NOT mark tree as dirty (per -uno).
+        self.repo.git("checkout", "HEAD", "--", "test.file")
+        with self.repo.open("untracked.file", "w") as f:
+            f.write("untracked")
+        retval = []
+        self.repo.capture_stdio(
+            lambda: retval.append(
+                self.repo.run(self.gc.is_dirty_git_tree, "foo")
+            )
+        )
+        self.assertEqual(False, retval[0])
+
+    def testAsyncIsGitTreeDirty(self):
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.repo.repo_path)
+            # 1. Clean repo returns False asynchronously.
+            checker = self.gc.async_is_dirty_git_tree("foo")
+            self.assertFalse(checker())
+
+            # 2. Staged modification returns True asynchronously.
+            with self.repo.open("async_test.file", "w") as f:
+                f.write("test data")
+            self.repo.git("add", "async_test.file")
+
+            with mock.patch("sys.stderr", new_callable=StringIO):
+                checker = self.gc.async_is_dirty_git_tree("foo")
+                self.assertTrue(checker())
+        finally:
+            os.chdir(old_cwd)
+
+    def testAsyncIsGitTreeDirty_ExceptionPropagated(self):
+        with mock.patch.object(
+            self.gc,
+            "get_dirty_files",
+            side_effect=RuntimeError("simulated error"),
+        ):
+            checker = self.gc.async_is_dirty_git_tree("foo")
+            with self.assertRaises(RuntimeError) as ctx:
+                checker()
+            self.assertEqual("simulated error", str(ctx.exception))
+
+    def testIsGitTreeDirty_UnbornBranch(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_path = os.path.realpath(td)
+            subprocess2.check_call(["git", "init", "-q"], cwd=repo_path)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(repo_path)
+                with mock.patch("sys.stderr", new_callable=StringIO):
+                    # Empty repo on unborn branch is clean.
+                    self.assertFalse(self.gc.is_dirty_git_tree("foo"))
+
+                    # Adding a staged file marks unborn branch as dirty.
+                    with open(os.path.join(repo_path, "new.txt"), "w") as f:
+                        f.write("data")
+                    subprocess2.check_call(
+                        ["git", "add", "new.txt"], cwd=repo_path
+                    )
+                    self.assertTrue(self.gc.is_dirty_git_tree("foo"))
+            finally:
+                os.chdir(old_cwd)
 
     def testSquashBranch(self):
         self.repo.git("checkout", "branch_K")
