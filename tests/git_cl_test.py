@@ -2800,6 +2800,197 @@ class TestGitCl(unittest.TestCase):
             git_cl.UploadAllSquashed(options, [])
 
     @mock.patch(
+        "git_cl.Changelist.GetGerritHost",
+        return_value="chromium-review.googlesource.com",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteBranch",
+        return_value=("origin", "refs/remotes/origin/main"),
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        return_value="current-upstream-ancestor",
+    )
+    @mock.patch("git_cl.Changelist.PostUploadUpdates")
+    @mock.patch("git_cl.Changelist._RunGitPushWithTraces")
+    @mock.patch("git_cl._UploadAllPrecheck")
+    @mock.patch("git_cl.Changelist.PrepareSquashedCommit")
+    @mock.patch(
+        "scm.GIT.GetBranch",
+        return_value="current-branch",
+    )
+    def test_upload_all_squashed_skips_redundant_checkout(
+        self,
+        mockGetBranch,
+        mockSquashedCommit,
+        mockUploadAllPrecheck,
+        mockRunGitPush,
+        mockPostUploadUpdates,
+        *_mocks,
+    ):
+        new_upload = git_cl._NewUpload(
+            [],
+            [],
+            "commit-to-push",
+            "end-commit",
+            "parent",
+            git_cl.ChangeDescription("description"),
+            0,
+        )
+        mockSquashedCommit.return_value = new_upload
+        cl = git_cl.Changelist(branchref="refs/heads/current-branch")
+        mockUploadAllPrecheck.return_value = ([cl], False)
+
+        options = optparse.Values()
+        options.send_mail = options.private = False
+        options.squash = True
+        options.title = None
+        options.message = "msg"
+        options.topic = None
+        options.enable_auto_submit = False
+        options.enable_owners_override = False
+        options.set_bot_commit = False
+        options.cq_dry_run = False
+        options.use_commit_queue = False
+        options.hashtags = []
+        options.target_branch = None
+        options.push_options = []
+
+        mockRunGitPush.return_value = (
+            "remote:   https://chromium-review."
+            "googlesource.com/c/project/+/1234\n"
+        )
+
+        # self.calls is empty: no git checkout commands should be invoked.
+        self.calls = []
+
+        git_cl.UploadAllSquashed(options, [])
+
+        self.assertEqual([], self.calls)
+        mockSquashedCommit.assert_called_once()
+        mockRunGitPush.assert_called_once()
+        mockPostUploadUpdates.assert_called_once()
+
+    @mock.patch(
+        "git_cl.Changelist.GetGerritHost",
+        return_value="chromium-review.googlesource.com",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteBranch",
+        return_value=("origin", "refs/remotes/origin/main"),
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        return_value="current-upstream-ancestor",
+    )
+    @mock.patch("git_cl._UploadAllPrecheck")
+    @mock.patch("git_cl.Changelist.PrepareSquashedCommit")
+    @mock.patch(
+        "scm.GIT.GetBranch",
+        return_value="current-branch",
+    )
+    def test_upload_all_squashed_single_branch_exception_skips_restore(
+        self,
+        mockGetBranch,
+        mockSquashedCommit,
+        mockUploadAllPrecheck,
+        *_mocks,
+    ):
+        cl = git_cl.Changelist(branchref="refs/heads/current-branch")
+        mockUploadAllPrecheck.return_value = ([cl], False)
+        mockSquashedCommit.side_effect = RuntimeError("Hook failure")
+
+        options = optparse.Values()
+        options.squash = True
+
+        # self.calls is empty: no checkouts should be called even on failure.
+        self.calls = []
+
+        with self.assertRaises(RuntimeError):
+            git_cl.UploadAllSquashed(options, [])
+
+        self.assertEqual([], self.calls)
+
+    @mock.patch(
+        "git_cl.Changelist.GetGerritHost",
+        return_value="chromium-review.googlesource.com",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteBranch",
+        return_value=("origin", "refs/remotes/origin/main"),
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        side_effect=["current-upstream-ancestor", "next-upstream-ancestor"],
+    )
+    @mock.patch("git_cl.Changelist.PostUploadUpdates")
+    @mock.patch("git_cl.Changelist._RunGitPushWithTraces")
+    @mock.patch("git_cl._UploadAllPrecheck")
+    @mock.patch("git_cl.Changelist.PrepareSquashedCommit")
+    @mock.patch(
+        "scm.GIT.GetBranch",
+        return_value="current-branch",
+    )
+    def test_upload_all_squashed_multi_branch_from_leaf(
+        self,
+        mockGetBranch,
+        mockSquashedCommit,
+        mockUploadAllPrecheck,
+        mockRunGitPush,
+        mockPostUploadUpdates,
+        *_mocks,
+    ):
+        new_upload = git_cl._NewUpload(
+            [],
+            [],
+            "commit-to-push",
+            "end-commit",
+            "parent",
+            git_cl.ChangeDescription("description"),
+            0,
+        )
+        mockSquashedCommit.return_value = new_upload
+        cls = [
+            git_cl.Changelist(branchref="refs/heads/current-branch"),
+            git_cl.Changelist(branchref="refs/heads/upstream-branch"),
+        ]
+        mockUploadAllPrecheck.return_value = (cls, False)
+
+        options = optparse.Values()
+        options.send_mail = options.private = False
+        options.squash = True
+        options.title = None
+        options.message = "msg"
+        options.topic = None
+        options.enable_auto_submit = False
+        options.enable_owners_override = False
+        options.set_bot_commit = False
+        options.cq_dry_run = False
+        options.use_commit_queue = False
+        options.hashtags = []
+        options.target_branch = None
+        options.push_options = []
+
+        mockRunGitPush.return_value = (
+            "remote:   https://chromium-review."
+            "googlesource.com/c/project/+/1233\n"
+            "remote:   https://chromium-review."
+            "googlesource.com/c/project/+/1234\n"
+        )
+
+        # Expected checkout sequence: checkout upstream-branch, then
+        # current-branch, and restore current-branch in finally.
+        self.calls = [
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "current-branch"],), ""),
+        ]
+
+        git_cl.UploadAllSquashed(options, [])
+
+        self.assertEqual([], self.calls)
+
+    @mock.patch(
         "git_cl.Changelist._GerritCommitMsgHookCheck",
         lambda offer_removal: None,
     )

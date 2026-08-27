@@ -6487,10 +6487,15 @@ def UploadAllSquashed(
         root_branch = scm.GIT.GetBranch(settings.GetRoot())
         if orig_parent is None:
             orig_parent = parent
+        current_branch = root_branch
+        needs_restore = False
         try:
             for i, cl in enumerate(ordered_cls):
-                if cl.GetBranch():
-                    RunGit(["checkout", "-q", "--detach", cl.GetBranch()])
+                cl_branch = cl.GetBranch()
+                if cl_branch and cl_branch != current_branch:
+                    RunGit(["checkout", "-q", "--detach", cl_branch])
+                    current_branch = cl_branch
+                    needs_restore = True
                 # If we're in the middle of the stack, set end_commit to
                 # downstream's direct ancestor.
                 if i + 1 < len(ordered_cls):
@@ -6506,7 +6511,7 @@ def UploadAllSquashed(
                 parent = new_upload.commit_to_push
                 orig_parent = child_base_commit
         finally:
-            if root_branch:
+            if root_branch and needs_restore:
                 RunGit(["checkout", "-q", root_branch])
 
     # Create refspec options
