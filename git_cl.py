@@ -1839,6 +1839,80 @@ class Changelist(object):
                 json_results = gclient_utils.FileRead(json_output)
                 return json.loads(json_results)
 
+    def HasPostUploadHook(self, upstream: Optional[str] = None) -> bool:
+        """Returns True if any relevant presubmit script defines PostUploadHook.
+
+        Avoids spawning a redundant ~250ms presubmit_support subprocess when
+        no post-upload hooks are actually defined by the change's presubmit files.
+        Fails open (returns True) on any error or ambiguity.
+        """
+        try:
+            root = settings.GetRoot()
+            if not root:
+                return True
+            root = os.path.abspath(root)
+
+            # Capture status with ignore_submodules=False to ensure submodules
+            # are not ignored (matching presubmit_support.py).
+            status = scm.GIT.CaptureStatus(
+                root, upstream, ignore_submodules=False
+            )
+            files = [f for _, f in status]
+            if not files:
+                # If there are no modified files (e.g. description-only upload),
+                # fail open to preserve historical behavior.
+                return True
+
+            # Respect inherit-review-settings-ok (matching presubmit_support.py)
+            stop_root = root
+            if os.path.isfile(os.path.join(root, "inherit-review-settings-ok")):
+                stop_root = None
+
+            directories = set()
+            for f in files:
+                p = os.path.normpath(os.path.join(root, f))
+                if os.path.isdir(p):
+                    directories.add(p)
+                directories.add(os.path.dirname(p))
+            candidate_dirs = set()
+            for directory in directories:
+                while directory and directory not in candidate_dirs:
+                    candidate_dirs.add(directory)
+                    if directory == stop_root:
+                        break
+                    parent_dir = os.path.dirname(directory)
+                    if parent_dir == directory:
+                        break
+                    directory = parent_dir
+
+            for d in candidate_dirs:
+                try:
+                    entries = os.listdir(d)
+                except (FileNotFoundError, NotADirectoryError):
+                    continue
+
+                for f in entries:
+                    if (
+                        f.startswith("PRESUBMIT")
+                        and f.endswith(".py")
+                        and not f.startswith("PRESUBMIT_test")
+                    ):
+                        p = os.path.join(d, f)
+                        if not os.path.isfile(p):
+                            continue
+                        try:
+                            content = gclient_utils.FileRead(p)
+                            if re.search(r"\bPostUploadHook\b", content):
+                                return True
+                        except Exception:
+                            # Fail open if a presubmit file cannot be read.
+                            return True
+
+            return False
+        except (Exception, SystemExit):
+            # Optimization must strictly fail open on any exception.
+            return True
+
     def RunPostUploadHook(self, verbose, upstream, description):
         args = self._GetCommonPresubmitArgs(verbose, upstream)
         args.append("--post_upload")
@@ -2221,7 +2295,9 @@ class Changelist(object):
             LAST_UPLOAD_HASH_CONFIG_KEY, new_upload.new_last_uploaded_commit
         )
 
-        if settings.GetRunPostUploadHook():
+        if settings.GetRunPostUploadHook() and self.HasPostUploadHook(
+            new_upload.parent
+        ):
             self.RunPostUploadHook(
                 options.verbose,
                 new_upload.parent,
@@ -2293,7 +2369,9 @@ class Changelist(object):
                     scm.GIT.ResolveCommit(settings.GetRoot(), "HEAD"),
                 )
             # Run post upload hooks, if specified.
-            if settings.GetRunPostUploadHook():
+            if settings.GetRunPostUploadHook() and self.HasPostUploadHook(
+                base_branch
+            ):
                 self.RunPostUploadHook(
                     options.verbose, base_branch, change_desc.description
                 )

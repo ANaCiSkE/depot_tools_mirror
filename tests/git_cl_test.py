@@ -6783,6 +6783,239 @@ class ChangelistTest(unittest.TestCase):
             "/tmp/fake-temp1", "description"
         )
 
+    @mock.patch.object(
+        gclient_utils,
+        "FileRead",
+        return_value="def CheckChangeOnUpload(): pass",
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT.py"])
+    @mock.patch("os.path.isfile", return_value=True)
+    def testHasPostUploadHook_NoHook(
+        self, _mock_isfile, _mock_listdir, _mock_status, _mock_fileread
+    ):
+        cl = git_cl.Changelist()
+        self.assertFalse(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch.object(
+        gclient_utils,
+        "FileRead",
+        return_value="def PostUploadHook(gerrit, change, output): pass",
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT.py"])
+    @mock.patch("os.path.isfile", return_value=True)
+    def testHasPostUploadHook_WithHook(
+        self, _mock_isfile, _mock_listdir, _mock_status, _mock_fileread
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch.object(
+        gclient_utils, "FileRead", return_value="def PostUploadHook(): pass"
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT_extra.py"])
+    @mock.patch("os.path.isfile", return_value=True)
+    def testHasPostUploadHook_VariantFilename(
+        self, _mock_isfile, _mock_listdir, _mock_status, _mock_fileread
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch.object(
+        gclient_utils, "FileRead", return_value="def PostUploadHook(): pass"
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT.py"])
+    @mock.patch(
+        "os.path.isfile",
+        side_effect=lambda p: (
+            "inherit-review-settings-ok" in p or "PRESUBMIT.py" in p
+        ),
+    )
+    def testHasPostUploadHook_InheritReviewSettingsOk(
+        self, _mock_isfile, _mock_listdir, _mock_status, _mock_fileread
+    ):
+        cl = git_cl.Changelist()
+        # Should traverse beyond root when inherit-review-settings-ok is present
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch.object(
+        gclient_utils, "FileRead", return_value="def PostUploadHook(): pass"
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "submodule_dir")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT.py"])
+    @mock.patch("os.path.isfile", return_value=True)
+    def testHasPostUploadHook_SubmoduleStatus(
+        self, _mock_isfile, _mock_listdir, mock_status, _mock_fileread
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+        mock_status.assert_called_once_with(
+            os.path.abspath("root"), "upstream", ignore_submodules=False
+        )
+
+    @mock.patch.object(
+        gclient_utils,
+        "FileRead",
+        return_value="def PostUploadHook(gerrit, change, output): pass",
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "submodule_dir")])
+    @mock.patch("os.path.isfile", return_value=True)
+    @mock.patch("os.path.isdir", return_value=True)
+    @mock.patch("os.listdir")
+    def testHasPostUploadHook_SubmoduleDirectoryScanned(
+        self,
+        mock_listdir,
+        _mock_isdir,
+        _mock_isfile,
+        _mock_status,
+        _mock_fileread,
+    ):
+        submodule_path = os.path.normpath(
+            os.path.join(os.path.abspath("root"), "submodule_dir")
+        )
+
+        def listdir_side_effect(path):
+            if path == submodule_path:
+                return ["PRESUBMIT.py"]
+            return []
+
+        mock_listdir.side_effect = listdir_side_effect
+
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+        mock_listdir.assert_any_call(submodule_path)
+
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.path.isfile", return_value=True)
+    @mock.patch("os.path.isdir")
+    @mock.patch("os.listdir", return_value=[])
+    def testHasPostUploadHook_RegularFileDoesNotListdirFile(
+        self, mock_listdir, mock_isdir, _mock_isfile, _mock_status
+    ):
+        mock_isdir.side_effect = lambda p: not p.endswith(".cc")
+        cl = git_cl.Changelist()
+        cl.HasPostUploadHook("upstream")
+        file_path = os.path.normpath(
+            os.path.join(os.path.abspath("root"), "foo.cc")
+        )
+        self.assertNotIn(
+            file_path, [call[0][0] for call in mock_listdir.call_args_list]
+        )
+
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[])
+    def testHasPostUploadHook_NoFilesDescriptionOnlyChangeFailsOpen(
+        self, _mock_status
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch("scm.GIT.CaptureStatus", side_effect=SystemExit(1))
+    def testHasPostUploadHook_SystemExitFailsOpen(self, _mock_status):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch.object(
+        gclient_utils, "FileRead", side_effect=PermissionError("EACCES")
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT.py"])
+    @mock.patch("os.path.isfile", return_value=True)
+    def testHasPostUploadHook_UnreadablePresubmitFailsOpen(
+        self, _mock_isfile, _mock_listdir, _mock_status, _mock_fileread
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch.object(git_cl.Settings, "GetRoot", return_value=".")
+    @mock.patch.object(
+        gclient_utils,
+        "FileRead",
+        return_value="def PostUploadHook(gerrit, change, output): pass",
+    )
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.listdir", return_value=["PRESUBMIT.py"])
+    @mock.patch("os.path.isfile", return_value=True)
+    def testHasPostUploadHook_RelativeRootPathAbspath(
+        self,
+        _mock_isfile,
+        _mock_listdir,
+        _mock_status,
+        _mock_fileread,
+        _mock_root,
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.path.isfile", return_value=True)
+    @mock.patch("os.listdir", side_effect=PermissionError("EACCES"))
+    def testHasPostUploadHook_PermissionErrorOnListdirFailsOpen(
+        self, _mock_listdir, _mock_isfile, _mock_status
+    ):
+        cl = git_cl.Changelist()
+        self.assertTrue(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch("scm.GIT.CaptureStatus", return_value=[("M", "foo.cc")])
+    @mock.patch("os.path.isfile", return_value=True)
+    @mock.patch("os.listdir", side_effect=FileNotFoundError("ENOENT"))
+    def testHasPostUploadHook_FileNotFoundErrorOnListdirIgnored(
+        self, _mock_listdir, _mock_isfile, _mock_status
+    ):
+        cl = git_cl.Changelist()
+        self.assertFalse(cl.HasPostUploadHook("upstream"))
+
+    @mock.patch("git_cl.Settings.GetRunPostUploadHook", return_value=True)
+    def testPostUploadUpdates_SkipsWhenNoHook(self, _mock_get_hook):
+        cl = git_cl.Changelist()
+        options = mock.MagicMock()
+        new_upload = mock.MagicMock()
+        new_upload.parent = "upstream"
+        new_upload.prev_patchset = 1
+        new_upload.commit_to_push = "abc"
+        new_upload.new_last_uploaded_commit = "def"
+        new_upload.reviewers = []
+        new_upload.ccs = []
+
+        with (
+            mock.patch.object(cl, "HasPostUploadHook", return_value=False),
+            mock.patch.object(cl, "RunPostUploadHook") as mock_run_hook,
+            mock.patch.object(cl, "SetPatchset"),
+            mock.patch.object(cl, "_GitSetBranchConfigValue"),
+        ):
+            cl.PostUploadUpdates(
+                options, new_upload, "12345", update_reviewers=False
+            )
+            mock_run_hook.assert_not_called()
+
+    @mock.patch("git_cl.Settings.GetRunPostUploadHook", return_value=True)
+    def testPostUploadUpdates_RunsWhenHookPresent(self, _mock_get_hook):
+        cl = git_cl.Changelist()
+        options = mock.MagicMock()
+        new_upload = mock.MagicMock()
+        new_upload.parent = "upstream"
+        new_upload.change_desc.description = "desc"
+        new_upload.prev_patchset = 1
+        new_upload.commit_to_push = "abc"
+        new_upload.new_last_uploaded_commit = "def"
+        new_upload.reviewers = []
+        new_upload.ccs = []
+
+        with (
+            mock.patch.object(cl, "HasPostUploadHook", return_value=True),
+            mock.patch.object(cl, "RunPostUploadHook") as mock_run_hook,
+            mock.patch.object(cl, "SetPatchset"),
+            mock.patch.object(cl, "_GitSetBranchConfigValue"),
+        ):
+            cl.PostUploadUpdates(
+                options, new_upload, "12345", update_reviewers=False
+            )
+            mock_run_hook.assert_called_once_with(
+                options.verbose, "upstream", "desc"
+            )
+
     def testRunPostUploadHookPy3Only(self):
         cl = git_cl.Changelist()
         cl.RunPostUploadHook(2, "upstream", "description")
