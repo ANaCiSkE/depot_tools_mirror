@@ -8,6 +8,7 @@ import json
 import os.path
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -1326,6 +1327,176 @@ class CheckGNFormattedTest(unittest.TestCase):
         self.assertEqual(len(cmd2), 6)
         # Third chunk has 1 file (+ 4 prefix args = 5)
         self.assertEqual(len(cmd3), 5)
+
+
+class CheckAuthorizedAuthorTest(unittest.TestCase):
+    def setUp(self):
+        self.input_api = MockInputApi()
+        self.output_api = MockOutputApi()
+        self.td = tempfile.TemporaryDirectory()
+        self.authors_path = os.path.join(self.td.name, "AUTHORS")
+        self.input_api.PresubmitLocalPath = lambda: self.td.name
+
+    def tearDown(self):
+        presubmit_canned_checks._ParseAuthors.cache_clear()
+        self.td.cleanup()
+
+    def _write_authors(self, lines):
+        with open(self.authors_path, "w", encoding="utf-8", newline="") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def test_no_author(self):
+        self.input_api.change.author_email = None
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+
+    def test_bot_allowlist(self):
+        self.input_api.change.author_email = "bot@example.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api,
+            self.output_api,
+            bot_allowlist=["bot@example.com"],
+        )
+        self.assertEqual([], results)
+
+    def test_missing_authors_file(self):
+        self.input_api.change.author_email = "anyone@example.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(1, len(results))
+        self.assertIn("Failed to read AUTHORS file", results[0].message)
+
+    def test_exact_author_match(self):
+        self._write_authors(
+            [
+                "# Comment",
+                "John Doe <jdoe@example.com>",
+                "Jane Smith <jsmith@sample.org>",
+            ]
+        )
+        self.input_api.change.author_email = "jdoe@example.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+
+    def test_wildcard_domain_match(self):
+        self._write_authors(
+            [
+                "# Organization wildcards",
+                "Google Inc. <*@google.com>",
+                "The Chromium Authors <*@chromium.org>",
+            ]
+        )
+        self.input_api.change.author_email = "developer@google.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+
+    def test_arbitrary_wildcard_match(self):
+        self._write_authors(
+            [
+                "Nutanix <*nutanix.com>",
+            ]
+        )
+        self.input_api.change.author_email = "eng@corp.nutanix.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+
+    def test_character_class_wildcards(self):
+        self._write_authors(
+            [
+                "Bot <bot-[0-9]@example.com>",
+                "Cluster <*@[a-c].example.com>",
+            ]
+        )
+        self.input_api.change.author_email = "bot-5@example.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+
+        self.input_api.change.author_email = "bot-x@example.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(1, len(results))
+
+        self.input_api.change.author_email = "worker@b.example.com"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+
+    def test_unauthorized_author_warning_on_upload(self):
+        self._write_authors(
+            [
+                "Google Inc. <*@google.com>",
+            ]
+        )
+        self.input_api.is_committing = False
+        self.input_api.no_diffs = False
+        self.input_api.change.author_email = "unauthorized@unknown.org"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(1, len(results))
+        self.assertEqual("warning", results[0].type)
+        self.assertIn(
+            "unauthorized@unknown.org is not in AUTHORS", results[0].message
+        )
+
+    def test_unauthorized_author_error_on_commit(self):
+        self._write_authors(
+            [
+                "Google Inc. <*@google.com>",
+            ]
+        )
+        self.input_api.is_committing = True
+        self.input_api.change.author_email = "unauthorized@unknown.org"
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(1, len(results))
+        self.assertEqual("error", results[0].type)
+        self.assertIn(
+            "unauthorized@unknown.org is not in AUTHORS", results[0].message
+        )
+
+    def test_cache_invalidation_on_file_update(self):
+        self._write_authors(
+            [
+                "Original Author <orig@example.com>",
+            ]
+        )
+        self.input_api.change.author_email = "newbie@example.com"
+        # First check fails
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(1, len(results))
+
+        # Update AUTHORS with newbie@example.com and advance mtime
+        new_mtime = os.path.getmtime(self.authors_path) + 2
+        self._write_authors(
+            [
+                "Original Author <orig@example.com>",
+                "Newbie <newbie@example.com>",
+            ]
+        )
+        os.utime(self.authors_path, (new_mtime, new_mtime))
+
+        # Second check succeeds via cache reload
+        results = presubmit_canned_checks.CheckAuthorizedAuthor(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
 
 
 class CheckForCommitObjectsTest(unittest.TestCase):

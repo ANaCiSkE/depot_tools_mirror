@@ -7,6 +7,7 @@ import datetime
 import functools
 import io as _io
 import os as _os
+import re as _re
 import time
 
 import metadata.discover
@@ -186,6 +187,56 @@ def CheckDescriptionUsesColonInsteadOfEquals(input_api, output_api):
 
 ### Content checks
 
+_FNMATCH_METACHARS = ("*", "?", "[", "]")
+_AUTHOR_RE = _re.compile(r"[^#]+\s+\<(.+?)\>\s*$")
+
+
+@functools.lru_cache(maxsize=16)
+def _ParseAuthors(authors_path, mtime, file_size):
+    """Parses an AUTHORS file into exact emails and wildcard patterns.
+
+    Args:
+        authors_path: Absolute path to the AUTHORS file.
+        mtime: File modification timestamp, used for LRU cache invalidation.
+        file_size: File size in bytes, used for LRU cache invalidation.
+
+    Returns:
+        A tuple of:
+          - frozenset of exact lowercase email addresses
+          - tuple of wildcard domain suffixes (e.g. '@google.com')
+          - tuple of arbitrary wildcard patterns (e.g. '*nutanix.com')
+          - tuple of all valid author patterns (for diagnostic logging)
+    """
+    del file_size  # Included in cache key for invalidation.
+    exact_authors = set()
+    wildcard_domains = []
+    other_wildcards = []
+    valid_authors = []
+
+    with _io.open(authors_path, encoding="utf-8") as fp:
+        for line in fp:
+            m = _AUTHOR_RE.match(line)
+            if not m:
+                continue
+            email = m.group(1).lower()
+            valid_authors.append(email)
+            has_meta = any(c in email for c in _FNMATCH_METACHARS)
+            if email.startswith("*@") and not any(
+                c in email[2:] for c in _FNMATCH_METACHARS
+            ):
+                wildcard_domains.append(email[1:])
+            elif has_meta:
+                other_wildcards.append(email)
+            else:
+                exact_authors.add(email)
+
+    return (
+        frozenset(exact_authors),
+        tuple(wildcard_domains),
+        tuple(other_wildcards),
+        tuple(valid_authors),
+    )
+
 
 def CheckAuthorizedAuthor(input_api, output_api, bot_allowlist=None):
     """For non-googler/chromites committers, verify the author's email address is
@@ -208,18 +259,40 @@ def CheckAuthorizedAuthor(input_api, output_api, bot_allowlist=None):
     authors_path = input_api.os_path.join(
         input_api.PresubmitLocalPath(), "AUTHORS"
     )
-    author_re = input_api.re.compile(r"[^#]+\s+\<(.+?)\>\s*$")
-    valid_authors = []
-    with _io.open(authors_path, encoding="utf-8") as fp:
-        for line in fp:
-            m = author_re.match(line)
-            if m:
-                valid_authors.append(m.group(1).lower())
+    try:
+        st = _os.stat(authors_path)
+        mtime = getattr(st, "st_mtime_ns", st.st_mtime)
+        file_size = st.st_size
+    except (IOError, OSError) as e:
+        return [
+            error_type("Failed to read AUTHORS file %s: %s" % (authors_path, e))
+        ]
 
-    if not any(
-        input_api.fnmatch.fnmatch(author.lower(), valid)
-        for valid in valid_authors
-    ):
+    try:
+        (
+            exact_authors,
+            wildcard_domains,
+            other_wildcards,
+            valid_authors,
+        ) = _ParseAuthors(authors_path, mtime, file_size)
+    except (IOError, OSError) as e:
+        return [
+            error_type(
+                "Failed to parse AUTHORS file %s: %s" % (authors_path, e)
+            )
+        ]
+
+    author_lower = author.lower()
+    is_authorized = (
+        author_lower in exact_authors
+        or author_lower.endswith(wildcard_domains)
+        or any(
+            input_api.fnmatch.fnmatch(author_lower, pat)
+            for pat in other_wildcards
+        )
+    )
+
+    if not is_authorized:
         input_api.logging.info("Valid authors are %s", ", ".join(valid_authors))
         return [
             error_type(
