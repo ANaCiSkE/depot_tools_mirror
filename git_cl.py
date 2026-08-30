@@ -1948,18 +1948,20 @@ class Changelist(object):
         fixed = options.fixed
         if not self.GetIssue():
             # Extract bug number from branch name, but only if issue is being
-            # created. It must start with bug or fix, followed by _ or - and
-            # number. Optionally, it may contain _ or - after number with
-            # arbitrary text. Examples: bug-123 bug_123 fix-123
-            # fix-123-some-description
+            # created. Matches bug, b, fix, fixes, fixed at start of branch or
+            # delineated by separators (-, _, /, :), followed by optional
+            # separator and digits.
+            # Examples: bug-123 bug_123 b/123 b-123 b123 fix-123
+            # fix-123-some-description user/b/123/feat
             branch = self.GetBranch()
             if branch is not None:
-                match = re.match(
-                    r"^(?P<type>bug|fix(?:e[sd])?)[_-]?(?P<bugnum>\d+)([-_]|$)",
+                match = re.search(
+                    r"(?:^|[-_/:])(?P<type>bug|b|fix(?:e[sd])?)[-_/:]?(?P<bugnum>\d+)(?=[-_/:]|$)",
                     branch,
+                    re.IGNORECASE,
                 )
                 if not bug and not fixed and match:
-                    if match.group("type") == "bug":
+                    if match.group("type").lower() in ("b", "bug"):
                         bug = match.group("bugnum")
                     else:
                         fixed = match.group("bugnum")
@@ -6090,9 +6092,10 @@ def CMDupload(parser, args):
         git config --unset branch.branch_name.skip-deps-uploads
     Can also set the above globally by using the --global flag.
 
-    If the name of the checked out branch starts with "bug-" or "fix-" followed
-    by a bug number, this bug number is automatically populated in the CL
-    description.
+    If the name of the checked out branch contains a bug or fix pattern (e.g.
+    "bug-123", "bug123", "b/123", "b-123", "b123", "fix-123") at the start or
+    delineated by separators, this bug number is automatically populated in the
+    CL description.
 
     If subject contains text in square brackets or has "<text>: " prefix, such
     text(s) is treated as Gerrit hashtags. For example, CLs with subjects:
