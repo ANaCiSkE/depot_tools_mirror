@@ -36,6 +36,7 @@ import contextlib  # noqa: E402
 import gclient_utils  # noqa: E402
 import gerrit_util  # noqa: E402
 import git_cl  # noqa: E402
+import git_cl_core  # noqa: E402
 import git_common  # noqa: E402
 import git_footers  # noqa: E402
 import git_new_branch  # noqa: E402
@@ -1043,6 +1044,7 @@ class TestGitCl(unittest.TestCase):
         ).start()
         # It's important to reset settings to not have inter-tests interference.
         git_cl.settings = git_cl.Settings()
+        git_cl_core.settings = git_cl.settings
         self.addCleanup(mock.patch.stopall)
         gerrit_util._Authenticator._resolved = None
 

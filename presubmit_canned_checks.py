@@ -3649,10 +3649,6 @@ def CheckAyeAye(input_api, output_api):
     if not _os.path.exists(alint_path):
         return []
 
-    # Early exit if no files are affected in this change.
-    if not input_api.AffectedFiles():
-        return []
-
     def parse_output(output):
         json_dict = input_api.json.loads(output)
         results = [output_api.PresubmitError(x) for x in json_dict["errors"]]
@@ -3668,10 +3664,6 @@ def CheckAyeAye(input_api, output_api):
         input_api.change.RepositoryRoot(),
         "-t=30s",
     ]
-
-    upstream = input_api.change.UpstreamBranch()
-    if upstream:
-        cmd.extend(["--commit", upstream])
 
     # Use input_api.Command so that the check can run concurrently with other
     # checks when "git cl presubmit --parallel" is used.

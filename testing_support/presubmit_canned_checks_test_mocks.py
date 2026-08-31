@@ -114,14 +114,12 @@ class MockInputApi(object):
         self.os_path.exists = lambda x: x in f_list
 
     def AffectedFiles(self, file_filter=None, include_deletes=True):
-        files = []
         for file in self.files:
             if file_filter and not file_filter(file):
                 continue
             if not include_deletes and file.Action() == "D":
                 continue
-            files.append(file)
-        return files
+            yield file
 
     def AffectedSourceFiles(self, file_filter=None):
         return self.AffectedFiles(file_filter=file_filter)

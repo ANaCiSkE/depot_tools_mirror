@@ -38,6 +38,7 @@ def GIT(
     NOTE: The dependency on git_new_branch.create_new_branch seems pretty
     circular - this functionality should probably move to scm.GIT?
     """
+    scm.GIT.drop_config_cache()
     _branchref = [branchref or "refs/heads/main"]
 
     global_lock = threading.Lock()
