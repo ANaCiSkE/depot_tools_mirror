@@ -1,0 +1,27 @@
+requires-python = '>=3.11,<3.12'
+dependencies = [
+  'httplib2==0.13.1',
+  'six==1.10.0',
+  'requests==2.31.0',
+  'charset-normalizer==2.0.4',
+  'urllib3==1.26.6',
+  'idna==2.8',
+  "brotli==1.0.9; python_version != '3.11' or sys_platform != 'linux' or platform_machine != 'riscv64'",
+  'tzdata==2023.4',
+  'python-dateutil==2.7.3',
+  'certifi==2021.5.30',
+  'parameterized==0.8.1',
+  'pytest==9.0.2',
+  'pytest-mock==3.10.0',
+  'pytest-cov==6.2.1',
+  'iniconfig==2.1.0',
+  'packaging==25.0',
+  'pluggy==1.6.0',
+  'pygments==2.19.2',
+  'colorama==0.4.6',
+  'hjson==3.1.0',
+  'sqlparse==0.4.4',
+  'lxml==4.9.3',
+  'coverage==7.13.0',
+  'pyyaml==5.4.1+chromium.1'
+]

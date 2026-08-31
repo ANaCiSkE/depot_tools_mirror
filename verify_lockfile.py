@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'packaging==25.0'
+# ]
+# ///
+
 # Copyright 2026 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.

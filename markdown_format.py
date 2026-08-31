@@ -1,40 +1,17 @@
 #!/usr/bin/env vpython3
-# [VPYTHON:BEGIN]
-# python_version: "3.11"
-# # Note: mdformat depends on mdurl and markdown-it-py, which are included above.
-# wheel: <
-#   name: "infra/python/wheels/mdurl-py3"
-#   version: "version:0.1.2"
-# >
-# wheel: <
-#   name: "infra/python/wheels/markdown-it-py-py3"
-#   version: "version:2.2.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/mdformat-py3"
-#   version: "version:0.7.22"
-# >
-# wheel: <
-#   name: "infra/python/wheels/mdit-py-plugins-py3"
-#   version: "version:0.6.1"
-# >
-# wheel: <
-#   name: "infra/python/wheels/mdformat_frontmatter-py3"
-#   version: "version:2.0.10"
-# >
-# wheel: <
-#   name: "infra/python/wheels/mdformat_tables-py3"
-#   version: "version:1.0.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/wcwidth-py2_py3"
-#   version: "version:0.7.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/ruamel_yaml-py3"
-#   version: "version:0.17.16"
-# >
-# [VPYTHON:END]
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'mdurl==0.1.2',
+#   'markdown-it-py==2.2.0',
+#   'mdformat==0.7.22',
+#   'mdit-py-plugins==0.6.1',
+#   'mdformat-frontmatter==2.0.10',
+#   'mdformat-tables==1.0.0',
+#   'wcwidth==0.7.0',
+#   'ruamel-yaml==0.17.16'
+# ]
+# ///
 
 # Copyright 2026 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be

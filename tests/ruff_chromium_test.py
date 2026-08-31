@@ -1,32 +1,16 @@
 #!/usr/bin/env vpython3
 #
-# [VPYTHON:BEGIN]
-# python_version: "3.11"
-# wheel: <
-#   name: "infra/python/wheels/ruff/${vpython_platform}"
-#   version: "version:0.15.17"
-# >
-# wheel: <
-#   name: "infra/python/wheels/yapf-py3"
-#   version: "version:0.40.2"
-# >
-# wheel: <
-#   name: "infra/python/wheels/platformdirs-py3"
-#   version: "version:4.1.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/importlib-metadata-py3"
-#   version: "version:7.0.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/tomli-py3"
-#   version: "version:2.0.1"
-# >
-# wheel: <
-#  name: "infra/python/wheels/zipp-py3"
-#  version: "version:3.7.0"
-# >
-# [VPYTHON:END]
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'ruff==0.15.17',
+#   'yapf==0.40.2',
+#   'platformdirs==4.1.0',
+#   'importlib-metadata==7.0.0',
+#   'tomli==2.0.1',
+#   'zipp==3.7.0'
+# ]
+# ///
 
 # Copyright 2026 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
@@ -1005,9 +989,7 @@ class TestRunRuffWithRanges(unittest.TestCase):
             mock_run.call_args_list[1][0][0],
         )
         self.assertIn("--force-exclude", mock_run.call_args_list[1][0][0])
-        self.assertEqual(
-            mock_run.call_args_list[1][1]["input"], b"int_out\n"
-        )
+        self.assertEqual(mock_run.call_args_list[1][1]["input"], b"int_out\n")
         mock_stdout.buffer.write.assert_called_once_with(b"final_out\n")
 
     @patch("subprocess.run")
@@ -1240,9 +1222,7 @@ class TestYapfFallback(unittest.TestCase):
     @patch("subprocess.call")
     def test_yapf_fallback_stdin_strips_dash(self, mock_call):
         mock_call.return_value = 0
-        self.write_file(
-            "sub/.style.yapf", "[style]\nbased_on_style = pep8\n"
-        )
+        self.write_file("sub/.style.yapf", "[style]\nbased_on_style = pep8\n")
         test_file = os.path.join(self.test_dir, "sub/foo.py")
 
         with patch(

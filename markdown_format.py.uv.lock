@@ -1,0 +1,32 @@
+markdown-it-py==2.2.0 \
+    --hash=sha256:5a35f8d1870171d9acc47b99612dc146129b631baf04970128b568f190d0cc30 \
+    --hash=sha256:dcccc496b810913d915b1cefacc210aba0b715889992d3ebc44e603ad461dd1d
+    # via
+    #   mdformat
+    #   mdit-py-plugins
+mdformat==0.7.22 \
+    --hash=sha256:61122637c9e1d9be1329054f3fa216559f0d1f722b7919b060a8c2a4ae1850e5 \
+    --hash=sha256:82a26fd4d284e83f5d6bfe753fbee24b27c207fb328713d16cbcec3844fda31d
+    # via
+    #   mdformat-frontmatter
+    #   mdformat-tables
+mdformat-frontmatter==2.0.10 \
+    --hash=sha256:bdfa8c2b9905f1ce7f21797a07502134a1f5d6db1a7252da71b30a855bfb71f8 \
+    --hash=sha256:c99f7c52de0403e39f48b6a1c2bb79a4c8ce69304a799ff0e403e3957aa3669b
+mdformat-tables==1.0.0 \
+    --hash=sha256:94cd86126141b2adc3b04c08d1441eb1272b36c39146bab078249a41c7240a9a \
+    --hash=sha256:cc2ce71de8479462b8dddb04878401d0f3e20053642512cbbcc908fb7a8de342
+mdit-py-plugins==0.6.1 \
+    --hash=sha256:214c82fb2ac524472ab6a5bcab1de80f73b50443e187f401bfd77efbc7c6481d
+    # via mdformat-frontmatter
+mdurl==0.1.2 \
+    --hash=sha256:83258797dcf54b946a39e95c4d46d5787308d38d129cdd5d25ad13f576a8c705 \
+    --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
+    # via markdown-it-py
+ruamel-yaml==0.17.16 \
+    --hash=sha256:cc22b3ac3291ca0c292b08f15fa77b014e4b0b513941c3d70da2378671781bb4 \
+    --hash=sha256:ea21da1198c4b41b8e7a259301cc9710d3b972bf8ba52f06218478e6802dd1f1
+    # via mdformat-frontmatter
+wcwidth==0.7.0 \
+    --hash=sha256:5d69154c429a82910e241c738cd0e2976fac8a2dd47a1a805f4afed1c0f136f2
+    # via mdformat-tables

@@ -6,15 +6,12 @@
 # Note: We use tags here instead of refs because refs will always hit the
 # network to see if there are any updates.
 
-# [VPYTHON:BEGIN]
-# python_version: "3.8"
-#
-# wheel: <
-#   name: "infra/python/wheels/isort-py3"
-#   version: "version:5.10.1"
-# >
-#
-# [VPYTHON:END]
+# /// script
+# requires-python = '>=3.8,<3.9'
+# dependencies = [
+#   'isort==5.10.1'
+# ]
+# ///
 
 from pathlib import Path
 import sys

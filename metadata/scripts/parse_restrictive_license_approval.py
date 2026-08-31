@@ -3,17 +3,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# [VPYTHON:BEGIN]
-# python_version: "3.11"
-# wheel: <
-#   name: "infra/python/wheels/protobuf-py3"
-#   version: "version:4.25.1"
-# >
-# wheel: <
-#   name: "infra/python/wheels/googleapis-common-protos-py2_py3"
-#   version: "version:1.61.0"
-# >
-# [VPYTHON:END]
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'protobuf==4.25.1',
+#   'googleapis-common-protos==1.61.0'
+# ]
+# ///
 
 import json
 import os

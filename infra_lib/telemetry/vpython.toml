@@ -1,0 +1,22 @@
+requires-python = '>=3.11,<3.12'
+dependencies = [
+  'colorama==0.4.1',
+  'typing-extensions==4.0.1',
+  'zipp==3.17.0',
+  'importlib-metadata==6.0.0',
+  'wrapt==1.15.0',
+  'deprecated==1.2.13',
+  'opentelemetry-semantic-conventions==0.39b0',
+  'opentelemetry-api==1.18.0',
+  'opentelemetry-sdk==1.18.0',
+  'protobuf==4.25.1',
+  'googleapis-common-protos==1.61.0',
+  'packaging==21.3',
+  'pyparsing==2.4.7',
+  'iniconfig==1.1.1',
+  'tomli==2.0.1',
+  'exceptiongroup==1.1.2',
+  'pluggy==0.13.1',
+  'pytest==7.3.1',
+  'pytest-asyncio==0.19.0'
+]

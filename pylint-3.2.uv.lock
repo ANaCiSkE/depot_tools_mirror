@@ -1,0 +1,35 @@
+astroid==3.2.4 \
+    --hash=sha256:413658a61eeca6202a59231abb473f932038fbcbf1666587f66d482083413a25 \
+    --hash=sha256:c09664dd54a671a27c75076cc2235308f6c69b6a5d262cfeef19893b2221ce9e
+    # via pylint
+colorama==0.4.6 \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6 \
+    --hash=sha256:8a5a9494346d7ae2d8f599e4661738007d2df56dbbf4ccbbf7a6a23679a3a302
+    # via pylint
+dill==0.3.7 \
+    --hash=sha256:76b122c08ef4ce2eedcd4d1abd8e641114bfc6c2867f49f3c41facf65bf19f5e \
+    --hash=sha256:cbda025bbb08eb6c0cd3ff19f6327ba8460b226992620239578707511e169304
+    # via pylint
+isort==5.10.1 \
+    --hash=sha256:6f62d78e2f89b4500b080fe3a81690850cd254227f27f75c3a0c491a1f351ba7 \
+    --hash=sha256:ec0da0d88470e89ade75bf1e2ea7b4349ec906f95c84aff08e4d41dea6864d25
+    # via pylint
+mccabe==0.6.1 \
+    --hash=sha256:101508df60f1c008d702884fdfb7fb1a4c3fd0ae9e563bc114acb59c4420edb4 \
+    --hash=sha256:101508df60f1c008d702884fdfb7fb1a4c3fd0ae9e563bc114acb59c4420edb4 \
+    --hash=sha256:101508df60f1c008d702884fdfb7fb1a4c3fd0ae9e563bc114acb59c4420edb4 \
+    --hash=sha256:ab8a6258860da4b6677da4bd2fe5dc2c659cff31b3ee4f7f5d64e79735b80d42 \
+    --hash=sha256:ab8a6258860da4b6677da4bd2fe5dc2c659cff31b3ee4f7f5d64e79735b80d42 \
+    --hash=sha256:ab8a6258860da4b6677da4bd2fe5dc2c659cff31b3ee4f7f5d64e79735b80d42
+    # via pylint
+platformdirs==3.10.0 \
+    --hash=sha256:24ac2a44c14e1c6558b5033cd703dfe396df9aed6d1c8a1f112af1817134beeb \
+    --hash=sha256:d7c24979f292f916dc9cbf8648319032f551ea8c49a4c9bf2fb556a02070ec1d
+    # via pylint
+pylint==3.2.7 \
+    --hash=sha256:02f4aedeac91be69fb3b4bea997ce580a4ac68ce58b89eaefeaf06749df73f4b \
+    --hash=sha256:34386f5259d7d4143366ca580c84935fa77661d2b298cf7e1e7d3e55f51e7f06
+tomlkit==0.12.3 \
+    --hash=sha256:ace887248297efa187fb7efd2c31c57b82c90307ea6ceab1633e744682b7f115 \
+    --hash=sha256:b0a645a9156dc7cb5d3a1f0d4bab66db287fcb8e0430bdd4664a095ea16414ba
+    # via pylint

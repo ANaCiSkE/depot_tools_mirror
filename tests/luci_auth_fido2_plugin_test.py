@@ -4,25 +4,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# [VPYTHON:BEGIN]
-# python_version: "3.11"
-# wheel: <
-#   name: "infra/python/wheels/cffi/${vpython_platform}"
-#   version: "version:1.15.1.chromium.2"
-# >
-# wheel: <
-#   name: "infra/python/wheels/cryptography/${vpython_platform}"
-#   version: "version:43.0.0"
-# >
-# wheel: <
-#   name: "infra/python/wheels/pycparser-py2_py3"
-#   version: "version:2.21"
-# >
-# wheel: <
-#   name: "infra/python/wheels/fido2-py3"
-#   version: "version:2.0.0"
-# >
-# [VPYTHON:END]
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'cffi==1.15.1+chromium.2',
+#   'cryptography==43.0.0',
+#   'pycparser==2.21',
+#   'fido2==2.0.0'
+# ]
+# ///
 """Unit tests for luci_auth_fido2_plugin.py."""
 
 import logging

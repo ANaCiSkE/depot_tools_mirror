@@ -1,0 +1,7 @@
+googleapis-common-protos==1.61.0 \
+    --hash=sha256:22f1915393bb3245343f6efe87f6fe868532efc12aa26b391b15132e1279f1c0 \
+    --hash=sha256:da224121513ef787a34eca857ec802fc1acac25ea25c91c74faa5cf5e8474717
+protobuf==4.25.1 \
+    --hash=sha256:a19731d5e83ae4737bb2a089605e636077ac001d18781b3cf489b9546c7c80d6 \
+    --hash=sha256:ff433d2aa814b498df6c54a8e14b716522b3ea61cb1a16950a25770374383eb1
+    # via googleapis-common-protos

@@ -1,4 +1,12 @@
 #!/usr/bin/env vpython3
+# /// script
+# requires-python = '>=3.11,<3.12'
+# dependencies = [
+#   'httplib2==0.13.1',
+#   'six==1.10.0'
+# ]
+# ///
+
 # Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.

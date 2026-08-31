@@ -262,7 +262,7 @@ def run_gsutil(target, args, clean=False):
         [
             "vpython3",
             "-vpython-spec",
-            os.path.join(THIS_DIR, "gsutil.py.vpython3"),
+            os.path.join(THIS_DIR, "gsutil.vpython.toml"),
             "--",
             gsutil_bin,
         ]
