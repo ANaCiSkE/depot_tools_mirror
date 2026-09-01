@@ -4988,9 +4988,6 @@ the current line as well!
             os.path.dirname(os.path.abspath(__file__))
         )
         verify_script = os.path.join(depot_tools_dir, "verify_lockfile.py")
-        verify_spec = os.path.join(
-            depot_tools_dir, "verify_lockfile.py.vpython3"
-        )
 
         self.assertEqual(len(commands), len(affected_local_paths))
         for i in range(0, len(commands)):
@@ -5008,8 +5005,6 @@ the current line as well!
             else:
                 expected_cmd = [
                     input_api.python3_executable,
-                    "-vpython-spec",
-                    verify_spec,
                     verify_script,
                     filename,
                     filename + ".uv.lock",
@@ -5050,9 +5045,6 @@ the current line as well!
             os.path.dirname(os.path.abspath(__file__))
         )
         verify_script = os.path.join(depot_tools_dir, "verify_lockfile.py")
-        verify_spec = os.path.join(
-            depot_tools_dir, "verify_lockfile.py.vpython3"
-        )
 
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0].name, "Verify " + spec_local_path)
@@ -5063,8 +5055,6 @@ the current line as well!
             commands[0].cmd,
             [
                 input_api.python3_executable,
-                "-vpython-spec",
-                verify_spec,
                 verify_script,
                 expected_spec_filename,
                 expected_spec_filename + ".uv.lock",

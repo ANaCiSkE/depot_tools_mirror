@@ -218,3 +218,10 @@ def CheckSkillValidatorTestsOnCommit(input_api, output_api):
         files_to_check=[r".*test\.py$"],
     )
     return input_api.RunTests(tests)
+
+
+def CheckVPythonSpec(input_api, output_api):
+    """Validates that modified vpython specs match their companion uv.lock files."""
+    return input_api.RunTests(
+        input_api.canned_checks.CheckVPythonSpec(input_api, output_api)
+    )

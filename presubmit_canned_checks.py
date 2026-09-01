@@ -3049,9 +3049,6 @@ def CheckVPythonSpec(input_api, output_api, file_filter=None):
     verify_script = input_api.os_path.join(
         depot_tools_dir, "verify_lockfile.py"
     )
-    verify_spec = input_api.os_path.join(
-        depot_tools_dir, "verify_lockfile.py.vpython3"
-    )
     commands = []
     seen_specs = set()
     for affected_file in affected_files:
@@ -3080,8 +3077,6 @@ def CheckVPythonSpec(input_api, output_api, file_filter=None):
         else:
             cmd = [
                 input_api.python3_executable,
-                "-vpython-spec",
-                verify_spec,
                 verify_script,
                 filename,
                 filename + ".uv.lock",
