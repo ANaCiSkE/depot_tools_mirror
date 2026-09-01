@@ -162,11 +162,6 @@ GIT_TRANSIENT_ERRORS_RE = re.compile(
     "|".join(GIT_TRANSIENT_ERRORS), re.IGNORECASE
 )
 
-# git's for-each-ref command first supported the upstream:track token in its
-# format string in version 1.9.0, but some usages were broken until 2.3.0.
-# See git commit b6160d95 for more information.
-MIN_UPSTREAM_TRACK_GIT_VERSION = (2, 3)
-
 
 class BadCommitRefException(Exception):
     def __init__(self, refs):
@@ -1715,11 +1710,7 @@ def get_branches_info(include_tracking_status, include_frozen_status=False):
         "--format=%(refname:short):%(objectname:short):%(upstream:short):"
     )
 
-    # This is not covered by the depot_tools CQ which only has git version 1.8.
-    if (
-        include_tracking_status
-        and get_git_version() >= MIN_UPSTREAM_TRACK_GIT_VERSION
-    ):  # pragma: no cover
+    if include_tracking_status:
         format_string += "%(upstream:track)"
 
     format_string += ":"

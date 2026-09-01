@@ -570,17 +570,13 @@ class GitMutableFunctionsTest(
         self.repo.git("checkout", "-t", "-b", "frozen_branch", "main")
         self.repo.git("commit", "--allow-empty", "-m", "FREEZE.indexed")
 
-        supports_track = (
-            self.repo.run(self.gc.get_git_version)
-            >= self.gc.MIN_UPSTREAM_TRACK_GIT_VERSION
-        )
-        actual = self.repo.run(self.gc.get_branches_info, supports_track, True)
+        actual = self.repo.run(self.gc.get_branches_info, True, True)
 
         expected = {
             "happybranch": (
                 self.repo.run(self.gc.hash_one, "happybranch", short=True),
                 "main",
-                1 if supports_track else None,
+                1,
                 None,
                 False,
             ),
@@ -601,7 +597,7 @@ class GitMutableFunctionsTest(
             "frozen_branch": (
                 self.repo.run(self.gc.hash_one, "frozen_branch", short=True),
                 "main",
-                1 if supports_track else None,
+                1,
                 None,
                 True,
             ),
