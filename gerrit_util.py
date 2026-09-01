@@ -171,6 +171,12 @@ def CheckShouldUseSSO(host: str, email: str) -> SSOCheckResult:
             GetAccountEmails(host, "self", authenticator=authenticator) or []
         )
     except GerritError as e:
+        # Temporary message for issue
+        if e.message == "Unexpected json output: <!--googleoff: all-->":
+            LOGGER.warning(
+                "See https://issues.chromium.org/541179825 for investigation and workarounds for this issue"
+            )
+            raise
         if e.http_status == 400:
             # This is likely because the user doesn't have an account on the Gerrit host.
             return SSOCheckResult(False, "account missing on Gerrit host")
