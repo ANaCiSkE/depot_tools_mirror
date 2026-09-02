@@ -664,7 +664,7 @@ class GitMutableFunctionsTest(
             "foobarB": (
                 self.repo.run(self.gc.hash_one, "foobarB", short=True),
                 "foobarA",
-                None,
+                1,
                 1,
                 False,
             ),

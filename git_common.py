@@ -112,6 +112,13 @@ FREEZE = "FREEZE"
 FREEZE_SECTIONS = {"indexed": "soft", "unindexed": "mixed"}
 FREEZE_MATCHER = re.compile(r"%s.(%s)" % (FREEZE, "|".join(FREEZE_SECTIONS)))
 
+# Matches and extracts the ahead commit count from Git's %(upstream:track) output (e.g., "[ahead 2]").
+AHEAD_MATCHER = re.compile(r"ahead (\d+)")
+
+# Matches and extracts the behind commit count from Git's %(upstream:track) output (e.g., "[behind 1]").
+BEHIND_MATCHER = re.compile(r"behind (\d+)")
+
+
 # NOTE: This list is DEPRECATED in favor of the Infra Git wrapper:
 # https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tools/git
 #
@@ -1706,16 +1713,14 @@ def get_num_commits(branch):
 
 
 def get_branches_info(include_tracking_status, include_frozen_status=False):
-    format_string = (
-        "--format=%(refname:short):%(objectname:short):%(upstream:short):"
-    )
-
-    if include_tracking_status:
-        format_string += "%(upstream:track)"
-
-    format_string += ":"
-    if include_frozen_status:
-        format_string += "%(subject)"
+    fields = [
+        "%(refname:short)",
+        "%(objectname:short)",
+        "%(upstream:short)",
+        "%(upstream:track)" if include_tracking_status else "",
+        "%(subject)" if include_frozen_status else "",
+    ]
+    format_string = "--format=" + "%00".join(fields)
 
     info_map = {}
     data = run("for-each-ref", format_string, "refs/heads")
@@ -1724,19 +1729,18 @@ def get_branches_info(include_tracking_status, include_frozen_status=False):
         "BranchesInfo", "hash upstream commits behind is_frozen"
     )
     for line in data.splitlines():
-        parts = line.split(":", 4)
-        branch = parts[0]
-        branch_hash = parts[1]
-        upstream_branch = parts[2]
-        tracking_status = parts[3]
-        subject = parts[4] if len(parts) > 4 else ""
+        branch, branch_hash, upstream_branch, tracking_status, subject = (
+            line.split("\0", 4)
+        )
 
         commits = None
-        if include_tracking_status:
-            commits = get_num_commits(branch)
+        behind = None
+        if tracking_status:
+            ahead_match = AHEAD_MATCHER.search(tracking_status)
+            commits = int(ahead_match.group(1)) if ahead_match else None
 
-        behind_match = re.search(r"behind (\d+)", tracking_status)
-        behind = int(behind_match.group(1)) if behind_match else None
+            behind_match = BEHIND_MATCHER.search(tracking_status)
+            behind = int(behind_match.group(1)) if behind_match else None
 
         is_frozen = bool(FREEZE_MATCHER.match(subject)) if subject else False
 
