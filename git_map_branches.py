@@ -124,7 +124,8 @@ class BranchMapper(object):
 
     Attributes:
         __branches_info: a map of branches to their BranchesInfo objects which
-            consist of the branch hash, upstream and ahead/behind status.
+            consist of the branch hash, upstream, ahead/behind status, frozen
+            status, and subject.
         __gone_branches: a set of upstreams which are not fetchable by git
     """
 
@@ -147,7 +148,7 @@ class BranchMapper(object):
         self.__root = git_common.root()
         self.__branches_info = get_branches_info(
             include_tracking_status=self.verbosity >= 1,
-            include_frozen_status=self.verbosity >= 3,
+            include_subject=self.show_subject or self.verbosity >= 3,
         )
         if self.verbosity >= 2:
             # Avoid heavy import unless necessary.
@@ -259,7 +260,11 @@ class BranchMapper(object):
         for child in sorted(self.__parent_map.pop(branch, ())):
             self.__append_branch(child, child_output, depth=depth + 1)
 
-        is_dormant_branch = self.__is_dormant_branch(branch)
+        is_dormant_branch = (
+            self.__is_dormant_branch(branch)
+            if (self.hide_dormant or self.verbosity >= 4)
+            else False
+        )
         if self.hide_dormant and is_dormant_branch and not child_output.lines:
             return
 
@@ -353,7 +358,11 @@ class BranchMapper(object):
         # The subject of the most recent commit on the branch.
         if self.show_subject:
             if not self.__is_invalid_parent(branch):
-                line.append(run("log", "-n1", "--format=%s", branch, "--"))
+                if branch_info:
+                    line.append(branch_info.subject)
+                else:
+                    # Fallback for upstream/remote roots not present in local refs/heads.
+                    line.append(run("log", "-n1", "--format=%s", branch, "--"))
             else:
                 line.append("")
 

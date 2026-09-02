@@ -1712,13 +1712,25 @@ def get_num_commits(branch):
     return None
 
 
-def get_branches_info(include_tracking_status, include_frozen_status=False):
+def get_branches_info(include_tracking_status, include_subject=False):
+    """Returns a mapping of local branch names to their BranchesInfo objects.
+
+    Upstreams that are not local branches (e.g. remotes or deleted branches)
+    are included in the returned dict mapped to None.
+
+    Args:
+        include_tracking_status: If True, calculates ahead/behind commit counts
+            relative to upstream (populating `commits` and `behind`).
+        include_subject: If True, fetches the commit subject (populating
+            `subject` and deriving `is_frozen`). If False, `subject` defaults
+            to "" and `is_frozen` defaults to False.
+    """
     fields = [
         "%(refname:short)",
         "%(objectname:short)",
         "%(upstream:short)",
         "%(upstream:track)" if include_tracking_status else "",
-        "%(subject)" if include_frozen_status else "",
+        "%(subject)" if include_subject else "",
     ]
     format_string = "--format=" + "%00".join(fields)
 
@@ -1726,7 +1738,7 @@ def get_branches_info(include_tracking_status, include_frozen_status=False):
     data = run("for-each-ref", format_string, "refs/heads")
     assert isinstance(data, str)
     BranchesInfo = collections.namedtuple(
-        "BranchesInfo", "hash upstream commits behind is_frozen"
+        "BranchesInfo", "hash upstream commits behind is_frozen subject"
     )
     for line in data.splitlines():
         branch, branch_hash, upstream_branch, tracking_status, subject = (
@@ -1750,6 +1762,7 @@ def get_branches_info(include_tracking_status, include_frozen_status=False):
             commits=commits,
             behind=behind,
             is_frozen=is_frozen,
+            subject=subject,
         )
 
     # Set None for upstreams which are not branches (e.g empty upstream, remotes
