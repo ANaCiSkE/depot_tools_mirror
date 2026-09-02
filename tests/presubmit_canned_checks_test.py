@@ -1064,7 +1064,7 @@ class CheckAyeAyeTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].type, "error")
-        self.assertIn("Unexpected error in AyeAye (alint):", results[0].message)
+        self.assertIn("Unexpected error in AyeAye:", results[0].message)
         self.assertIn("BOOM", results[0].message)
 
     def test_ayeaye_alint_fails(self):
@@ -1086,26 +1086,160 @@ class CheckAyeAyeTest(unittest.TestCase):
         self.assertEqual(results[0].type, "error")
         self.assertIn("Failed to run.", results[0].message)
 
+    def test_ayeaye_execution_error(self):
+        json_output = json.dumps(
+            {
+                "errors": [],
+                "warnings": [],
+                "execution_error": {
+                    "exit_code": 128,
+                    "output": "fatal: bad object HEAD:third_party/litert/src\nFailed to build request proto",
+                },
+            }
+        ).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].type, "warning")
+        self.assertEqual(
+            results[0].message,
+            "AyeAye execution failed (exit code 128):\n"
+            "fatal: bad object HEAD:third_party/litert/src\n"
+            "Failed to build request proto",
+        )
+
+    def test_ayeaye_execution_error_no_output(self):
+        json_output = json.dumps(
+            {
+                "errors": [],
+                "warnings": [],
+                "execution_error": {
+                    "exit_code": 1,
+                    "output": "",
+                },
+            }
+        ).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].type, "warning")
+        self.assertEqual(
+            results[0].message,
+            "AyeAye execution failed (exit code 1)",
+        )
+
 
 class RunAlintTest(unittest.TestCase):
     def test_parse_alint_output(self):
         alint_output = (
-            "\x1b[31mERROR:\x1b[0m This is an error.\n"
+            '\x1b[31mERROR:\x1b[0m [CheckMetadata/missing_field] README.chromium:1: ERR: Missing field "Name"\n'
             "Some other info line\n"
-            "\x1b[33mWARNING:\x1b[0m This is a warning.\n"
+            "\x1b[33mWARNING:\x1b[0m [CheckContents/trailing_whitespace] /COMMIT_MSG:18: WARN: Please remove the trailing whitespace.\n"
             "\x1b[94mINFO:\x1b[0m This is an info.\n"
-            "\x1b[31mERROR:\x1b[0m Another error.\n"
-            "\x1b[33mWARNING:\x1b[0m Another warning."
+            "\x1b[31mERROR:\x1b[0m Bare error.\n"
+            "\x1b[33mWARNING:\x1b[0m Bare warning.\n"
+            "WARNING: [AyeAye/AlreadyPrefixed] Already prefixed."
         )
-        parsed = run_alint._parse_alint_output(alint_output)
+        clean = run_alint._strip_ansi_codes(alint_output).strip()
+        parsed = run_alint._parse_alint_output(clean)
         self.assertEqual(
             parsed["errors"],
-            ["This is an error.", "Another error."],
+            [
+                '[AyeAye/CheckMetadata/missing_field] README.chromium:1: ERR: Missing field "Name"',
+                "[AyeAye] Bare error.",
+            ],
         )
         self.assertEqual(
             parsed["warnings"],
-            ["This is a warning.", "Another warning."],
+            [
+                "[AyeAye/CheckContents/trailing_whitespace] /COMMIT_MSG:18: WARN: Please remove the trailing whitespace.",
+                "[AyeAye] Bare warning.",
+                "[AyeAye/AlreadyPrefixed] Already prefixed.",
+            ],
         )
+
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_execution_error(self, mock_popen, mock_chdir):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"fatal: bad object HEAD", b"")
+        mock_proc.returncode = 128
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_chdir.assert_called_once_with("/repo")
+            result = json.loads(mock_stdout.getvalue())
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(result["warnings"], [])
+            self.assertEqual(
+                result["execution_error"],
+                {
+                    "exit_code": 128,
+                    "output": "fatal: bad object HEAD",
+                },
+            )
+
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_success_findings(self, mock_popen, mock_chdir):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"WARNING: [CheckContents/trailing_whitespace] /COMMIT_MSG:18: WARN: trailing space\n",
+            b"",
+        )
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_chdir.assert_called_once_with("/repo")
+            mock_popen.assert_called_once_with(
+                ["/bin/alint", "--", "-t=30s"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            result = json.loads(mock_stdout.getvalue())
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(
+                result["warnings"],
+                [
+                    "[AyeAye/CheckContents/trailing_whitespace] /COMMIT_MSG:18: WARN: trailing space"
+                ],
+            )
+            self.assertNotIn("execution_error", result)
+
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_exception(self, mock_popen, mock_chdir):
+        mock_popen.side_effect = OSError("Executable not found")
+
+        with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_chdir.assert_called_once_with("/repo")
+            result = json.loads(mock_stdout.getvalue())
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(result["warnings"], [])
+            self.assertEqual(result["execution_error"]["exit_code"], 1)
+            self.assertIn(
+                "Executable not found", result["execution_error"]["output"]
+            )
 
 
 class CheckGNFormattedTest(unittest.TestCase):

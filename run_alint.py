@@ -17,16 +17,27 @@ def _strip_ansi_codes(text):
     return _ANSI_ESCAPE_RE.sub("", text)
 
 
-def _parse_alint_output(output_str):
-    clean_output = _strip_ansi_codes(output_str)
+def _format_finding(finding):
+    if not finding:
+        return finding
+    if finding.startswith(("[AyeAye/", "[AyeAye]")):
+        return finding
+    if finding.startswith("["):
+        return f"[AyeAye/{finding[1:]}"
+    return f"[AyeAye] {finding}"
+
+
+def _parse_alint_output(clean_output):
     errors = []
     warnings = []
     for line in clean_output.splitlines():
         clean_line = line.strip()
         if clean_line.startswith("ERROR:"):
-            errors.append(clean_line[len("ERROR:") :].strip())
+            errors.append(_format_finding(clean_line[len("ERROR:") :].strip()))
         elif clean_line.startswith("WARNING:"):
-            warnings.append(clean_line[len("WARNING:") :].strip())
+            warnings.append(
+                _format_finding(clean_line[len("WARNING:") :].strip())
+            )
     return {"errors": errors, "warnings": warnings}
 
 
@@ -50,12 +61,13 @@ def main():
         )
         stdout, _ = p.communicate()
         output_str = stdout.decode("utf-8", "ignore")
-        parsed = _parse_alint_output(output_str)
+        clean = _strip_ansi_codes(output_str).strip()
+        parsed = _parse_alint_output(clean)
         if p.returncode and not parsed["errors"] and not parsed["warnings"]:
-            clean = _strip_ansi_codes(output_str).strip()
-            if not clean:
-                clean = f"alint had exit code {p.returncode}"
-            parsed["warnings"].append(clean)
+            parsed["execution_error"] = {
+                "exit_code": p.returncode,
+                "output": clean,
+            }
         print(json.dumps(parsed))
         return 0
     except Exception as e:
@@ -63,7 +75,11 @@ def main():
             json.dumps(
                 {
                     "errors": [],
-                    "warnings": [f"Unexpected error in AyeAye (alint): {e}"],
+                    "warnings": [],
+                    "execution_error": {
+                        "exit_code": 1,
+                        "output": f"Unexpected error in AyeAye: {e}",
+                    },
                 }
             )
         )

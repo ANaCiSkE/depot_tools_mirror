@@ -3656,6 +3656,12 @@ def CheckAyeAye(input_api, output_api):
         results += [
             output_api.PresubmitPromptWarning(x) for x in json_dict["warnings"]
         ]
+        if "execution_error" in json_dict:
+            err = json_dict["execution_error"]
+            msg = f"AyeAye execution failed (exit code {err['exit_code']})"
+            if err.get("output"):
+                msg += f":\n{err['output']}"
+            results.append(output_api.PresubmitPromptWarning(msg))
         return results
 
     cmd = [
@@ -3671,7 +3677,7 @@ def CheckAyeAye(input_api, output_api):
     return input_api.RunTests(
         [
             input_api.Command(
-                name="AyeAye (alint)",
+                name="AyeAye",
                 cmd=cmd,
                 kwargs={"cwd": input_api.change.RepositoryRoot()},
                 output_parser=parse_output,
