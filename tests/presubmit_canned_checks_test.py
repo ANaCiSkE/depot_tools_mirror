@@ -520,6 +520,78 @@ class CheckLongLinesTest(unittest.TestCase):
                             any(item in str(actual) for actual in all_items)
                         )
 
+    def testCheckPythonLongLines(self):
+        input_api = MockInputApi()
+
+        # Case 1: Existing long line, not changed. No warning expected.
+        file_existing_long = MockFile(
+            os.path.normpath("some/python/file.py"),
+            [
+                "short line",
+                "# This is an existing long line that was already there and not changed so it should not warn",
+                "another short line",
+            ]
+        )
+        # Manually set changed contents to exclude the long line (line 2)
+        file_existing_long._changed_contents = [
+            (1, "short line"),
+            (3, "another short line"),
+        ]
+
+        # Case 2: New long line. Warning expected.
+        file_new_long = MockFile(
+            os.path.normpath("some/python/file2.py"),
+            [
+                "short line",
+                "# This is a new long line that should warn because it is new and exceeds the limit",
+            ]
+        )
+
+        # Case 3: Modified long line. Warning expected.
+        file_modified_long = MockFile(
+            os.path.normpath("some/python/file3.py"),
+            [
+                "short line",
+                "# This is a modified long line that should warn because it was modified and is long",
+            ]
+        )
+        file_modified_long._changed_contents = [
+            (2, "# This is a modified long line that should warn because it was modified and is long"),
+        ]
+
+        # Case 4: Indented long line. Warning expected.
+        file_indented_long = MockFile(
+            os.path.normpath("some/python/file4.py"),
+            [
+                "short line",
+                "    # This is an existing long line that was indented and should warn because it is now very long indeed",
+            ]
+        )
+        file_indented_long._changed_contents = [
+            (2, "    # This is an existing long line that was indented and should warn because it is now very long indeed"),
+        ]
+
+        input_api.files = [
+            file_existing_long,
+            file_new_long,
+            file_modified_long,
+            file_indented_long,
+        ]
+
+        errors = presubmit_canned_checks.CheckLongLines(
+            input_api, MockOutputApi(), maxlen=80
+        )
+
+        self.assertEqual(1, len(errors))
+        all_items = errors[0].items
+        self.assertEqual(3, len(all_items))
+
+        items_strs = [str(item) for item in all_items]
+        self.assertTrue(any("file2.py, line 2" in s for s in items_strs))
+        self.assertTrue(any("file3.py, line 2" in s for s in items_strs))
+        self.assertTrue(any("file4.py, line 2" in s for s in items_strs))
+        self.assertFalse(any("file.py" in s for s in items_strs))
+
 
 class DescriptionChecksTest(unittest.TestCase):
     def testCheckDescriptionUsesColonInsteadOfEquals(self):

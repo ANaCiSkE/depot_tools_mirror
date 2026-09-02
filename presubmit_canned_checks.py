@@ -818,10 +818,11 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
 
     def check_python_long_lines(affected_files, error_formatter):
         errors = []
-        global_check_enabled = True
 
         for f in affected_files:
+            global_check_enabled = True
             file_path = f.LocalPath()
+            changed_lines = None
             for idx, line in enumerate(f.NewContents()):
                 line_num = idx + 1
                 line_is_short = no_long_lines(PY_FILE_EXTS[0], line)
@@ -846,7 +847,12 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
                         do_check = True  # Local enable
 
                 if do_check and not line_is_short:
-                    errors.append(error_formatter(file_path, line_num, line))
+                    if changed_lines is None:
+                        changed_lines = set(
+                            line_num for line_num, _ in f.ChangedContents()
+                        )
+                    if line_num in changed_lines:
+                        errors.append(error_formatter(file_path, line_num, line))
 
         return errors
 
