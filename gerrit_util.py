@@ -166,10 +166,30 @@ def CheckShouldUseSSO(host: str, email: str) -> SSOCheckResult:
         )
     authenticator = SSOAuthenticator()
     records: list[EmailRecord] = []
+
+    @contextlib.contextmanager
+    def http_debug():
+        """HTTP debug for https://issues.chromium.org/541179825"""
+        old = http.client.HTTPConnection.debuglevel
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            LOGGER.warning(
+                "!!!!!!!!!!!!!!!!!! BE CAREFUL WHEN SHARING !!!!!!!!!!!!!!!!!!"
+            )
+            LOGGER.warning(
+                "Enabling verbose HTTP logs; headers including secrets will be printed"
+            )
+            http.client.HTTPConnection.debuglevel = 1
+        try:
+            yield None
+        finally:
+            http.client.HTTPConnection.debuglevel = old
+
     try:
-        records = (
-            GetAccountEmails(host, "self", authenticator=authenticator) or []
-        )
+        with http_debug():
+            records = (
+                GetAccountEmails(host, "self", authenticator=authenticator)
+                or []
+            )
     except GerritError as e:
         # Temporary message for issue
         if e.message == "Unexpected json output: <!--googleoff: all-->":
@@ -1244,6 +1264,16 @@ class HttpConn:
                 urllib.request.ProxyHandler(
                     {"http": self.proxy, "https": self.proxy}
                 )
+            )
+        # Propagate global debuglevel.
+        # This is a hack hook for debugging https://issues.chromium.org/541179825
+        if http.client.HTTPConnection.debuglevel:
+            level = http.client.HTTPConnection.debuglevel
+            handlers.extend(
+                [
+                    urllib.request.HTTPHandler(debuglevel=level),
+                    urllib.request.HTTPSHandler(debuglevel=level),
+                ]
             )
         opener = urllib.request.build_opener(*handlers)
         try:
