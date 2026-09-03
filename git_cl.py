@@ -44,6 +44,7 @@ from typing import List
 from typing import Mapping
 from typing import Optional
 from typing import Sequence
+from typing import TextIO
 from typing import Tuple
 from typing import TypedDict
 
@@ -214,6 +215,11 @@ _NO_BRANCH_ERROR = (
     "Unable to determine base commit in detached HEAD state. "
     "Get on a branch or run `git cl upload --no-squash <base>` to "
     "upload all commits since base!"
+)
+
+_ERROR_OR_REJECTION_RE = re.compile(
+    r"\b(error|failed|fatal|exception|rejected|declined|denied)\b",
+    re.IGNORECASE,
 )
 
 
@@ -1271,6 +1277,157 @@ def _NormalizeChangeDetailOptions(
     ) and "CURRENT_COMMIT" not in normalized:
         normalized.append("CURRENT_COMMIT")
     return normalized
+
+
+def _is_ai_agent() -> bool:
+    """Detects whether execution is within an AI agent environment."""
+    return gclient_utils.IsEnvAi()
+
+
+def _is_repeating_progress_message(stripped: str) -> bool:
+    """Checks if `stripped` represents an intermediate repeating progress line.
+
+    Identifies intermediate progress updates such as delta resolution percentages,
+    object counting updates, countdown checkers, and animated spinner frames.
+    """
+    if _ERROR_OR_REJECTION_RE.search(stripped):
+        return False
+    if "http://" in stripped or "https://" in stripped:
+        return False
+    if (
+        "->" in stripped
+        or stripped.startswith("* [new ")
+        or stripped.startswith("To ")
+    ):
+        return False
+
+    # Gerrit processing changes progress frames without done, e.g. `Processing changes: (\)`,
+    # `Processing changes: updated: 1 (/)`, `Processing changes: refs: 1, updated: 1 (/)`,
+    # or empty parentheses `Processing changes: ()`.
+    if re.search(r"Processing changes:", stripped) and "done" not in stripped:
+        return True
+
+    # Generic spinner animation frames at end of line like `(\)`, `(|)`, `(/)`, `(-)`,
+    # or empty parentheses frame on remote lines `remote: ()`.
+    if re.search(r"\(\s*[\\|/-]\s*\)\s*$", stripped) or re.search(
+        r"^remote:\s*\([\\|/\s-]*\)\s*$", stripped
+    ):
+        return True
+
+    # Delta resolution progress less than 100% and not marked done
+    m = re.search(r"Resolving deltas:\s*(\d+)%", stripped)
+    if m and int(m.group(1)) < 100 and "done" not in stripped:
+        return True
+
+    # Object counting or enumerating progress without done
+    if (
+        re.search(r"\b(Counting|Enumerating)\s+objects:\s*\d+", stripped)
+        and "done" not in stripped
+    ):
+        return True
+
+    # Finding sources progress less than 100% and not marked done
+    m = re.search(r"Finding sources:\s*(?:(\d+)%|\d+)", stripped)
+    if m and "done" not in stripped:
+        if m.group(1) is None or int(m.group(1)) < 100:
+            return True
+
+    # Object compression, writing, receiving, transferring, unpacking without done
+    m = re.search(
+        r"\b(Compressing|Writing|Receiving|Transferring|Unpacking)\s+objects:\s*(\d+)%",
+        stripped,
+    )
+    if m and "done" not in stripped:
+        return True
+
+    # Checking connectivity progress without done
+    if (
+        re.search(r"Checking connectivity:\s*\d+", stripped)
+        and "done" not in stripped
+    ):
+        return True
+
+    # Private key checker countdown progress
+    if re.search(r"Waiting for private key checker:.*left", stripped):
+        return True
+
+    return False
+
+
+def _create_ai_agent_push_filter(
+    out_stream: Optional[TextIO] = None,
+) -> Callable[[str], None]:
+    """Creates a line filter callback for `gclient_utils.CheckCallAndFilter`.
+
+    Suppresses repeating progress messages to avoid context pollution for AI agents
+    while continuing to report final step completions, errors, warnings, and URLs.
+    """
+    if out_stream is None:
+        out_stream = sys.stdout
+    last_printed = [None]
+
+    def process_single_line(single_line: str) -> None:
+        single_line = re.sub(
+            r"^(?:remote:\s*)+remote:\s*", "remote: ", single_line
+        )
+        stripped = single_line.strip()
+        if not stripped:
+            return
+
+        if _ERROR_OR_REJECTION_RE.search(stripped):
+            out_stream.write(single_line.rstrip() + "\n")
+            out_stream.flush()
+            last_printed[0] = stripped
+            return
+
+        if "http://" in stripped or "https://" in stripped:
+            out_stream.write(single_line.rstrip() + "\n")
+            out_stream.flush()
+            last_printed[0] = stripped
+            return
+
+        if _is_repeating_progress_message(stripped):
+            return
+
+        if stripped == last_printed[0]:
+            return
+
+        if stripped in ("remote:", "remote"):
+            return
+
+        out_stream.write(single_line.rstrip() + "\n")
+        out_stream.flush()
+        last_printed[0] = stripped
+
+    split_pattern = re.compile(
+        r"(?<=[^:\s])\s*(?=remote:(?:\s|$))"
+        r"|(?<=[^:\s])\s*(?=(?:(?:Enumerating|Counting|Compressing|Writing|Receiving|Transferring|Unpacking)\s+objects:|Finding sources:|Resolving deltas:|Checking connectivity:|Processing changes:|Waiting for private key checker:))"
+    )
+
+    def filter_fn(line: str) -> None:
+        parts = line.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        for part in parts:
+            if (
+                "http://" in part
+                or "https://" in part
+                or "->" in part
+                or part.startswith("To ")
+            ):
+                process_single_line(part)
+                continue
+            # Handle multiple progress updates that may be concatenated on a
+            # single line separated by single spaces, zero spaces, or multiple
+            # spaces in captured terminal output.
+            segments = split_pattern.split(part)
+            for segment in segments:
+                process_single_line(segment)
+
+    return filter_fn
+
+
+def _flush_stdout(_: str) -> None:
+    """Default filter callback that flushes stdout after each line."""
+    sys.stdout.flush()
 
 
 class Changelist(object):
@@ -3437,13 +3594,27 @@ class Changelist(object):
                 for opt in all_push_options:
                     push_cmd.extend(["-o", opt])
 
+            if _is_ai_agent():
+                log_msg = (
+                    "AI agent detected; "
+                    "suppressing repeating progress messages to avoid context pollution."
+                )
+                print(log_msg)
+                sys.stdout.flush()
+                logging.info(log_msg)
+                filter_fn = _create_ai_agent_push_filter()
+                print_stdout = False
+            else:
+                filter_fn = _flush_stdout
+                print_stdout = True
+
             push_stdout = gclient_utils.CheckCallAndFilter(
                 push_cmd,
                 env=env,
-                print_stdout=True,
+                print_stdout=print_stdout,
                 # Flush after every line: useful for seeing progress when
                 # running as recipe.
-                filter_fn=lambda _: sys.stdout.flush(),
+                filter_fn=filter_fn,
             )
             push_stdout = push_stdout.decode("utf-8", "replace")
             has_error = False

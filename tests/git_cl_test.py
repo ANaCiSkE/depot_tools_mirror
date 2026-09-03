@@ -9301,6 +9301,12 @@ class TestFindGitDir(unittest.TestCase):
 
 
 class TestRunGitPushWithTraces(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch("git_cl._is_ai_agent", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
     @mock.patch(
         "git_cl.gclient_utils.CheckCallAndFilter",
@@ -9438,6 +9444,885 @@ class TestRunGitPushWithTraces(unittest.TestCase):
             "custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
             push_cmd,
         )
+
+
+class TestAIAgentProgressSuppression(unittest.TestCase):
+    """Tests detection of AI agents and suppression of repeating progress messages."""
+
+    def test_is_ai_agent_env_detection(self):
+        """Verifies that `git_cl._is_ai_agent` detects environment variables.
+
+        Tests that all recognized AI agent variables return True when set to
+        truthy values and False when unset or explicitly disabled.
+        """
+        for var in (
+            "ANTIGRAVITY_AGENT",
+            "AI_AGENT",
+            "GEMINI_CLI",
+            "CLAUDECODE",
+            "CODEX_SANDBOX",
+            "CURSOR_AGENT",
+        ):
+            with mock.patch.dict(os.environ, {var: "1"}, clear=True):
+                self.assertTrue(git_cl._is_ai_agent())
+
+            with mock.patch.dict(os.environ, {var: "true"}, clear=True):
+                self.assertTrue(git_cl._is_ai_agent())
+
+            with mock.patch.dict(os.environ, {var: "0"}, clear=True):
+                self.assertFalse(git_cl._is_ai_agent())
+
+            with mock.patch.dict(os.environ, {var: "false"}, clear=True):
+                self.assertFalse(git_cl._is_ai_agent())
+
+        # Test with multiple variables set
+        with mock.patch.dict(
+            os.environ,
+            {"ANTIGRAVITY_AGENT": "1", "AI_AGENT": "1"},
+            clear=True,
+        ):
+            self.assertTrue(git_cl._is_ai_agent())
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(git_cl._is_ai_agent())
+
+    def test_is_repeating_progress_message(self):
+        """Verifies detection of repeating intermediate progress lines.
+
+        Tests that spinner frames, incomplete percentages, and countdown messages
+        are classified as repeating, while step completions, successes, URLs,
+        and errors are preserved.
+        """
+        # Intermediate repeating spinner frames should be detected
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: (\\)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: (|)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: (/)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: (-)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: updated: 1 (/)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: refs: 1, updated: 1 (/)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: ()"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: updated: 1 ()"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: refs: 1, updated: 1 ()"
+            )
+        )
+        self.assertTrue(git_cl._is_repeating_progress_message("remote: ()"))
+
+        # Intermediate percentages and object counting should be detected
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Resolving deltas:   3% (1/29)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Resolving deltas:  97% (28/29)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Counting objects: 75"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Counting objects: 2375"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message("Counting objects: 1% (1/63)")
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Counting objects: 100% (63/63)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Waiting for private key checker: 6/14 objects left"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Compressing objects:  50% (5/10)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Compressing objects: 100% (35/35)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Writing objects: 100% (36/36)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Enumerating objects: 1% (1/63)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Enumerating objects: 100% (63/63)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Checking connectivity: 1% (1/100)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Unpacking objects: 1% (1/50)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: updated: 1"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Finding sources:  52% (160/309)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "remote: Finding sources:   1% (3/309)"
+            )
+        )
+        self.assertTrue(
+            git_cl._is_repeating_progress_message(
+                "Finding sources: 99% (305/309)"
+            )
+        )
+
+        # Step completions and non-repeating status lines should not be detected
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Finding sources: 100% (309/309)"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Finding sources: 100% (309/309), done"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Resolving deltas: 100% (29/29)"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Counting objects: 1286, done"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Counting objects: 51860, done"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "Counting objects: 100% (63/63), done."
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "Enumerating objects: 100% (63/63), done."
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Checking connectivity: 100% (100/100), done."
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Unpacking objects: 100% (50/50), done."
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "Compressing objects: 100% (35/35), done."
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "Writing objects: 100% (36/36), 7.06 KiB | 361.00 KiB/s, done."
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "Delta compression using up to 128 threads"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "Total 36 (delta 24), reused 0 (delta 0), pack-reused 0 (from 0)"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: refs: 1, updated: 1, done"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message("remote: SUCCESS")
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote:   https://chromium-review.googlesource.com/c/chromium/src/+/8310252 [Extensions] Remove Uncaught Error"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: The following approvals got outdated and were removed:"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: * Commit-Queue+1 by Justin Lulejian"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "To sso://chromium/chromium/src.git"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                " * [new reference]               cbf60b4cd17a1e7e213e73fe49aafb737cb2d560 -> refs/for/refs/heads/main"
+            )
+        )
+
+        # Errors and rejection messages should not be classified as repeating
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: ERROR: [banned-words] blocked keyword found"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: refs: 1, rejected: 1, done"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: Processing changes: refs: 1, rejected: 1"
+            )
+        )
+        self.assertFalse(
+            git_cl._is_repeating_progress_message(
+                "remote: WARNING: commit message line is too long"
+            )
+        )
+
+    def test_create_ai_agent_push_filter_streaming_snippet(self):
+        """Verifies filtering of repeating messages in a streaming carriage-return format.
+
+        Tests that intermediate spinner and delta updates separated by carriage returns
+        are stripped, while final step completions, review URL, and success status are preserved.
+        """
+        raw_snippet = (
+            "remote: Resolving deltas:   3% (1/29)\r"
+            "remote: Resolving deltas:   7% (2/29)\r"
+            "remote: Resolving deltas:  10% (3/29)\r"
+            "remote: Resolving deltas: 100% (29/29)\r"
+            "remote: Resolving deltas: 100% (29/29)\n"
+            "remote: Waiting for private key checker: 6/14 objects left\n"
+            "remote: Counting objects: 75\r"
+            "remote: Counting objects: 1286, done\n"
+            "remote: Finding sources:  52% (160/309)\r"
+            "remote: Finding sources: 100% (309/309)\n"
+            "remote: Processing changes: (\\)\r"
+            "remote: Processing changes: (|)\r"
+            "remote: Processing changes: (/)\r"
+            "remote: Processing changes: (-)\r"
+            "remote: Processing changes: updated: 1 (/)\r"
+            "remote: Processing changes: refs: 1, updated: 1 (/)\r"
+            "remote: Processing changes: refs: 1, updated: 1, done\n"
+            "remote:\n"
+            "remote: SUCCESS\n"
+            "remote:\n"
+            "remote:   https://chromium-review.googlesource.com/c/chromium/src/+/8310252 [Extensions] Remove Uncaught Error prefix\n"
+            "remote:\n"
+            "remote: The following approvals got outdated and were removed:\n"
+            "remote: * Commit-Queue+1 by Justin Lulejian\n"
+            "remote:\n"
+            "To sso://chromium/chromium/src.git\n"
+            " * [new reference]               cbf60b4cd17a1e7e213e73fe49aafb737cb2d560 -> refs/for/refs/heads/main\n"
+        )
+
+        # Execute filter with string buffer output stream
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(raw_snippet)
+        output = buf.getvalue()
+
+        # Check that intermediate repeating lines are suppressed
+        self.assertNotIn("Resolving deltas:   3%", output)
+        self.assertNotIn("Resolving deltas:   7%", output)
+        self.assertNotIn("Waiting for private key checker", output)
+        self.assertNotIn("Counting objects: 75", output)
+        self.assertNotIn("Finding sources:  52%", output)
+        self.assertNotIn("Processing changes: (\\)", output)
+        self.assertNotIn("Processing changes: (|)", output)
+        self.assertNotIn("Processing changes: updated: 1 (/)", output)
+
+        # Check that step completions and ultimate success/URLs are reported
+        self.assertIn("remote: Resolving deltas: 100% (29/29)", output)
+        self.assertIn("remote: Counting objects: 1286, done", output)
+        self.assertIn("remote: Finding sources: 100% (309/309)", output)
+        self.assertIn(
+            "remote: Processing changes: refs: 1, updated: 1, done", output
+        )
+        self.assertIn("remote: SUCCESS", output)
+        self.assertIn(
+            "https://chromium-review.googlesource.com/c/chromium/src/+/8310252",
+            output,
+        )
+        self.assertIn(
+            "The following approvals got outdated and were removed:", output
+        )
+        self.assertIn("To sso://chromium/chromium/src.git", output)
+        self.assertIn("* [new reference]", output)
+
+    def test_create_ai_agent_push_filter_exact_prompt_snippet(self):
+        """Verifies filtering of repeating messages using the exact task snippet.
+
+        Tests that intermediate spinner and delta updates concatenated across
+        lines without carriage returns are stripped, while final step completions,
+        review URL, and success status are preserved.
+        """
+        prompt_snippet = (
+            "remote: Resolving deltas:   3% (1/29)           "
+            "remote: Resolving deltas:   7% (2/29)           "
+            "remote: Resolving deltas:  10% (3/29)           "
+            "remote: Resolving deltas: 100% (29/29)           "
+            "remote: Resolving deltas: 100% (29/29)        \n"
+            "remote: Waiting for private key checker: 6/14 objects left        \n"
+            "remote: Counting objects: 75           remote: Counting objects: 1286, done        \n"
+            "remote: remote: Processing changes: (\\)        "
+            "remote: Processing changes: (|)        "
+            "remote: Processing changes: (/)        "
+            "remote: Processing changes: (-)        "
+            "remote: Processing changes: updated: 1 (/)        "
+            "remote: Processing changes: updated: 1 (-)        "
+            "remote: Processing changes: refs: 1, updated: 1 (/)        "
+            "remote: Processing changes: refs: 1, updated: 1, done            \n"
+            "remote: \n"
+            "remote: SUCCESS        \n"
+            "remote: \n"
+            "remote:   https://chromium-review.googlesource.com/c/chromium/src/+/8310252 "
+            "[Extensions] Remove Uncaught Error prefix from onMessage error responses [WIP]        \n"
+            "remote: \n"
+            "remote: The following approvals got outdated and were removed:        \n"
+            "remote: * Commit-Queue+1 by Justin Lulejian        \n"
+            "remote: \n"
+            "remote: \n"
+            "To sso://chromium/chromium/src.git\n"
+            " * [new reference]               cbf60b4cd17a1e7e213e73fe49aafb737cb2d560 -> "
+            "refs/for/refs/heads/main%m=%5BExtensions%5D_Remove_Uncaught_Error_prefix_from_onMessage_error_responses,l=Commit-Queue+1\n"
+        )
+
+        # Execute filter with string buffer output stream
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(prompt_snippet)
+        output = buf.getvalue()
+
+        # Check that intermediate repeating lines are suppressed
+        self.assertNotIn("Resolving deltas:   3%", output)
+        self.assertNotIn("Resolving deltas:   7%", output)
+        self.assertNotIn("Waiting for private key checker", output)
+        self.assertNotIn("Counting objects: 75", output)
+        self.assertNotIn("Processing changes: (\\)", output)
+        self.assertNotIn("Processing changes: (|)", output)
+        self.assertNotIn("Processing changes: updated: 1 (/)", output)
+
+        # Check that step completions and ultimate success/URLs are reported
+        self.assertIn("remote: Resolving deltas: 100% (29/29)", output)
+        self.assertIn("remote: Counting objects: 1286, done", output)
+        self.assertIn(
+            "remote: Processing changes: refs: 1, updated: 1, done", output
+        )
+        self.assertIn("remote: SUCCESS", output)
+        self.assertIn(
+            "https://chromium-review.googlesource.com/c/chromium/src/+/8310252",
+            output,
+        )
+        self.assertIn(
+            "The following approvals got outdated and were removed:", output
+        )
+        self.assertIn("To sso://chromium/chromium/src.git", output)
+        self.assertIn("* [new reference]", output)
+
+    def test_create_ai_agent_push_filter_concatenated_second_snippet(self):
+        """Verifies filtering of repeating messages using the second concatenated snippet.
+
+        Tests that single-space-separated local git progress frames, zero-space-separated
+        concatenated remote progress frames, and empty parentheses spinner animation frames
+        are fully suppressed while step completions, review URLs, and status lines are preserved.
+        """
+        second_snippet = (
+            "Counting objects: 1% (1/63) Counting objects: 3% (2/63) Counting objects: 4% (3/63) "
+            "Counting objects: 6% (4/63) Counting objects: 7% (5/63) Counting objects: 9% (6/63) "
+            "Counting objects: 11% (7/63) Counting objects: 12% (8/63) Counting objects: 14% (9/63) "
+            "Counting objects: 15% (10/63) Counting objects: 17% (11/63) Counting objects: 19% (12/63) "
+            "Counting objects: 20% (13/63) Counting objects: 22% (14/63) Counting objects: 23% (15/63) "
+            "Counting objects: 25% (16/63) Counting objects: 26% (17/63) Counting objects: 28% (18/63) "
+            "Counting objects: 30% (19/63) Counting objects: 31% (20/63) Counting objects: 33% (21/63) "
+            "Counting objects: 34% (22/63) Counting objects: 36% (23/63) Counting objects: 38% (24/63) "
+            "Counting objects: 39% (25/63) Counting objects: 41% (26/63) Counting objects: 42% (27/63) "
+            "Counting objects: 44% (28/63) Counting objects: 46% (29/63) Counting objects: 47% (30/63) "
+            "Counting objects: 49% (31/63) Counting objects: 50% (32/63) Counting objects: 52% (33/63) "
+            "Counting objects: 53% (34/63) Counting objects: 55% (35/63) Counting objects: 57% (36/63) "
+            "Counting objects: 58% (37/63) Counting objects: 60% (38/63) Counting objects: 61% (39/63) "
+            "Counting objects: 63% (40/63) Counting objects: 65% (41/63) Counting objects: 66% (42/63) "
+            "Counting objects: 68% (43/63) Counting objects: 69% (44/63) Counting objects: 71% (45/63) "
+            "Counting objects: 73% (46/63) Counting objects: 74% (47/63) Counting objects: 76% (48/63) "
+            "Counting objects: 77% (49/63) Counting objects: 79% (50/63) Counting objects: 80% (51/63) "
+            "Counting objects: 82% (52/63) Counting objects: 84% (53/63) Counting objects: 85% (54/63) "
+            "Counting objects: 87% (55/63) Counting objects: 88% (56/63) Counting objects: 90% (57/63) "
+            "Counting objects: 92% (58/63) Counting objects: 93% (59/63) Counting objects: 95% (60/63) "
+            "Counting objects: 96% (61/63) Counting objects: 98% (62/63) Counting objects: 100% (63/63) "
+            "Counting objects: 100% (63/63), done.\n"
+            "Delta compression using up to 128 threads\n"
+            "Compressing objects: 2% (1/35) Compressing objects: 5% (2/35) Compressing objects: 8% (3/35) "
+            "Compressing objects: 11% (4/35) Compressing objects: 14% (5/35) Compressing objects: 17% (6/35) "
+            "Compressing objects: 20% (7/35) Compressing objects: 22% (8/35) Compressing objects: 25% (9/35) "
+            "Compressing objects: 28% (10/35) Compressing objects: 31% (11/35) Compressing objects: 34% (12/35) "
+            "Compressing objects: 37% (13/35) Compressing objects: 40% (14/35) Compressing objects: 42% (15/35) "
+            "Compressing objects: 45% (16/35) Compressing objects: 48% (17/35) Compressing objects: 51% (18/35) "
+            "Compressing objects: 54% (19/35) Compressing objects: 57% (20/35) Compressing objects: 60% (21/35) "
+            "Compressing objects: 62% (22/35) Compressing objects: 65% (23/35) Compressing objects: 68% (24/35) "
+            "Compressing objects: 71% (25/35) Compressing objects: 74% (26/35) Compressing objects: 77% (27/35) "
+            "Compressing objects: 80% (28/35) Compressing objects: 82% (29/35) Compressing objects: 85% (30/35) "
+            "Compressing objects: 88% (31/35) Compressing objects: 91% (32/35) Compressing objects: 94% (33/35) "
+            "Compressing objects: 97% (34/35) Compressing objects: 100% (35/35) Compressing objects: 100% (35/35), done.\n"
+            "Writing objects: 2% (1/36) Writing objects: 5% (2/36) Writing objects: 8% (3/36) "
+            "Writing objects: 11% (4/36) Writing objects: 13% (5/36) Writing objects: 16% (6/36) "
+            "Writing objects: 19% (7/36) Writing objects: 22% (8/36) Writing objects: 25% (9/36) "
+            "Writing objects: 27% (10/36) Writing objects: 30% (11/36) Writing objects: 33% (12/36) "
+            "Writing objects: 36% (13/36) Writing objects: 38% (14/36) Writing objects: 41% (15/36) "
+            "Writing objects: 44% (16/36) Writing objects: 47% (17/36) Writing objects: 50% (18/36) "
+            "Writing objects: 52% (19/36) Writing objects: 55% (20/36) Writing objects: 58% (21/36) "
+            "Writing objects: 61% (22/36) Writing objects: 63% (23/36) Writing objects: 69% (25/36) "
+            "Writing objects: 72% (26/36) Writing objects: 75% (27/36) Writing objects: 77% (28/36) "
+            "Writing objects: 80% (29/36) Writing objects: 83% (30/36) Writing objects: 88% (32/36) "
+            "Writing objects: 91% (33/36) Writing objects: 94% (34/36) Writing objects: 97% (35/36) "
+            "Writing objects: 100% (36/36) Writing objects: 100% (36/36), 7.06 KiB | 361.00 KiB/s, done.\n"
+            "Total 36 (delta 24), reused 0 (delta 0), pack-reused 0 (from 0)\n"
+            "remote: Resolving deltas: 4% (1/24)remote: Resolving deltas: 8% (2/24)"
+            "remote: Resolving deltas: 13% (3/24)remote: Resolving deltas: 17% (4/24)"
+            "remote: Resolving deltas: 21% (5/24)remote: Resolving deltas: 25% (6/24)"
+            "remote: Resolving deltas: 29% (7/24)remote: Resolving deltas: 33% (8/24)"
+            "remote: Resolving deltas: 38% (9/24)remote: Resolving deltas: 42% (10/24)"
+            "remote: Resolving deltas: 46% (11/24)remote: Resolving deltas: 50% (12/24)"
+            "remote: Resolving deltas: 54% (13/24)remote: Resolving deltas: 58% (14/24)"
+            "remote: Resolving deltas: 63% (15/24)remote: Resolving deltas: 67% (16/24)"
+            "remote: Resolving deltas: 71% (17/24)remote: Resolving deltas: 75% (18/24)"
+            "remote: Resolving deltas: 79% (19/24)remote: Resolving deltas: 83% (20/24)"
+            "remote: Resolving deltas: 88% (21/24)remote: Resolving deltas: 92% (22/24)"
+            "remote: Resolving deltas: 96% (23/24)remote: Resolving deltas: 100% (24/24)"
+            "remote: Resolving deltas: 100% (24/24)\n"
+            "remote: Waiting for private key checker: 13/13 objects left\n"
+            "remote: Counting objects: 2375remote: Counting objects: 6404"
+            "remote: Counting objects: 10018remote: Counting objects: 13729"
+            "remote: Counting objects: 17787remote: Counting objects: 21725"
+            "remote: Counting objects: 26320remote: Counting objects: 31174"
+            "remote: Counting objects: 36048remote: Counting objects: 41557"
+            "remote: Counting objects: 47251remote: Counting objects: 51826"
+            "remote: Counting objects: 51860, done\n"
+            "remote: remote: Processing changes: ()remote: Processing changes: (|)"
+            "remote: Processing changes: (/)remote: Processing changes: (-)"
+            "remote: Processing changes: ()remote: Processing changes: updated: 1 (|)"
+            "remote: Processing changes: updated: 1 (/)remote: Processing changes: updated: 1 (-)"
+            "remote: Processing changes: updated: 1 ()remote: Processing changes: updated: 1 (|)"
+            "remote: Processing changes: updated: 1 (/)remote: Processing changes: updated: 1 (-)"
+            "remote: Processing changes: updated: 1 ()remote: Processing changes: refs: 1, updated: 1 ()"
+            "remote: Processing changes: refs: 1, updated: 1 ()remote: Processing changes: refs: 1, updated: 1 ()"
+            "remote: Processing changes: refs: 1, updated: 1, done\n"
+            "remote:\n"
+            "remote: SUCCESS\n"
+            "remote:\n"
+            "remote: [https://chromium-review.googlesource.com/c/chromium/src/+/8310252](https://chromium-review.googlesource.com/c/chromium/src/+/8310252) "
+            "[Extensions] Remove Uncaught Error prefix from onMessage error responses\n"
+            "remote:\n"
+            "To sso://chromium/chromium/src.git\n"
+            "[new reference] 6df7d46a36a378aa11feded6ce73460c2ca6c9d5 -> refs/for/refs/heads/main%m=%5BExtensions%5D_Address_review_comments_for_onMessage_error_handling,l=Commit-Queue+1\n"
+        )
+
+        # Execute filter with string buffer output stream
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(second_snippet)
+        output = buf.getvalue()
+
+        # Check that intermediate local progress updates are suppressed
+        self.assertNotIn("Counting objects: 1%", output)
+        self.assertNotIn("Counting objects: 98%", output)
+        self.assertNotIn("Compressing objects: 2%", output)
+        self.assertNotIn("Compressing objects: 97%", output)
+        self.assertNotIn("Writing objects: 2%", output)
+        self.assertNotIn("Writing objects: 97%", output)
+
+        # Check that intermediate remote progress updates and empty spinner
+        # frames are suppressed
+        self.assertNotIn("Resolving deltas: 4%", output)
+        self.assertNotIn("Resolving deltas: 96%", output)
+        self.assertNotIn("Waiting for private key checker", output)
+        self.assertNotIn("Counting objects: 2375", output)
+        self.assertNotIn("Counting objects: 51826", output)
+        self.assertNotIn("Processing changes: ()", output)
+        self.assertNotIn("Processing changes: (|)", output)
+        self.assertNotIn("Processing changes: updated: 1", output)
+
+        # Check that step completions, URLs, and static status lines are
+        # preserved
+        self.assertIn("Counting objects: 100% (63/63), done.", output)
+        self.assertIn("Delta compression using up to 128 threads", output)
+        self.assertIn("Compressing objects: 100% (35/35), done.", output)
+        self.assertIn(
+            "Writing objects: 100% (36/36), 7.06 KiB | 361.00 KiB/s, done.",
+            output,
+        )
+        self.assertIn(
+            "Total 36 (delta 24), reused 0 (delta 0), pack-reused 0 (from 0)",
+            output,
+        )
+        self.assertIn("remote: Resolving deltas: 100% (24/24)", output)
+        self.assertIn("remote: Counting objects: 51860, done", output)
+        self.assertIn(
+            "remote: Processing changes: refs: 1, updated: 1, done",
+            output,
+        )
+        self.assertIn("remote: SUCCESS", output)
+        self.assertIn(
+            "https://chromium-review.googlesource.com/c/chromium/src/+/8310252",
+            output,
+        )
+        self.assertIn("To sso://chromium/chromium/src.git", output)
+        self.assertIn("[new reference]", output)
+
+    def test_create_ai_agent_push_filter_with_errors(self):
+        """Verifies that push errors and rejection lines are preserved.
+
+        Tests that when Gerrit rejects a push or returns an error, the rejection
+        line and error details are preserved and written to the output stream.
+        """
+        error_output = (
+            "remote: Processing changes: (\\)\r"
+            "remote: Processing changes: refs: 1, rejected: 1, done\n"
+            "remote: ERROR: [banned-words] blocked keyword found\n"
+            "To sso://chromium/chromium/src.git\n"
+            " ! [remote rejected] HEAD -> refs/for/main (pre-receive hook declined)\n"
+            "error: failed to push some refs to 'sso://chromium/chromium/src.git'\n"
+        )
+
+        # Execute filter with string buffer output stream
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(error_output)
+        output = buf.getvalue()
+
+        # Check that intermediate spinner frame is suppressed
+        self.assertNotIn("Processing changes: (\\)", output)
+
+        # Check that rejection line and error details are preserved
+        self.assertIn(
+            "remote: Processing changes: refs: 1, rejected: 1, done", output
+        )
+        self.assertIn(
+            "remote: ERROR: [banned-words] blocked keyword found", output
+        )
+        self.assertIn("! [remote rejected]", output)
+        self.assertIn("error: failed to push some refs", output)
+
+    def test_create_ai_agent_push_filter_edge_cases(self):
+        """Verifies filtering of edge-case progress formats and concatenation.
+
+        Tests that modern git `Enumerating objects`, remote `Checking
+        connectivity`, remote `Unpacking objects`, trailing empty spinner
+        frames `remote: ()`, concatenation directly with status tokens
+        `remote: SUCCESS`, and streaming line feeds do not leak repeating
+        progress or empty `remote:` lines.
+        """
+        # Test modern git object enumeration progress updates
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(
+            "Enumerating objects: 1% (1/63) Enumerating objects: 3% (2/63) "
+            "Enumerating objects: 100% (63/63) Enumerating objects: 100% (63/63), done.\n"
+        )
+        output = buf.getvalue()
+        self.assertNotIn("Enumerating objects: 1%", output)
+        self.assertNotIn("Enumerating objects: 3%", output)
+        self.assertIn("Enumerating objects: 100% (63/63), done.", output)
+
+        # Test remote connectivity check and unpacking progress frames
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(
+            "remote: Checking connectivity: 1% (1/100) remote: Checking connectivity: 100% (100/100), done.\n"
+            "remote: Unpacking objects: 1% (1/50) remote: Unpacking objects: 100% (50/50), done.\n"
+        )
+        output = buf.getvalue()
+        self.assertNotIn("Checking connectivity: 1%", output)
+        self.assertIn(
+            "remote: Checking connectivity: 100% (100/100), done.", output
+        )
+        self.assertNotIn("Unpacking objects: 1%", output)
+        self.assertIn("remote: Unpacking objects: 100% (50/50), done.", output)
+
+        # Test trailing empty spinner frames without completion keyword
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn("remote: (|)remote: (/)remote: ()\n")
+        self.assertEqual(buf.getvalue(), "")
+
+        # Test spinner frame concatenated directly with `remote: SUCCESS`
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(
+            "remote: Processing changes: refs: 1, updated: 1 ()remote: SUCCESS\n"
+        )
+        output = buf.getvalue()
+        self.assertNotIn("Processing changes: refs: 1, updated: 1 ()", output)
+        self.assertIn("remote: SUCCESS", output)
+
+        # Test streaming lines do not emit orphan `remote:` lines
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        for line in [
+            "remote: Processing changes: refs: 1, updated: 1, done",
+            "remote:",
+            "remote: SUCCESS",
+            "remote:",
+            "remote: https://chromium-review.googlesource.com/c/123",
+            "remote:",
+            "To sso://chromium/chromium/src.git",
+        ]:
+            filter_fn(line)
+        output = buf.getvalue()
+        self.assertNotIn("\nremote:\n", output)
+        self.assertFalse(output.startswith("remote:\n"))
+        self.assertIn(
+            "remote: Processing changes: refs: 1, updated: 1, done", output
+        )
+        self.assertIn("remote: SUCCESS", output)
+        self.assertIn("https://chromium-review.googlesource.com/c/123", output)
+        self.assertIn("To sso://chromium/chromium/src.git", output)
+
+    def test_create_ai_agent_push_filter_consecutive_rejections_not_deduplicated(
+        self,
+    ):
+        """Verifies that consecutive rejection or error lines are both preserved.
+
+        Tests that when push produces multiple consecutive rejection lines,
+        the deduplication check does not suppress subsequent error lines.
+        """
+        rejection_output = (
+            "! [remote rejected] HEAD -> refs/for/main (pre-receive hook declined)\n"
+            "! [remote rejected] HEAD -> refs/for/main (pre-receive hook declined)\n"
+            "remote: ERROR: rejected keyword\n"
+            "remote: ERROR: rejected keyword\n"
+        )
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(rejection_output)
+        output = buf.getvalue()
+        self.assertEqual(output.count("pre-receive hook declined"), 2)
+        self.assertEqual(output.count("ERROR: rejected keyword"), 2)
+
+    def test_create_ai_agent_push_filter_preserves_refspec_and_ref_lines(self):
+        """Verifies that ref update lines and refspecs with `remote:` are preserved.
+
+        Tests that lines containing `->`, starting with `To `, or containing
+        embedded `remote:` in refspecs/messages are not incorrectly split.
+        """
+        raw_output = (
+            "remote: Resolving deltas: 100% (29/29)\n"
+            "To sso://chromium/chromium/src.git\n"
+            " * [new reference] cbf60b4 -> refs/for/main%m=Fix_remote:_problem\n"
+        )
+        buf = io.StringIO()
+        filter_fn = git_cl._create_ai_agent_push_filter(out_stream=buf)
+        filter_fn(raw_output)
+        output = buf.getvalue()
+        self.assertIn(
+            " * [new reference] cbf60b4 -> refs/for/main%m=Fix_remote:_problem\n",
+            output,
+        )
+        self.assertIn("To sso://chromium/chromium/src.git\n", output)
+
+    @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        return_value=b"remote: ok",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_ai_agent_active(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        mock_call,
+        _mock_superproject,
+    ) -> None:
+        """Verifies that `_RunGitPushWithTraces` activates filter and emits log message.
+
+        Tests that when an AI agent environment variable is set, `print_stdout`
+        is set to False and the suppression log message is printed.
+        """
+        cl = git_cl.Changelist()
+        metadata = {}
+
+        # Test detection with `ANTIGRAVITY_AGENT` set
+        with (
+            mock.patch.dict(os.environ, {"ANTIGRAVITY_AGENT": "1"}, clear=True),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout,
+        ):
+            out = cl._RunGitPushWithTraces("refspec", [], metadata)
+
+        # Verify output from `git push`
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_call.call_count, 1)
+
+        # Verify that `print_stdout` is False so repeating raw bytes are not streamed
+        kwargs = mock_call.call_args[1]
+        self.assertFalse(kwargs.get("print_stdout"))
+
+        # Verify that the log message about suppressing repeating messages was emitted
+        stdout_output = mock_stdout.getvalue()
+        self.assertIn(
+            "AI agent detected; "
+            "suppressing repeating progress messages to avoid context pollution.",
+            stdout_output,
+        )
+
+        # Test detection with `AI_AGENT` set
+        with (
+            mock.patch.dict(os.environ, {"AI_AGENT": "1"}, clear=True),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout,
+        ):
+            out = cl._RunGitPushWithTraces("refspec", [], metadata)
+
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_call.call_count, 2)
+        kwargs = mock_call.call_args[1]
+        self.assertFalse(kwargs.get("print_stdout"))
+        self.assertIn(
+            "AI agent detected; "
+            "suppressing repeating progress messages to avoid context pollution.",
+            mock_stdout.getvalue(),
+        )
+
+        # Test detection with `GEMINI_CLI` set
+        with (
+            mock.patch.dict(os.environ, {"GEMINI_CLI": "1"}, clear=True),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout,
+        ):
+            out = cl._RunGitPushWithTraces("refspec", [], metadata)
+
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_call.call_count, 3)
+        kwargs = mock_call.call_args[1]
+        self.assertFalse(kwargs.get("print_stdout"))
+        self.assertIn(
+            "AI agent detected; "
+            "suppressing repeating progress messages to avoid context pollution.",
+            mock_stdout.getvalue(),
+        )
+
+    @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        return_value=b"remote: ok",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_non_ai_agent(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        mock_call,
+        _mock_superproject,
+    ) -> None:
+        """Verifies that `_RunGitPushWithTraces` behaves normally when not an AI agent.
+
+        Tests that when no AI agent variables are set, `print_stdout` remains True
+        and no suppression log message is printed.
+        """
+        cl = git_cl.Changelist()
+        metadata = {}
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout,
+        ):
+            out = cl._RunGitPushWithTraces("refspec", [], metadata)
+
+        # Verify output from `git push`
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_call.call_count, 1)
+
+        # Verify that `print_stdout` is True for standard users
+        kwargs = mock_call.call_args[1]
+        self.assertTrue(kwargs.get("print_stdout"))
+
+        # Verify that the suppression log message was not emitted
+        stdout_output = mock_stdout.getvalue()
+        self.assertNotIn("AI agent detected", stdout_output)
 
 
 if __name__ == "__main__":
