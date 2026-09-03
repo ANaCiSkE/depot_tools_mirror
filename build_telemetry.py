@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 
 import utils
@@ -130,21 +131,25 @@ def load_config(cfg_path=_DEFAULT_CONFIG_PATH, countdown=_DEFAULT_COUNTDOWN):
 
 def check_auth():
     """Checks auth information."""
-    try:
-        out = subprocess.check_output(
-            "cipd auth-info --json-output -",
-            text=True,
-            shell=True,
-            stderr=subprocess.DEVNULL,
-            timeout=3,
-        )
-    except Exception:
-        return {}
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError as e:
-        logging.error(e)
-        return {}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        json_path = os.path.join(tmpdir, "auth_info.json")
+        try:
+            subprocess.run(
+                f'cipd auth-info --json-output "{json_path}"',
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=True,
+            )
+        except Exception:
+            return {}
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            logging.error(e)
+            return {}
 
 
 def enabled():

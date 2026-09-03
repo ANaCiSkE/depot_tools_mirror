@@ -19,19 +19,31 @@ import build_telemetry  # noqa: E402
 
 class BuildTelemetryTest(unittest.TestCase):
     def test_check_auth(self):
-        with unittest.mock.patch("subprocess.check_output") as run_mock:
+        with unittest.mock.patch("subprocess.run") as run_mock:
             auth = {"email": "bob@google.com"}
-            run_mock.return_value = json.dumps(auth)
+
+            def write_auth(cmd, **kwargs):
+                path = cmd.split("--json-output ")[1].strip('"')
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(auth, f)
+
+            run_mock.side_effect = write_auth
             self.assertEqual(build_telemetry.check_auth(), auth)
 
-        with unittest.mock.patch("subprocess.check_output") as run_mock:
+        with unittest.mock.patch("subprocess.run") as run_mock:
             run_mock.side_effect = subprocess.CalledProcessError(
                 1, cmd=["check auth"], stderr="failed"
             )
             self.assertEqual(build_telemetry.check_auth(), {})
 
-        with unittest.mock.patch("subprocess.check_output") as run_mock:
-            run_mock.return_value = ""
+        with unittest.mock.patch("subprocess.run") as run_mock:
+
+            def write_invalid(cmd, **kwargs):
+                path = cmd.split("--json-output ")[1].strip('"')
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("invalid json")
+
+            run_mock.side_effect = write_invalid
             self.assertEqual(build_telemetry.check_auth(), {})
 
     def test_load_and_save_config(self):
