@@ -113,6 +113,7 @@ import scm as scm_git
 import setup_color
 import subcommand
 import subprocess2
+import trace_utils
 import upload_to_google_storage_first_class
 import from_third_party
 
@@ -255,43 +256,54 @@ class Hook(object):
         if cmd[0] == "vpython3" and _detect_host_os() == "win":
             cmd[0] += ".bat"
 
+        hook_name = f"hook: {self._name or (cmd[0] if cmd else 'unknown')}"
+        trace_args = {
+            "action": cmd,
+            "name": self._name,
+            "cwd": os.path.relpath(
+                os.path.normpath(self.effective_cwd), self._cwd_base
+            ),
+            "condition": self._condition,
+        }
+
         exit_code = 2
-        try:
-            start_time = time.time()
-            gclient_utils.CheckCallAndFilter(
-                cmd,
-                cwd=self.effective_cwd,
-                print_stdout=True,
-                show_header=True,
-                always_show_header=self._verbose,
-            )
-            exit_code = 0
-        except (gclient_utils.Error, subprocess2.CalledProcessError) as e:
-            # Use a discrete exit status code of 2 to indicate that a hook
-            # action failed.  Users of this script may wish to treat hook action
-            # failures differently from VC failures.
-            print("Error: %s" % str(e), file=sys.stderr)
-            sys.exit(exit_code)
-        finally:
-            elapsed_time = time.time() - start_time
-            metrics.collector.add_repeated(
-                "hooks",
-                {
-                    "action": gclient_utils.CommandToStr(cmd),
-                    "name": self._name,
-                    "cwd": os.path.relpath(
-                        os.path.normpath(self.effective_cwd), self._cwd_base
-                    ),
-                    "condition": self._condition,
-                    "execution_time": elapsed_time,
-                    "exit_code": exit_code,
-                },
-            )
-            if elapsed_time > 10:
-                print(
-                    "Hook '%s' took %.2f secs"
-                    % (gclient_utils.CommandToStr(cmd), elapsed_time)
+        with trace_utils.trace(hook_name, cat="hook", args=trace_args):
+            try:
+                start_time = time.time()
+                gclient_utils.CheckCallAndFilter(
+                    cmd,
+                    cwd=self.effective_cwd,
+                    print_stdout=True,
+                    show_header=True,
+                    always_show_header=self._verbose,
                 )
+                exit_code = 0
+            except (gclient_utils.Error, subprocess2.CalledProcessError) as e:
+                # Use a discrete exit status code of 2 to indicate that a hook
+                # action failed.  Users of this script may wish to treat hook action
+                # failures differently from VC failures.
+                print("Error: %s" % str(e), file=sys.stderr)
+                sys.exit(exit_code)
+            finally:
+                elapsed_time = time.time() - start_time
+                metrics.collector.add_repeated(
+                    "hooks",
+                    {
+                        "action": gclient_utils.CommandToStr(cmd),
+                        "name": self._name,
+                        "cwd": os.path.relpath(
+                            os.path.normpath(self.effective_cwd), self._cwd_base
+                        ),
+                        "condition": self._condition,
+                        "execution_time": elapsed_time,
+                        "exit_code": exit_code,
+                    },
+                )
+                if elapsed_time > 10:
+                    print(
+                        "Hook '%s' took %.2f secs"
+                        % (gclient_utils.CommandToStr(cmd), elapsed_time)
+                    )
 
 
 class DependencySettings(object):
@@ -2730,15 +2742,18 @@ it or fix the checkout.
         for s in self.dependencies:
             if s.should_process:
                 work_queue.enqueue(s)
-        work_queue.flush(
-            revision_overrides,
-            command,
-            args,
-            options=self._options,
-            patch_refs=patch_refs,
-            target_branches=target_branches,
-            skip_sync_revisions=skip_sync_revisions,
-        )
+        with trace_utils.trace(
+            f"ExecutionQueue.flush ({command})", cat="gclient"
+        ):
+            work_queue.flush(
+                revision_overrides,
+                command,
+                args,
+                options=self._options,
+                patch_refs=patch_refs,
+                target_branches=target_branches,
+                skip_sync_revisions=skip_sync_revisions,
+            )
 
         if revision_overrides:
             print(
@@ -2808,26 +2823,30 @@ it or fix the checkout.
         # dependency was moved to CIPD, we want to remove the old git directory
         # first and then sync the CIPD dep.
         if self._cipd_root:
-            self._cipd_root.run(command)
-            # It's possible that CIPD removed some entries that are now part of
-            # git worktree. Try to checkout those directories
-            if removed_cipd_entries:
-                for cipd_entry in removed_cipd_entries:
-                    cwd = os.path.join(self._root_dir, cipd_entry.split(":")[0])
-                    cwd, tail = os.path.split(cwd)
-                    if cwd:
-                        try:
-                            gclient_scm.scm.GIT.Capture(
-                                ["checkout", tail], cwd=cwd
-                            )
-                        except (subprocess2.CalledProcessError, OSError):
-                            # repo of the deleted cipd may also have been deleted.
-                            pass
+            with trace_utils.trace("CipdSync", cat="gclient"):
+                self._cipd_root.run(command)
+                # It's possible that CIPD removed some entries that are now part of
+                # git worktree. Try to checkout those directories
+                if removed_cipd_entries:
+                    for cipd_entry in removed_cipd_entries:
+                        cwd = os.path.join(
+                            self._root_dir, cipd_entry.split(":")[0]
+                        )
+                        cwd, tail = os.path.split(cwd)
+                        if cwd:
+                            try:
+                                gclient_scm.scm.GIT.Capture(
+                                    ["checkout", tail], cwd=cwd
+                                )
+                            except (subprocess2.CalledProcessError, OSError):
+                                # repo of the deleted cipd may also have been deleted.
+                                pass
 
         if not self._options.nohooks:
             if should_show_progress:
                 pm = Progress("Running hooks", 1)
-            self.RunHooksRecursively(self._options, pm)
+            with trace_utils.trace("RunHooksRecursively", cat="gclient"):
+                self.RunHooksRecursively(self._options, pm)
 
         self._WriteFileContents(
             PREVIOUS_SYNC_COMMITS_FILE,
@@ -5287,6 +5306,18 @@ class OptionParser(optparse.OptionParser):
             action="store_true",
             help="Ignored for backwards compatibility.",
         )
+        self.add_option(
+            "--trace",
+            action="store_true",
+            default=False,
+            help="Enable tracing to Chrome Trace Event format for Perfetto UI.",
+        )
+        self.add_option(
+            "--trace-file",
+            dest="trace_file",
+            default=None,
+            help="Specify output file path for trace JSON (implies --trace).",
+        )
 
     def parse_args(self, args=None, _values=None):
         """Integrates standard options processing."""
@@ -5302,6 +5333,9 @@ class OptionParser(optparse.OptionParser):
         # We store only the keys, and not the values, since the values can
         # contain arbitrary information, which might be PII.
         metrics.collector.add("arguments", list(actual_options.__dict__))
+
+        if options.trace or options.trace_file:
+            trace_utils.collector.start(options.trace_file)
 
         levels = [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]
         logging.basicConfig(
@@ -5414,6 +5448,7 @@ def main(argv):
         print("Error: %s" % str(e), file=sys.stderr)
         return 1
     finally:
+        trace_utils.collector.close()
         gclient_utils.PrintWarnings()
     return 0
 
