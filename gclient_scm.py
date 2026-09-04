@@ -26,7 +26,6 @@ import git_cache
 import git_common
 import scm
 import subprocess2
-import trace_utils
 
 
 class NoUsableRevError(gclient_utils.Error):
@@ -794,14 +793,7 @@ class GitWrapper(SCMWrapper):
 
     def set_config(f):
         def wrapper(*args):
-            self = args[0]
-            trace_name = f"git: {getattr(self, 'relpath', getattr(self, 'name', 'unknown'))}"
-            trace_args = {
-                "url": getattr(self, "url", ""),
-                "checkout_path": getattr(self, "checkout_path", ""),
-            }
-            with trace_utils.trace(trace_name, cat="scm", args=trace_args):
-                return_val = f(*args)
+            return_val = f(*args)
             checkout_path = args[0].checkout_path
             if os.path.exists(os.path.join(checkout_path, ".git")):
                 # The config updates to the project are stored in this list
@@ -2246,24 +2238,21 @@ class CipdRoot(object):
 
     def ensure(self):
         """Run `cipd ensure`."""
-        with trace_utils.trace(
-            "cipd: ensure", cat="cipd", args={"root_dir": self.root_dir}
-        ):
-            with self._mutator_lock:
-                with self._create_ensure_file() as ensure_file:
-                    cmd = [
-                        "cipd",
-                        "ensure",
-                        "-log-level",
-                        self._log_level,
-                        "-root",
-                        self.root_dir,
-                        "-ensure-file",
-                        ensure_file,
-                    ]
-                    gclient_utils.CheckCallAndFilter(
-                        cmd, print_stdout=True, show_header=True
-                    )
+        with self._mutator_lock:
+            with self._create_ensure_file() as ensure_file:
+                cmd = [
+                    "cipd",
+                    "ensure",
+                    "-log-level",
+                    self._log_level,
+                    "-root",
+                    self.root_dir,
+                    "-ensure-file",
+                    ensure_file,
+                ]
+                gclient_utils.CheckCallAndFilter(
+                    cmd, print_stdout=True, show_header=True
+                )
 
     @contextlib.contextmanager
     def _create_ensure_file_for_resolve(self):

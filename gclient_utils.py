@@ -28,7 +28,6 @@ import urllib.parse
 
 import gclient_eval
 import subprocess2
-import trace_utils
 
 # Git wrapper retries on a transient error, and some callees do retries too,
 # such as GitWrapper.update (doing clone). One retry attempt should be
@@ -1174,12 +1173,7 @@ class ExecutionQueue(object):
                     "[%s] Started." % Elapsed(task_item.start),
                     file=task_item.outbuf,
                 )
-                with trace_utils.trace(
-                    task_item.name,
-                    cat="work_queue",
-                    args={"requirements": list(task_item.requirements)},
-                ):
-                    task_item.run(*args, **kwargs)
+                task_item.run(*args, **kwargs)
                 task_item.finish = datetime.datetime.now()
                 print(
                     "[%s] Finished." % Elapsed(task_item.finish),
@@ -1222,21 +1216,13 @@ class ExecutionQueue(object):
             """Runs in its own thread."""
             logging.debug("_Worker.run(%s)" % self.item.name)
             work_queue = self.kwargs["work_queue"]
-            trace_utils.collector.set_thread_name(
-                f"Worker-{self.index}: {self.item.name}"
-            )
             try:
                 self.item.start = datetime.datetime.now()
                 print(
                     "[%s] Started." % Elapsed(self.item.start),
                     file=self.item.outbuf,
                 )
-                with trace_utils.trace(
-                    self.item.name,
-                    cat="work_queue",
-                    args={"requirements": list(self.item.requirements)},
-                ):
-                    self.item.run(*self.args, **self.kwargs)
+                self.item.run(*self.args, **self.kwargs)
                 self.item.finish = datetime.datetime.now()
                 print(
                     "[%s] Finished." % Elapsed(self.item.finish),
