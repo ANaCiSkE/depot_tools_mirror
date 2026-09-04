@@ -879,10 +879,15 @@ class _CQState(object):
 
 
 class _ParsedIssueNumberArgument(object):
-    def __init__(self, issue=None, patchset=None, hostname=None):
+    def __init__(self, issue=None, patchset=None, hostname=None, project=None):
+        # Numeric issue ID.
         self.issue = issue
+        # Patchset number if specified in URL.
         self.patchset = patchset
+        # Hostname of the code review server (e.g. chromium-review.googlesource.com).
         self.hostname = hostname
+        # Gerrit project name if specified in URL (e.g. chrome/experimental/chromium/src).
+        self.project = project
 
     @property
     def valid(self):
@@ -936,18 +941,23 @@ def ParseIssueNumberArgument(arg):
     else:
         part = parsed_url.path
 
+    # Match both standard Gerrit URLs (/c/project/+/issue) and short URLs (/issue).
+    # Group 'project' captures the project path between '/c/' and '/+/'.
     match = re.match(
-        r"(/c(/.*/\+)?)?/(?P<issue>\d+)(/(?P<patchset>\d+)?/?)?$", part
+        r"(/c(/(?P<project>.+)/\+)?)?/(?P<issue>\d+)(/(?P<patchset>\d+)?/?)?$",
+        part,
     )
     if not match:
         return fail_result
 
     issue = int(match.group("issue"))
     patchset = match.group("patchset")
+    project = match.group("project")
     return _ParsedIssueNumberArgument(
         issue=issue,
         patchset=int(patchset) if patchset else None,
         hostname=parsed_url.netloc,
+        project=project,
     )
 
 
@@ -1455,12 +1465,19 @@ class Changelist(object):
     ] = {}
 
     def __init__(
-        self, branchref=None, issue=None, codereview_host=None, commit_date=None
+        self,
+        branchref=None,
+        issue=None,
+        codereview_host=None,
+        commit_date=None,
+        gerrit_project=None,
     ):
         """Create a new ChangeList instance.
 
         **kwargs will be passed directly to Gerrit implementation.
         """
+        # Explicitly specified Gerrit project (e.g. parsed from CL URL).
+        self._gerrit_project = gerrit_project
         self.branchref = branchref
         if self.branchref:
             assert (
@@ -2643,6 +2660,17 @@ class Changelist(object):
 
     def GetGerritProject(self):
         """Returns Gerrit project name based on remote git URL."""
+        # Use explicitly provided project if set (e.g. from CL URL).
+        if self._gerrit_project:
+            return self._gerrit_project
+        # If the code review host differs from the local repository's Gerrit
+        # host and no project was specified, the project cannot be inferred from
+        # the local repo.
+        if (
+            self._gerrit_host
+            and self._gerrit_host != self._GetGerritHostFromRemoteUrl()
+        ):
+            return None
         remote_url = self.GetRemoteUrl()
         if remote_url is None:
             logging.warning("can't detect Gerrit project.")
@@ -3298,6 +3326,8 @@ class Changelist(object):
         if parsed_issue_arg.hostname:
             self._gerrit_host = parsed_issue_arg.hostname
             self._gerrit_server = "https://%s" % self._gerrit_host
+        if parsed_issue_arg.project:
+            self._gerrit_project = parsed_issue_arg.project
 
         try:
             detail = self._GetChangeDetail(["ALL_REVISIONS"])
@@ -3446,6 +3476,15 @@ class Changelist(object):
         if repo.endswith(".git"):
             repo = repo[: -len(".git")]
         repo = repo.rstrip("/")
+        # Normalize internal experimental forks (e.g. chrome/experimental/chromium/src
+        # on chrome-internal corresponds to chromium/src on chromium).
+        if host == "chrome-internal" and repo.startswith(
+            "/chrome/experimental/"
+        ):
+            host = "chromium"
+            repo = repo[len("/chrome/experimental") :]
+        elif repo.startswith("/experimental/"):
+            repo = repo[len("/experimental") :]
         return (host, repo)
 
     @staticmethod
@@ -5902,6 +5941,7 @@ def CMDdescription(parser, args):
     if target_issue_arg:
         kwargs["issue"] = target_issue_arg.issue
         kwargs["codereview_host"] = target_issue_arg.hostname
+        kwargs["gerrit_project"] = target_issue_arg.project
 
     cl = Changelist(**kwargs)
     if not cl.GetIssue():
@@ -7394,7 +7434,9 @@ def CMDpatch(parser, args):
             return err
 
     cl = Changelist(
-        codereview_host=target_issue_arg.hostname, issue=target_issue_arg.issue
+        codereview_host=target_issue_arg.hostname,
+        issue=target_issue_arg.issue,
+        gerrit_project=target_issue_arg.project,
     )
 
     if not args[0].isdigit():

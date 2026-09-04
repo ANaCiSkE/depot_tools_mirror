@@ -695,7 +695,15 @@ class TestGitClBasic(unittest.TestCase):
 
 
 class TestParseIssueURL(unittest.TestCase):
-    def _test(self, arg, issue=None, patchset=None, hostname=None, fail=False):
+    def _test(
+        self,
+        arg,
+        issue=None,
+        patchset=None,
+        hostname=None,
+        project=None,
+        fail=False,
+    ):
         parsed = git_cl.ParseIssueNumberArgument(arg)
         self.assertIsNotNone(parsed)
         if fail:
@@ -705,6 +713,7 @@ class TestParseIssueURL(unittest.TestCase):
         self.assertEqual(parsed.issue, issue)
         self.assertEqual(parsed.patchset, patchset)
         self.assertEqual(parsed.hostname, hostname)
+        self.assertEqual(parsed.project, project)
 
     def test_basic(self):
         self._test("123", 123)
@@ -716,6 +725,20 @@ class TestParseIssueURL(unittest.TestCase):
         self._test("ssh://chrome-review.source.com/c/123/1/", fail=True)
 
     def test_gerrit_url(self):
+        self._test(
+            "https://chrome-internal-review.googlesource.com/c/chrome/experimental/chromium/src/+/9739452",
+            9739452,
+            None,
+            "chrome-internal-review.googlesource.com",
+            project="chrome/experimental/chromium/src",
+        )
+        self._test(
+            "https://chrome-internal-review.googlesource.com/c/chrome/experimental/chromium/src/+/9739452/3",
+            9739452,
+            3,
+            "chrome-internal-review.googlesource.com",
+            project="chrome/experimental/chromium/src",
+        )
         self._test(
             "https://codereview.source.com/123",
             123,
@@ -4241,6 +4264,52 @@ class TestGitCl(unittest.TestCase):
     @unittest.skipIf(
         gclient_utils.IsEnvCog(), "not supported in non-git environment"
     )
+    def test_patch_gerrit_guess_by_url_with_experimental_repo(self):
+        self._patch_common("chromium")
+        gerrit_util.GetChangeDetail.return_value = {
+            "current_revision": "1111111111",
+            "revisions": {
+                "1111111111": {
+                    "_number": 1,
+                    "fetch": {
+                        "http": {
+                            "url": "https://chrome-internal.googlesource.com/chrome/experimental/my/repo",
+                            "ref": "refs/changes/56/123456/1",
+                        }
+                    },
+                },
+            },
+        }
+        self.calls += [
+            (
+                (
+                    [
+                        "git",
+                        "fetch",
+                        "https://chrome-internal.googlesource.com/chrome/experimental/my/repo",
+                        "refs/changes/56/123456/1",
+                    ],
+                ),
+                "",
+            ),
+            ((["git", "cherry-pick", "FETCH_HEAD"],), ""),
+        ]
+        self.assertEqual(
+            git_cl.main(
+                [
+                    "patch",
+                    "https://chrome-internal-review.googlesource.com/c/chrome/experimental/my/repo/+/123456/1",
+                ]
+            ),
+            0,
+        )
+        self.assertIssueAndPatchset(
+            patchset="1", git_short_host="chrome-internal"
+        )
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
     @mock.patch("sys.stderr", io.StringIO())
     def test_patch_gerrit_conflict(self):
         self._patch_common()
@@ -7518,6 +7587,10 @@ class ChangelistTest(unittest.TestCase):
                 "https://chromium.googlesource.com/build",
                 "sso://chromium.googlesource.com/build",
             ),
+            (
+                "https://chromium.googlesource.com/chromium/src",
+                "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
+            ),
         ]
         for a, b in cases:
             with self.subTest(c=(a, b)):
@@ -7526,6 +7599,10 @@ class ChangelistTest(unittest.TestCase):
             (
                 "https://chrome-internal.googlesource.com/chromium/tools/depot_tools",
                 "sso://chromium/chromium/tools/depot_tools",
+            ),
+            (
+                "https://chromium.googlesource.com/v8/v8",
+                "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
             ),
         ]
         for a, b in cases:
@@ -7541,6 +7618,10 @@ class ChangelistTest(unittest.TestCase):
             (
                 "sso://chromium/chromium/tools/depot_tools",
                 ("chromium", "/chromium/tools/depot_tools"),
+            ),
+            (
+                "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
+                ("chromium", "/chromium/src"),
             ),
         ]
         for x, want in cases:
