@@ -558,68 +558,68 @@ infra/tools/luci/luci/mac-arm64
 	DKwHSG-c3VTlyp5MD88jNav6pyr0lgsPMGobphXYV9oC
 
 infra/tools/luci/lucicfg/linux-386
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	vtU8N58XuMlCDogdQdhDAuEic9uPakaGbXv48hF1-xwC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	3GqTvXhLx-n06dxyHGu0wdFgbP6SpuebQADGcZSvb2oC
 
 infra/tools/luci/lucicfg/linux-amd64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	lJY-XJauWfIWMx_2MeOmUTORdBiHZRqrBOljeh80XjIC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	RmpRQ6hasXOIhGJqMakrDNgSzOYGWyzlGy2eir5JH5UC
 
 infra/tools/luci/lucicfg/linux-arm64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	LF2kXvMeb4coTv3YKLa6gFfICmtKJ6If0CRH6Ft_IXYC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	rpAkKnDYw2QtZEKjqQXOsvrI3fTB54fXuNcjV25mIpgC
 
 infra/tools/luci/lucicfg/linux-armv6l
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	KW7YCHsXP67wvZKESVzhAJLo5hOOX_pZc9VtQG6uZzMC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	4PEGB1VO2PGkSuLmCWGowld5GgB5B6ObkNuObIr4tYgC
 
 infra/tools/luci/lucicfg/linux-loong64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	MOShBY1B3G80QI7AhrErJF08YULkZgiA7Inb_uhHGn8C
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	9Ue3bPmWa4A0qCvzqkO2-yQJkkaPrfgcQpsCYkRg7wcC
 
 infra/tools/luci/lucicfg/linux-mips64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	subZDXf7RcE3YUojuNI-T7QL-8TdYEhA0aQXio2qznsC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	mIym48RtAFu3DRrb4NcM5kL0qeVm3WwTPFv0XCG24mQC
 
 infra/tools/luci/lucicfg/linux-mips64le
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	_x8hnYYoIMEghePSaOPPArlMWQdtWa0fuaHdWsC9wTUC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	ehSjhNm1lWKRGtxc6Q2VbXAL92uv19IuRvV0klxcC7wC
 
 infra/tools/luci/lucicfg/linux-mipsle
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	nCQK-gnxX9XwjBfJS0jYwALoiJRqKake37p1myfAZ7cC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	IktnGkfS2a-UsIl8heQ71WPhRnF5bGKg0_-ZB2s3rHcC
 
 infra/tools/luci/lucicfg/linux-ppc64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	vbNB-4CG4fhQF7_ypKEOmDE9aBtYNTpb4-u9sT4dQuMC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	GiwOXfGwQIrv4og6REERsriqGpGC_HLaJDmzx-gCvLUC
 
 infra/tools/luci/lucicfg/linux-ppc64le
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	mZgWPQJXC8yjTXFtDRRe0BGy62ALnpwGuqSjHp_kcJAC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	MZdNSluW5fxgIzKpHTUPhH7ELYAtKS196zfQpaJ-4ewC
 
 infra/tools/luci/lucicfg/linux-riscv64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	2qKDi3eHeBb7BI77LG9mFGBjutHS3wjfXidzDphk-2gC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	-N2l-eyogK4gcHlYnJWN1op4qDHaXZVkba7wxRrgDQoC
 
 infra/tools/luci/lucicfg/linux-s390x
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	haTVaKCHS3_WhyR7bhvQ7jSfBkPw2b8Z9hpUcRuQg60C
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	W_eUJ5VOpGqhe5WuothQ1fW9RvP46wn2q196TKVcqVMC
 
 infra/tools/luci/lucicfg/mac-amd64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	2AebA8jgmoq6JSb66dJA57aQKf2FUm78b2ZXgX8HlzIC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	Zlo05XQfGBwmiirxfWA8JZMxFioeTjbLaTNNJTbGcV8C
 
 infra/tools/luci/lucicfg/mac-arm64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	gK0DeoAUoKjcyo196TjMHkRcGSzzaAiJ_0Ys5CuP0j0C
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	v3IA47Z3NrTvahqrDsDJod28BXB7br7cNtzJlnfX94cC
 
 infra/tools/luci/lucicfg/windows-amd64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	x9DraWdNNTzVHfByBnayqx5dl1EJtj1pEV41oIodkTMC
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	9azALEm5kI0JV020C-RVnyISl1XjYnCGmZMKKi9NrbEC
 
 infra/tools/luci/lucicfg/windows-arm64
-	git_revision:7e9b8650002131e7fad93752370b92fd1ef8132d
-	7iXI0ZFdCxyz49RgfcKg3U6MJUzwB1cjcN6qQbXW8P4C
+	git_revision:b83b6bcd8c6552a06b27fc0f70d3200f0fdc7a48
+	xjuIPdhngPzbhqddMlooeoKsl0yU9j4ZDZ_4SOL1KyAC
 
 infra/tools/luci/vpython3/linux-386
 	git_revision:f4c06cbc5f6300908d4f2a5958fee56177202d71
