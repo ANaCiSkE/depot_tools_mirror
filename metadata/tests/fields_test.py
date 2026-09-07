@@ -186,6 +186,7 @@ class FieldValidationTest(unittest.TestCase):
                 "Apache-2.0",
                 "BSD-2-Clause",
                 "BSD-2-Clause-FreeBSD",
+                "Info-ZIP",
                 "MIT",
                 "Refer to additional_readme_paths.json",
                 "LicenseRef-MIT",

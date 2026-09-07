@@ -117,6 +117,7 @@ _ALLOWED_SPDX_LICENSES = frozenset(
         "HPND-sell-variant",
         "ICU",
         "IJG",
+        "Info-ZIP",
         "ISC",
         "JSON",
         "Libpng",
