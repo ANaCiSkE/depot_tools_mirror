@@ -6669,25 +6669,20 @@ def CMDupload(parser, args):
         print("No previous patchsets, so --retry-failed has no effect.")
         options.retry_failed = False
 
-    # Verify working tree is clean before proceeding with either squashed or
-    # non-squashed uploads. Evaluating wait_dirty_check() before wait_for_account()
-    # aborts immediately on dirty trees without blocking on network latency from
-    # remote Gerrit account verification.
-    if wait_dirty_check():
-        return 1
-
-    # Block until background Gerrit account verification finishes (if not
-    # already completed or cached) before proceeding to interactive description
-    # prompt, presubmit checks, or git push.
-    wait_for_account()
-
     if options.squash:
         if options.cherry_pick_stacked:
             try:
                 orig_args.remove("--cherry-pick-stacked")
             except ValueError:
                 orig_args.remove("--cp")
-        UploadAllSquashed(options, orig_args)
+        ret = UploadAllSquashed(
+            options,
+            orig_args,
+            wait_dirty_check=wait_dirty_check,
+            wait_for_account=wait_for_account,
+        )
+        if ret != 0:
+            return ret
         if options.dependencies:
             orig_args.remove("--dependencies")
             if not cl.GetIssue():
@@ -6701,6 +6696,15 @@ def CMDupload(parser, args):
         parser.error(
             "--cherry-pick-stacked is not available without squash=true,"
         )
+
+    # For non-squash uploads, verify working tree is clean before proceeding.
+    if wait_dirty_check():
+        return 1
+
+    # Block until background Gerrit account verification finishes (if not
+    # already completed or cached) before proceeding to interactive description
+    # prompt, presubmit checks, or git push.
+    wait_for_account()
 
     # cl.GetMostRecentPatchset uses cached information, and can return the last
     # patchset before upload. Calling it here makes it clear that it's the
@@ -6728,10 +6732,22 @@ def CMDupload(parser, args):
 
 
 def UploadAllSquashed(
-    options: optparse.Values, orig_args: Sequence[str]
+    options: optparse.Values,
+    orig_args: Sequence[str],
+    wait_dirty_check: Optional[Callable[[], bool]] = None,
+    wait_for_account: Optional[Callable[[], None]] = None,
 ) -> int:
     """Uploads the current and upstream branches (if necessary)."""
-    cls, cherry_pick_current = _UploadAllPrecheck(options, orig_args)
+    cls, cherry_pick_current = _UploadAllPrecheck(
+        options, orig_args, wait_dirty_check=wait_dirty_check
+    )
+    if cls is None:
+        return 1
+
+    # Ensure remote Gerrit account exists (if not already verified or cached)
+    # after the dirty check has passed and before synthesizing commits or pushing.
+    if wait_for_account:
+        wait_for_account()
 
     # Create commits.
     uploads_by_cl: List[Tuple[Changelist, _NewUpload]] = []
@@ -6905,13 +6921,16 @@ def UploadAllSquashed(
 
 
 def _UploadAllPrecheck(
-    options: optparse.Values, orig_args: Sequence[str]
-) -> Tuple[Sequence[Changelist], bool]:
+    options: optparse.Values,
+    orig_args: Sequence[str],
+    wait_dirty_check: Optional[Callable[[], bool]] = None,
+) -> Tuple[Optional[Sequence[Changelist]], bool]:
     """Checks the state of the tree and gives the user uploading options
 
     Returns: A tuple of the ordered list of changes that have new commits
         since their last upload and a boolean of whether the user wants to
         cherry-pick and upload the current branch instead of uploading all cls.
+        Returns (None, False) if the working tree is dirty.
     """
     cl = Changelist()
     if cl.GetBranch() is None:
@@ -6921,8 +6940,6 @@ def _UploadAllPrecheck(
     cls: List[Changelist] = []
     must_upload_upstream = False
     first_pass = True
-
-    Changelist._GerritCommitMsgHookCheck(offer_removal=not options.force)
 
     while True:
         if len(cls) > _MAX_STACKED_BRANCHES_UPLOAD:
@@ -7002,6 +7019,17 @@ def _UploadAllPrecheck(
         # The tree went through a rebase. LAST_UPLOAD_HASH_CONFIG_KEY no longer
         # has any relation to commits in the tree. Continue up the tree until we
         # hit the root.
+
+    # Verify working tree is clean before any interactive prompts, hook checks,
+    # or commit synthesis. Evaluating here allows the read-only branch stack
+    # resolution above to execute concurrently with the background git status.
+    if wait_dirty_check:
+        if wait_dirty_check():
+            return None, False
+    elif git_common.is_dirty_git_tree("upload"):
+        return None, False
+
+    Changelist._GerritCommitMsgHookCheck(offer_removal=not options.force)
 
     # We assume all cls in the stack have the same auth requirements and only
     # check this once.

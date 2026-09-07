@@ -8401,12 +8401,110 @@ class CMDUploadTestCase(CMDTestCaseBase):
         self.addCleanup(mock.patch.stopall)
 
     def test_upload_abort_on_dirty_tree(self):
-        mock.patch("git_cl.Changelist.EnsureAuthenticated").start()
-        mock.patch(
-            "git_common.async_is_dirty_git_tree",
-            return_value=lambda: True,
-        ).start()
-        self.assertEqual(1, git_cl.main(["upload", "-f", "--bypass-hooks"]))
+        with (
+            mock.patch("git_cl.Changelist.EnsureAuthenticated"),
+            mock.patch(
+                "git_common.async_is_dirty_git_tree", return_value=lambda: True
+            ),
+            mock.patch("scm.GIT.GetBranchRef", return_value="refs/heads/main"),
+            mock.patch(
+                "git_cl.Changelist.GetCommonAncestorWithUpstream",
+                return_value="base",
+            ),
+            mock.patch("git_cl.RunGit", return_value="head_sha"),
+            mock.patch(
+                "git_cl._GetCommitCountSummary", return_value="1 commit"
+            ),
+            mock.patch(
+                "git_cl.Changelist.FetchUpstreamTuple",
+                return_value=("origin", "refs/remotes/origin/main"),
+            ),
+        ):
+            self.assertEqual(1, git_cl.main(["upload", "-f", "--bypass-hooks"]))
+
+    def test_upload_squashed_fallback_dirty_check_when_none(self):
+        mock_account = mock.MagicMock()
+        with (
+            mock.patch("scm.GIT.GetBranchRef", return_value="refs/heads/main"),
+            mock.patch(
+                "git_cl.Changelist.GetCommonAncestorWithUpstream",
+                return_value="base",
+            ),
+            mock.patch("git_cl.RunGit", return_value="head_sha"),
+            mock.patch(
+                "git_cl._GetCommitCountSummary", return_value="1 commit"
+            ),
+            mock.patch(
+                "git_cl.Changelist.FetchUpstreamTuple",
+                return_value=("origin", "refs/remotes/origin/main"),
+            ),
+            mock.patch(
+                "git_common.is_dirty_git_tree", return_value=True
+            ) as mock_dirty,
+        ):
+            ret = git_cl.UploadAllSquashed(
+                optparse.Values(),
+                [],
+                wait_dirty_check=None,
+                wait_for_account=mock_account,
+            )
+            self.assertEqual(1, ret)
+            mock_dirty.assert_called_once_with("upload")
+            mock_account.assert_not_called()
+
+    def test_upload_squashed_does_not_call_account_when_dirty(self):
+        mock_account = mock.MagicMock()
+        with (
+            mock.patch("scm.GIT.GetBranchRef", return_value="refs/heads/main"),
+            mock.patch(
+                "git_cl.Changelist.GetCommonAncestorWithUpstream",
+                return_value="base",
+            ),
+            mock.patch("git_cl.RunGit", return_value="head_sha"),
+            mock.patch(
+                "git_cl._GetCommitCountSummary", return_value="1 commit"
+            ),
+            mock.patch(
+                "git_cl.Changelist.FetchUpstreamTuple",
+                return_value=("origin", "refs/remotes/origin/main"),
+            ),
+        ):
+            ret = git_cl.UploadAllSquashed(
+                optparse.Values(),
+                [],
+                wait_dirty_check=lambda: True,
+                wait_for_account=mock_account,
+            )
+            self.assertEqual(1, ret)
+            mock_account.assert_not_called()
+
+    def test_upload_precheck_aborts_before_prompts_when_dirty(self):
+        with (
+            mock.patch("git_cl.Changelist.GetBranch", return_value="feature"),
+            mock.patch(
+                "git_cl.Changelist.GetCommonAncestorWithUpstream",
+                return_value="base",
+            ),
+            mock.patch("git_cl.RunGit", return_value="head_sha"),
+            mock.patch(
+                "git_cl._GetCommitCountSummary", return_value="1 commit"
+            ),
+            mock.patch(
+                "git_cl.Changelist.FetchUpstreamTuple",
+                return_value=("origin", "refs/remotes/origin/main"),
+            ),
+            mock.patch(
+                "git_cl.Changelist._GerritCommitMsgHookCheck"
+            ) as mock_hook,
+            mock.patch("git_cl.gclient_utils.AskForData") as mock_prompt,
+        ):
+            cls, cherry_pick = git_cl._UploadAllPrecheck(
+                optparse.Values(), [], wait_dirty_check=lambda: True
+            )
+            self.assertIsNone(cls)
+            self.assertFalse(cherry_pick)
+            mock_hook.assert_not_called()
+            mock_prompt.assert_not_called()
 
 
 class MakeRequestsHelperTestCase(unittest.TestCase):
