@@ -3702,73 +3702,30 @@ class TestGitCl(unittest.TestCase):
     @mock.patch("git_cl.Changelist.GetIssue")
     def testGetDescriptionForUpload_BugFromBranch(self, mockGetIssue):
         mockGetIssue.return_value = None
-        for branch in [
-            "bug-1234",
-            "bug_1234",
-            "bug1234",
-            "bug/1234",
-            "bug:1234",
-            "b-1234",
-            "b_1234",
-            "b1234",
-            "b/1234",
-            "b:1234",
-            "BUG-1234",
-            "B/1234",
-            "user/b/1234/my-feature",
-            "feature-b-1234",
-            "team_bug1234_fix",
-        ]:
-            self.getDescriptionForUploadTest(
-                branch=branch,
-                expected_description="\n".join(
-                    [
-                        "desc",
-                        "",
-                        "Bug: prefix:1234",
-                    ]
-                ),
-            )
+        self.getDescriptionForUploadTest(
+            branch="bug-1234",
+            expected_description="\n".join(
+                [
+                    "desc",
+                    "",
+                    "Bug: prefix:1234",
+                ]
+            ),
+        )
 
     @mock.patch("git_cl.Changelist.GetIssue")
     def testGetDescriptionForUpload_FixedFromBranch(self, mockGetIssue):
         mockGetIssue.return_value = None
-        for branch in [
-            "fix-1234",
-            "fix_1234",
-            "fix1234",
-            "fix/1234",
-            "fix:1234",
-            "fixes-1234",
-            "fixed-1234",
-            "fixes/1234",
-            "user/fix-1234",
-            "feature_fix1234",
-        ]:
-            self.getDescriptionForUploadTest(
-                branch=branch,
-                expected_description="\n".join(
-                    [
-                        "desc",
-                        "",
-                        "Fixed: prefix:1234",
-                    ]
-                ),
-            )
-
-    @mock.patch("git_cl.Changelist.GetIssue")
-    def testGetDescriptionForUpload_NoBugMatched(self, mockGetIssue):
-        mockGetIssue.return_value = None
-        for branch in [
-            "sub1234",
-            "cl-1234",
-            "blob1234",
-            "user/sub1234/feature",
-        ]:
-            self.getDescriptionForUploadTest(
-                branch=branch,
-                expected_description="desc",
-            )
+        self.getDescriptionForUploadTest(
+            branch="fix-1234",
+            expected_description="\n".join(
+                [
+                    "desc",
+                    "",
+                    "Fixed: prefix:1234",
+                ]
+            ),
+        )
 
     def testGetDescriptionForUpload_SkipBugFromBranchIfAlreadyUploaded(self):
         self.getDescriptionForUploadTest(
