@@ -201,7 +201,6 @@ def rebase_branch(
     parent,
     start_hash,
     no_squash,
-    return_branch,
     branches_in_other_worktrees,
 ):
     """Rebases `branch` onto `parent` from `start_hash`.
@@ -216,7 +215,6 @@ def rebase_branch(
         parent: The upstream parent ref or branch name.
         start_hash: The merge-base commit SHA between branch and parent.
         no_squash: If True, disables automated commit squashing on rebase failure.
-        return_branch: The active branch checked out when rebase-update began.
         branches_in_other_worktrees: Set of branch names checked out in other worktrees.
 
     Returns:
@@ -254,13 +252,13 @@ def rebase_branch(
         print("Rebasing:", format_branch_name(branch))
 
         # Only attempt in-memory fast-forward/replay for background branches
-        # (not the starting checked-out branch, nor branches in other worktrees).
+        # (not the currently checked-out branch, nor branches in other worktrees).
         # We also bypass git replay when commit.gpgsign is enabled because
         # git replay does not sign commits and would produce unsigned commits.
         # Note: git replay is experimental in upstream Git; any failure or conflict
         # gracefully falls back to standard porcelain git.rebase below.
         if (
-            branch != return_branch
+            branch != git.current_branch()
             and branch not in branches_in_other_worktrees
             and not git.get_gpg_sign_args()
         ):
@@ -506,7 +504,6 @@ def main(args=None):
                 parent,
                 merge_base[branch],
                 opts.no_squash,
-                return_branch,
                 branches_in_other_worktrees,
             )
             if not ret:
