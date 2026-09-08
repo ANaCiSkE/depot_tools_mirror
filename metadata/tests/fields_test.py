@@ -414,18 +414,6 @@ class FieldValidationTest(unittest.TestCase):
         )
         self.assertIsNone(res_with)
 
-    def test_license_validation_with_rla_invalid_proto(self):
-        test_license = "LicenseRef-GUST-Font-License"
-
-        field = metadata.fields.custom.license.LicenseField()
-        with self.assertRaisesRegex(ValueError, "textproto is invalid"):
-            field.validate(
-                test_license,
-                source_file_dir=os.path.join(
-                    _THIS_DIR, "data", "invalid_restrictive_license_approval"
-                ),
-            )
-
     def test_get_license_validation_status(self):
         get_status = metadata.fields.custom.license_allowlist.get_license_validation_status
         data_dir = os.path.join(_THIS_DIR, "data")

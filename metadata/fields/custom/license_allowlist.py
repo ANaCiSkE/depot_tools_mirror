@@ -353,14 +353,6 @@ def is_license_allowed(
     return False
 
 
-# Environment variable name to set when calling restrictive license approval
-# parsing script.
-SCRIPT_INPUT_ENV = "INPUT_PATH"
-
-# Exit code to use when textproto is invalid.
-SCRIPT_EXIT_CODE_INVALID_PROTO = 5
-
-
 def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
     """Loads a restrictive_license_approval.textproto file and returns a mapping of license IDs to bug IDs."""
     covered = {}
@@ -370,23 +362,12 @@ def load_restrictive_license_approval_textproto(path: str) -> dict[str, int]:
         "scripts",
         "parse_restrictive_license_approval.py",
     )
-    vpython_exe = os.path.join(_ROOT_DIR, "vpython3")
+    vpython_exe = "vpython3"
     if sys.platform.startswith("win"):
         vpython_exe += ".bat"
-
-    try:
-        stdout = subprocess.check_output(
-            [vpython_exe, script_path],
-            env={**os.environ, SCRIPT_INPUT_ENV: path},
-            encoding="utf-8",
-        )
-    except subprocess.CalledProcessError as e:
-        if e.returncode == SCRIPT_EXIT_CODE_INVALID_PROTO:
-            raise ValueError(
-                f"restricted license textproto is invalid: {e.stderr}"
-            )
-        raise e
-
+    stdout = subprocess.check_output([vpython_exe, script_path, path]).decode(
+        "utf-8"
+    )
     approvals = json.loads(stdout)
     for approval in approvals:
         license_id = approval.get("id")
