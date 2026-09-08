@@ -82,38 +82,32 @@ def fetch_remotes(branch_tree):
         )
         return
 
-    parents = list(set(branch_tree.values()))
-    if not parents:
-        print("Nothing to fetch.")
-        return
-
-    fetchspec_map = {}
-    all_fetchspec_configs = git.get_config_regexp(r"^remote\..*\.fetch")
-    for key, fetchspec in all_fetchspec_configs:
-        dest_spec = fetchspec.partition(":")[2]
-        remote_name = key.split(".")[1]
-        fetchspec_map[dest_spec] = remote_name
-
     remotes = set()
-    full_refs = git.run(
-        "rev-parse", "--symbolic-full-name", "--revs-only", *parents
-    ).splitlines()
-    for full_ref in full_refs:
-        for dest_spec, remote_name in fetchspec_map.items():
-            if fnmatch(full_ref, dest_spec):
-                remotes.add(remote_name)
-                break
+    parents = set(branch_tree.values())
+    if parents:
+        fetchspec_map = {}
+        all_fetchspec_configs = git.get_config_regexp(r"^remote\..*\.fetch$")
+        for key, fetchspec in all_fetchspec_configs:
+            dest_spec = fetchspec.partition(":")[2]
+            remote_name = key[len("remote.") : -len(".fetch")]
+            fetchspec_map[dest_spec] = remote_name
 
-    if not remotes:  # pragma: no cover
-        print("Nothing to fetch.")
-    else:
-        git.run_with_stderr(
-            "fetch",
-            "--multiple",
-            *sorted(remotes),
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
+        full_refs = git.run(
+            "rev-parse", "--symbolic-full-name", "--revs-only", *parents
+        ).splitlines()
+        for full_ref in full_refs:
+            for dest_spec, remote_name in fetchspec_map.items():
+                if fnmatch(full_ref, dest_spec):
+                    remotes.add(remote_name)
+                    break
+
+    git.run_with_stderr(
+        "fetch",
+        "--multiple",
+        *sorted(remotes),
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
 
 
 def remove_empty_branches(branch_tree, worktree_branches):
