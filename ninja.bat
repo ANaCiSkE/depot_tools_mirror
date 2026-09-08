@@ -9,4 +9,4 @@ setlocal
 set PATH=%PATH%;%~dp0
 
 :: Defer control.
-python3 "%~dp0\ninja.py" "%*"
+call "%~dp0python-bin\python3.bat" "%~dp0\ninja.py" "%*"
