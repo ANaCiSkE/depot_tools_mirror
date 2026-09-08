@@ -1194,12 +1194,9 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         help="Disable auto-formatting of .java",
     )
     parser.add_option(
-        "--ktfmt",
-        dest="ktfmt",
+        "--no-ktfmt",
         action="store_true",
-        default=False,
-        help="Temporary until on by default. "
-        "Enables formatting of .kt files using ktfmt.",
+        help="Disable auto-formatting of .kt",
     )
     parser.add_option(
         "--lucicfg",
@@ -1277,7 +1274,7 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     ]
     if not opts.no_java:
         formatters.append(([".java"], _RunGoogleJavaFormat, []))
-    if opts.ktfmt:
+    if not opts.no_ktfmt:
         formatters.append(([".kt"], _RunKtfmt, []))
     if opts.clang_format:
         formatters.append((clang_exts, _RunClangFormatDiff, [".html.ts"]))
