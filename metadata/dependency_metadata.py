@@ -262,9 +262,12 @@ class DependencyMetadata:
                 )
                 results.append(error)
 
-        # If CPEPrefix is provided without a version, the Version field must be
-        # present.
-        if self._cpe_prefix_lacks_version():
+        # If metadata isn't sufficient for vulnerability scanning, CPEPrefix
+        # must be provided with a version.
+        if (
+            self.vuln_scan_sufficiency.startswith("insufficient")
+            and self._cpe_prefix_lacks_version()
+        ):
             error = vr.ValidationWarning(
                 reason="CPEPrefix is missing a version, and no Version is "
                 "specified.",

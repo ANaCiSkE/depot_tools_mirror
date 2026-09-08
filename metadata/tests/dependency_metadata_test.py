@@ -178,6 +178,36 @@ class DependencyValidationTest(unittest.TestCase):
             )
             self.assertEqual(len(results), 0)
 
+        with self.subTest(
+            msg="CPEPrefix without version, but metadata sufficient for vuln scanning"
+        ):
+            dependency = dm.DependencyMetadata()
+            dependency.add_entry(known_fields.NAME.get_name(), "Test")
+            dependency.add_entry(
+                known_fields.URL.get_name(), "https://github.com/foo/bar"
+            )
+            dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
+            dependency.add_entry(
+                known_fields.LICENSE_FILE.get_name(), "LICENSE"
+            )
+            dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
+            dependency.add_entry(
+                known_fields.REVISION.get_name(), "abcdef0123456789"
+            )
+            dependency.add_entry(
+                known_fields.SECURITY_CRITICAL.get_name(), "yes"
+            )
+            dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
+            dependency.add_entry(
+                known_fields.CPE_PREFIX.get_name(), "cpe:/a:vendor:product"
+            )
+            results = dependency.validate(
+                source_file_dir=os.path.join(_THIS_DIR, "data"),
+                repo_root_dir=_THIS_DIR,
+            )
+            # Shouldn't trigger "CPE requires version" check because other metadata is sufficient for vulnerability scanning.
+            self.assertEqual(len(results), 0)
+
         with self.subTest(msg="CPEPrefix without version, N/A Version"):
             dependency = dm.DependencyMetadata()
             dependency.add_entry(known_fields.NAME.get_name(), "Test")
