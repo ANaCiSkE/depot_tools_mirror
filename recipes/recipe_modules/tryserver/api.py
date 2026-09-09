@@ -50,6 +50,9 @@ class SubmodulePathsResult:
   # Nested submodules that were detected (and thus skipped from recursion).
   nested_submodules: list[str] = field(default_factory=list)
 
+  # Submodules whose git diff could not be resolved (e.g. missing commits).
+  unresolvable_submodules: list[str] = field(default_factory=list)
+
 
 class TryserverApi(recipe_api.RecipeApi):
   def __init__(self, *args, **kwargs):
@@ -322,35 +325,6 @@ class TryserverApi(recipe_api.RecipeApi):
 
     This is an extended version of get_files_affected_by_patch that also detects
     and expands submodule diffs.
-    """
-    try:
-      return self._get_files_affected_by_patch_with_submodules(
-        patch_root,
-        report_files_via_property=report_files_via_property,
-        **kwargs,
-      )
-    except Exception as ex:
-      # Temporarily prevent any submodule expansion errors from failing the
-      # build while this function is run as an experiment and is only
-      # logging its results.
-      self.m.step.empty(
-        "[Experimental] submodule expansion failed (ignored)",
-        status=self.m.step.WARNING,
-        step_text=str(ex),
-        raise_on_failure=False,
-      )
-      return SubmodulePathsResult(
-        affected_files=[],
-        unchecked_out_submodules=[],
-        deleted_submodules=[],
-        new_submodules=[],
-        nested_submodules=[],
-      )
-
-  def _get_files_affected_by_patch_with_submodules(
-    self, patch_root, report_files_via_property=None, **kwargs
-  ) -> SubmodulePathsResult:
-    """Internal implementation of get_files_affected_by_patch_with_submodules.
 
     Args:
       * patch_root: path relative to api.path['root'], usually obtained from
@@ -363,6 +337,7 @@ class TryserverApi(recipe_api.RecipeApi):
     deleted_submodules = []
     new_submodules = []
     nested_submodules = []
+    unresolvable_submodules = []
     submodule_files = []
     submodules_to_process = []
 
@@ -435,6 +410,9 @@ class TryserverApi(recipe_api.RecipeApi):
             "deleted_submodules": format_prop_list(deleted_submodules),
             "new_submodules": format_prop_list(new_submodules),
             "nested_submodules": format_prop_list(nested_submodules),
+            "unresolvable_submodules": format_prop_list(
+              unresolvable_submodules
+            ),
           }
         )
         presentation.properties[report_files_via_property] = prop_dict
@@ -449,7 +427,7 @@ class TryserverApi(recipe_api.RecipeApi):
         "diff",
         "--cached",
         "--raw",
-        name="[Experimental] git diff --raw to analyze patch",
+        name="git diff --raw to analyze patch",
         stdout=self.m.raw_io.output(add_output_log=True),
         step_test_data=lambda: self.m.raw_io.test_api.stream_output(""),
         **kwargs,
@@ -464,9 +442,7 @@ class TryserverApi(recipe_api.RecipeApi):
     # 2. Process submodules if there are any
     if submodules_to_process:
       with self.m.context(cwd=cwd):
-        with self.m.step.nest(
-          "[Experimental] git diff submodules"
-        ) as presentation:
+        with self.m.step.nest("git diff submodules") as presentation:
           for old_sha, new_sha, rel_path in submodules_to_process:
             if new_sha.startswith("0" * 7):
               # If a submodule is deleted (new_commit starts with 0s), we skip
@@ -490,6 +466,8 @@ class TryserverApi(recipe_api.RecipeApi):
               old_sha = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
             # this call to git diff is what actually expands the submodule
             sub_result = self.m.git(
+              "-c",
+              "core.quotePath=false",
               "-C",
               rel_path,
               "diff",
@@ -497,11 +475,20 @@ class TryserverApi(recipe_api.RecipeApi):
               old_sha,
               new_sha,
               name=rel_path,
+              raise_on_failure=False,
               stdout=self.m.raw_io.output(add_output_log=True),
               step_test_data=lambda: self.m.raw_io.test_api.stream_output(
                 ":100644 100644 1234567 89abcdef M\tsub_foo.cc"
               ),
             )
+            if sub_result.exc_result.retcode != 0:
+              sub_result.presentation.status = self.m.step.WARNING
+              sub_result.presentation.step_text = (
+                f"git diff failed (retcode {sub_result.exc_result.retcode})"
+              )
+              unresolvable_submodules.append(rel_path)
+              continue
+
             step_files = []
             for sub_mode, _, _, sub_path in parse_raw_diff(sub_result):
               # Do not recursively expand nested submodules because tryjob checkouts
@@ -527,6 +514,9 @@ class TryserverApi(recipe_api.RecipeApi):
           attach_submodule_log(
             presentation, nested_submodules, "nested_submodules"
           )
+          attach_submodule_log(
+            presentation, unresolvable_submodules, "unresolvable_submodules"
+          )
 
           affected_files = finalize_and_log(presentation, affected_files)
     else:
@@ -540,6 +530,7 @@ class TryserverApi(recipe_api.RecipeApi):
       deleted_submodules=deleted_submodules,
       new_submodules=new_submodules,
       nested_submodules=nested_submodules,
+      unresolvable_submodules=unresolvable_submodules,
     )
 
   def set_subproject_tag(self, subproject_tag):
