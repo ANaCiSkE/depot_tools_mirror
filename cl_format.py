@@ -7,17 +7,17 @@
 from __future__ import annotations
 
 import collections
-import fnmatch
-import json
 import concurrent.futures
+import fnmatch
 import io
+import json
 import multiprocessing
-import threading
 import optparse
 import os
 import re
 import shutil
 import sys
+import threading
 from typing import Any, Callable, Mapping, Optional
 
 from git_cl_core import (
@@ -244,15 +244,45 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
         if not opts.dry_run and not opts.diff:
             cmd.append("-i")
         if opts.dry_run:
-            for p in paths:
-                with open(p, "r") as myfile:
-                    code = myfile.read().replace("\r\n", "\n")
-                    stdout = RunCommand(cmd + [p], cwd=top_dir)
-                    stdout = stdout.replace("\r\n", "\n")
-                    if opts.diff:
-                        sys.stdout.write(stdout)
-                    if code != stdout:
-                        return_value = 2
+
+            def _CheckFileFormatted(p):
+                try:
+                    with open(
+                        p, "r", encoding="utf-8", errors="replace"
+                    ) as myfile:
+                        code = myfile.read().replace("\r\n", "\n")
+                    out = RunCommand(cmd + [p], cwd=top_dir).replace(
+                        "\r\n", "\n"
+                    )
+                    is_different = code != out
+                    return (p, is_different, out if opts.diff else "", None)
+                except Exception as e:
+                    return (p, False, "", e)
+
+            max_workers = min(len(paths), os.cpu_count() or 8, 16)
+            if len(paths) > 2 and max_workers > 1:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=max_workers
+                ) as executor:
+                    file_results = list(
+                        executor.map(_CheckFileFormatted, paths)
+                    )
+            else:
+                file_results = [_CheckFileFormatted(p) for p in paths]
+
+            first_exc = None
+            for p, is_different, out, exc in file_results:
+                if exc is not None:
+                    if first_exc is None:
+                        first_exc = exc
+                    continue
+                if opts.diff and out:
+                    sys.stdout.write(out)
+                if is_different:
+                    return_value = 2
+
+            if first_exc is not None:
+                raise first_exc
         else:
             stdout = RunCommand(cmd + paths, cwd=top_dir)
             if opts.diff:
@@ -276,18 +306,34 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
     env["PATH"] = (
         str(os.path.dirname(clang_format_tool)) + os.pathsep + env["PATH"]
     )
-    # If `clang-format-diff.py` is run without `-i` and the diff is
-    # non-empty, it returns an error code of 1. This will cause `RunCommand`
-    # to die with an error if `error_ok` is not set.
-    input_diff = "\n".join(diffs.get(p, "") for p in paths)
-    stdout = RunCommand(
-        cmd,
-        error_ok=True,
-        stdin=input_diff.encode(),
-        cwd=top_dir,
-        env=env,
-        shell=sys.platform.startswith("win32"),
-    )
+
+    def _RunDiffChunk(chunk_paths):
+        get_diff = diffs.get
+        chunk_diff = "\n".join(get_diff(p, "") for p in chunk_paths)
+        return RunCommand(
+            cmd,
+            error_ok=True,
+            stdin=chunk_diff.encode(),
+            cwd=top_dir,
+            env=env,
+            shell=sys.platform.startswith("win32"),
+        )
+
+    # Parallelize formatting across worker processes when multiple files are
+    # affected.
+    max_workers = min(len(paths), os.cpu_count() or 8, 16)
+    if len(paths) > 2 and max_workers > 1:
+        chunk_size = (len(paths) + max_workers - 1) // max_workers
+        chunks = [
+            paths[i : i + chunk_size] for i in range(0, len(paths), chunk_size)
+        ]
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(chunks)
+        ) as executor:
+            chunk_results = list(executor.map(_RunDiffChunk, chunks))
+        stdout = "".join(chunk_results)
+    else:
+        stdout = _RunDiffChunk(paths)
 
     if stdout:
         # Filter out full-deletion diffs produced by clang-format-diff.py for

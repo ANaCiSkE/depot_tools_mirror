@@ -437,6 +437,312 @@ class CMDFormatTestCase(unittest.TestCase):
             shell=mock.ANY,
         )
 
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDiffParallel(self, _):
+        diffs = {
+            f"file_{i}.cc": (
+                f"--- a/file_{i}.cc\n"
+                f"+++ b/file_{i}.cc\n"
+                f"@@ -1,1 +1,1 @@\n-old\n+new\n"
+            )
+            for i in range(12)
+        }
+        files = list(diffs.keys())
+        mock_opts = mock.Mock(full=False, dry_run=False, diff=False)
+
+        cl_format.RunCommand.return_value = ""
+        with mock.patch.object(
+            cl_format.concurrent.futures,
+            "ThreadPoolExecutor",
+            wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+        ) as mock_executor:
+            return_value = cl_format._RunClangFormatDiff(
+                mock_opts, files, self._top_dir, diffs
+            )
+            self.assertEqual(0, return_value)
+            mock_executor.assert_called_once()
+
+        # Verify chunks receive disjoint subsets of diffs without dropping any.
+        received_diffs = []
+        for call in cl_format.RunCommand.call_args_list:
+            stdin_bytes = call.kwargs.get("stdin", b"")
+            received_diffs.append(stdin_bytes.decode("utf-8"))
+        combined = "\n".join(received_diffs)
+        for f, d in diffs.items():
+            self.assertIn(d.strip(), combined)
+
+    @mock.patch("os.cpu_count", return_value=8)
+    def testClangFormatDiffChunkPartitioning(self, _):
+        for num_files in (3, 5, 8, 17, 33):
+            diffs = {
+                f"file_{i}.cc": (
+                    f"--- a/file_{i}.cc\n"
+                    f"+++ b/file_{i}.cc\n"
+                    f"@@ -1,1 +1,1 @@\n-old\n+new\n"
+                )
+                for i in range(num_files)
+            }
+            files = list(diffs.keys())
+            mock_opts = mock.Mock(full=False, dry_run=False, diff=False)
+
+            cl_format.RunCommand.reset_mock()
+            cl_format.RunCommand.return_value = ""
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                return_value = cl_format._RunClangFormatDiff(
+                    mock_opts, files, self._top_dir, diffs
+                )
+                self.assertEqual(0, return_value)
+                mock_executor.assert_called_once()
+
+            # Every file should be included in exactly one chunk diff stdin.
+            received = []
+            for call in cl_format.RunCommand.call_args_list:
+                stdin_text = call.kwargs.get("stdin", b"").decode("utf-8")
+                self.assertTrue(len(stdin_text) > 0)
+                received.append(stdin_text)
+            combined = "\n".join(received)
+            for f, d in diffs.items():
+                self.assertEqual(1, combined.count(d.strip()))
+
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDiffParallelThreeFiles(self, _):
+        diffs = {
+            "file_0.cc": "--- a/file_0.cc\n+++ b/file_0.cc\n@@ -1 +1 @@\n-a\n+b\n",
+            "file_1.cc": "--- a/file_1.cc\n+++ b/file_1.cc\n@@ -1 +1 @@\n-c\n+d\n",
+            "file_2.cc": "--- a/file_2.cc\n+++ b/file_2.cc\n@@ -1 +1 @@\n-e\n+f\n",
+        }
+        files = list(diffs.keys())
+        mock_opts = mock.Mock(full=False, dry_run=False, diff=False)
+
+        cl_format.RunCommand.return_value = ""
+        with mock.patch.object(
+            cl_format.concurrent.futures,
+            "ThreadPoolExecutor",
+            wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+        ) as mock_executor:
+            return_value = cl_format._RunClangFormatDiff(
+                mock_opts, files, self._top_dir, diffs
+            )
+            self.assertEqual(0, return_value)
+            mock_executor.assert_called_once()
+
+    @mock.patch("os.cpu_count", return_value=1)
+    def testClangFormatDiffSingleCpuFallback(self, _):
+        diffs = {
+            f"file_{i}.cc": (
+                f"--- a/file_{i}.cc\n"
+                f"+++ b/file_{i}.cc\n"
+                f"@@ -1,1 +1,1 @@\n-old\n+new\n"
+            )
+            for i in range(6)
+        }
+        files = list(diffs.keys())
+        mock_opts = mock.Mock(full=False, dry_run=False, diff=False)
+
+        cl_format.RunCommand.return_value = ""
+        with mock.patch.object(
+            cl_format.concurrent.futures,
+            "ThreadPoolExecutor",
+            wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+        ) as mock_executor:
+            return_value = cl_format._RunClangFormatDiff(
+                mock_opts, files, self._top_dir, diffs
+            )
+            self.assertEqual(0, return_value)
+            self.assertEqual(cl_format.RunCommand.call_count, 1)
+            mock_executor.assert_not_called()
+
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDiffOutputParallel(self, _):
+        diffs = {
+            f"file_{i}.cc": f"--- a/file_{i}.cc\n+++ b/file_{i}.cc\n"
+            for i in range(4)
+        }
+        files = list(diffs.keys())
+        mock_opts = mock.Mock(full=False, dry_run=True, diff=True)
+
+        def mock_run_cmd(*args, **kwargs):
+            stdin = kwargs.get("stdin", b"").decode("utf-8")
+            return stdin
+
+        cl_format.RunCommand.side_effect = mock_run_cmd
+        stdout = io.StringIO()
+        with mock.patch("sys.stdout", stdout):
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                return_value = cl_format._RunClangFormatDiff(
+                    mock_opts, files, self._top_dir, diffs
+                )
+                self.assertEqual(2, return_value)
+                mock_executor.assert_called_once()
+        output = stdout.getvalue()
+        for f in files:
+            self.assertIn(f"--- a/{f}", output)
+
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDryRunParallel(self, _):
+        files = [f"file_{i}.cc" for i in range(12)]
+        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        for f in files:
+            self._make_temp_file(f, ["// test"])
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            cl_format.RunCommand.side_effect = self._run_command_mock("// test")
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                return_value = cl_format._RunClangFormatDiff(
+                    mock_opts, files, self._top_dir, None
+                )
+                self.assertEqual(0, return_value)
+                mock_executor.assert_called_once()
+        finally:
+            os.chdir(previous_cwd)
+
+    @mock.patch("os.cpu_count", return_value=1)
+    def testClangFormatDryRunSingleCpuFallback(self, _):
+        files = [f"file_{i}.cc" for i in range(6)]
+        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        for f in files:
+            self._make_temp_file(f, ["// test"])
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            cl_format.RunCommand.side_effect = self._run_command_mock("// test")
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                return_value = cl_format._RunClangFormatDiff(
+                    mock_opts, files, self._top_dir, None
+                )
+                self.assertEqual(0, return_value)
+                self.assertEqual(cl_format.RunCommand.call_count, len(files))
+                mock_executor.assert_not_called()
+        finally:
+            os.chdir(previous_cwd)
+
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDryRunUnformattedParallel(self, _):
+        files = [f"file_{i}.cc" for i in range(6)]
+        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        for f in files:
+            self._make_temp_file(f, ["// unformatted"])
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            cl_format.RunCommand.side_effect = self._run_command_mock(
+                "// formatted"
+            )
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                return_value = cl_format._RunClangFormatDiff(
+                    mock_opts, files, self._top_dir, None
+                )
+                self.assertEqual(2, return_value)
+                mock_executor.assert_called_once()
+        finally:
+            os.chdir(previous_cwd)
+
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDryRunUtf8(self, _):
+        filename = "utf8_file.cc"
+        utf8_content = "// Copyright © 2026 日本語 🚀"
+        self._make_temp_file(filename, [utf8_content])
+        self._make_temp_file("other_1.cc", ["// other 1"])
+        self._make_temp_file("other_2.cc", ["// other 2"])
+        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+
+            def mock_cmd(cmd, **kwargs):
+                file_arg = cmd[-1]
+                with open(file_arg, "r", encoding="utf-8") as f:
+                    return f.read()
+
+            cl_format.RunCommand.side_effect = mock_cmd
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                return_value = cl_format._RunClangFormatDiff(
+                    mock_opts,
+                    [filename, "other_1.cc", "other_2.cc"],
+                    self._top_dir,
+                    None,
+                )
+                self.assertEqual(0, return_value)
+                mock_executor.assert_called_once()
+        finally:
+            os.chdir(previous_cwd)
+
+    @mock.patch("os.cpu_count", return_value=4)
+    def testClangFormatDryRunFileErrorParallel(self, _):
+        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                with self.assertRaises(FileNotFoundError):
+                    cl_format._RunClangFormatDiff(
+                        mock_opts,
+                        [
+                            "non_existent_1.cc",
+                            "non_existent_2.cc",
+                            "non_existent_3.cc",
+                        ],
+                        self._top_dir,
+                        None,
+                    )
+                mock_executor.assert_called_once()
+        finally:
+            os.chdir(previous_cwd)
+
+    def testClangFormatDryRunFileErrorSequential(self):
+        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        try:
+            previous_cwd = os.getcwd()
+            os.chdir(self._top_dir)
+            with mock.patch.object(
+                cl_format.concurrent.futures,
+                "ThreadPoolExecutor",
+                wraps=cl_format.concurrent.futures.ThreadPoolExecutor,
+            ) as mock_executor:
+                with self.assertRaises(FileNotFoundError):
+                    cl_format._RunClangFormatDiff(
+                        mock_opts,
+                        ["non_existent_1.cc", "non_existent_2.cc"],
+                        self._top_dir,
+                        None,
+                    )
+                mock_executor.assert_not_called()
+        finally:
+            os.chdir(previous_cwd)
+
     def testClangFormatDiffFilter(self):
         diffs = cl_format._SplitDiffsByFile(test_format_input_diff)
         files = [f for f in diffs if f.endswith(".h")]
