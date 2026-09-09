@@ -530,7 +530,7 @@ class CheckLongLinesTest(unittest.TestCase):
                 "short line",
                 "# This is an existing long line that was already there and not changed so it should not warn",
                 "another short line",
-            ]
+            ],
         )
         # Manually set changed contents to exclude the long line (line 2)
         file_existing_long._changed_contents = [
@@ -544,7 +544,7 @@ class CheckLongLinesTest(unittest.TestCase):
             [
                 "short line",
                 "# This is a new long line that should warn because it is new and exceeds the limit",
-            ]
+            ],
         )
 
         # Case 3: Modified long line. Warning expected.
@@ -553,10 +553,13 @@ class CheckLongLinesTest(unittest.TestCase):
             [
                 "short line",
                 "# This is a modified long line that should warn because it was modified and is long",
-            ]
+            ],
         )
         file_modified_long._changed_contents = [
-            (2, "# This is a modified long line that should warn because it was modified and is long"),
+            (
+                2,
+                "# This is a modified long line that should warn because it was modified and is long",
+            ),
         ]
 
         # Case 4: Indented long line. Warning expected.
@@ -565,10 +568,13 @@ class CheckLongLinesTest(unittest.TestCase):
             [
                 "short line",
                 "    # This is an existing long line that was indented and should warn because it is now very long indeed",
-            ]
+            ],
         )
         file_indented_long._changed_contents = [
-            (2, "    # This is an existing long line that was indented and should warn because it is now very long indeed"),
+            (
+                2,
+                "    # This is an existing long line that was indented and should warn because it is now very long indeed",
+            ),
         ]
 
         input_api.files = [
@@ -1208,10 +1214,15 @@ class RunAlintTest(unittest.TestCase):
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
             mock_chdir.assert_called_once_with("/repo")
-            mock_popen.assert_called_once_with(
-                ["/bin/alint", "--", "-t=30s"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+            mock_popen.assert_called_once()
+            called_args, called_kwargs = mock_popen.call_args
+            self.assertEqual(called_args[0], ["/bin/alint", "--", "-t=30s"])
+            self.assertEqual(called_kwargs["stdout"], subprocess.PIPE)
+            self.assertEqual(called_kwargs["stderr"], subprocess.STDOUT)
+            self.assertIn("GIT_CONFIG_PARAMETERS", called_kwargs["env"])
+            self.assertIn(
+                "'status.showUntrackedFiles=no'",
+                called_kwargs["env"]["GIT_CONFIG_PARAMETERS"],
             )
             result = json.loads(mock_stdout.getvalue())
             self.assertEqual(result["errors"], [])
@@ -1239,6 +1250,100 @@ class RunAlintTest(unittest.TestCase):
             self.assertEqual(result["execution_error"]["exit_code"], 1)
             self.assertIn(
                 "Executable not found", result["execution_error"]["output"]
+            )
+
+    @mock.patch.dict(os.environ, {"GIT_CONFIG_PARAMETERS": "'custom.key=val'"})
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_preserves_existing_git_config_parameters(
+        self, mock_popen, mock_chdir
+    ):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()):
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_popen.assert_called_once()
+            called_env = mock_popen.call_args[1]["env"]
+            self.assertEqual(
+                called_env["GIT_CONFIG_PARAMETERS"],
+                "'custom.key=val' 'status.showUntrackedFiles=no'",
+            )
+
+    @mock.patch.dict(os.environ, {"GIT_CONFIG_PARAMETERS": "   "})
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_strips_whitespace_git_config_parameters(
+        self, mock_popen, mock_chdir
+    ):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()):
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_popen.assert_called_once()
+            called_env = mock_popen.call_args[1]["env"]
+            self.assertEqual(
+                called_env["GIT_CONFIG_PARAMETERS"],
+                "'status.showUntrackedFiles=no'",
+            )
+
+    @mock.patch.dict(
+        os.environ,
+        {"GIT_CONFIG_PARAMETERS": "'status.showuntrackedfiles=no'"},
+    )
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_does_not_duplicate_status_show_untracked_files(
+        self, mock_popen, mock_chdir
+    ):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()):
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_popen.assert_called_once()
+            called_env = mock_popen.call_args[1]["env"]
+            self.assertEqual(
+                called_env["GIT_CONFIG_PARAMETERS"],
+                "'status.showuntrackedfiles=no'",
+            )
+
+    @mock.patch.dict(
+        os.environ,
+        {"GIT_CONFIG_PARAMETERS": "'status.showuntrackedfiles=normal'"},
+    )
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_enforces_status_show_untracked_files_no_over_normal(
+        self, mock_popen, mock_chdir
+    ):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()):
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_popen.assert_called_once()
+            called_env = mock_popen.call_args[1]["env"]
+            self.assertEqual(
+                called_env["GIT_CONFIG_PARAMETERS"],
+                "'status.showuntrackedfiles=normal' 'status.showUntrackedFiles=no'",
             )
 
 
