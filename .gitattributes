@@ -17,10 +17,13 @@
 
 # Extensionless tools we want and support scripts.
 /autoninja*                   recipes
+/bootstrap/**                 recipes
+/bootstrap_python3*           recipes
 /clang*                       recipes
 /cipd*                         recipes
 /dirmd                        recipes
 /download_from_google_storage recipes
+/ensure_bootstrap*            recipes
 /fetch                        recipes
 /gclient                      recipes
 /git*                         recipes
@@ -29,6 +32,7 @@
 /jj/*.py                      recipes
 /ninja*                       recipes
 /pylint*                      recipes
+/python-bin/**                recipes
 /repo                         recipes
 /repo_launcher                recipes
 /roll-dep*                    recipes
