@@ -13,6 +13,7 @@ import logging
 import ntpath
 import os
 import queue
+import shutil
 import sys
 import tempfile
 import unittest
@@ -2091,6 +2092,178 @@ class MergeVarsTest(unittest.TestCase):
         l = {"foo": "bar"}  # noqa: E741
         merge_vars(l, {"baz": True})
         self.assertEqual(l, {"foo": "bar", "baz": True})
+
+
+class GNArgsValidationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        parser = gclient.OptionParser()
+        options, _ = parser.parse_args([])
+        self.client = gclient.GClient(root_dir=self.tmpdir, options=options)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _make_dep(self, name: str = "src") -> gclient.Dependency:
+        return gclient.Dependency(
+            parent=self.client,
+            name=name,
+            url="https://fake.url/repo.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=False,
+            relative=False,
+            condition=None,
+        )
+
+    def test_write_gn_args_file_valid(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args_file = "args.gn"
+        dep._gn_args = ["is_debug", "target_cpu"]
+        dep._vars = {
+            "is_debug": False,
+            "target_cpu": gclient_eval.ConstantString("x64"),
+        }
+        dep.WriteGNArgsFile()
+        out_path = os.path.join(self.tmpdir, "args.gn")
+        self.assertTrue(os.path.exists(out_path))
+        with open(out_path, "r") as f:
+            content = f.read()
+        self.assertIn("is_debug = false", content)
+        self.assertIn('target_cpu = "x64"', content)
+
+    def test_write_gn_args_file_traversal_rejected(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args = ["foo_var"]
+        dep._vars = {"foo_var": "true"}
+
+        for invalid_path in [
+            "../outside.gn",
+            "/tmp/outside.gn",
+            "C:\\outside.gn",
+            "C:/outside.gn",
+            "C:outside.gn",
+            "C:../outside.gn",
+            ".git/config",
+            ".gclient",
+            ".git/hooks/post-checkout",
+            "src/.git/config",
+        ]:
+            dep._gn_args_file = invalid_path
+            with self.assertRaises(gclient_utils.Error):
+                dep.WriteGNArgsFile()
+
+    def test_write_gn_args_file_directory_rejected(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args = ["foo_var"]
+        dep._vars = {"foo_var": "true"}
+
+        # Target is "."
+        dep._gn_args_file = "."
+        with self.assertRaises(gclient_utils.Error):
+            dep.WriteGNArgsFile()
+
+        # Target is an existing directory
+        existing_dir = os.path.join(self.tmpdir, "existing_dir")
+        os.makedirs(existing_dir, exist_ok=True)
+        dep._gn_args_file = "existing_dir"
+        with self.assertRaises(gclient_utils.Error):
+            dep.WriteGNArgsFile()
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_write_gn_args_file_symlink_escape_rejected(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args = ["foo_var"]
+        dep._vars = {"foo_var": "true"}
+
+        outside_dir = tempfile.mkdtemp()
+        try:
+            link_dir = os.path.join(self.tmpdir, "symlink_dir")
+            os.symlink(outside_dir, link_dir)
+            dep._gn_args_file = "symlink_dir/args.gn"
+            with self.assertRaises(gclient_utils.Error) as ctx:
+                dep.WriteGNArgsFile()
+            self.assertIn("Path escapes directory", str(ctx.exception))
+        finally:
+            shutil.rmtree(outside_dir, ignore_errors=True)
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_write_gn_args_file_symlink_target_rejected(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args = ["foo_var"]
+        dep._vars = {"foo_var": "true"}
+
+        real_target = os.path.join(self.tmpdir, "real_target.gn")
+        with open(real_target, "w") as f:
+            f.write("target")
+        symlink_path = os.path.join(self.tmpdir, "symlink.gn")
+        os.symlink(real_target, symlink_path)
+        dep._gn_args_file = "symlink.gn"
+        with self.assertRaises(gclient_utils.Error) as ctx:
+            dep.WriteGNArgsFile()
+        self.assertIn("Target must not be a symbolic link", str(ctx.exception))
+
+    def test_write_gn_args_invalid_identifier_rejected(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args_file = "args.gn"
+        invalid_args = [
+            "foo\nbar",
+            "foo\n",
+            '[credential]\nhelper = "!sh -c touch /tmp/pwned"\ndummy',
+            "invalid-ident",
+            "123foo",
+            "foo bar",
+        ]
+        for arg in invalid_args:
+            dep._gn_args = [arg]
+            dep._vars = {arg: "true"}
+            with self.assertRaises(gclient_utils.Error):
+                dep.WriteGNArgsFile()
+
+    def test_write_gn_args_missing_variable_rejected(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args_file = "args.gn"
+        dep._gn_args = ["foo_var"]
+        dep._vars = {}
+        with self.assertRaises(gclient_utils.Error) as ctx:
+            dep.WriteGNArgsFile()
+        self.assertIn("not defined in vars", str(ctx.exception))
+
+    def test_parse_deps_file_gn_args_traversal_rejected(self) -> None:
+        dep = self._make_dep()
+        src_dir = os.path.join(self.tmpdir, "src")
+        os.makedirs(src_dir, exist_ok=True)
+        deps_path = os.path.join(src_dir, "DEPS")
+        with open(deps_path, "w") as f:
+            f.write(
+                'gclient_gn_args_file = "../evil.gn"\n'
+                'gclient_gn_args = ["foo"]\n'
+                'vars = {"foo": "true"}\n'
+            )
+        with self.assertRaises(gclient_utils.Error):
+            dep.ParseDepsFile()
+
+    def test_parse_deps_file_gn_args_invalid_identifier_rejected(self) -> None:
+        dep = self._make_dep()
+        src_dir = os.path.join(self.tmpdir, "src")
+        os.makedirs(src_dir, exist_ok=True)
+        deps_path = os.path.join(src_dir, "DEPS")
+        with open(deps_path, "w") as f:
+            f.write(
+                'gclient_gn_args_file = "args.gn"\n'
+                'gclient_gn_args = ["foo\\nbar"]\n'
+                'vars = {"foo\\nbar": "true"}\n'
+            )
+        with self.assertRaises(gclient_utils.Error):
+            dep.ParseDepsFile()
 
 
 if __name__ == "__main__":
