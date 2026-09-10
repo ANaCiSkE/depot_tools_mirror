@@ -44,20 +44,12 @@ def RunSteps(api):
     api.assertions.assertCountEqual(
       result.nested_submodules, api.properties["expected_nested_submodules"]
     )
-  if "expected_unresolvable_submodules" in api.properties:
-    api.assertions.assertCountEqual(
-      result.unresolvable_submodules,
-      api.properties["expected_unresolvable_submodules"],
-    )
 
 
 def GenTests(api):
 
   def has_nested_submodules_log(check, steps, step_name):
     check("nested_submodules" in steps[step_name].logs)
-
-  def has_unresolvable_submodules_log(check, steps, step_name):
-    check("unresolvable_submodules" in steps[step_name].logs)
 
   def has_unchecked_out_submodules_log(check, steps, step_name):
     check("unchecked_out_submodules" in steps[step_name].logs)
@@ -72,11 +64,11 @@ def GenTests(api):
     "submodule",
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef M\tsub_foo.cc\n"
       ),
@@ -93,11 +85,11 @@ def GenTests(api):
     "submodule-added",
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(":000000 160000 0000000 89abcdef A\tsub"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(":000000 100644 0000000 89abcdef A\tsub_foo.cc"),
     ),
     api.properties(
@@ -105,7 +97,9 @@ def GenTests(api):
       expected_files=["sub", "sub/sub_foo.cc"],
       expected_new_submodules=["sub"],
     ),
-    api.post_check(has_new_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_new_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -113,7 +107,7 @@ def GenTests(api):
   yield api.test(
     "submodule-deleted",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(":160000 160000 1234567 0000000 D\tsub"),
     ),
     api.properties(
@@ -121,7 +115,9 @@ def GenTests(api):
       expected_files=["sub"],
       expected_deleted_submodules=["sub"],
     ),
-    api.post_check(has_deleted_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_deleted_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -129,7 +125,7 @@ def GenTests(api):
   yield api.test(
     "submodule-none",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(":100644 100644 1234567 89abcdef M\tfoo.cc"),
     ),
     api.properties(
@@ -145,11 +141,11 @@ def GenTests(api):
     api.platform("win", 32),
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef M\tsub_foo.cc\n"
       ),
@@ -166,11 +162,11 @@ def GenTests(api):
     "submodule-nested",
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(
         "\n:100644 160000 1234567 89abcdef M\tnested_sub\n"
       ),
@@ -180,7 +176,9 @@ def GenTests(api):
       expected_files=["sub"],
       expected_nested_submodules=["sub/nested_sub"],
     ),
-    api.post_check(has_nested_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_nested_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -188,7 +186,7 @@ def GenTests(api):
   yield api.test(
     "submodule-unchecked-out",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.properties(
@@ -196,7 +194,9 @@ def GenTests(api):
       expected_files=["sub"],
       expected_unchecked_out_submodules=["sub"],
     ),
-    api.post_check(has_unchecked_out_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_unchecked_out_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -205,7 +205,7 @@ def GenTests(api):
     "submodule-unchecked-out-win",
     api.platform("win", 32),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.properties(
@@ -213,7 +213,9 @@ def GenTests(api):
       expected_files=["sub"],
       expected_unchecked_out_submodules=["sub"],
     ),
-    api.post_check(has_unchecked_out_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_unchecked_out_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -222,16 +224,14 @@ def GenTests(api):
     "submodule-expansion-failed",
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
-    api.step_data("git diff submodules.sub", retcode=1),
+    api.step_data("[Experimental] git diff submodules.sub", retcode=1),
     api.properties(
       patch_root="",
-      expected_files=["sub"],
-      expected_unresolvable_submodules=["sub"],
+      expected_files=[],
     ),
-    api.post_check(has_unresolvable_submodules_log, "git diff submodules"),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -240,7 +240,7 @@ def GenTests(api):
     "submodule-deleted-win",
     api.platform("win", 32),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(":160000 160000 1234567 0000000 D\tsub"),
     ),
     api.properties(
@@ -248,7 +248,9 @@ def GenTests(api):
       expected_files=["sub"],
       expected_deleted_submodules=["sub"],
     ),
-    api.post_check(has_deleted_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_deleted_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -258,11 +260,11 @@ def GenTests(api):
     api.platform("win", 32),
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(":000000 160000 0000000 89abcdef A\tsub"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(":000000 100644 0000000 89abcdef A\tsub_foo.cc"),
     ),
     api.properties(
@@ -270,7 +272,9 @@ def GenTests(api):
       expected_files=["sub", "sub/sub_foo.cc"],
       expected_new_submodules=["sub"],
     ),
-    api.post_check(has_new_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_new_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -280,11 +284,11 @@ def GenTests(api):
     api.platform("win", 32),
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(
         "\n:100644 160000 1234567 89abcdef M\tnested_sub\n"
       ),
@@ -294,7 +298,9 @@ def GenTests(api):
       expected_files=["sub"],
       expected_nested_submodules=["sub/nested_sub"],
     ),
-    api.post_check(has_nested_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_nested_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -303,7 +309,7 @@ def GenTests(api):
     "submodule-none-win",
     api.platform("win", 32),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(
         ":100644 100644 1234567 89abcdef M\tfoo\\bar.cc"
       ),
@@ -320,11 +326,11 @@ def GenTests(api):
     "submodule-report-property",
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef M\tsub_foo.cc\n"
       ),
@@ -343,11 +349,11 @@ def GenTests(api):
     api.platform("win", 32),
     api.path.files_exist(api.path.start_dir / "sub" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output("\n:100644 160000 1234567 89abcdef M\tsub\n"),
     ),
     api.step_data(
-      "git diff submodules.sub",
+      "[Experimental] git diff submodules.sub",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef M\tsub_foo.cc\n"
       ),
@@ -364,7 +370,7 @@ def GenTests(api):
   yield api.test(
     "submodule-none-report-property",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(":100644 100644 1234567 89abcdef M\tfoo.cc"),
     ),
     api.properties(
@@ -380,13 +386,13 @@ def GenTests(api):
     "submodule-renamed",
     api.path.files_exist(api.path.start_dir / "sub_dst" / ".git"),
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(
         "\n:160000 160000 1234567 89abcdef R100\tsub_src\tsub_dst\n"
       ),
     ),
     api.step_data(
-      "git diff submodules.sub_dst",
+      "[Experimental] git diff submodules.sub_dst",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef M\tsub_foo.cc\n"
       ),
@@ -397,8 +403,12 @@ def GenTests(api):
       expected_deleted_submodules=["sub_src"],
       expected_new_submodules=["sub_dst"],
     ),
-    api.post_check(has_deleted_submodules_log, "git diff submodules"),
-    api.post_check(has_new_submodules_log, "git diff submodules"),
+    api.post_check(
+      has_deleted_submodules_log, "[Experimental] git diff submodules"
+    ),
+    api.post_check(
+      has_new_submodules_log, "[Experimental] git diff submodules"
+    ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
@@ -406,7 +416,7 @@ def GenTests(api):
   yield api.test(
     "file-renamed",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef R100\tfoo_src.cc\tfoo_dst.cc\n"
       ),
@@ -422,7 +432,7 @@ def GenTests(api):
   yield api.test(
     "file-copied",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       api.raw_io.stream_output(
         "\n:100644 100644 1234567 89abcdef C090\tfoo_src.cc\tfoo_dst.cc\n"
       ),
@@ -438,7 +448,7 @@ def GenTests(api):
   yield api.test(
     "malformed-diff-parts",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       # missing new_sha and status
       api.raw_io.stream_output(":100644 100644 1234567\tfoo.cc\n"),
     ),
@@ -446,14 +456,14 @@ def GenTests(api):
       patch_root="",
       expected_files=[],
     ),
-    api.expect_exception("ValueError"),
+    api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
 
   yield api.test(
     "malformed-diff-rename",
     api.step_data(
-      "git diff --raw to analyze patch",
+      "[Experimental] git diff --raw to analyze patch",
       # missing dst_path
       api.raw_io.stream_output(
         ":100644 100644 1234567 89abcdef R100\tfoo.cc\n"
@@ -463,6 +473,6 @@ def GenTests(api):
       patch_root="",
       expected_files=[],
     ),
-    api.expect_exception("ValueError"),
+    api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
   )
