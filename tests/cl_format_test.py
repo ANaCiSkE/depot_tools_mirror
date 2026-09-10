@@ -1650,6 +1650,293 @@ class TestRuffBatchIntegration(unittest.TestCase):
         )
 
 
+class TestGnFormatBatch(unittest.TestCase):
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchInPlace(self, mock_popen):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        files = ["BUILD.gn", "foo/BUILD.gn", "bar/BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        ret = cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        self.assertEqual(0, ret)
+        mock_popen.assert_called_once()
+        cmd_args = mock_popen.call_args[0][0]
+        self.assertIn("format", cmd_args)
+        self.assertNotIn("--dry-run", cmd_args)
+        for f in files:
+            self.assertIn(f, cmd_args)
+        self.assertFalse(mock_popen.call_args[1].get("shell", False))
+
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchDryRunFormatted(self, mock_popen):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        files = ["BUILD.gn", "foo/BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        ret = cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        self.assertEqual(0, ret)
+        mock_popen.assert_called_once()
+        cmd_args = mock_popen.call_args[0][0]
+        self.assertIn("--dry-run", cmd_args)
+
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchDryRunUnformattedPrintsStdout(self, mock_popen):
+        # In dry-run mode without --diff, unformatted filenames on stdout must be
+        # printed to sys.stdout, and return code 2 must be returned.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"BUILD.gn\nfoo/BUILD.gn\n", b"")
+        mock_proc.returncode = 2
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        files = ["BUILD.gn", "foo/BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        stdout = io.StringIO()
+        with mock.patch("sys.stdout", stdout):
+            ret = cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        self.assertEqual(2, ret)
+        self.assertEqual("BUILD.gn\nfoo/BUILD.gn\n", stdout.getvalue())
+
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchDiff(self, mock_popen):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"BUILD.gn\nfoo/BUILD.gn\n", b"")
+        mock_proc.returncode = 2
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=True)
+        files = ["BUILD.gn", "foo/BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        stdout = io.StringIO()
+        with mock.patch("sys.stdout", stdout):
+            ret = cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        self.assertEqual(0, ret)
+        output = stdout.getvalue()
+        self.assertIn("This change has GN build file diff for BUILD.gn", output)
+        self.assertIn(
+            "This change has GN build file diff for foo/BUILD.gn", output
+        )
+
+    @mock.patch("subprocess2.Popen")
+    @mock.patch("cl_format.DieWithError", side_effect=SystemExit(1))
+    def testRunGnFormatBatchInPlaceMissingGnFails(self, mock_die, mock_popen):
+        # When gn.py cannot find gn, it prints to stderr and returns code 2.
+        # In-place mode must not swallow this as a formatted success.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"",
+            b"gn.py: Unable to find gn in your $PATH",
+        )
+        mock_proc.returncode = 2
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        files = ["BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        with self.assertRaises(SystemExit):
+            cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        mock_die.assert_called_once()
+        self.assertIn("Unable to find gn", mock_die.call_args[0][0])
+
+    @mock.patch("subprocess2.Popen")
+    @mock.patch("cl_format.DieWithError", side_effect=SystemExit(1))
+    def testRunGnFormatBatchDryRunMissingGnFails(self, mock_die, mock_popen):
+        # In dry-run mode, if gn is missing (gn_ret == 2, stdout empty, stderr has error),
+        # it must abort with DieWithError rather than falsely returning code 2 (unformatted).
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"",
+            b"gn.py: Unable to find gn in your $PATH",
+        )
+        mock_proc.returncode = 2
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        files = ["BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        with self.assertRaises(SystemExit):
+            cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        mock_die.assert_called_once()
+        self.assertIn("Unable to find gn", mock_die.call_args[0][0])
+
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchDryRunUnformattedWithStderrWarning(
+        self, mock_popen
+    ):
+        # If gn returns 2 with unformatted files on stdout AND a diagnostic warning on stderr,
+        # it must report unformatted (ret=2), forward stderr to sys.stderr, and NOT crash.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"BUILD.gn\n",
+            b"warning: benign diagnostic warning\n",
+        )
+        mock_proc.returncode = 2
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        files = ["BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+            ret = cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        self.assertEqual(2, ret)
+        self.assertIn("BUILD.gn", stdout.getvalue())
+        self.assertIn("warning: benign diagnostic warning", stderr.getvalue())
+
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchSuccessEmitsStderrWarning(self, mock_popen):
+        # If gn succeeds (gn_ret == 0) but emits warnings to stderr, those warnings
+        # must be written to sys.stderr.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"",
+            b"warning: build configuration deprecation\n",
+        )
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        files = ["BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        stderr = io.StringIO()
+        with mock.patch("sys.stderr", stderr):
+            ret = cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        self.assertEqual(0, ret)
+        self.assertIn(
+            "warning: build configuration deprecation", stderr.getvalue()
+        )
+
+    @mock.patch("subprocess2.Popen")
+    @mock.patch("cl_format.DieWithError", side_effect=SystemExit(1))
+    def testRunGnFormatBatchStdoutErrorCaptured(self, mock_die, mock_popen):
+        # Real gn format outputs syntax/parse errors to stdout.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"ERROR at //foo/BUILD.gn:10: Unexpected end of file in list.\n",
+            b"",
+        )
+        mock_proc.returncode = 1
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        files = ["BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        with self.assertRaises(SystemExit):
+            cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        mock_die.assert_called_once()
+        self.assertIn("Unexpected end of file", mock_die.call_args[0][0])
+
+    @mock.patch("subprocess2.Popen")
+    @mock.patch("cl_format.DieWithError", side_effect=SystemExit(1))
+    def testRunGnFormatBatchStdoutAndStderrBothCaptured(
+        self, mock_die, mock_popen
+    ):
+        # Verify both stdout syntax error and stderr warning/diagnostics are preserved.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (
+            b"ERROR at //foo/BUILD.gn:10: syntax error\n",
+            b"warning: custom toolchain flag\n",
+        )
+        mock_proc.returncode = 1
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        files = ["BUILD.gn"]
+        top_dir = "dummy_top_dir"
+        with self.assertRaises(SystemExit):
+            cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        mock_die.assert_called_once()
+        self.assertIn("syntax error", mock_die.call_args[0][0])
+        self.assertIn("custom toolchain flag", mock_die.call_args[0][0])
+
+    @mock.patch("subprocess2.Popen")
+    def testRunGnFormatBatchShellFalseOnWindows(self, mock_popen):
+        # shell=False must be used across all platforms, including Windows.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        top_dir = "dummy_top_dir"
+        with mock.patch("sys.platform", "win32"):
+            cl_format._RunGnFormat(mock_opts, ["BUILD.gn"], top_dir, None)
+
+        mock_popen.assert_called_once()
+        self.assertFalse(mock_popen.call_args[1].get("shell", True))
+
+    @mock.patch("subprocess2.Popen")
+    @mock.patch("cl_format._SplitArgsByCmdLineLimit")
+    def testRunGnFormatBatchMultiBatchPreservesReturnCode(
+        self, mock_split, mock_popen
+    ):
+        # When files are partitioned into multiple batches, exit code 2 in batch 1
+        # must be preserved even if batch 2 exits with code 0.
+        mock_split.return_value = [["batch1.gn"], ["batch2.gn"]]
+        proc1 = mock.Mock()
+        proc1.communicate.return_value = (b"batch1.gn\n", b"")
+        proc1.returncode = 2
+
+        proc2 = mock.Mock()
+        proc2.communicate.return_value = (b"", b"")
+        proc2.returncode = 0
+
+        mock_popen.side_effect = [proc1, proc2]
+
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        top_dir = "dummy_top_dir"
+        stdout = io.StringIO()
+        with mock.patch("sys.stdout", stdout):
+            ret = cl_format._RunGnFormat(
+                mock_opts, ["batch1.gn", "batch2.gn"], top_dir, None
+            )
+
+        self.assertEqual(2, ret)
+        self.assertEqual(2, mock_popen.call_count)
+
+    @mock.patch("subprocess2.Popen")
+    @mock.patch("cl_format.DieWithError", side_effect=SystemExit(1))
+    def testRunGnFormatBatchFailureTruncatesFileSummary(
+        self, mock_die, mock_popen
+    ):
+        # When a large batch of files fails to format, the file list in the
+        # error message should be truncated to the first 3 files followed by '...'.
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"Parse error\n")
+        mock_proc.returncode = 1
+        mock_popen.return_value = mock_proc
+
+        mock_opts = mock.Mock(dry_run=False, diff=False)
+        files = ["a.gn", "b.gn", "c.gn", "d.gn", "e.gn"]
+        top_dir = "dummy_top_dir"
+        with self.assertRaises(SystemExit):
+            cl_format._RunGnFormat(mock_opts, files, top_dir, None)
+
+        mock_die.assert_called_once()
+        self.assertIn(
+            "5 files (a.gn, b.gn, c.gn, ...)", mock_die.call_args[0][0]
+        )
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG if "-v" in sys.argv else logging.ERROR
