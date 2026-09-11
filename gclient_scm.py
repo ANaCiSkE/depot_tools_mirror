@@ -1876,30 +1876,39 @@ class GitWrapper(SCMWrapper):
             self.Print("")
 
     def _EnsureValidHeadObjectOrCheckout(self, revision, options, url):
-        # Special case handling if all 3 conditions are met:
-        # * the mirros have recently changed, but deps destination remains same,
-        # * the git histories of mirrors are conflicting. * git cache is used
-        # This manifests itself in current checkout having invalid HEAD commit
-        # on most git operations. Since git cache is used, just deleted the .git
-        # folder, and re-create it by cloning.
+        # Handle cases where the current checkout has an invalid or unresolvable
+        # HEAD commit (e.g., conflicting mirror histories when git cache is used,
+        # corrupted ref storage, or broken worktree symlinks).
+        # In these cases, git operations like rev-list or checkout will fail.
+        # Delete or move the broken checkout and re-create it by cloning.
         try:
             return self._Capture(["rev-list", "-n", "1", "HEAD"])
         except subprocess2.CalledProcessError as e:
-            if (
-                (
-                    b"fatal: bad object HEAD" in e.stderr
-                    or b"fatal: Could not parse object 'HEAD'" in e.stderr
-                )
-                and self.cache_dir
-                and self.cache_dir in url
+            invalid_head_errors = (
+                b"fatal: bad object HEAD",
+                b"fatal: Could not parse object 'HEAD'",
+                b"fatal: ambiguous argument 'HEAD'",
+                b"fatal: your current branch appears to be broken",
+            )
+            if options.force or (
+                e.stderr and any(err in e.stderr for err in invalid_head_errors)
             ):
-                self.Print(
-                    (
-                        "Likely due to DEPS change with git cache_dir, "
-                        "the current commit points to no longer existing object.\n"
-                        "%s" % e
+                if self.cache_dir and self.cache_dir in url:
+                    self.Print(
+                        (
+                            "Likely due to DEPS change with git cache_dir, "
+                            "the current commit points to no longer existing object.\n"
+                            "%s" % e
+                        )
                     )
-                )
+                else:
+                    self.Print(
+                        (
+                            "The current checkout has an invalid HEAD, "
+                            "re-creating it by cloning.\n"
+                            "%s" % e
+                        )
+                    )
                 self._DeleteOrMove(options.force)
                 return self._Clone(revision, url, options)
             raise

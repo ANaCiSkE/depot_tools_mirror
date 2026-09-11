@@ -935,6 +935,88 @@ class ManagedGitWrapperTestCaseMock(unittest.TestCase):
         mockClone.assert_called_with("revision", url, options)
 
     @mock.patch("gclient_scm.GitWrapper._Clone")
+    def testEnsureValidHeadObjectOrCheckout_AmbiguousArgumentHEAD(
+        self, mockClone
+    ):
+        options = self.Options()
+        git_wrapper = gclient_scm.GitWrapper(
+            self.url, self.root_dir, self.relpath
+        )
+        url = "https://chromium.googlesource.com/foo"
+
+        mock_capture = mock.Mock(
+            side_effect=subprocess2.CalledProcessError(
+                returncode=128,
+                cmd=["rev-list"],
+                cwd=None,
+                stdout=None,
+                stderr=(
+                    b"fatal: ambiguous argument 'HEAD': unknown revision or "
+                    b"path not in the working tree.\n"
+                ),
+            )
+        )
+        git_wrapper._Capture = mock_capture
+
+        git_wrapper._EnsureValidHeadObjectOrCheckout("revision", options, url)
+
+        git_wrapper._DeleteOrMove.assert_called_with(options.force)
+        mockClone.assert_called_with("revision", url, options)
+
+    @mock.patch("gclient_scm.GitWrapper._Clone")
+    def testEnsureValidHeadObjectOrCheckout_Force(self, mockClone):
+        options = self.Options(force=True)
+        git_wrapper = gclient_scm.GitWrapper(
+            self.url, self.root_dir, self.relpath
+        )
+        url = "https://chromium.googlesource.com/foo"
+
+        mock_capture = mock.Mock(
+            side_effect=subprocess2.CalledProcessError(
+                returncode=128,
+                cmd=["rev-list"],
+                cwd=None,
+                stdout=None,
+                stderr=b"fatal: some unknown git error\n",
+            )
+        )
+        git_wrapper._Capture = mock_capture
+
+        git_wrapper._EnsureValidHeadObjectOrCheckout("revision", options, url)
+
+        git_wrapper._DeleteOrMove.assert_called_with(True)
+        mockClone.assert_called_with("revision", url, options)
+
+    @mock.patch("gclient_scm.GitWrapper._Clone")
+    def testEnsureValidHeadObjectOrCheckout_UnknownErrorWithoutForceRaises(
+        self, mockClone
+    ):
+        options = self.Options()
+        git_wrapper = gclient_scm.GitWrapper(
+            self.url, self.root_dir, self.relpath
+        )
+        url = "https://chromium.googlesource.com/foo"
+
+        mock_capture = mock.Mock(
+            side_effect=subprocess2.CalledProcessError(
+                returncode=128,
+                cmd=["rev-list"],
+                cwd=None,
+                stdout=None,
+                stderr=b"fatal: permission denied\n",
+            )
+        )
+        git_wrapper._Capture = mock_capture
+
+        with self.assertRaises(subprocess2.CalledProcessError):
+            git_wrapper._EnsureValidHeadObjectOrCheckout(
+                "revision", options, url
+            )
+
+        self.assertFalse(git_wrapper._DeleteOrMove.called)
+        self.assertFalse(mockClone.called)
+
+    @mock.patch("gclient_scm.GitWrapper._Clone")
     @mock.patch("os.path.isdir")
     @mock.patch("os.path.exists")
     @mock.patch("git_common.run")
