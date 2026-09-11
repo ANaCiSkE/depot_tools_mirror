@@ -5,9 +5,11 @@
 
 import datetime
 import functools
+import ast as _ast
 import io as _io
 import os as _os
 import re as _re
+import sys as _sys
 import time
 
 import metadata.discover
@@ -1601,6 +1603,316 @@ def _FetchAllFiles(input_api, files_to_check, files_to_skip):
     return files
 
 
+def _IsCaseInsensitivePlatform(input_api):
+    """Returns True if the underlying platform or input_api is case-insensitive."""
+    return (
+        getattr(input_api, "is_windows", False)
+        or getattr(input_api, "is_mac", False)
+        or getattr(input_api, "platform", "") == "darwin"
+        or _sys.platform in ("win32", "darwin")
+    )
+
+
+def _NormalizePath(input_api, path, is_case_insensitive=False):
+    """Normalizes path separators, collapses '..', and folds case if requested."""
+    p = input_api.os_path.normpath(path.replace("\\", "/")).replace("\\", "/")
+    if is_case_insensitive:
+        p = p.lower()
+    return p
+
+
+def _CumulativePrefixes(mod):
+    """Returns all cumulative prefixes of a dotted module name (e.g. 'a.b.c' -> ['a', 'a.b', 'a.b.c'])."""
+    if not mod:
+        return []
+    parts = mod.split(".")
+    return [".".join(parts[:i]) for i in range(1, len(parts) + 1)]
+
+
+def _ResolveRelativeExtraPaths(input_api, extra_paths_list, local_path, norm_fn):
+    """Converts search paths in extra_paths_list to normalized paths relative to local_path.
+
+    In presubmit checks, python files are tracked relative to local_path (the
+    presubmit root). When extra_paths_list is provided (e.g. sys.path / PYTHONPATH
+    directories), modules inside those directories can be imported without
+    prefixing the directory name (e.g. `import bar` instead of `import foo.bar`).
+
+    This function identifies which search paths in extra_paths_list reside within
+    local_path and returns their normalized relative paths (e.g. 'foo/bar').
+    These prefixes are then used by _BuildModuleToFileIndex to register stripped
+    module aliases so imports across extra_paths are resolved correctly.
+
+    Args:
+        input_api: The presubmit InputApi instance.
+        extra_paths_list: Iterable of string paths (relative or absolute)
+            representing extra import search directories.
+        local_path: Path to the presubmit local root directory.
+        norm_fn: Path normalization function taking a path string and returning
+            a forward-slash normalized path string.
+
+    Returns:
+        A set of normalized relative path strings under local_path that act as
+        additional module import roots. External search paths or paths identical
+        to local_path are excluded.
+    """
+    rel_extra_paths = set()
+    norm_local = norm_fn(local_path).strip("/")
+    for ep in extra_paths_list:
+        norm_ep = norm_fn(ep).strip("/")
+        if norm_ep.startswith(norm_local + "/"):
+            sub = norm_ep[len(norm_local) + 1 :]
+            if sub and sub != ".":
+                rel_extra_paths.add(sub)
+        elif norm_ep and norm_ep != norm_local and norm_ep != ".":
+            if not input_api.os_path.isabs(ep):
+                rel_extra_paths.add(norm_ep)
+            else:
+                try:
+                    local_abs = (
+                        local_path
+                        if input_api.os_path.isabs(local_path)
+                        else input_api.os_path.abspath(local_path)
+                    )
+                    rel_p = norm_fn(input_api.os_path.relpath(ep, local_abs))
+                    if not rel_p.startswith("..") and rel_p != ".":
+                        rel_extra_paths.add(rel_p)
+                except (ValueError, OSError):
+                    pass
+    return rel_extra_paths
+
+
+def _BuildModuleToFileIndex(files, pkg_root_name, rel_extra_paths, norm_fn):
+    """Maps dotted module names to candidate files within the repository.
+
+    Registers multiple lookup keys for each file:
+    - Base relative module name (e.g. 'foo/bar.py' -> 'foo.bar').
+    - Package-prefixed module name if pkg_root_name is set (e.g. 'pkg.foo.bar').
+    - Package namespace for '__init__.py' files (e.g. 'foo/__init__.py' -> 'foo').
+    - Sub-module names stripped of extra_paths prefixes (e.g. when 'foo' is
+      in rel_extra_paths, 'foo/bar.py' is also indexed under 'bar').
+
+    Args:
+        files: Iterable of file paths relative to the presubmit local root.
+        pkg_root_name: Package name of the local root directory, or empty string.
+        rel_extra_paths: Set of relative search paths under the local root.
+        norm_fn: Path normalization function.
+
+    Returns:
+        A dict mapping dotted module names to lists of matching candidate files.
+    """
+    file_by_mod = {}
+    for f in files:
+        f_norm = norm_fn(f)
+        if not f_norm.endswith(".py"):
+            continue
+        mod = f_norm[:-3].replace("/", ".")
+        file_by_mod.setdefault(mod, []).append(f)
+        if pkg_root_name:
+            file_by_mod.setdefault(f"{pkg_root_name}.{mod}", []).append(f)
+
+        if f_norm.endswith("/__init__.py"):
+            init_mod = f_norm[:-12].replace("/", ".")
+            if init_mod:
+                file_by_mod.setdefault(init_mod, []).append(f)
+                if pkg_root_name:
+                    file_by_mod.setdefault(
+                        f"{pkg_root_name}.{init_mod}", []
+                    ).append(f)
+        elif f_norm == "__init__.py":
+            if pkg_root_name:
+                file_by_mod.setdefault(pkg_root_name, []).append(f)
+
+        for ep_norm in rel_extra_paths:
+            if f_norm.startswith(ep_norm + "/"):
+                sub_mod = f_norm[len(ep_norm) + 1 : -3].replace("/", ".")
+                file_by_mod.setdefault(sub_mod, []).append(f)
+                if f_norm.endswith("/__init__.py"):
+                    sub_init = f_norm[len(ep_norm) + 1 : -12].replace("/", ".")
+                    if sub_init:
+                        file_by_mod.setdefault(sub_init, []).append(f)
+    return file_by_mod
+
+
+def _ReadFileBytes(input_api, local_path, curr):
+    """Reads file bytes for AST parsing, tolerating varying InputApi implementations.
+
+    AST parsing requires raw bytes without encoding or newline distortions.
+    While InputApi provides `ReadFile()`, different presubmit environments and test
+    harnesses expect either absolute paths or local-relative paths, and minimal
+    or custom InputApi objects may not implement `ReadFile()` at all.
+
+    This helper provides a unified fallback chain: it attempts `input_api.ReadFile`
+    with the full path, falls back to the relative path, and finally falls back
+    to direct disk I/O via `_io.open()`.
+    """
+    curr_full_path = input_api.os_path.join(local_path, curr)
+    if hasattr(input_api, "ReadFile"):
+        try:
+            return input_api.ReadFile(curr_full_path, "rb")
+        except (IOError, OSError):
+            try:
+                return input_api.ReadFile(curr, "rb")
+            except (IOError, OSError):
+                with _io.open(curr_full_path, "rb") as fp:
+                    return fp.read()
+    with _io.open(curr_full_path, "rb") as fp:
+        return fp.read()
+
+
+def _ResolveNodeImports(node, curr_dir_parts, file_by_mod, norm_mod_fn):
+    """Finds referenced files for an AST Import or ImportFrom node.
+
+    Returns a list of matching file paths, an empty list if none, or None
+    if an escape above the directory root occurred (requiring fallback).
+    """
+    targets = []
+    if isinstance(node, _ast.Import):
+        for n in node.names:
+            name = norm_mod_fn(n.name)
+            for mod in _CumulativePrefixes(name):
+                if mod in file_by_mod:
+                    targets.extend(file_by_mod[mod])
+                elif curr_dir_parts:
+                    sibling = ".".join(curr_dir_parts + [mod])
+                    if sibling in file_by_mod:
+                        targets.extend(file_by_mod[sibling])
+    elif isinstance(node, _ast.ImportFrom):
+        if node.level > 0:
+            up = node.level - 1
+            if up > len(curr_dir_parts):
+                return None
+            target_parts = (
+                curr_dir_parts[:-up] if up > 0 else list(curr_dir_parts)
+            )
+            if node.module:
+                target_parts.extend(norm_mod_fn(node.module).split("."))
+            rel_mod = ".".join(target_parts)
+            for mod in _CumulativePrefixes(rel_mod):
+                if mod in file_by_mod:
+                    targets.extend(file_by_mod[mod])
+            for n in node.names:
+                if n.name == "*":
+                    continue
+                n_name = norm_mod_fn(n.name)
+                sub_mod = f"{rel_mod}.{n_name}" if rel_mod else n_name
+                if sub_mod in file_by_mod:
+                    targets.extend(file_by_mod[sub_mod])
+        elif node.module:
+            mod_name = norm_mod_fn(node.module)
+            for mod in _CumulativePrefixes(mod_name):
+                if mod in file_by_mod:
+                    targets.extend(file_by_mod[mod])
+                elif curr_dir_parts:
+                    sibling = ".".join(curr_dir_parts + [mod])
+                    if sibling in file_by_mod:
+                        targets.extend(file_by_mod[sibling])
+            for n in node.names:
+                if n.name == "*":
+                    continue
+                n_name = norm_mod_fn(n.name)
+                sub_mod = f"{mod_name}.{n_name}"
+                if sub_mod in file_by_mod:
+                    targets.extend(file_by_mod[sub_mod])
+                elif curr_dir_parts:
+                    sibling_sub = f"{'.'.join(curr_dir_parts)}.{sub_mod}"
+                    if sibling_sub in file_by_mod:
+                        targets.extend(file_by_mod[sibling_sub])
+    return targets
+
+
+def _GetCyclicImportFiles(
+    input_api, files, affected_files, extra_paths_list=None
+):
+    """Finds the closure of files that could form an import cycle with affected files.
+
+    Pylint's cyclic-import checker is single-threaded and slow when analyzing
+    entire repositories. However, any cyclic import involving a modified file
+    can only contain files reachable from that modified file along the directed
+    import graph.
+
+    This function performs a depth-first traversal starting from affected_files
+    within the candidate files set:
+    1. Indexes repository files by their dotted module names, package roots, and
+       extra search paths.
+    2. Parses the AST of each reachable file to extract both direct and relative
+       imports.
+    3. Expands the traversal to include all downstream dependencies until the
+       transitive closure is resolved.
+
+    If an AST parsing error or unresolvable path escape occurs, it safely falls
+    back to returning the entire original files list.
+
+    Args:
+        input_api: The presubmit InputApi instance.
+        files: Sequence of candidate Python file paths (relative to local_path).
+        affected_files: Sequence of modified file paths in the changelist.
+        extra_paths_list: Optional list of additional import search directories
+            (e.g. PYTHONPATH entries).
+
+    Returns:
+        A sorted list of file paths in the transitive import closure of
+        affected_files. If affected_files is empty, or if an error occurs,
+        returns the full files sequence.
+    """
+    if not affected_files:
+        return files
+
+    try:
+        local_path = input_api.PresubmitLocalPath()
+        is_case_insensitive = _IsCaseInsensitivePlatform(input_api)
+
+        def norm(p):
+            return _NormalizePath(input_api, p, is_case_insensitive)
+
+        def norm_mod(m):
+            return m.lower() if (is_case_insensitive and m) else m
+
+        norm_local = norm(local_path).strip("/")
+        pkg_root_name = (
+            norm_mod(norm_local.rsplit("/", 1)[-1]) if norm_local else ""
+        )
+        rel_extra_paths = _ResolveRelativeExtraPaths(
+            input_api, extra_paths_list or [], local_path, norm
+        )
+        file_by_mod = _BuildModuleToFileIndex(
+            files, pkg_root_name, rel_extra_paths, norm
+        )
+
+        affected_set = {norm(f) for f in affected_files}
+        stack = [f for f in files if norm(f) in affected_set]
+        if not stack:
+            return files
+
+        closure = set()
+        seen = set(stack)
+
+        while stack:
+            curr = stack.pop()
+            if curr in closure:
+                continue
+            closure.add(curr)
+
+            content_bytes = _ReadFileBytes(input_api, local_path, curr)
+            tree = _ast.parse(content_bytes, filename=curr)
+            curr_dir_parts = norm(curr).split("/")[:-1]
+
+            for node in _ast.walk(tree):
+                targets = _ResolveNodeImports(
+                    node, curr_dir_parts, file_by_mod, norm_mod
+                )
+                if targets is None:
+                    # Traversal escaped directory root via invalid relative import.
+                    return files
+                for target in targets:
+                    if target not in seen:
+                        seen.add(target)
+                        stack.append(target)
+
+        return sorted(closure)
+    except Exception:
+        return files
+
+
 def GetPylint(
     input_api,
     output_api,
@@ -1658,9 +1970,45 @@ def GetPylint(
     src_filter = lambda x: input_api.FilterSourceFile(  # noqa: E731
         x, map(rel_path, files_to_check), map(rel_path, files_to_skip)
     )
-    if not input_api.AffectedSourceFiles(src_filter):
+    affected_sources = input_api.AffectedSourceFiles(src_filter)
+    if not affected_sources:
         input_api.logging.info("Skipping pylint: no matching changes.")
         return []
+
+    try:
+        sources_list = list(affected_sources)
+        if not sources_list:
+            input_api.logging.info("Skipping pylint: no matching changes.")
+            return []
+    except TypeError:
+        sources_list = None
+
+    affected_files = []
+    if sources_list:
+        presubmit_path = input_api.PresubmitLocalPath()
+        pre_norm = presubmit_path.replace("\\", "/").rstrip("/")
+        is_case_insensitive = _IsCaseInsensitivePlatform(input_api)
+        pre_cmp = pre_norm.lower() if is_case_insensitive else pre_norm
+        for f in sources_list:
+            try:
+                abs_p = (
+                    f.AbsoluteLocalPath()
+                    if hasattr(f, "AbsoluteLocalPath")
+                    else f
+                )
+                if isinstance(abs_p, str):
+                    p_norm = abs_p.replace("\\", "/")
+                    p_cmp = p_norm.lower() if is_case_insensitive else p_norm
+                    if p_cmp.startswith(pre_cmp + "/"):
+                        rel_p = p_norm[len(pre_norm) + 1 :]
+                    elif not input_api.os_path.isabs(abs_p):
+                        rel_p = abs_p
+                    else:
+                        rel_p = input_api.os_path.relpath(abs_p, presubmit_path)
+                    affected_files.append(rel_p)
+            except Exception:
+                affected_files = []
+                break
 
     if pylintrc is not None:
         pylintrc = input_api.os_path.join(
@@ -1743,12 +2091,19 @@ def GetPylint(
     if len(files) >= files_per_job and not any(
         "R0401" in a or "cyclic-import" in a for a in extra_args
     ):
-        return [
-            GetPylintCmd(files, ["--disable=cyclic-import"], True),
-            GetPylintCmd(
-                files, ["--disable=all", "--enable=cyclic-import"], False
-            ),
-        ]
+        commands = [GetPylintCmd(files, ["--disable=cyclic-import"], True)]
+        cyclic_files = _GetCyclicImportFiles(
+            input_api, files, affected_files, extra_paths_list=extra_paths_list
+        )
+        if len(cyclic_files) >= 2:
+            commands.append(
+                GetPylintCmd(
+                    cyclic_files,
+                    ["--disable=all", "--enable=cyclic-import"],
+                    False,
+                )
+            )
+        return commands
 
     return [
         GetPylintCmd(files, [], True),

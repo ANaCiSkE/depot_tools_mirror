@@ -4232,6 +4232,99 @@ the current line as well!
 
         self.checkstdout("")
 
+    def testCannedGetPylintCyclicImportClosure(self):
+        change = mock.Mock()
+        change.RepositoryRoot.return_value = "CWD"
+        input_api = self.MockInputApi(change, False)
+        input_api.environ = mock.MagicMock(os.environ)
+        input_api.environ.copy.return_value = {}
+        input_api.cpu_count = 8
+        input_api.PresubmitLocalPath.return_value = "CWD"
+
+        files = [f"file_{i}.py" for i in range(15)]
+        input_api.os_walk.return_value = [("CWD", [], files)]
+
+        affected = mock.Mock()
+        affected.AbsoluteLocalPath.return_value = "CWD/file_0.py"
+        input_api.AffectedSourceFiles = mock.Mock(return_value=[affected])
+
+        contents = {
+            "CWD/file_0.py": b"import file_1\n",
+            "CWD/file_1.py": b"import file_0\n",
+        }
+        input_api.ReadFile = lambda path, mode="r": contents.get(
+            path.replace("\\", "/"), b"# empty\n"
+        )
+
+        commands = presubmit_canned_checks.GetPylint(
+            input_api, presubmit.OutputApi, version="2.7"
+        )
+        self.assertEqual(len(commands), 2)
+        cmd_parallel, cmd_cyclic = commands
+        self.assertIn("15 files", cmd_parallel.name)
+        self.assertIn("--disable=cyclic-import", cmd_parallel.name)
+        self.assertIn("2 files", cmd_cyclic.name)
+        self.assertIn("--enable=cyclic-import", cmd_cyclic.name)
+
+        cyclic_stdin = cmd_cyclic.stdin.decode("utf-8").splitlines()
+        self.assertIn("--disable=all", cyclic_stdin)
+        self.assertIn("--enable=cyclic-import", cyclic_stdin)
+        self.assertIn("file_0.py", cyclic_stdin)
+        self.assertIn("file_1.py", cyclic_stdin)
+        self.assertNotIn("file_2.py", cyclic_stdin)
+
+    def testCannedGetPylintCyclicImportSkippedWhenNoCycles(self):
+        change = mock.Mock()
+        change.RepositoryRoot.return_value = "CWD"
+        input_api = self.MockInputApi(change, False)
+        input_api.environ = mock.MagicMock(os.environ)
+        input_api.environ.copy.return_value = {}
+        input_api.cpu_count = 8
+        input_api.PresubmitLocalPath.return_value = "CWD"
+
+        files = [f"file_{i}.py" for i in range(15)]
+        input_api.os_walk.return_value = [("CWD", [], files)]
+
+        affected = mock.Mock()
+        affected.AbsoluteLocalPath.return_value = "CWD/file_5.py"
+        input_api.AffectedSourceFiles = mock.Mock(return_value=[affected])
+
+        input_api.ReadFile = lambda path, mode="r": (
+            b"# no internal imports\nimport os\n"
+        )
+
+        commands = presubmit_canned_checks.GetPylint(
+            input_api, presubmit.OutputApi, version="2.7"
+        )
+        self.assertEqual(len(commands), 1)
+        self.assertIn("15 files", commands[0].name)
+        self.assertIn("--disable=cyclic-import", commands[0].name)
+
+    def testCannedGetPylintParseFailureFallback(self):
+        change = mock.Mock()
+        change.RepositoryRoot.return_value = "CWD"
+        input_api = self.MockInputApi(change, False)
+        input_api.environ = mock.MagicMock(os.environ)
+        input_api.environ.copy.return_value = {}
+        input_api.cpu_count = 8
+        input_api.PresubmitLocalPath.return_value = "CWD"
+
+        files = [f"file_{i}.py" for i in range(15)]
+        input_api.os_walk.return_value = [("CWD", [], files)]
+
+        affected = mock.Mock()
+        affected.AbsoluteLocalPath.return_value = "CWD/file_0.py"
+        input_api.AffectedSourceFiles = mock.Mock(return_value=[affected])
+
+        input_api.ReadFile = lambda path, mode="r": b"def syntax_error(\n"
+
+        commands = presubmit_canned_checks.GetPylint(
+            input_api, presubmit.OutputApi, version="2.7"
+        )
+        self.assertEqual(len(commands), 2)
+        cmd_parallel, cmd_cyclic = commands
+        self.assertIn("15 files", cmd_cyclic.name)
+
     def testCannedRunRuff(self):
         affected_file = mock.Mock()
         affected_file.AbsoluteLocalPath.return_value = "/path/to/file1.py"
