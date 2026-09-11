@@ -2265,6 +2265,38 @@ class GNArgsValidationTest(unittest.TestCase):
         with self.assertRaises(gclient_utils.Error):
             dep.ParseDepsFile()
 
+    def test_enforce_revisions_invalid_starting_with_hyphen(self) -> None:
+        options, _ = gclient.OptionParser().parse_args([])
+        options.revisions = ["src@--upload-pack=foo"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforceRevisions()
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.revisions = ["-bad_name@HEAD"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforceRevisions()
+
+    def test_enforce_patch_refs_invalid_starting_with_hyphen(self) -> None:
+        options, _ = gclient.OptionParser().parse_args([])
+        options.patch_refs = ["-bad_repo@target:ref"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforcePatchRefsAndBranches()
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.patch_refs = ["repo@-target:ref"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforcePatchRefsAndBranches()
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.patch_refs = ["repo@target:-patchref"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforcePatchRefsAndBranches()
+
 
 if __name__ == "__main__":
     sys.stdout = gclient_utils.MakeFileAutoFlush(sys.stdout)

@@ -16,6 +16,7 @@ import gclient_utils
 import subprocess2
 from testing_support import trial_dir
 
+
 class CheckCallAndFilterTestCase(unittest.TestCase):
     class ProcessIdMock(object):
         def __init__(self, test_string, return_code=0):
@@ -179,6 +180,7 @@ class CheckCallAndFilterTestCase(unittest.TestCase):
             ],
         )
 
+
 class AnnotatedTestCase(unittest.TestCase):
     def setUp(self):
         self.out = gclient_utils.MakeFileAnnotated(io.BytesIO())
@@ -244,6 +246,7 @@ class AnnotatedTestCase(unittest.TestCase):
             self.annotated.getvalue(), b"0>first line\n0>second line\n"
         )
 
+
 class SplitUrlRevisionTestCase(unittest.TestCase):
     def testSSHUrl(self):
         url = "ssh://test@example.com/test.git"
@@ -304,6 +307,25 @@ class SplitUrlRevisionTestCase(unittest.TestCase):
         self.assertEqual(out_rev, rev)
         self.assertEqual(out_url, url)
 
+    def testInvalidRevisionStartingWithHyphen(self):
+        with self.assertRaises(gclient_utils.Error):
+            gclient_utils.SplitUrlRevision(
+                "https://example.com/repo.git@--upload-pack=foo"
+            )
+        with self.assertRaises(gclient_utils.Error):
+            gclient_utils.SplitUrlRevision("https://example.com/repo.git@-b")
+        with self.assertRaises(gclient_utils.Error):
+            gclient_utils.SplitUrlRevision(
+                "ssh://user@example.com/repo.git@--upload-pack=foo"
+            )
+
+    def testInvalidUrlStartingWithHyphen(self):
+        with self.assertRaises(gclient_utils.Error):
+            gclient_utils.SplitUrlRevision("--upload-pack=foo@main")
+        with self.assertRaises(gclient_utils.Error):
+            gclient_utils.SplitUrlRevision("-u")
+
+
 class ExtracRefNameTest(unittest.TestCase):
     def testMatchFound(self):
         self.assertEqual(
@@ -320,6 +342,7 @@ class ExtracRefNameTest(unittest.TestCase):
 
     def testNoMatch(self):
         self.assertIsNone(gclient_utils.ExtractRefName("origin", "abcbbb1234"))
+
 
 class GClientUtilsTest(trial_dir.TestCase):
     def testHardToDelete(self):
@@ -452,6 +475,7 @@ class GClientUtilsTest(trial_dir.TestCase):
             ["AI_AGENT"],
         )
 
+
 class IsGitShaTest(unittest.TestCase):
     def testIsFullGitSha(self):
         # A full object name is 40 hex chars for SHA-1 or 64 for SHA-256.
@@ -483,8 +507,10 @@ class IsGitShaTest(unittest.TestCase):
         self.assertFalse(gclient_utils.IsGitSha("a" * 65))
         self.assertFalse(gclient_utils.IsGitSha("z" * 40))
 
+
 if __name__ == "__main__":
     unittest.main()
+
 
 class SafeReplaceTest(unittest.TestCase):
     def setUp(self):
@@ -507,5 +533,6 @@ class SafeReplaceTest(unittest.TestCase):
         with mock.patch("time.sleep"):
             with self.assertRaises(OSError):
                 gclient_utils.safe_replace("old", "new")
+
 
 # vim: ts=2:sw=2:tw=80:et:

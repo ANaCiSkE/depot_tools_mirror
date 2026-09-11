@@ -197,6 +197,12 @@ class RealGitTest(fake_repos.FakeReposTestBase):
         # fail.
         self.assertFalse(scm.GIT.IsValidRevision(cwd=self.cwd, rev="zebra"))
         self.assertFalse(scm.GIT.IsValidRevision(cwd=self.cwd, rev="r123456"))
+        self.assertFalse(
+            scm.GIT.IsValidRevision(
+                cwd=self.cwd, rev="--upload-pack=touch /tmp/pwn"
+            )
+        )
+        self.assertFalse(scm.GIT.IsValidRevision(cwd=self.cwd, rev="-b"))
         # Valid cases
         first_rev = self.githash("repo_1", 1)
         self.assertTrue(scm.GIT.IsValidRevision(cwd=self.cwd, rev=first_rev))
