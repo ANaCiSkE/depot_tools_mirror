@@ -450,19 +450,3 @@ def GenTests(api):
     ),
     api.post_process(post_process.DropExpectation),
   )
-
-  yield api.test(
-    "invalid_revision_starts_with_hyphen",
-    ci_build(),
-    api.properties(patch=False, revisions={"src": "-bad_revision"}),
-    api.expect_status("FAILURE"),
-    api.post_process(post_process.DropExpectation),
-  )
-
-  yield api.test(
-    "invalid_revision_name_starts_with_hyphen",
-    ci_build(),
-    api.properties(patch=False, revisions={("-bad_name"): "HEAD"}),
-    api.expect_status("FAILURE"),
-    api.post_process(post_process.DropExpectation),
-  )

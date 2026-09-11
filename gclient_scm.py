@@ -627,29 +627,6 @@ class GitWrapper(SCMWrapper):
       file_list: A list where modified files will be appended.
     """
 
-        if not patch_repo:
-            raise gclient_utils.Error("A patch repo must be given")
-        if patch_repo.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid patch repo '{patch_repo}': patch repo cannot start with '-'"
-            )
-        if not target_rev:
-            raise gclient_utils.Error(
-                "A target revision for the patch must be given"
-            )
-        if target_rev.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid target revision '{target_rev}': cannot start with '-'"
-            )
-        if not patch_rev:
-            raise gclient_utils.Error(
-                "A patch revision for the patch must be given"
-            )
-        if patch_rev.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid patch revision '{patch_rev}': cannot start with '-'"
-            )
-
         # Abort any cherry-picks in progress.
         try:
             self._Capture(["cherry-pick", "--abort"])
@@ -657,6 +634,11 @@ class GitWrapper(SCMWrapper):
             pass
 
         base_rev = self.revinfo(None, None, None)
+
+        if not target_rev:
+            raise gclient_utils.Error(
+                "A target revision for the patch must be given"
+            )
 
         if target_rev.startswith(("refs/heads/", "refs/branch-heads")):
             # If |target_rev| is in refs/heads/** or refs/branch-heads/**, try
@@ -677,9 +659,7 @@ class GitWrapper(SCMWrapper):
                     self._UpdateMirrorIfNotContains(
                         mirror, options, "branch", target_rev
                     )
-                self._Capture(
-                    ["fetch", "--no-tags", "--", self.remote, target_rev]
-                )
+                self._Capture(["fetch", "--no-tags", self.remote, target_rev])
                 target_rev = remote_ref
         elif not scm.GIT.IsValidRevision(self.checkout_path, target_rev):
             # Fetch |target_rev| if it's not already available.
@@ -704,34 +684,23 @@ class GitWrapper(SCMWrapper):
 
         self._Capture(["reset", "--hard"])
         for pr in patch_revs_to_process:
-            if pr.startswith("-"):
-                raise gclient_utils.Error(
-                    f"Invalid patch revision '{pr}': cannot start with '-'"
-                )
             self.Print("===Applying patch===")
             self.Print("Revision to patch is %r @ %r." % (patch_repo, pr))
             self.Print("Current dir is %r" % self.checkout_path)
-            self._Capture(["fetch", "--no-tags", "--", patch_repo, pr])
+            self._Capture(["fetch", "--no-tags", patch_repo, pr])
             pr = self._Capture(["rev-parse", "FETCH_HEAD"])
 
             if not options.rebase_patch_ref:
-                self._Capture(["checkout", "--end-of-options", pr])
+                self._Capture(["checkout", pr])
                 # Adjust base_rev to be the first parent of our checked out
                 # patch ref; This will allow us to correctly extend `file_list`,
                 # and will show the correct file-list to programs which do `git
                 # diff --cached` expecting to see the patch diff.
                 base_rev = self._Capture(["rev-parse", pr + "~"])
             else:
-                target_rev_hash = self._Capture(
-                    ["rev-parse", "--verify", "--end-of-options", target_rev]
-                )
+                target_rev_hash = self._Capture(["rev-parse", target_rev])
                 commit_list = self._Capture(
-                    [
-                        "log",
-                        "--oneline",
-                        "--end-of-options",
-                        target_rev + ".." + pr,
-                    ]
+                    ["log", "--oneline", target_rev + ".." + pr]
                 )
                 self.Print(
                     "Will cherrypick %r (%r) .. %r on top of %r:"
@@ -754,7 +723,7 @@ class GitWrapper(SCMWrapper):
                             )
                         # If |patch_rev| is an ancestor of |target_rev|, check
                         # it out.
-                        self._Capture(["checkout", "--end-of-options", pr])
+                        self._Capture(["checkout", pr])
                     else:
                         # If a change was uploaded on top of another change,
                         # which has already landed, one of the commits in the
@@ -942,10 +911,6 @@ class GitWrapper(SCMWrapper):
         if options.revision:
             # Override the revision number.
             revision = str(options.revision)
-        if revision and revision != "unmanaged" and revision.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid revision '{revision}': revisions cannot start with '-'"
-            )
         if revision == "unmanaged":
             # Check again for a revision in case an initial ref was specified
             # in the url, for example bla.git@refs/heads/custombranch
@@ -2054,12 +2019,6 @@ class GitWrapper(SCMWrapper):
               'None', the behavior is inferred from 'options.verbose'.
         Returns: (str) The output of the checkout operation
         """
-        if not ref:
-            raise gclient_utils.Error("A ref must be specified for checkout")
-        if ref.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid ref '{ref}': cannot start with '-'"
-            )
         if quiet is None:
             quiet = not options.verbose
         checkout_args = ["checkout"]
@@ -2067,7 +2026,7 @@ class GitWrapper(SCMWrapper):
             checkout_args.append("--force")
         if quiet:
             checkout_args.append("--quiet")
-        checkout_args.extend(["--end-of-options", ref])
+        checkout_args.append(ref)
         return self._Capture(checkout_args)
 
     def _Fetch(
@@ -2079,18 +2038,6 @@ class GitWrapper(SCMWrapper):
         refspec=None,
         depth=None,
     ):
-        target_remote = remote or self.remote
-        if not target_remote:
-            raise gclient_utils.Error("A remote must be specified for fetch")
-        if target_remote.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid remote '{target_remote}': remotes cannot start with '-'"
-            )
-        if refspec and refspec.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid refspec '{refspec}': refspecs cannot start with '-'"
-            )
-
         cfg = gclient_utils.DefaultIndexPackConfig(self.url)
         # When updating, the ref is modified to be a remote ref .
         # (e.g. refs/heads/NAME becomes refs/remotes/REMOTE/NAME).
@@ -2106,16 +2053,13 @@ class GitWrapper(SCMWrapper):
                 ("refs/heads/", "refs/branch-heads/", "refs/tags/")
             ):
                 remote, _ = gclient_utils.SplitUrlRevision(self.url)
-                target_remote = remote or self.remote
-        if not target_remote:
-            raise gclient_utils.Error("A remote must be specified for fetch")
-        if target_remote.startswith("-"):
-            raise gclient_utils.Error(
-                f"Invalid remote '{target_remote}': remotes cannot start with '-'"
-            )
         fetch_cmd = cfg + [
             "fetch",
+            remote or self.remote,
         ]
+        if refspec:
+            fetch_cmd.append(refspec)
+
         if prune:
             fetch_cmd.append("--prune")
         if options.verbose:
@@ -2126,9 +2070,6 @@ class GitWrapper(SCMWrapper):
             fetch_cmd.append("--quiet")
         if depth:
             fetch_cmd.append("--depth=" + str(depth))
-        fetch_cmd.extend(["--", target_remote])
-        if refspec:
-            fetch_cmd.append(refspec)
         self._Run(fetch_cmd, options, show_header=options.verbose, retry=True)
 
     def _SetFetchConfig(self, options):

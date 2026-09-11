@@ -112,7 +112,7 @@ def SplitUrlRevision(url):
     if url.startswith("ssh:"):
         # Make sure ssh://user-name@example.com/~/test.git@stable works
         regex = r"(ssh://(?:[-.\w]+@)?[-\w:\.]+/[-~\w\./]+)(?:@(.+))?"
-        components = list(re.search(regex, url).groups())
+        components = re.search(regex, url).groups()
     else:
         components = url.rsplit("@", 1)
         if re.match(r"^\w+\@", url) and "@" not in components[0]:
@@ -120,14 +120,6 @@ def SplitUrlRevision(url):
 
         if len(components) == 1:
             components += [None]
-    if components[0] and components[0].startswith("-"):
-        raise Error(
-            f"Invalid repository url '{components[0]}': url cannot start with '-'"
-        )
-    if len(components) > 1 and components[1] and components[1].startswith("-"):
-        raise Error(
-            f"Invalid revision '{components[1]}': revisions cannot start with '-'"
-        )
     return tuple(components)
 
 
