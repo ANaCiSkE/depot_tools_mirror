@@ -5964,6 +5964,18 @@ def CMDdescription(parser, args):
 
         description.set_description(text)
     else:
+        if _is_ai_agent():
+            print(
+                "AI agent detected; opening an interactive editor is not supported.\n"
+                "To view or update the description non-interactively, use:\n"
+                "  git cl description -d (--display)         : Display the current description\n"
+                "  git cl description -n <desc>              : Set a new description\n"
+                "  git cl description -n -                   : Read description from stdin\n"
+                "  git cl description -n +                   : Load description from local commit HEAD\n"
+                "(Add -f/--force to overwrite unpublished edits without prompting)",
+                file=sys.stderr,
+            )
+            return 1
         description.prompt()
     if cl.FetchDescription().strip() != description.description:
         cl.UpdateDescription(description.description, force=options.force)

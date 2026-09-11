@@ -10461,6 +10461,71 @@ class TestAIAgentProgressSuppression(unittest.TestCase):
         self.assertNotIn("AI agent detected", stdout_output)
 
 
+class TestCMDDescription(unittest.TestCase):
+    """Tests for `git cl description` AI agent detection and hint output."""
+
+    def setUp(self):
+        super().setUp()
+        self.mock_stderr = io.StringIO()
+        self.mock_stdout = io.StringIO()
+        mock.patch("sys.stderr", self.mock_stderr).start()
+        mock.patch("sys.stdout", self.mock_stdout).start()
+        mock.patch("git_cl.Changelist.GetIssue", return_value=12345).start()
+        mock.patch(
+            "git_cl.Changelist.FetchDescription",
+            return_value="Initial description\n\nBug: 123",
+        ).start()
+        self.addCleanup(mock.patch.stopall)
+
+    @mock.patch("git_cl._is_ai_agent", return_value=True)
+    @mock.patch("git_cl.ChangeDescription.prompt")
+    def test_description_ai_agent_blocked_with_hints(
+        self, mock_prompt, _mock_ai
+    ):
+        """Verifies that opening an editor is blocked in AI agent mode and hints are shown."""
+        result = git_cl.main(["description"])
+        self.assertEqual(result, 1)
+        mock_prompt.assert_not_called()
+        stderr = self.mock_stderr.getvalue()
+        self.assertIn(
+            "AI agent detected; opening an interactive editor is not supported.",
+            stderr,
+        )
+        self.assertIn("git cl description -d (--display)", stderr)
+        self.assertIn("git cl description -n <desc>", stderr)
+        self.assertIn("git cl description -n -", stderr)
+        self.assertIn("git cl description -n +", stderr)
+
+    @mock.patch("git_cl._is_ai_agent", return_value=True)
+    def test_description_ai_agent_display_allowed(self, _mock_ai):
+        """Verifies that --display works normally even in AI agent mode."""
+        result = git_cl.main(["description", "-d"])
+        self.assertEqual(result, 0)
+        self.assertIn("Initial description", self.mock_stdout.getvalue())
+
+    @mock.patch("git_cl._is_ai_agent", return_value=True)
+    @mock.patch("git_cl.Changelist.UpdateDescription")
+    def test_description_ai_agent_new_description_allowed(
+        self, mock_update, _mock_ai
+    ):
+        """Verifies that -n sets description normally even in AI agent mode."""
+        result = git_cl.main(
+            ["description", "-n", "New description\n\nBug: 123"]
+        )
+        self.assertEqual(result, 0)
+        mock_update.assert_called_once_with(
+            "New description\n\nBug: 123", force=None
+        )
+
+    @mock.patch("git_cl._is_ai_agent", return_value=False)
+    @mock.patch("git_cl.ChangeDescription.prompt")
+    def test_description_non_ai_agent_prompts(self, mock_prompt, _mock_ai):
+        """Verifies that normal non-AI users still get the interactive prompt."""
+        result = git_cl.main(["description"])
+        self.assertEqual(result, 0)
+        mock_prompt.assert_called_once()
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG if "-v" in sys.argv else logging.ERROR
