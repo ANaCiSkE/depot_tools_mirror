@@ -46,6 +46,20 @@ KNOWN_SUBCOMMANDS = {
     "analyze",
 }
 
+# Flags that consume the argument that follows them. Anything listed here must
+# be skipped when scanning argv for positional arguments, otherwise a flag value
+# such as the "1:1-5:1" of "--range 1:1-5:1" is mistaken for a file name.
+FLAGS_WITH_VALUES = {
+    "--config",
+    "-c",
+    "--target-version",
+    "--line-length",
+    "--stdin-filename",
+    "--exclude",
+    "--extension",
+    "--range",
+}
+
 
 class LineRange(NamedTuple):
     """Represents a 1-based line range interval [start, end) where end is exclusive."""
@@ -326,16 +340,6 @@ def parse_formatting_options(pass_through_args: list[str]) -> FormattingOptions:
     subcommand: str | None = None
     target_files: list[str] = []
     chain_base_args: list[str] = []
-
-    flags_with_values = {
-        "--config",
-        "-c",
-        "--target-version",
-        "--line-length",
-        "--stdin-filename",
-        "--exclude",
-        "--extension",
-    }
     skip_next = False
     subcmd_idx = -1
     for arg in pass_through_args:
@@ -355,7 +359,7 @@ def parse_formatting_options(pass_through_args: list[str]) -> FormattingOptions:
             has_check = True
         elif arg in ("-i", "--in-place"):
             pass
-        elif arg in flags_with_values:
+        elif arg in FLAGS_WITH_VALUES:
             chain_base_args.append(arg)
             skip_next = True
         elif not arg.startswith("-") and arg != "-":
@@ -875,15 +879,21 @@ def main() -> int:
     if args and args[0] == "--batch":
         return run_batch()
 
-    # Determine target path for config detection
+    # Determine target path for config detection.
     target_path = os.getcwd()
+    skip_next = False
     for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
         if arg.startswith("--stdin-filename="):
             target_path = arg.split("=", 1)[1]
             break
         elif arg == "--stdin-filename" and i + 1 < len(args):
             target_path = args[i + 1]
             break
+        elif arg in FLAGS_WITH_VALUES:
+            skip_next = True
         elif not arg.startswith("-") and arg not in KNOWN_SUBCOMMANDS:
             target_path = arg
             break

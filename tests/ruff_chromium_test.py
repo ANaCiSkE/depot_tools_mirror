@@ -1238,5 +1238,79 @@ class TestYapfFallback(unittest.TestCase):
         self.assertNotIn("-", cmd)
 
 
+class TestMainTargetDetection(unittest.TestCase):
+    """main() must resolve the config from the file, not from a flag value."""
+
+    def setUp(self):
+        depot_tools_ruff._dir_config_cache.clear()
+        self.test_dir = os.path.realpath(
+            tempfile.mkdtemp(prefix="ruff_target_test_")
+        )
+        self.old_cwd = os.getcwd()
+        # A working directory without any formatter config, mirroring an editor
+        # that runs the wrapper from the root of the checkout.
+        os.chdir(self.test_dir)
+
+    def tearDown(self):
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def write_file(self, rel_path, content=""):
+        abs_path = os.path.join(self.test_dir, rel_path)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return abs_path
+
+    @patch("subprocess.call")
+    @patch("depot_tools_ruff_chromium.get_ruff_bin", return_value="ruff")
+    def test_space_separated_range_does_not_shadow_target(
+        self, mock_get_bin, mock_call
+    ):
+        mock_call.return_value = 0
+        self.write_file("sub/.ruff.toml", "line-length = 80\n")
+        test_file = os.path.join(self.test_dir, "sub/foo.py")
+
+        with patch(
+            "sys.argv",
+            [
+                "ruff_chromium",
+                "--range",
+                "1:1-3:1",
+                f"--stdin-filename={test_file}",
+                "-",
+            ],
+        ):
+            ret = depot_tools_ruff.main()
+
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        self.assertEqual(mock_call.call_args[0][0][0], "ruff")
+
+    @patch("subprocess.call")
+    def test_space_separated_range_falls_back_to_yapf(self, mock_call):
+        mock_call.return_value = 0
+        self.write_file("sub/.style.yapf", "[style]\nbased_on_style = pep8\n")
+        test_file = os.path.join(self.test_dir, "sub/foo.py")
+
+        with patch(
+            "sys.argv",
+            [
+                "ruff_chromium",
+                "--range",
+                "1:1-3:1",
+                f"--stdin-filename={test_file}",
+                "-",
+            ],
+        ):
+            ret = depot_tools_ruff.main()
+
+        self.assertEqual(ret, 0)
+        mock_call.assert_called_once()
+        cmd = mock_call.call_args[0][0]
+        self.assertTrue(cmd[1].endswith("yapf"), cmd)
+        self.assertEqual(cmd[2:], ["--line", "1-2"])
+
+
 if __name__ == "__main__":
     unittest.main()
