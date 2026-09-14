@@ -32,7 +32,6 @@ def IsSupportedHistogramsXML(path):
         [
             "histograms.xml",
             "enums.xml",
-            "histogram_suffixes_list.xml",
         ]
     )
     return os.path.basename(path) in supported_xmls
