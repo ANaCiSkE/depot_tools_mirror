@@ -1224,6 +1224,10 @@ class RunAlintTest(unittest.TestCase):
                 "'status.showUntrackedFiles=no'",
                 called_kwargs["env"]["GIT_CONFIG_PARAMETERS"],
             )
+            self.assertIn(
+                "'diff.ignoreSubmodules=all'",
+                called_kwargs["env"]["GIT_CONFIG_PARAMETERS"],
+            )
             result = json.loads(mock_stdout.getvalue())
             self.assertEqual(result["errors"], [])
             self.assertEqual(
@@ -1271,7 +1275,7 @@ class RunAlintTest(unittest.TestCase):
             called_env = mock_popen.call_args[1]["env"]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
-                "'custom.key=val' 'status.showUntrackedFiles=no'",
+                "'custom.key=val' 'status.showUntrackedFiles=no' 'diff.ignoreSubmodules=all'",
             )
 
     @mock.patch.dict(os.environ, {"GIT_CONFIG_PARAMETERS": "   "})
@@ -1293,7 +1297,7 @@ class RunAlintTest(unittest.TestCase):
             called_env = mock_popen.call_args[1]["env"]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
-                "'status.showUntrackedFiles=no'",
+                "'status.showUntrackedFiles=no' 'diff.ignoreSubmodules=all'",
             )
 
     @mock.patch.dict(
@@ -1318,7 +1322,7 @@ class RunAlintTest(unittest.TestCase):
             called_env = mock_popen.call_args[1]["env"]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
-                "'status.showuntrackedfiles=no'",
+                "'status.showuntrackedfiles=no' 'diff.ignoreSubmodules=all'",
             )
 
     @mock.patch.dict(
@@ -1343,7 +1347,32 @@ class RunAlintTest(unittest.TestCase):
             called_env = mock_popen.call_args[1]["env"]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
-                "'status.showuntrackedfiles=normal' 'status.showUntrackedFiles=no'",
+                "'status.showuntrackedfiles=normal' 'status.showUntrackedFiles=no' 'diff.ignoreSubmodules=all'",
+            )
+
+    @mock.patch.dict(
+        os.environ,
+        {"GIT_CONFIG_PARAMETERS": "'diff.ignoresubmodules=all'"},
+    )
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
+    @mock.patch("os.chdir")
+    @mock.patch("subprocess.Popen")
+    def test_main_does_not_duplicate_diff_ignore_submodules(
+        self, mock_popen, mock_chdir
+    ):
+        mock_proc = mock.Mock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with mock.patch("sys.stdout", new=io.StringIO()):
+            exit_code = run_alint.main()
+            self.assertEqual(exit_code, 0)
+            mock_popen.assert_called_once()
+            called_env = mock_popen.call_args[1]["env"]
+            self.assertEqual(
+                called_env["GIT_CONFIG_PARAMETERS"],
+                "'diff.ignoresubmodules=all' 'status.showUntrackedFiles=no'",
             )
 
 
@@ -3122,6 +3151,7 @@ class GetPylintTest(unittest.TestCase):
         # When an ImportFrom node has level=0 and module=None, it should safely return []
         # without raising UnboundLocalError for mod_name.
         import ast
+
         node = ast.ImportFrom(
             module=None,
             names=[ast.alias(name="foo", asname=None)],
