@@ -440,33 +440,37 @@ class GitWrapper(SCMWrapper):
 
     def _Scrub(self, target, options):
         """Scrubs out all changes in the local repo, back to the state of target."""
-        quiet = []
-        if not options.verbose:
-            quiet = ["--quiet"]
-        self._Run(["reset", "--hard", target] + quiet, options)
-        if options.force and options.delete_unversioned_trees:
-            # where `target` is a commit that contains both upper and lower case
-            # versions of the same file on a case insensitive filesystem, we are
-            # actually in a broken state here. The index will have both 'a' and
-            # 'A', but only one of them will exist on the disk. To progress, we
-            # delete everything that status thinks is modified.
-            output = self._Capture(
-                ["-c", "core.quotePath=false", "status", "--porcelain"],
-                strip=False,
-            )
-            for line in output.splitlines():
-                # --porcelain (v1) looks like:
-                # XY filename
-                try:
-                    filename = line[3:]
-                    self.Print(
-                        "_____ Deleting residual after reset: %r." % filename
-                    )
-                    gclient_utils.rm_file_or_tree(
-                        os.path.join(self.checkout_path, filename)
-                    )
-                except OSError:
-                    pass
+        with trace_utils.trace(
+            "git._Scrub", cat="scm", args={"target": target}
+        ):
+            quiet = []
+            if not options.verbose:
+                quiet = ["--quiet"]
+            self._Run(["reset", "--hard", target] + quiet, options)
+            if options.force and options.delete_unversioned_trees:
+                # where `target` is a commit that contains both upper and lower case
+                # versions of the same file on a case insensitive filesystem, we are
+                # actually in a broken state here. The index will have both 'a' and
+                # 'A', but only one of them will exist on the disk. To progress, we
+                # delete everything that status thinks is modified.
+                output = self._Capture(
+                    ["-c", "core.quotePath=false", "status", "--porcelain"],
+                    strip=False,
+                )
+                for line in output.splitlines():
+                    # --porcelain (v1) looks like:
+                    # XY filename
+                    try:
+                        filename = line[3:]
+                        self.Print(
+                            "_____ Deleting residual after reset: %r."
+                            % filename
+                        )
+                        gclient_utils.rm_file_or_tree(
+                            os.path.join(self.checkout_path, filename)
+                        )
+                    except OSError:
+                        pass
 
     def _FetchAndReset(self, revision, file_list, options):
         """Equivalent to git fetch; git reset."""
@@ -1322,13 +1326,18 @@ class GitWrapper(SCMWrapper):
                     "Trying fast-forward merge to branch : %s" % upstream_branch
                 )
             try:
-                merge_args = ["merge"]
-                if options.merge:
-                    merge_args.append("--ff")
-                else:
-                    merge_args.append("--ff-only")
-                merge_args.append(upstream_branch)
-                merge_output = self._Capture(merge_args)
+                with trace_utils.trace(
+                    "git._Merge",
+                    cat="scm",
+                    args={"upstream_branch": upstream_branch},
+                ):
+                    merge_args = ["merge"]
+                    if options.merge:
+                        merge_args.append("--ff")
+                    else:
+                        merge_args.append("--ff-only")
+                    merge_args.append(upstream_branch)
+                    merge_output = self._Capture(merge_args)
             except subprocess2.CalledProcessError as e:
                 rebase_files = []
                 if re.search(
@@ -1617,45 +1626,47 @@ class GitWrapper(SCMWrapper):
         This raises an error if a SHA-1 revision isn't present even after
         fetching from the remote.
         """
-        # 'hash' is overloaded and can refer to a SHA-1 hash or refs/changes/*.
-        is_sha = gclient_utils.IsFullGitSha(revision)
-        # If git_cache has read-write lock, the lock_timeout only has to hold
-        # when another process is sync()-ing. But before that, it blocks both
-        # sync() and contains_revision() from other processes.
-        # Override lock_timeout to 20s if users set it to 0, because 20s should
-        # cover most practical cases.
-        lock_timeout = getattr(options, "lock_timeout", 0)
-        if (
-            rev_type == "hash"
-            and is_sha
-            and mirror.contains_revision(revision, lock_timeout or 20)
-        ):
-            if options.verbose:
-                self.Print(
-                    "skipping mirror update, it has rev=%s already" % revision,
-                    timestamp=False,
-                )
-            return
+        with trace_utils.trace("git._UpdateMirrorIfNotContains", cat="scm"):
+            # 'hash' is overloaded and can refer to a SHA-1 hash or refs/changes/*.
+            is_sha = gclient_utils.IsFullGitSha(revision)
+            # If git_cache has read-write lock, the lock_timeout only has to hold
+            # when another process is sync()-ing. But before that, it blocks both
+            # sync() and contains_revision() from other processes.
+            # Override lock_timeout to 20s if users set it to 0, because 20s should
+            # cover most practical cases.
+            lock_timeout = getattr(options, "lock_timeout", 0)
+            if (
+                rev_type == "hash"
+                and is_sha
+                and mirror.contains_revision(revision, lock_timeout or 20)
+            ):
+                if options.verbose:
+                    self.Print(
+                        "skipping mirror update, it has rev=%s already"
+                        % revision,
+                        timestamp=False,
+                    )
+                return
 
-        if getattr(options, "shallow", False):
-            depth = 10000
-        else:
-            depth = None
-        mirror.populate(
-            verbose=False,
-            bootstrap=not getattr(options, "no_bootstrap", False),
-            depth=depth,
-            lock_timeout=lock_timeout,
-        )
+            if getattr(options, "shallow", False):
+                depth = 10000
+            else:
+                depth = None
+            mirror.populate(
+                verbose=False,
+                bootstrap=not getattr(options, "no_bootstrap", False),
+                depth=depth,
+                lock_timeout=lock_timeout,
+            )
 
-        # Make sure we've actually fetched the revision we want, but only if it
-        # was specified as an explicit commit hash.
-        if (
-            rev_type == "hash"
-            and is_sha
-            and not mirror.contains_revision(revision, lock_timeout or 20)
-        ):
-            raise gclient_utils.Error(f"Failed to fetch {revision}.")
+            # Make sure we've actually fetched the revision we want, but only if it
+            # was specified as an explicit commit hash.
+            if (
+                rev_type == "hash"
+                and is_sha
+                and not mirror.contains_revision(revision, lock_timeout or 20)
+            ):
+                raise gclient_utils.Error(f"Failed to fetch {revision}.")
 
     def _Clone(self, revision, url, options):
         """Clone a git repository from the given URL.
@@ -1665,98 +1676,107 @@ class GitWrapper(SCMWrapper):
         commit, then we leave HEAD detached as it makes future updates simpler
         -- in this case the user should first create a new branch or switch to
         an existing branch before making changes in the repo."""
+        with trace_utils.trace(
+            "git._Clone", cat="scm", args={"url": url, "revision": revision}
+        ):
+            if self.print_outbuf:
+                print_stdout = True
+                filter_fn = None
+            else:
+                print_stdout = False
+                filter_fn = self.filter
 
-        if self.print_outbuf:
-            print_stdout = True
-            filter_fn = None
-        else:
-            print_stdout = False
-            filter_fn = self.filter
+            if not options.verbose:
+                # git clone doesn't seem to insert a newline properly before
+                # printing to stdout
+                self.Print("")
 
-        if not options.verbose:
-            # git clone doesn't seem to insert a newline properly before
-            # printing to stdout
-            self.Print("")
+            # If the parent directory does not exist, Git clone on Windows will not
+            # create it, so we need to do it manually.
+            parent_dir = os.path.dirname(self.checkout_path)
+            gclient_utils.safe_makedirs(parent_dir)
 
-        # If the parent directory does not exist, Git clone on Windows will not
-        # create it, so we need to do it manually.
-        parent_dir = os.path.dirname(self.checkout_path)
-        gclient_utils.safe_makedirs(parent_dir)
-
-        if hasattr(options, "no_history") and options.no_history:
-            object_format = scm.GIT.GetRemoteObjectFormat(url)
-            self._Run(
-                [
-                    "init",
-                    f"--object-format={object_format}",
-                    self.checkout_path,
-                ],
-                options,
-                cwd=self._root_dir,
-            )
-            self._Run(["remote", "add", "origin", url], options)
-            revision = self._AutoFetchRef(options, revision, depth=1)
-            remote_ref = scm.GIT.RefToRemoteRef(revision, self.remote)
-            self._Checkout(options, "".join(remote_ref or revision), quiet=True)
-        else:
-            cfg = gclient_utils.DefaultIndexPackConfig(url)
-            clone_cmd = cfg + ["clone", "--no-checkout", "--progress"]
-            # --shared borrows objects via alternates and breaks if the
-            # cache is deleted; bootstrap mode hardlinks/copies instead.
-            if self.cache_dir and self.cache_mode != CacheMode.BOOTSTRAP:
-                clone_cmd.append("--shared")
-            if options.verbose:
-                clone_cmd.append("--verbose")
-            clone_cmd.append(url)
-            tmp_dir = tempfile.mkdtemp(
-                prefix="_gclient_%s_" % os.path.basename(self.checkout_path),
-                dir=parent_dir,
-            )
-            clone_cmd.append(tmp_dir)
-
-            try:
+            if hasattr(options, "no_history") and options.no_history:
+                object_format = scm.GIT.GetRemoteObjectFormat(url)
                 self._Run(
-                    clone_cmd,
+                    [
+                        "init",
+                        f"--object-format={object_format}",
+                        self.checkout_path,
+                    ],
                     options,
                     cwd=self._root_dir,
-                    retry=True,
-                    print_stdout=print_stdout,
-                    filter_fn=filter_fn,
                 )
-                logging.debug(
-                    "Cloned into temporary dir, moving to checkout_path"
+                self._Run(["remote", "add", "origin", url], options)
+                revision = self._AutoFetchRef(options, revision, depth=1)
+                remote_ref = scm.GIT.RefToRemoteRef(revision, self.remote)
+                self._Checkout(
+                    options, "".join(remote_ref or revision), quiet=True
                 )
-                gclient_utils.safe_makedirs(self.checkout_path)
-                gclient_utils.safe_replace(
-                    os.path.join(tmp_dir, ".git"),
-                    os.path.join(self.checkout_path, ".git"),
+            else:
+                cfg = gclient_utils.DefaultIndexPackConfig(url)
+                clone_cmd = cfg + ["clone", "--no-checkout", "--progress"]
+                # --shared borrows objects via alternates and breaks if the
+                # cache is deleted; bootstrap mode hardlinks/copies instead.
+                if self.cache_dir and self.cache_mode != CacheMode.BOOTSTRAP:
+                    clone_cmd.append("--shared")
+                if options.verbose:
+                    clone_cmd.append("--verbose")
+                clone_cmd.append(url)
+                tmp_dir = tempfile.mkdtemp(
+                    prefix="_gclient_%s_"
+                    % os.path.basename(self.checkout_path),
+                    dir=parent_dir,
                 )
-            except:
-                traceback.print_exc(file=self.out_fh)
-                raise
-            finally:
-                if os.listdir(tmp_dir):
-                    self.Print("_____ removing non-empty tmp dir %s" % tmp_dir)
-                gclient_utils.rmtree(tmp_dir)
+                clone_cmd.append(tmp_dir)
 
-            self._SetFetchConfig(options)
-            self._Fetch(options, prune=options.force)
-            revision = self._AutoFetchRef(options, revision)
-            remote_ref = scm.GIT.RefToRemoteRef(revision, self.remote)
-            self._Checkout(options, "".join(remote_ref or revision), quiet=True)
+                try:
+                    self._Run(
+                        clone_cmd,
+                        options,
+                        cwd=self._root_dir,
+                        retry=True,
+                        print_stdout=print_stdout,
+                        filter_fn=filter_fn,
+                    )
+                    logging.debug(
+                        "Cloned into temporary dir, moving to checkout_path"
+                    )
+                    gclient_utils.safe_makedirs(self.checkout_path)
+                    gclient_utils.safe_replace(
+                        os.path.join(tmp_dir, ".git"),
+                        os.path.join(self.checkout_path, ".git"),
+                    )
+                except:
+                    traceback.print_exc(file=self.out_fh)
+                    raise
+                finally:
+                    if os.listdir(tmp_dir):
+                        self.Print(
+                            "_____ removing non-empty tmp dir %s" % tmp_dir
+                        )
+                    gclient_utils.rmtree(tmp_dir)
 
-        if self._GetCurrentBranch() is None:
-            # Squelch git's very verbose detached HEAD warning and use our own
-            self.Print(
-                (
-                    "Checked out %s to a detached HEAD. Before making any commits\n"
-                    "in this repo, you should use 'git checkout <branch>' to switch \n"
-                    "to an existing branch or use 'git checkout %s -b <branch>' to\n"
-                    "create a new branch for your work."
+                self._SetFetchConfig(options)
+                self._Fetch(options, prune=options.force)
+                revision = self._AutoFetchRef(options, revision)
+                remote_ref = scm.GIT.RefToRemoteRef(revision, self.remote)
+                self._Checkout(
+                    options, "".join(remote_ref or revision), quiet=True
                 )
-                % (revision, self.remote)
-            )
-        return revision
+
+            if self._GetCurrentBranch() is None:
+                # Squelch git's very verbose detached HEAD warning and use our own
+                self.Print(
+                    (
+                        "Checked out %s to a detached HEAD. Before making any commits\n"
+                        "in this repo, you should use 'git checkout <branch>' to switch \n"
+                        "to an existing branch or use 'git checkout %s -b <branch>' to\n"
+                        "create a new branch for your work."
+                    )
+                    % (revision, self.remote)
+                )
+            return revision
 
     def _AskForData(self, prompt, options):
         if options.jobs > 1:
@@ -1779,101 +1799,104 @@ class GitWrapper(SCMWrapper):
         merge=False,
     ):
         """Attempt to rebase onto either upstream or, if specified, newbase."""
-        if files is not None:
-            files.extend(self._GetDiffFilenames(upstream))
-        revision = upstream
-        if newbase:
-            revision = newbase
-        action = "merge" if merge else "rebase"
-        if not printed_path:
-            self.Print(
-                "_____ %s : Attempting %s onto %s..."
-                % (self.relpath, action, revision)
-            )
-            printed_path = True
-        else:
-            self.Print("Attempting %s onto %s..." % (action, revision))
-
-        if merge:
-            merge_output = self._Capture(["merge", revision])
-            if options.verbose:
-                self.Print(merge_output)
-            return
-
-        # Build the rebase command here using the args
-        # git rebase [options] [--onto <newbase>] <upstream> [<branch>]
-        rebase_cmd = ["rebase"]
-        if options.verbose:
-            rebase_cmd.append("--verbose")
-        if newbase:
-            rebase_cmd.extend(["--onto", newbase])
-        rebase_cmd.append(upstream)
-        if branch:
-            rebase_cmd.append(branch)
-
-        try:
-            rebase_output = scm.GIT.Capture(rebase_cmd, cwd=self.checkout_path)
-        except subprocess2.CalledProcessError as e:
-            if re.match(
-                rb"cannot rebase: you have unstaged changes", e.stderr
-            ) or re.match(
-                rb"cannot rebase: your index contains uncommitted changes",
-                e.stderr,
-            ):
-                while True:
-                    rebase_action = self._AskForData(
-                        "Cannot rebase because of unstaged changes.\n"
-                        "'git reset --hard HEAD' ?\n"
-                        "WARNING: destroys any uncommitted work in your current branch!"
-                        " (y)es / (q)uit / (s)how : ",
-                        options,
-                    )
-                    if re.match(r"yes|y", rebase_action, re.I):
-                        self._Scrub("HEAD", options)
-                        # Should this be recursive?
-                        rebase_output = scm.GIT.Capture(
-                            rebase_cmd, cwd=self.checkout_path
-                        )
-                        break
-
-                    if re.match(r"quit|q", rebase_action, re.I):
-                        raise gclient_utils.Error(
-                            "Please merge or rebase manually\n"
-                            "cd %s && git "
-                            % self.checkout_path
-                            + "%s" % " ".join(rebase_cmd)
-                        )
-
-                    if re.match(r"show|s", rebase_action, re.I):
-                        self.Print("%s" % e.stderr.decode("utf-8").strip())
-                        continue
-
-                    gclient_utils.Error("Input not recognized")
-                    continue
-            elif re.search(rb"^CONFLICT", e.stdout, re.M):
-                raise gclient_utils.Error(
-                    "Conflict while rebasing this branch.\n"
-                    "Fix the conflict and run gclient again.\n"
-                    "See 'man git-rebase' for details.\n"
-                )
-            else:
-                self.Print(e.stdout.decode("utf-8").strip())
+        with trace_utils.trace("git._AttemptRebase", cat="scm"):
+            if files is not None:
+                files.extend(self._GetDiffFilenames(upstream))
+            revision = upstream
+            if newbase:
+                revision = newbase
+            action = "merge" if merge else "rebase"
+            if not printed_path:
                 self.Print(
-                    "Rebase produced error output:\n%s"
-                    % e.stderr.decode("utf-8").strip()
+                    "_____ %s : Attempting %s onto %s..."
+                    % (self.relpath, action, revision)
                 )
-                raise gclient_utils.Error(
-                    "Unrecognized error, please merge or rebase "
-                    "manually.\ncd %s && git "
-                    % self.checkout_path
-                    + "%s" % " ".join(rebase_cmd)
-                )
+                printed_path = True
+            else:
+                self.Print("Attempting %s onto %s..." % (action, revision))
 
-        self.Print(rebase_output.strip())
-        if not options.verbose:
-            # Make the output a little prettier. It's nice to have some
-            # whitespace between projects when syncing.
-            self.Print("")
+            if merge:
+                merge_output = self._Capture(["merge", revision])
+                if options.verbose:
+                    self.Print(merge_output)
+                return
+
+            # Build the rebase command here using the args
+            # git rebase [options] [--onto <newbase>] <upstream> [<branch>]
+            rebase_cmd = ["rebase"]
+            if options.verbose:
+                rebase_cmd.append("--verbose")
+            if newbase:
+                rebase_cmd.extend(["--onto", newbase])
+            rebase_cmd.append(upstream)
+            if branch:
+                rebase_cmd.append(branch)
+
+            try:
+                rebase_output = scm.GIT.Capture(
+                    rebase_cmd, cwd=self.checkout_path
+                )
+            except subprocess2.CalledProcessError as e:
+                if re.match(
+                    rb"cannot rebase: you have unstaged changes", e.stderr
+                ) or re.match(
+                    rb"cannot rebase: your index contains uncommitted changes",
+                    e.stderr,
+                ):
+                    while True:
+                        rebase_action = self._AskForData(
+                            "Cannot rebase because of unstaged changes.\n"
+                            "'git reset --hard HEAD' ?\n"
+                            "WARNING: destroys any uncommitted work in your current branch!"
+                            " (y)es / (q)uit / (s)how : ",
+                            options,
+                        )
+                        if re.match(r"yes|y", rebase_action, re.I):
+                            self._Scrub("HEAD", options)
+                            # Should this be recursive?
+                            rebase_output = scm.GIT.Capture(
+                                rebase_cmd, cwd=self.checkout_path
+                            )
+                            break
+
+                        if re.match(r"quit|q", rebase_action, re.I):
+                            raise gclient_utils.Error(
+                                "Please merge or rebase manually\n"
+                                "cd %s && git "
+                                % self.checkout_path
+                                + "%s" % " ".join(rebase_cmd)
+                            )
+
+                        if re.match(r"show|s", rebase_action, re.I):
+                            self.Print("%s" % e.stderr.decode("utf-8").strip())
+                            continue
+
+                        gclient_utils.Error("Input not recognized")
+                        continue
+                elif re.search(rb"^CONFLICT", e.stdout, re.M):
+                    raise gclient_utils.Error(
+                        "Conflict while rebasing this branch.\n"
+                        "Fix the conflict and run gclient again.\n"
+                        "See 'man git-rebase' for details.\n"
+                    )
+                else:
+                    self.Print(e.stdout.decode("utf-8").strip())
+                    self.Print(
+                        "Rebase produced error output:\n%s"
+                        % e.stderr.decode("utf-8").strip()
+                    )
+                    raise gclient_utils.Error(
+                        "Unrecognized error, please merge or rebase "
+                        "manually.\ncd %s && git "
+                        % self.checkout_path
+                        + "%s" % " ".join(rebase_cmd)
+                    )
+
+            self.Print(rebase_output.strip())
+            if not options.verbose:
+                # Make the output a little prettier. It's nice to have some
+                # whitespace between projects when syncing.
+                self.Print("")
 
     def _EnsureValidHeadObjectOrCheckout(self, revision, options, url):
         # Handle cases where the current checkout has an invalid or unresolvable
@@ -1881,37 +1904,41 @@ class GitWrapper(SCMWrapper):
         # corrupted ref storage, or broken worktree symlinks).
         # In these cases, git operations like rev-list or checkout will fail.
         # Delete or move the broken checkout and re-create it by cloning.
-        try:
-            return self._Capture(["rev-list", "-n", "1", "HEAD"])
-        except subprocess2.CalledProcessError as e:
-            invalid_head_errors = (
-                b"fatal: bad object HEAD",
-                b"fatal: Could not parse object 'HEAD'",
-                b"fatal: ambiguous argument 'HEAD'",
-                b"fatal: your current branch appears to be broken",
-            )
-            if options.force or (
-                e.stderr and any(err in e.stderr for err in invalid_head_errors)
-            ):
-                if self.cache_dir and self.cache_dir in url:
-                    self.Print(
-                        (
-                            "Likely due to DEPS change with git cache_dir, "
-                            "the current commit points to no longer existing object.\n"
-                            "%s" % e
+        with trace_utils.trace(
+            "git._EnsureValidHeadObjectOrCheckout", cat="scm"
+        ):
+            try:
+                return self._Capture(["rev-list", "-n", "1", "HEAD"])
+            except subprocess2.CalledProcessError as e:
+                invalid_head_errors = (
+                    b"fatal: bad object HEAD",
+                    b"fatal: Could not parse object 'HEAD'",
+                    b"fatal: ambiguous argument 'HEAD'",
+                    b"fatal: your current branch appears to be broken",
+                )
+                if options.force or (
+                    e.stderr
+                    and any(err in e.stderr for err in invalid_head_errors)
+                ):
+                    if self.cache_dir and self.cache_dir in url:
+                        self.Print(
+                            (
+                                "Likely due to DEPS change with git cache_dir, "
+                                "the current commit points to no longer existing object.\n"
+                                "%s" % e
+                            )
                         )
-                    )
-                else:
-                    self.Print(
-                        (
-                            "The current checkout has an invalid HEAD, "
-                            "re-creating it by cloning.\n"
-                            "%s" % e
+                    else:
+                        self.Print(
+                            (
+                                "The current checkout has an invalid HEAD, "
+                                "re-creating it by cloning.\n"
+                                "%s" % e
+                            )
                         )
-                    )
-                self._DeleteOrMove(options.force)
-                return self._Clone(revision, url, options)
-            raise
+                    self._DeleteOrMove(options.force)
+                    return self._Clone(revision, url, options)
+                raise
 
     def _IsRebasing(self):
         # Check for any of REBASE-i/REBASE-m/REBASE/AM. Unfortunately git
@@ -1924,61 +1951,65 @@ class GitWrapper(SCMWrapper):
         )
 
     def _CheckClean(self, revision):
-        lockfile = os.path.join(self.checkout_path, ".git", "index.lock")
-        if os.path.exists(lockfile):
-            raise gclient_utils.Error(
-                "\n____ %s at %s\n"
-                "\tYour repo is locked, possibly due to a concurrent git process.\n"
-                "\tIf no git executable is running, then clean up %r and try again.\n"
-                % (self.relpath, revision, lockfile)
-            )
+        with trace_utils.trace("git._CheckClean", cat="scm"):
+            lockfile = os.path.join(self.checkout_path, ".git", "index.lock")
+            if os.path.exists(lockfile):
+                raise gclient_utils.Error(
+                    "\n____ %s at %s\n"
+                    "\tYour repo is locked, possibly due to a concurrent git process.\n"
+                    "\tIf no git executable is running, then clean up %r and try again.\n"
+                    % (self.relpath, revision, lockfile)
+                )
 
-        # Ensure that the tree is clean.
-        if scm.GIT.Capture(
-            [
-                "status",
-                "--porcelain",
-                "--untracked-files=no",
-                "--ignore-submodules",
-            ],
-            cwd=self.checkout_path,
-        ):
-            raise gclient_utils.Error(
-                "\n____ %s at %s\n"
-                "\tYou have uncommitted changes.\n"
-                "\tcd into %s, run git status to see changes,\n"
-                "\tand commit, stash, or reset.\n"
-                % (self.relpath, revision, self.relpath)
-            )
+            # Ensure that the tree is clean.
+            if scm.GIT.Capture(
+                [
+                    "status",
+                    "--porcelain",
+                    "--untracked-files=no",
+                    "--ignore-submodules",
+                ],
+                cwd=self.checkout_path,
+            ):
+                raise gclient_utils.Error(
+                    "\n____ %s at %s\n"
+                    "\tYou have uncommitted changes.\n"
+                    "\tcd into %s, run git status to see changes,\n"
+                    "\tand commit, stash, or reset.\n"
+                    % (self.relpath, revision, self.relpath)
+                )
 
     def _CheckDetachedHead(self, revision, _options):
         # HEAD is detached. Make sure it is safe to move away from (i.e., it is
         # reference by a commit). If not, error out -- most likely a rebase is
         # in progress, try to detect so we can give a better error.
-        try:
-            scm.GIT.Capture(
-                ["name-rev", "--no-undefined", "HEAD"], cwd=self.checkout_path
-            )
-        except subprocess2.CalledProcessError:
-            # Commit is not contained by any rev. See if the user is rebasing:
-            if self._IsRebasing():
-                # Punt to the user
-                raise gclient_utils.Error(
-                    "\n____ %s at %s\n"
-                    "\tAlready in a conflict, i.e. (no branch).\n"
-                    "\tFix the conflict and run gclient again.\n"
-                    "\tOr to abort run:\n\t\tgit-rebase --abort\n"
-                    "\tSee man git-rebase for details.\n"
-                    % (self.relpath, revision)
+        with trace_utils.trace("git._CheckDetachedHead", cat="scm"):
+            try:
+                scm.GIT.Capture(
+                    ["name-rev", "--no-undefined", "HEAD"],
+                    cwd=self.checkout_path,
                 )
-            # Let's just save off the commit so we can proceed.
-            name = "saved-by-gclient-" + self._Capture(
-                ["rev-parse", "--short", "HEAD"]
-            )
-            self._Capture(["branch", "-f", name])
-            self.Print(
-                "_____ found an unreferenced commit and saved it as '%s'" % name
-            )
+            except subprocess2.CalledProcessError:
+                # Commit is not contained by any rev. See if the user is rebasing:
+                if self._IsRebasing():
+                    # Punt to the user
+                    raise gclient_utils.Error(
+                        "\n____ %s at %s\n"
+                        "\tAlready in a conflict, i.e. (no branch).\n"
+                        "\tFix the conflict and run gclient again.\n"
+                        "\tOr to abort run:\n\t\tgit-rebase --abort\n"
+                        "\tSee man git-rebase for details.\n"
+                        % (self.relpath, revision)
+                    )
+                # Let's just save off the commit so we can proceed.
+                name = "saved-by-gclient-" + self._Capture(
+                    ["rev-parse", "--short", "HEAD"]
+                )
+                self._Capture(["branch", "-f", name])
+                self.Print(
+                    "_____ found an unreferenced commit and saved it as '%s'"
+                    % name
+                )
 
     def _GetCurrentBranch(self):
         # Returns name of current branch or None for detached HEAD
@@ -2019,15 +2050,16 @@ class GitWrapper(SCMWrapper):
               'None', the behavior is inferred from 'options.verbose'.
         Returns: (str) The output of the checkout operation
         """
-        if quiet is None:
-            quiet = not options.verbose
-        checkout_args = ["checkout"]
-        if force:
-            checkout_args.append("--force")
-        if quiet:
-            checkout_args.append("--quiet")
-        checkout_args.append(ref)
-        return self._Capture(checkout_args)
+        with trace_utils.trace("git._Checkout", cat="scm", args={"ref": ref}):
+            if quiet is None:
+                quiet = not options.verbose
+            checkout_args = ["checkout"]
+            if force:
+                checkout_args.append("--force")
+            if quiet:
+                checkout_args.append("--quiet")
+            checkout_args.append(ref)
+            return self._Capture(checkout_args)
 
     def _Fetch(
         self,
@@ -2038,39 +2070,46 @@ class GitWrapper(SCMWrapper):
         refspec=None,
         depth=None,
     ):
-        cfg = gclient_utils.DefaultIndexPackConfig(self.url)
-        # When updating, the ref is modified to be a remote ref .
-        # (e.g. refs/heads/NAME becomes refs/remotes/REMOTE/NAME).
-        # Try to reverse that mapping.
-        original_ref = scm.GIT.RemoteRefToRef(refspec, self.remote)
-        if original_ref:
-            refspec = original_ref + ":" + refspec
-            # When a mirror is configured, it only fetches
-            # refs/{heads,branch-heads,tags}/*.
-            # If asked to fetch other refs, we must fetch those directly from
-            # the repository, and not from the mirror.
-            if not original_ref.startswith(
-                ("refs/heads/", "refs/branch-heads/", "refs/tags/")
-            ):
-                remote, _ = gclient_utils.SplitUrlRevision(self.url)
-        fetch_cmd = cfg + [
-            "fetch",
-            remote or self.remote,
-        ]
-        if refspec:
-            fetch_cmd.append(refspec)
+        with trace_utils.trace(
+            "git._Fetch",
+            cat="scm",
+            args={"remote": remote or self.remote, "refspec": refspec},
+        ):
+            cfg = gclient_utils.DefaultIndexPackConfig(self.url)
+            # When updating, the ref is modified to be a remote ref .
+            # (e.g. refs/heads/NAME becomes refs/remotes/REMOTE/NAME).
+            # Try to reverse that mapping.
+            original_ref = scm.GIT.RemoteRefToRef(refspec, self.remote)
+            if original_ref:
+                refspec = original_ref + ":" + refspec
+                # When a mirror is configured, it only fetches
+                # refs/{heads,branch-heads,tags}/*.
+                # If asked to fetch other refs, we must fetch those directly from
+                # the repository, and not from the mirror.
+                if not original_ref.startswith(
+                    ("refs/heads/", "refs/branch-heads/", "refs/tags/")
+                ):
+                    remote, _ = gclient_utils.SplitUrlRevision(self.url)
+            fetch_cmd = cfg + [
+                "fetch",
+                remote or self.remote,
+            ]
+            if refspec:
+                fetch_cmd.append(refspec)
 
-        if prune:
-            fetch_cmd.append("--prune")
-        if options.verbose:
-            fetch_cmd.append("--verbose")
-        if not hasattr(options, "with_tags") or not options.with_tags:
-            fetch_cmd.append("--no-tags")
-        elif quiet:
-            fetch_cmd.append("--quiet")
-        if depth:
-            fetch_cmd.append("--depth=" + str(depth))
-        self._Run(fetch_cmd, options, show_header=options.verbose, retry=True)
+            if prune:
+                fetch_cmd.append("--prune")
+            if options.verbose:
+                fetch_cmd.append("--verbose")
+            if not hasattr(options, "with_tags") or not options.with_tags:
+                fetch_cmd.append("--no-tags")
+            elif quiet:
+                fetch_cmd.append("--quiet")
+            if depth:
+                fetch_cmd.append("--depth=" + str(depth))
+            self._Run(
+                fetch_cmd, options, show_header=options.verbose, retry=True
+            )
 
     def _SetFetchConfig(self, options):
         """Adds, and optionally fetches, "branch-heads" and "tags" refspecs
@@ -2113,10 +2152,13 @@ class GitWrapper(SCMWrapper):
         """Attempts to fetch |revision| if not available in local repo.
 
         Returns possibly updated revision."""
-        if not scm.GIT.IsValidRevision(self.checkout_path, revision):
-            self._Fetch(options, refspec=revision, depth=depth)
-            revision = self._Capture(["rev-parse", "FETCH_HEAD"])
-        return revision
+        with trace_utils.trace(
+            "git._AutoFetchRef", cat="scm", args={"revision": revision}
+        ):
+            if not scm.GIT.IsValidRevision(self.checkout_path, revision):
+                self._Fetch(options, refspec=revision, depth=depth)
+                revision = self._Capture(["rev-parse", "FETCH_HEAD"])
+            return revision
 
     def _Run(self, args, options, **kwargs):
         kwargs.setdefault("cwd", self.checkout_path)
