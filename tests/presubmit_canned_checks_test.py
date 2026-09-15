@@ -3166,5 +3166,21 @@ class GetPylintTest(unittest.TestCase):
         self.assertEqual(targets, [])
 
 
+class MockInputApiTest(unittest.TestCase):
+    def test_affected_extensions(self):
+        input_api = MockInputApi()
+        input_api.files = [
+            MockFile("base/foo.cc", []),
+            MockFile("base/bar.H", []),
+            MockAffectedFile("base/old.py", [], action="D"),
+            MockFile(".gn", []),
+            MockFile("LICENSE", []),
+        ]
+        self.assertEqual(
+            input_api.AffectedExtensions(),
+            frozenset({".cc", ".h", ".py", ".gn", ""}),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

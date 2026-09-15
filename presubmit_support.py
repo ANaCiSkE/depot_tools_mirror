@@ -427,6 +427,9 @@ class InputApi(object):
         self._named_temporary_files = []
         self._temporary_directories = []
 
+        # Cached result of AffectedExtensions().
+        self._cached_affected_extensions = None
+
         self.owners_client = None
         if self.gerrit and "PRESUBMIT_SKIP_NETWORK" not in self.environ:
             try:
@@ -510,6 +513,27 @@ class InputApi(object):
     def AbsoluteLocalPaths(self):
         """Returns absolute local paths of input_api.AffectedFiles()."""
         return [af.AbsoluteLocalPath() for af in self.AffectedFiles()]
+
+    def AffectedExtensions(self):
+        """Returns a frozenset of lowercase file extensions for affected files.
+
+        Includes leading dot (e.g. '.cc', '.h', '.py'). Extensionless dotfiles
+        like '.gn' or '.gitignore' return the full name (e.g. '.gn'). Files
+        without an extension return empty string ''. Always includes deleted
+        files so cleanup checks can trigger on removal.
+        """
+        if self._cached_affected_extensions is not None:
+            return self._cached_affected_extensions
+
+        exts = set()
+        for f in self.AffectedFiles(include_deletes=True):
+            basename = os.path.basename(f.LocalPath()).lower()
+            if basename.startswith(".") and "." not in basename[1:]:
+                exts.add(basename)
+            else:
+                exts.add(os.path.splitext(basename)[1])
+        self._cached_affected_extensions = frozenset(exts)
+        return self._cached_affected_extensions
 
     def AffectedTestableFiles(self, include_deletes=None, **kwargs):
         """Same as input_api.change.AffectedTestableFiles() except only lists files

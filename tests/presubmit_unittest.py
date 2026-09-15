@@ -2125,6 +2125,30 @@ class InputApiUnittest(PresubmitTestsBase):
             ),
         )
 
+    def testAffectedExtensions(self):
+        files = [
+            ["A", "base/foo.cc"],
+            ["M", "base/bar.H"],
+            ["D", "base/old.py"],
+            ["A", ".gn"],
+            ["A", "LICENSE"],
+            ["M", "docs/README.md"],
+        ]
+        change = presubmit.Change(
+            "mychange", "", self.fake_root_dir, files, 0, 0, None
+        )
+        api = presubmit.InputApi(
+            change=change,
+            presubmit_path=os.path.join(self.fake_root_dir, "PRESUBMIT.py"),
+            is_committing=True,
+            gerrit_obj=None,
+            verbose=False,
+        )
+        expected = frozenset({".cc", ".h", ".py", ".gn", "", ".md"})
+        self.assertEqual(api.AffectedExtensions(), expected)
+        # Test caching
+        self.assertIs(api.AffectedExtensions(), api.AffectedExtensions())
+
     def testDeprecated(self):
         change = presubmit.Change(
             "mychange", "", self.fake_root_dir, [], 0, 0, None

@@ -156,6 +156,16 @@ class MockInputApi(object):
     def LocalPaths(self):
         return [file.LocalPath() for file in self.files]
 
+    def AffectedExtensions(self):
+        exts = set()
+        for f in self.AffectedFiles(include_deletes=True):
+            basename = os.path.basename(f.LocalPath()).lower()
+            if basename.startswith(".") and "." not in basename[1:]:
+                exts.add(basename)
+            else:
+                exts.add(os.path.splitext(basename)[1])
+        return frozenset(exts)
+
     def PresubmitLocalPath(self):
         return self.presubmit_local_path
 
