@@ -39,7 +39,11 @@ def IsSafeGNArgsPath(path: str) -> bool:
     if path.endswith(("/", "\\")):
         return False
     parts = path.replace("\\", "/").split("/")
-    if any(not part or part.startswith(".") for part in parts):
+    if parts[-1] == ".":
+        return False
+    if any(
+        not part or (part.startswith(".") and part != ".") for part in parts
+    ):
         return False
     return True
 

@@ -2136,6 +2136,20 @@ class GNArgsValidationTest(unittest.TestCase):
         self.assertIn("is_debug = false", content)
         self.assertIn('target_cpu = "x64"', content)
 
+    def test_write_gn_args_file_relative_dot_path(self) -> None:
+        dep = self._make_dep()
+        dep._gn_args_file = "./build/config/gclient_args.gni"
+        dep._gn_args = ["is_debug"]
+        dep._vars = {"is_debug": False}
+        dep.WriteGNArgsFile()
+        out_path = os.path.join(
+            self.tmpdir, "build", "config", "gclient_args.gni"
+        )
+        self.assertTrue(os.path.exists(out_path))
+        with open(out_path, "r") as f:
+            content = f.read()
+        self.assertIn("is_debug = false", content)
+
     def test_write_gn_args_file_traversal_rejected(self) -> None:
         dep = self._make_dep()
         dep._gn_args = ["foo_var"]

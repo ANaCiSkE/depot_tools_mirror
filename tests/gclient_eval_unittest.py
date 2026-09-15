@@ -1721,15 +1721,25 @@ class ParseTest(unittest.TestCase):
         )
 
     def test_gclient_gn_args_file_valid(self) -> None:
-        content = (
-            'gclient_gn_args_file = "src/build/args.gn"\n'
-            'gclient_gn_args = ["foo_var", "bar_var"]\n'
-        )
-        local_scope = gclient_eval.Exec(content)
-        self.assertEqual(
-            "src/build/args.gn", local_scope["gclient_gn_args_file"]
-        )
-        self.assertEqual(["foo_var", "bar_var"], local_scope["gclient_gn_args"])
+        valid_paths = [
+            "src/build/args.gn",
+            "./build/config/gclient_args.gni",
+            ".\\build\\config\\gclient_args.gni",
+            "./args.gn",
+            ".\\args.gn",
+            "src/./build/args.gn",
+            "args.gn",
+        ]
+        for path in valid_paths:
+            content = (
+                f"gclient_gn_args_file = {path!r}\n"
+                'gclient_gn_args = ["foo_var", "bar_var"]\n'
+            )
+            local_scope = gclient_eval.Exec(content)
+            self.assertEqual(path, local_scope["gclient_gn_args_file"])
+            self.assertEqual(
+                ["foo_var", "bar_var"], local_scope["gclient_gn_args"]
+            )
 
     def test_gclient_gn_args_file_invalid(self) -> None:
         invalid_paths = [
