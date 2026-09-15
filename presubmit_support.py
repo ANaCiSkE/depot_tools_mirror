@@ -94,6 +94,23 @@ def normpath(path):
     return os.path.normpath(path)
 
 
+def GetFileExtension(path):
+    """Returns the lowercase extension (or name for dotfiles) of a path."""
+    basename = os.path.basename(path).lower()
+    if basename.startswith(".") and "." not in basename[1:]:
+        return basename
+    return os.path.splitext(basename)[1]
+
+
+def PathMatches(abs_path, target_path, target_prefix, recursive):
+    """Returns True if abs_path matches target_path."""
+    if abs_path == target_path:
+        return True
+    if not recursive:
+        return os.path.dirname(abs_path) == target_path
+    return abs_path.startswith(target_prefix)
+
+
 def _RightHandSideLinesImpl(affected_files):
     """Implements RightHandSideLines for InputApi and GclChange."""
     for af in affected_files:
@@ -525,15 +542,103 @@ class InputApi(object):
         if self._cached_affected_extensions is not None:
             return self._cached_affected_extensions
 
-        exts = set()
-        for f in self.AffectedFiles(include_deletes=True):
-            basename = os.path.basename(f.LocalPath()).lower()
-            if basename.startswith(".") and "." not in basename[1:]:
-                exts.add(basename)
-            else:
-                exts.add(os.path.splitext(basename)[1])
+        exts = {
+            GetFileExtension(f.LocalPath())
+            for f in self.AffectedFiles(include_deletes=True)
+        }
         self._cached_affected_extensions = frozenset(exts)
         return self._cached_affected_extensions
+
+    def _HasAffectedExtensions(self, extensions, recursive, include_deletes):
+        """Helper for HasAffectedFiles when filtering by file extensions."""
+        if isinstance(extensions, str):
+            extensions = [extensions]
+        norm_exts = set()
+        for ext in extensions:
+            ext_str = ext.lower()
+            if ext_str and not ext_str.startswith("."):
+                ext_str = "." + ext_str
+            norm_exts.add(ext_str)
+        extensions = frozenset(norm_exts)
+
+        # Fast path when checking extensions under current presubmit directory
+        if recursive and include_deletes:
+            return bool(self.AffectedExtensions().intersection(extensions))
+
+        presubmit_dir = os.path.normcase(normpath(self.PresubmitLocalPath()))
+        for f in self.AffectedFiles(include_deletes=include_deletes):
+            abs_path = os.path.normcase(normpath(f.AbsoluteLocalPath()))
+            if not recursive and os.path.dirname(abs_path) != presubmit_dir:
+                continue
+            if GetFileExtension(abs_path) in extensions:
+                return True
+        return False
+
+    def _HasAffectedPaths(self, path, recursive, include_deletes):
+        """Helper for HasAffectedFiles when filtering by paths."""
+        if isinstance(path, str):
+            paths = [path]
+        else:
+            paths = list(path)
+
+        presubmit_dir = os.path.normcase(normpath(self.PresubmitLocalPath()))
+        resolved_targets = []
+        for p in paths:
+            if not os.path.isabs(p):
+                p = os.path.join(presubmit_dir, p)
+            target = os.path.normcase(normpath(p))
+            prefix = (
+                target if target.endswith(os.path.sep) else target + os.path.sep
+            )
+            resolved_targets.append((target, prefix))
+
+        for f in self.AffectedFiles(include_deletes=include_deletes):
+            abs_path = os.path.normcase(normpath(f.AbsoluteLocalPath()))
+            if any(
+                PathMatches(abs_path, target, prefix, recursive)
+                for target, prefix in resolved_targets
+            ):
+                return True
+        return False
+
+    def HasAffectedFiles(
+        self,
+        *,
+        extensions=None,
+        path=None,
+        recursive=True,
+        include_deletes=True,
+    ):
+        """Returns True if any affected file matches the specified criteria.
+
+        Must specify exactly one of 'extensions' (to match files by extension
+        under the current presubmit directory) or 'path' (to match a directory,
+        file, or list of paths). They are mutually exclusive.
+
+        Args:
+            extensions: A file extension (e.g. '.py') or sequence of
+                extensions (e.g. ('.py', '.gn')). Case-insensitive. Leading dot
+                is optional.
+            path: A directory or file path (or sequence of paths) to check.
+                Paths can be relative to PresubmitLocalPath() or absolute
+                (must still reside within the current presubmit directory
+                scope, as AffectedFiles() is intrinsically scoped).
+            recursive: If True (default), checks files in path and any
+                subdirectories. If False, checks only direct children of path.
+            include_deletes: If True (default), includes deleted files.
+        """
+        if (extensions is None) == (path is None):
+            raise ValueError(
+                "Must specify exactly one of 'extensions' or 'path' to "
+                "HasAffectedFiles()."
+            )
+
+        if extensions is not None:
+            return self._HasAffectedExtensions(
+                extensions, recursive, include_deletes
+            )
+
+        return self._HasAffectedPaths(path, recursive, include_deletes)
 
     def AffectedTestableFiles(self, include_deletes=None, **kwargs):
         """Same as input_api.change.AffectedTestableFiles() except only lists files

@@ -2149,6 +2149,112 @@ class InputApiUnittest(PresubmitTestsBase):
         # Test caching
         self.assertIs(api.AffectedExtensions(), api.AffectedExtensions())
 
+    def testHasAffectedFiles(self):
+        files = [
+            ["A", "base/foo.cc"],
+            ["M", "base/bar.H"],
+            ["D", "base/old.py"],
+            ["A", "base/subdir/sub.py"],
+            ["A", ".gn"],
+            ["M", "docs/README.md"],
+        ]
+        change = presubmit.Change(
+            "mychange", "", self.fake_root_dir, files, 0, 0, None
+        )
+        api = presubmit.InputApi(
+            change=change,
+            presubmit_path=os.path.join(
+                self.fake_root_dir, "base", "PRESUBMIT.py"
+            ),
+            is_committing=True,
+            gerrit_obj=None,
+            verbose=False,
+        )
+
+        # Extensionless files
+        self.assertFalse(api.HasAffectedFiles(extensions=""))
+        files_extless = [
+            ["A", "base/BUILD"],
+        ]
+        change_extless = presubmit.Change(
+            "mychange", "", self.fake_root_dir, files_extless, 0, 0, None
+        )
+        api_extless = presubmit.InputApi(
+            change=change_extless,
+            presubmit_path=os.path.join(
+                self.fake_root_dir, "base", "PRESUBMIT.py"
+            ),
+            is_committing=True,
+            gerrit_obj=None,
+            verbose=False,
+        )
+        self.assertTrue(api_extless.HasAffectedFiles(extensions=""))
+        self.assertTrue(api_extless.HasAffectedFiles(extensions=[""]))
+        self.assertFalse(api_extless.HasAffectedFiles(extensions=".cc"))
+
+        # Scoped to base/ directory
+        # Missing both arguments raises ValueError
+        with self.assertRaises(ValueError):
+            api.HasAffectedFiles()
+        self.assertTrue(api.HasAffectedFiles(extensions=".cc"))
+        self.assertTrue(api.HasAffectedFiles(extensions="cc"))
+        self.assertTrue(api.HasAffectedFiles(extensions=".h"))
+        self.assertTrue(api.HasAffectedFiles(extensions=".py"))
+        self.assertFalse(api.HasAffectedFiles(extensions=".js"))
+        self.assertFalse(api.HasAffectedFiles(extensions=".gn"))
+
+        # Non-recursive
+        self.assertTrue(api.HasAffectedFiles(extensions=".cc", recursive=False))
+        self.assertTrue(
+            api.HasAffectedFiles(extensions=".py", recursive=False)
+        )  # matches deleted base/old.py
+        self.assertFalse(
+            api.HasAffectedFiles(
+                extensions=".py", recursive=False, include_deletes=False
+            )
+        )  # base/subdir/sub.py is in subdir/
+
+        # Subdirectory checking
+        self.assertTrue(api.HasAffectedFiles(path="subdir"))
+        self.assertFalse(api.HasAffectedFiles(path="nonexistent"))
+
+        # Path matching for specific files
+        self.assertTrue(api.HasAffectedFiles(path="foo.cc"))
+        self.assertTrue(api.HasAffectedFiles(path=["foo.cc", "missing.txt"]))
+        self.assertFalse(api.HasAffectedFiles(path="missing.txt"))
+
+        # Include deletes
+        self.assertTrue(
+            api.HasAffectedFiles(path="old.py", include_deletes=True)
+        )
+        self.assertFalse(
+            api.HasAffectedFiles(path="old.py", include_deletes=False)
+        )
+
+        # Keyword-only arguments
+        with self.assertRaises(TypeError):
+            api.HasAffectedFiles(".cc")
+
+        # Empty affected files test
+        change_empty = presubmit.Change(
+            "mychange", "", self.fake_root_dir, [], 0, 0, None
+        )
+        api_empty = presubmit.InputApi(
+            change=change_empty,
+            presubmit_path=os.path.join(
+                self.fake_root_dir, "base", "PRESUBMIT.py"
+            ),
+            is_committing=True,
+            gerrit_obj=None,
+            verbose=False,
+        )
+        self.assertFalse(api_empty.HasAffectedFiles(extensions=".cc"))
+        self.assertFalse(api_empty.HasAffectedFiles(path="foo.cc"))
+
+        # Mutually exclusive extensions and path
+        with self.assertRaises(ValueError):
+            api.HasAffectedFiles(extensions=".py", path="subdir")
+
     def testDeprecated(self):
         change = presubmit.Change(
             "mychange", "", self.fake_root_dir, [], 0, 0, None
