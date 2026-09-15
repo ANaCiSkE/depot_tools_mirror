@@ -17,7 +17,7 @@ DEPOT_TOOLS = os.path.dirname(os.path.abspath(__file__))
 DESCRIPTION_BACKUP_FILE = ".git_cl_description_backup"
 
 # Valid extensions for files we want to lint.
-DEFAULT_LINT_REGEX = r"(.*\.cpp|.*\.cc|.*\.h)"
+DEFAULT_LINT_REGEX = r"(.*\.cpp|.*\.cc|.*\.h|.*\.py)"
 DEFAULT_LINT_IGNORE_REGEX = r"$^"
 
 
