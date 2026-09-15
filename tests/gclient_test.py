@@ -8,6 +8,7 @@ See gclient_smoketest.py for integration tests.
 """
 
 import contextlib
+import io
 import json
 import logging
 import ntpath
@@ -15,6 +16,7 @@ import os
 import queue
 import shutil
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -2278,6 +2280,415 @@ class GNArgsValidationTest(unittest.TestCase):
             )
         with self.assertRaises(gclient_utils.Error):
             dep.ParseDepsFile()
+
+
+class GcsDependencyTest(trial_dir.TestCase):
+    def setUp(self):
+        super(GcsDependencyTest, self).setUp()
+        self.parent_mock = mock.MagicMock()
+        self.parent_mock.name = "src"
+        self.parent_mock.root.root_dir = self.root_dir
+        self.gcs_root_mock = mock.MagicMock()
+        self.dep = gclient.GcsDependency(
+            parent=self.parent_mock,
+            name="test_dep",
+            bucket="fake_bucket",
+            object_name="payload.tar.gz",
+            sha256sum="fake",
+            output_file=None,
+            size_bytes=100,
+            gcs_root=self.gcs_root_mock,
+            custom_vars={},
+            should_process=True,
+            relative=False,
+            condition=None,
+        )
+        os.makedirs(self.dep.output_dir, exist_ok=True)
+
+    def _create_tar(self, members):
+        tar_path = os.path.join(self.root_dir, "test.tar.gz")
+        with tarfile.open(tar_path, "w:gz") as tar:
+            for m in members:
+                ti = tarfile.TarInfo(name=m["name"])
+                if "linkname" in m:
+                    ti.type = m.get("type", tarfile.SYMTYPE)
+                    ti.linkname = m["linkname"]
+                elif "type" in m:
+                    ti.type = m["type"]
+                else:
+                    data = m.get("data", b"test content")
+                    ti.size = len(data)
+                    tar.addfile(ti, io.BytesIO(data))
+                    continue
+                tar.addfile(ti)
+        return tar_path
+
+    def test_validate_tar_file_valid(self):
+        tar_path = self._create_tar(
+            [
+                {"name": "extracted_dir/file1.txt"},
+                {"name": "extracted_dir/sub/file2.txt"},
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["extracted_dir"]))
+
+    def test_validate_tar_file_sysroot(self):
+        tar_path = self._create_tar(
+            [
+                {"name": ".", "type": tarfile.DIRTYPE},
+                {"name": "./usr/lib/libc.so", "data": b"libc"},
+                {"name": "./usr/lib/libc.so.6", "linkname": "libc.so"},
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["usr"]))
+
+    def test_validate_tar_file_rejects_empty_prefixes(self):
+        tar_path = self._create_tar([{"name": "file.txt"}])
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, []))
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["", "."]))
+
+    def test_validate_tar_file_rejects_absolute_path(self):
+        tar_path = self._create_tar(
+            [
+                {"name": "/home/chrome-bot/.gitconfig", "data": b"evil"},
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["home"]))
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["", "home"]))
+
+    def test_validate_tar_file_rejects_windows_drive(self):
+        tar_path = self._create_tar(
+            [
+                {"name": "C:\\Windows\\System32\\cmd.exe", "data": b"evil"},
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["C:"]))
+
+    def test_validate_tar_file_rejects_path_traversal(self):
+        traversal_names = [
+            "../evil.txt",
+            "dir/../../evil.txt",
+            "dir/..",
+            "dir/../bar",
+            "..\\evil.txt",
+        ]
+        for name in traversal_names:
+            tar_path = self._create_tar([{"name": name, "data": b"evil"}])
+            with tarfile.open(tar_path, "r:*") as tar:
+                self.assertFalse(
+                    self.dep.ValidateTarFile(tar, ["dir"]),
+                    f"Expected {name} to be rejected",
+                )
+
+    def test_validate_tar_file_rejects_escaping_symlinks(self):
+        # Absolute symlink target
+        tar_path = self._create_tar(
+            [
+                {"name": "dir/link", "linkname": "/etc/passwd"},
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["dir"]))
+
+        # Traversing symlink target
+        tar_path = self._create_tar(
+            [
+                {"name": "dir/link", "linkname": "../../etc/passwd"},
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["dir"]))
+
+    def test_validate_tar_file_empty_archive(self):
+        tar_path = self._create_tar([])
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, []))
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["dir"]))
+
+    def test_validate_tar_file_rejects_escaping_hardlinks(self):
+        # Absolute hard link target
+        tar_path = self._create_tar(
+            [
+                {"name": "dir/file.txt", "data": b"content"},
+                {
+                    "name": "dir/link",
+                    "linkname": "/etc/passwd",
+                    "type": tarfile.LNKTYPE,
+                },
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["dir"]))
+
+        # Traversing hard link target (hard link targets are relative to archive root)
+        tar_path = self._create_tar(
+            [
+                {"name": "dir/sub/file.txt", "data": b"content"},
+                {
+                    "name": "dir/sub/link",
+                    "linkname": "dir/../../outside",
+                    "type": tarfile.LNKTYPE,
+                },
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertFalse(self.dep.ValidateTarFile(tar, ["dir"]))
+
+    def test_maybe_extract_artifact_rejects_absolute_path(self):
+        escaped_file = os.path.join(self.root_dir, "escaped.txt")
+        tar_path = self._create_tar(
+            [
+                {"name": escaped_file, "data": b"evil payload"},
+            ]
+        )
+        shutil.copy(tar_path, self.dep.artifact_output_file)
+        with self.assertRaises(Exception) as ctx:
+            self.dep._MaybeExtractArtifact()
+        self.assertIn("tarfile contains invalid entries", str(ctx.exception))
+        self.assertFalse(os.path.exists(escaped_file))
+
+    def test_clobber_tar_content_names_prevents_arbitrary_deletion(self):
+        victim_file = os.path.join(self.root_dir, "victim.txt")
+        with open(victim_file, "w") as f:
+            f.write("important victim data")
+
+        legit_file = os.path.join(self.dep.output_dir, "legit.txt")
+        with open(legit_file, "w") as f:
+            f.write("legit data")
+
+        content_file = os.path.join(self.dep.output_dir, ".test_content_names")
+        names = [
+            victim_file,
+            os.path.join("..", "..", "victim.txt"),
+            "legit.txt",
+        ]
+        with open(content_file, "w") as f:
+            f.write(json.dumps(names))
+
+        gcs_root = gclient_scm.GcsRoot(self.root_dir)
+        gcs_root.clobber_tar_content_names(self.dep.output_dir)
+
+        # Victim file outside output_dir must NOT be deleted.
+        self.assertTrue(os.path.exists(victim_file))
+        with open(victim_file) as f:
+            self.assertEqual(f.read(), "important victim data")
+
+        # Legit file inside output_dir should be deleted.
+        self.assertFalse(os.path.exists(legit_file))
+
+        # Content names file itself should be cleaned up.
+        self.assertFalse(os.path.exists(content_file))
+
+    def test_validate_tar_file_sysroot_backslashes(self):
+        tar_path = self._create_tar(
+            [
+                {"name": ".\\", "type": tarfile.DIRTYPE},
+                {"name": ".\\usr\\lib\\libc.so", "data": b"libc"},
+                {"name": ".\\usr\\lib\\libc.so.6", "linkname": "libc.so"},
+                {
+                    "name": ".\\usr\\lib\\libc_hard.so",
+                    "linkname": "usr/lib/libc.so",
+                    "type": tarfile.LNKTYPE,
+                },
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["usr"]))
+
+    def test_validate_tar_file_only_root(self):
+        tar_path = self._create_tar([{"name": ".", "type": tarfile.DIRTYPE}])
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, []))
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["", "."]))
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_clobber_tar_content_names_handles_cross_drive_and_broken_symlinks(
+        self,
+    ):
+        broken_symlink = os.path.join(self.dep.output_dir, "broken_link")
+        os.symlink("nonexistent_target", broken_symlink)
+        self.assertTrue(os.path.lexists(broken_symlink))
+        self.assertFalse(os.path.exists(broken_symlink))
+
+        content_file = os.path.join(self.dep.output_dir, ".test_content_names")
+        names = ["broken_link", "D:\\other\\drive\\path"]
+        with open(content_file, "w") as f:
+            f.write(json.dumps(names))
+
+        orig_commonpath = os.path.commonpath
+
+        def mock_commonpath(paths):
+            for p in paths:
+                if "D:" in p or "other" in p:
+                    raise ValueError("Paths don't have the same drive")
+            return orig_commonpath(paths)
+
+        with mock.patch("os.path.commonpath", side_effect=mock_commonpath):
+            gcs_root = gclient_scm.GcsRoot(self.root_dir)
+            gcs_root.clobber_tar_content_names(self.dep.output_dir)
+
+        # Broken symlink should be removed.
+        self.assertFalse(os.path.lexists(broken_symlink))
+        # Content names file itself should be cleaned up.
+        self.assertFalse(os.path.exists(content_file))
+
+    def test_maybe_extract_artifact_success(self):
+        tar_path = self._create_tar(
+            [
+                {"name": "extracted_dir/file.txt", "data": b"valid payload"},
+            ]
+        )
+        shutil.copy(tar_path, self.dep.artifact_output_file)
+        self.dep._MaybeExtractArtifact()
+        extracted_file = os.path.join(
+            self.dep.output_dir, "extracted_dir", "file.txt"
+        )
+        self.assertTrue(os.path.exists(extracted_file))
+        with open(extracted_file, "rb") as f:
+            self.assertEqual(f.read(), b"valid payload")
+
+    def test_artifact_output_file_rejects_invalid_paths(self):
+        invalid_paths = [
+            "/home/chrome-bot/.gitconfig",
+            "../../evil.txt",
+            "dir/../../evil.txt",
+            "C:\\evil.txt",
+            "\\evil.txt",
+            ".",
+            "..",
+        ]
+        for path in invalid_paths:
+            dep = gclient.GcsDependency(
+                parent=self.parent_mock,
+                name="test_dep",
+                bucket="fake_bucket",
+                object_name="payload.tar.gz",
+                sha256sum="fake",
+                output_file=path,
+                size_bytes=100,
+                gcs_root=self.gcs_root_mock,
+                custom_vars={},
+                should_process=True,
+                relative=False,
+                condition=None,
+            )
+            with self.assertRaises(Exception) as ctx:
+                _ = dep.artifact_output_file
+            self.assertIn("Invalid output_file path", str(ctx.exception))
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_clobber_tar_content_names_removes_directory_symlink(self):
+        real_dir = os.path.join(self.dep.output_dir, "real_dir")
+        os.makedirs(real_dir, exist_ok=True)
+        dir_symlink = os.path.join(self.dep.output_dir, "dir_symlink")
+        os.symlink("real_dir", dir_symlink)
+
+        self.assertTrue(os.path.isdir(dir_symlink))
+        self.assertTrue(os.path.islink(dir_symlink))
+
+        content_file = os.path.join(self.dep.output_dir, ".test_content_names")
+        names = ["dir_symlink", "real_dir"]
+        with open(content_file, "w") as f:
+            f.write(json.dumps(names))
+
+        gcs_root = gclient_scm.GcsRoot(self.root_dir)
+        gcs_root.clobber_tar_content_names(self.dep.output_dir)
+
+        # Directory symlink should be removed.
+        self.assertFalse(os.path.lexists(dir_symlink))
+        # Real directory should NOT be removed.
+        self.assertTrue(os.path.isdir(real_dir))
+
+    def test_maybe_extract_artifact_rejects_malicious_zip(self):
+        import zipfile
+
+        escaped_file = os.path.join(self.root_dir, "zip_escaped.txt")
+        zip_path = os.path.join(self.root_dir, "evil.zip")
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr(escaped_file, "evil zip payload")
+        shutil.copy(zip_path, self.dep.artifact_output_file)
+        with self.assertRaises(Exception) as ctx:
+            self.dep._MaybeExtractArtifact()
+        self.assertIn("zipfile contains invalid entries", str(ctx.exception))
+        self.assertFalse(os.path.exists(escaped_file))
+
+    def test_validate_tar_file_redundant_dot_slash(self):
+        tar_path = self._create_tar(
+            [
+                {
+                    "name": "././extracted_dir/file.txt",
+                    "data": b"valid payload",
+                },
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["extracted_dir"]))
+
+    def test_validate_tar_file_redundant_dot_slash_directory(self):
+        tar_path = self._create_tar(
+            [
+                {"name": "././", "type": tarfile.DIRTYPE},
+                {
+                    "name": "././extracted_dir/file.txt",
+                    "data": b"valid payload",
+                },
+            ]
+        )
+        with tarfile.open(tar_path, "r:*") as tar:
+            self.assertTrue(self.dep.ValidateTarFile(tar, ["extracted_dir"]))
+
+    def test_maybe_extract_artifact_redundant_dot_slash(self):
+        tar_path = self._create_tar(
+            [
+                {
+                    "name": "././extracted_dir/file.txt",
+                    "data": b"valid payload",
+                },
+            ]
+        )
+        shutil.copy(tar_path, self.dep.artifact_output_file)
+        self.dep._MaybeExtractArtifact()
+        extracted_file = os.path.join(
+            self.dep.output_dir, "extracted_dir", "file.txt"
+        )
+        self.assertTrue(os.path.exists(extracted_file))
+        with open(extracted_file, "rb") as f:
+            self.assertEqual(f.read(), b"valid payload")
+
+    def test_maybe_extract_artifact_rejects_empty_zip_entry(self):
+        import zipfile
+
+        zip_path = os.path.join(self.root_dir, "empty_entry.zip")
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zinfo = zipfile.ZipInfo()
+            zinfo.filename = ""
+            zf.writestr(zinfo, b"")
+        shutil.copy(zip_path, self.dep.artifact_output_file)
+        with self.assertRaises(Exception) as ctx:
+            self.dep._MaybeExtractArtifact()
+        self.assertIn("zipfile contains invalid entries", str(ctx.exception))
+
+    def test_clobber_tar_content_names_ignores_entry_directory_itself(self):
+        content_file = os.path.join(self.dep.output_dir, ".test_content_names")
+        names = [".", "", "./"]
+        with open(content_file, "w") as f:
+            f.write(json.dumps(names))
+
+        gcs_root = gclient_scm.GcsRoot(self.root_dir)
+        gcs_root.clobber_tar_content_names(self.dep.output_dir)
+
+        # Output dir itself must not be deleted.
+        self.assertTrue(os.path.isdir(self.dep.output_dir))
+        self.assertFalse(os.path.exists(content_file))
 
 
 if __name__ == "__main__":

@@ -2592,6 +2592,7 @@ class GcsRoot(object):
 
     def clobber_tar_content_names(self, entry_directory):
         """Delete paths written in .*_content_names files"""
+        entry_directory_abs = os.path.abspath(entry_directory)
         content_names_files = glob.glob(
             os.path.join(entry_directory, ".*_content_names")
         )
@@ -2599,12 +2600,36 @@ class GcsRoot(object):
             with open(file, "r") as f:
                 names = json.loads(f.read().strip())
                 for name in names:
-                    name_path = os.path.join(entry_directory, name)
-                    if os.path.isdir(name_path) or not os.path.exists(
-                        name_path
-                    ):
+                    name_path = os.path.abspath(
+                        os.path.join(entry_directory, name)
+                    )
+                    # Ensure path is strictly inside entry_directory (prevent
+                    # arbitrary deletion)
+                    try:
+                        if (
+                            name_path == entry_directory_abs
+                            or os.path.commonpath(
+                                [entry_directory_abs, name_path]
+                            )
+                            != entry_directory_abs
+                        ):
+                            continue
+                    except ValueError:
                         continue
-                    os.remove(os.path.join(entry_directory, name))
+                    if (
+                        os.path.isdir(name_path)
+                        and not os.path.islink(name_path)
+                    ) or not os.path.lexists(name_path):
+                        continue
+                    try:
+                        os.remove(name_path)
+                    except FileNotFoundError:
+                        continue
+                    except OSError:
+                        if os.path.islink(name_path):
+                            os.rmdir(name_path)
+                        else:
+                            raise
             os.remove(file)
 
     def clobber_hash_files(self, entry_directory):
