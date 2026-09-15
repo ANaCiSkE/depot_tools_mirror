@@ -2,68 +2,68 @@
 # Do not modify manually. All changes will be overwritten.
 
 infra/chromeperf/pinpoint/linux-386
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	xaf6pdGq7r1ORWYpDEf25DH20nf410KLBvbZPnKt3REC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	V5prkoKfD20oiKtWuq08cCZsUX2-cI1fi7Hif-8pZCIC
 
 infra/chromeperf/pinpoint/linux-amd64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	23KzzymTNWIhH-z3xLGvHkE6uUJtNBDjpv83nkKMWBEC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	VJGAXygGloiJu7HDSpFU8qLJ8Meqsf1GAJXqfr_au8EC
 
 infra/chromeperf/pinpoint/linux-arm64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	eSQF5hd6nbk3ndyCSgRgzZgcBH2abQNGMyHunZ4oF4wC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	NSRy-t9idMYfpD5lVSSMWO3CMny1wGs9GJeEF2-rT_kC
 
 infra/chromeperf/pinpoint/linux-armv6l
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	BnULVthXv7Cet9eOQVPt2zq4lJoM8kglFnt6pMwK4nUC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	NC8yqS9EsGLDkC6Rqn49BCXcp1hTeDgEipLbiK28JEoC
 
 infra/chromeperf/pinpoint/linux-loong64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	XBj-a3ERYdAmRKEkJyg2YVGHClklSDpUNZkZY_X9MoAC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	5YSQwmpkG8IxC8rPPNAtuw8TcSX9vhNCZIgr9JkKMsgC
 
 infra/chromeperf/pinpoint/linux-mips64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	DhrWNYvF2hcNC6LX3vro_DpkhUYBjzu7Hj2_YHLuvIgC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	H9iK1gve8aPjK-XEln2nbtvNZTE1btlgZ_VNkzQENPQC
 
 infra/chromeperf/pinpoint/linux-mips64le
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	ihhdsdwnZvAEOtNE1CK2XlFxyhEKvY7NbgLP05FDjPYC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	E1STHDwxDHoL93WlubeiLyL9Ai20BxTHq-PqZT_jB6EC
 
 infra/chromeperf/pinpoint/linux-mipsle
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	jlCl13HZ6asE3M7SOsmPc1K8fV2WuYdQWof4cv45Rs4C
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	LFLxxVvKm9s4giZkS-VcbWGTt98CfDt_h-NxY-6dOYEC
 
 infra/chromeperf/pinpoint/linux-ppc64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	a2sAHLCF9jZioeiLD1HjPO3lXl6R_so7Zs2bB7EVYTQC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	YxAMdAHWj6wSk2Enk1ID-HI-7JC-Hv2T5zNbB790M5UC
 
 infra/chromeperf/pinpoint/linux-ppc64le
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	x-9JUpp_soZ80OOAJ8lgv96I5s17Ts9ZnmqvOk9FiOsC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	6hGRDX93j9XJn--x9o6V7x83gXlCzOIYrfS7VpKbo_EC
 
 infra/chromeperf/pinpoint/linux-riscv64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	O20_19P_cBFJZuCKahgNMl7VwpUYUQOJ1eQPK451cfgC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	70S6q7226xPHFZMv0BF3kgooXJEHyDWJNLOwXBPK_MYC
 
 infra/chromeperf/pinpoint/linux-s390x
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	N5mUVt6hS55iIixPOfLoYd0DOC-Z94DIJllzk_fJbh0C
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	fVRv2U56zXbpGIXMdkya7jVMSnuAO9JPCUx-6Ui85mQC
 
 infra/chromeperf/pinpoint/mac-amd64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	kgEH3-ZSkTPkyuM99wbbhWKHt12E4oMQa-DjHjZIyXoC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	fe72DYcHqdHHT8IlBTw3OalL7GZPNrZzfF1z6YLZ71kC
 
 infra/chromeperf/pinpoint/mac-arm64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	wFyayI2VOFrmtDO64oVRyCpku2fjJ8xUYJeWqFD7OAsC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	PAj1gnkK4X4kSgW8gmpg2wJHKgfsH4FNQ63dHuWusrsC
 
 infra/chromeperf/pinpoint/windows-amd64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	tWWU8Tw1HglFUYJNO3pwVa9Z8kKHYLiLr04bP7VyMKYC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	aQ09xbhRl-TTI2uQFbI6jjieUbyAbiOkJDPfWveZtIAC
 
 infra/chromeperf/pinpoint/windows-arm64
-	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
-	274RreSAlQGcGi2tU6f-cohe5EIBUEohk7PZnLndo3cC
+	git_revision:7b769993dfbe8adbd56679cf8fb29fe305d49800
+	lCyi6GD3EL8biOpcovy9TrTy60I0E3NuH6q8G2cgwXEC
 
 infra/rbe/client/linux-amd64
 	re_client_version:0.124.1.13f78cc-gomaip
