@@ -21,6 +21,7 @@ sys.path.insert(
 )
 import bot_update
 
+
 class MockedPopen(object):
     """A fake instance of a called subprocess.
 
@@ -60,6 +61,7 @@ class MockedPopen(object):
             return self.return_value(*args, **kwargs)
         return self.return_value
 
+
 class MockedCall(object):
     """A fake instance of bot_update.call().
 
@@ -91,6 +93,7 @@ class MockedCall(object):
                 return popen(args, kwargs)
         return ""
 
+
 class MockedGclientSync:
     """A class producing a callable instance of gclient sync."""
 
@@ -99,6 +102,7 @@ class MockedGclientSync:
 
     def __call__(self, *args, **_):
         self.records.append(args)
+
 
 class FakeFile:
     def __init__(self):
@@ -118,6 +122,7 @@ class FakeFile:
     def __exit__(self, _, __, ___):
         pass
 
+
 class FakeFilesystem:
     def __init__(self):
         self.files = {}
@@ -128,8 +133,10 @@ class FakeFilesystem:
             return self.files[target]
         return self.files[target]
 
+
 def fake_git(*args, **kwargs):
     return bot_update.call("git", *args, **kwargs)
+
 
 class BotUpdateUnittests(unittest.TestCase):
     DEFAULT_PARAMS = {
@@ -391,10 +398,21 @@ class BotUpdateUnittests(unittest.TestCase):
         actual_results = bot_update.parse_revisions(revisions, "root")
         self.assertEqual(expected_results, actual_results)
 
+        with self.assertRaises(ValueError):
+            bot_update.parse_revisions(["--upload-pack=foo"], "root")
+        with self.assertRaises(ValueError):
+            bot_update.parse_revisions(["src@--upload-pack=foo"], "root")
+        with self.assertRaises(ValueError):
+            bot_update.parse_revisions(["-bad_root@HEAD"], "root")
+        with self.assertRaises(ValueError):
+            bot_update.parse_revisions([], "-bad_root")
+
+
 class CallUnitTest(unittest.TestCase):
     def testCall(self):
         ret = bot_update.call(sys.executable, "-c", "print(1)")
         self.assertEqual("1\n", ret)
+
 
 if __name__ == "__main__":
     unittest.main()

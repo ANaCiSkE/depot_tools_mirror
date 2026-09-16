@@ -1882,6 +1882,27 @@ class GclientTest(trial_dir.TestCase):
         ):
             self._testPosixpathImpl()
 
+    def testCipdDependencyVersionStartingWithHyphen(self):
+        parser = gclient.OptionParser()
+        options, _ = parser.parse_args([])
+        obj = gclient.GClient("src", options)
+        cipd_root = CIPDRootMock("src", "https://example.com")
+
+        cipd_dep = gclient.CipdDependency(
+            parent=obj,
+            name="src/foo/bar/baz",
+            dep_value={
+                "package": "baz_package",
+                "version": "-uRXiZeA4Yl-Nv-6jP69DyDs5cGroZgGsa1NHnVySQwC",
+            },
+            cipd_root=cipd_root,
+            custom_vars=None,
+            should_process=True,
+            relative=False,
+            condition=None,
+        )
+        self.assertIsNone(cipd_dep.FuzzyMatchUrl({}))
+
     def testFuzzyMatchUrlByURL(self):
         write(
             ".gclient",
@@ -2280,6 +2301,38 @@ class GNArgsValidationTest(unittest.TestCase):
             )
         with self.assertRaises(gclient_utils.Error):
             dep.ParseDepsFile()
+
+    def test_enforce_revisions_invalid_starting_with_hyphen(self) -> None:
+        options, _ = gclient.OptionParser().parse_args([])
+        options.revisions = ["src@--upload-pack=foo"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforceRevisions()
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.revisions = ["-bad_name@HEAD"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforceRevisions()
+
+    def test_enforce_patch_refs_invalid_starting_with_hyphen(self) -> None:
+        options, _ = gclient.OptionParser().parse_args([])
+        options.patch_refs = ["-bad_repo@target:ref"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforcePatchRefsAndBranches()
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.patch_refs = ["repo@-target:ref"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforcePatchRefsAndBranches()
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.patch_refs = ["repo@target:-patchref"]
+        client = gclient.GClient(root_dir=self.tmpdir, options=options)
+        with self.assertRaises(gclient_utils.Error):
+            client._EnforcePatchRefsAndBranches()
 
 
 class GcsDependencyTest(trial_dir.TestCase):

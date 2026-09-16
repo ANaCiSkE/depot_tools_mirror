@@ -622,8 +622,17 @@ class BotUpdateApi(recipe_api.RecipeApi):
     # every command line parameter "--revision name@value".
     fixed_revisions = {}
     for name, revision in sorted(revisions.items()):
+      if name.startswith("-"):
+        raise self.m.step.StepFailure(
+          "Invalid revision dependency name '%s': cannot start with '-'" % name
+        )
       fixed_revision = self.m.gclient.resolve_revision(revision)
       if fixed_revision:
+        if fixed_revision.startswith("-"):
+          raise self.m.step.StepFailure(
+            "Invalid revision '%s': revisions cannot start with '-'"
+            % fixed_revision
+          )
         if fixed_revision.upper() == "HEAD" and patch:
           # Sync to correct destination ref
           fixed_revision = self._destination_ref(cfg, name)
