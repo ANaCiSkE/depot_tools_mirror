@@ -719,7 +719,11 @@ class GitWrapper(SCMWrapper):
             pr = self._Capture(["rev-parse", "FETCH_HEAD"])
 
             if not options.rebase_patch_ref:
-                self._Capture(["checkout", "--end-of-options", pr])
+                checkout_cmd = ["checkout"]
+                if git_common.meets_git_version((2, 44, 0)):
+                    checkout_cmd.append("--end-of-options")
+                checkout_cmd.append(pr)
+                self._Capture(checkout_cmd)
                 # Adjust base_rev to be the first parent of our checked out
                 # patch ref; This will allow us to correctly extend `file_list`,
                 # and will show the correct file-list to programs which do `git
@@ -758,7 +762,11 @@ class GitWrapper(SCMWrapper):
                             )
                         # If |patch_rev| is an ancestor of |target_rev|, check
                         # it out.
-                        self._Capture(["checkout", "--end-of-options", pr])
+                        checkout_cmd = ["checkout"]
+                        if git_common.meets_git_version((2, 44, 0)):
+                            checkout_cmd.append("--end-of-options")
+                        checkout_cmd.append(pr)
+                        self._Capture(checkout_cmd)
                     else:
                         # If a change was uploaded on top of another change,
                         # which has already landed, one of the commits in the
@@ -2101,7 +2109,9 @@ class GitWrapper(SCMWrapper):
                 checkout_args.append("--force")
             if quiet:
                 checkout_args.append("--quiet")
-            checkout_args.extend(["--end-of-options", ref])
+            if git_common.meets_git_version((2, 44, 0)):
+                checkout_args.append("--end-of-options")
+            checkout_args.append(ref)
             return self._Capture(checkout_args)
 
     def _Fetch(

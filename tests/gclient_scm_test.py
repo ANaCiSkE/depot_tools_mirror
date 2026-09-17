@@ -804,6 +804,25 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
         with self.assertRaises(gclient_utils.Error):
             git_wrapper._Checkout(options, None)
 
+    @mock.patch("git_common.meets_git_version")
+    def testCheckoutEndOfOptionsGatedByGitVersion(self, mock_meets_git_version):
+        git_wrapper = gclient_scm.GitWrapper(
+            self.url, self.root_dir, self.relpath
+        )
+        options = self.Options()
+        mock_capture = mock.Mock()
+        git_wrapper._Capture = mock_capture
+
+        mock_meets_git_version.return_value = True
+        git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(
+            ["checkout", "--quiet", "--end-of-options", "main"]
+        )
+
+        mock_meets_git_version.return_value = False
+        git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(["checkout", "--quiet", "main"])
+
     def testFetchRejectsInvalidRefspecOrRemoteStartingWithHyphen(self):
         git_wrapper = gclient_scm.GitWrapper(
             self.url, self.root_dir, self.relpath
