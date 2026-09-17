@@ -19,6 +19,7 @@
 import os
 import sys
 import argparse
+import fnmatch
 import subprocess
 import json
 import difflib
@@ -548,7 +549,11 @@ def run_ruff_with_ranges(args: list[str]) -> int:
     if is_stdin:
         if opts.has_diff:
             return dispatch_output(
-                target, original_val, formatted_val, opts.has_check, opts.has_diff
+                target,
+                original_val,
+                formatted_val,
+                opts.has_check,
+                opts.has_diff,
             )
         if opts.has_check:
             return 1 if formatted_val != original_val else 0
@@ -572,6 +577,7 @@ def translate_args(args: list[str]) -> list[str]:
     """
     yapf_args = []
     has_diff = False
+    has_check = False
     has_stdin = False
     files = []
 
@@ -608,6 +614,10 @@ def translate_args(args: list[str]) -> list[str]:
             has_diff = True
             yapf_args.append(arg)
             i += 1
+        elif arg == "--check":
+            has_check = True
+            yapf_args.append("-q")
+            i += 1
         elif arg == "-":
             has_stdin = True
             i += 1
@@ -625,10 +635,58 @@ def translate_args(args: list[str]) -> list[str]:
             i += 1
 
     # Ruff formats files in-place by default; YAPF prints to stdout unless -i is explicitly passed.
-    if files and not has_diff and not has_stdin:
+    if files and not has_diff and not has_check and not has_stdin:
         yapf_args.append("-i")
 
     return yapf_args
+
+
+def get_yapfignore_patterns(root_dir: str | None = None) -> set[str]:
+    """Returns all fnmatch patterns listed in the repository's .yapfignore file."""
+    base_dir = root_dir or os.getcwd()
+    yapfignore_file = os.path.join(base_dir, ".yapfignore")
+    ignore_patterns: set[str] = set()
+    if not os.path.isfile(yapfignore_file):
+        return ignore_patterns
+
+    try:
+        with open(yapfignore_file, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    ignore_patterns.add(stripped)
+    except Exception:
+        pass
+    return ignore_patterns
+
+
+def is_yapf_ignored(
+    filepath: str, patterns: set[str], root_dir: str | None = None
+) -> bool:
+    """Checks whether filepath matches any pattern in .yapfignore."""
+    if not patterns:
+        return False
+    candidates = {filepath, filepath.replace("\\", "/")}
+    base_dir = root_dir or os.getcwd()
+    try:
+        rel = os.path.relpath(
+            os.path.abspath(filepath), os.path.abspath(base_dir)
+        )
+        if not rel.startswith(".."):
+            candidates.add(rel)
+            candidates.add(rel.replace("\\", "/"))
+    except ValueError:
+        pass
+    return any(
+        fnmatch.fnmatch(cand, pat) for cand in candidates for pat in patterns
+    )
+
+
+def filter_yapf_ignored_files(
+    filepaths: list[str], patterns: set[str], root_dir: str | None = None
+) -> list[str]:
+    """Filters out any filepaths that match any of the given .yapfignore patterns."""
+    return [f for f in filepaths if not is_yapf_ignored(f, patterns, root_dir)]
 
 
 def get_yapf_style(target_path: str, root_dir: str | None = None) -> str:
@@ -825,9 +883,11 @@ def run_batch() -> int:
     diff = config.get("diff", False)
     dry_run = config.get("dry_run", False)
     full = config.get("full", False)
+    force_python = config.get("force_python", False)
 
     ruff_files_no_range = []
     yapf_files = []
+    yapfignore_patterns = get_yapfignore_patterns(root_dir)
 
     for f in files_cfg:
         path = f["path"]
@@ -841,8 +901,9 @@ def run_batch() -> int:
             # fully formatted, so formatting the whole file won't affect
             # untouched lines.
             ruff_files_no_range.append(path)
-        elif has_yapf_config(path, root_dir):
-            yapf_files.append((path, ranges))
+        elif has_yapf_config(path, root_dir) or force_python:
+            if not is_yapf_ignored(path, yapfignore_patterns, root_dir):
+                yapf_files.append((path, ranges))
 
     has_changes = False
     has_error = False
@@ -875,6 +936,11 @@ def main() -> int:
         Exit code of the invoked formatter subprocess.
     """
     root_dir, args = extract_root_flag(sys.argv[1:])
+
+    force_python = False
+    if "--force-python" in args:
+        force_python = True
+        args = [a for a in args if a != "--force-python"]
 
     if args and args[0] == "--batch":
         return run_batch()
@@ -909,10 +975,19 @@ def main() -> int:
     if should_use_ruff(target_path, root_dir):
         return run_ruff_with_ranges(args)
     else:
+        yapfignore_patterns = get_yapfignore_patterns(root_dir)
+        is_stdin = "-" in args
+        has_diff = "--diff" in args or "-d" in args
+        has_check = "--check" in args or "-q" in args or "--quiet" in args
+
         # Before attempting YAPF as a backoff, ascertain that a YAPF formatter/config
-        # is present. If the file was rejected by Ruff (e.g. excluded in ruff.toml)
-        # and no YAPF config governs the directory, return 0 (no-op).
-        if not has_yapf_config(target_path, root_dir):
+        # is present (or --force-python was passed), and the file is not ignored by .yapfignore.
+        if (
+            not has_yapf_config(target_path, root_dir) and not force_python
+        ) or is_yapf_ignored(target_path, yapfignore_patterns, root_dir):
+            if is_stdin and not has_diff and not has_check:
+                sys.stdout.buffer.write(sys.stdin.buffer.read())
+                sys.stdout.buffer.flush()
             return 0
 
         # Fallback to YAPF
@@ -921,6 +996,9 @@ def main() -> int:
         yapf_script = os.path.join(depot_tools_dir, "yapf")
 
         yapf_args = translate_args(args)
+        style_config = get_yapf_style(target_path, root_dir)
+        if style_config and "--style" not in yapf_args:
+            yapf_args.extend(["--style", style_config])
 
         # We must invoke the yapf wrapper via vpython3 so it gets its own env
         vpython_bin = "vpython3"

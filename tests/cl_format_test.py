@@ -158,17 +158,6 @@ class CMDFormatTestCase(unittest.TestCase):
             os.path.join(self._top_dir, fname), ("\n".join(contents))
         )
 
-    def _make_yapfignore(self, contents):
-        self._make_temp_file(".yapfignore", contents)
-
-    def _check_yapf_filtering(self, files, expected):
-        self.assertEqual(
-            expected,
-            cl_format._FilterYapfIgnoredFiles(
-                files, cl_format._GetYapfIgnorePatterns(self._top_dir)
-            ),
-        )
-
     def _make_markdown_config(self, path):
         self._make_temp_file(os.path.join(path, ".style.mdformat"), [])
 
@@ -250,11 +239,13 @@ class CMDFormatTestCase(unittest.TestCase):
         captured_stdout = []
 
         def fake_call(cmd, **kwargs):
-            import subprocess
+            import subprocess2
 
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            captured_stdout.append(res.stdout)
-            return res.returncode
+            (stdout, _), returncode = subprocess2.communicate(
+                cmd, stdout=subprocess2.PIPE, stderr=subprocess2.PIPE
+            )
+            captured_stdout.append(stdout.decode("utf-8").replace("\r\n", "\n"))
+            return returncode
 
         mock_call.side_effect = fake_call
 
@@ -779,117 +770,6 @@ class CMDFormatTestCase(unittest.TestCase):
             )
             mock_stdout_write.assert_called_once_with(expected_output)
 
-    def testYapfignoreExplicit(self):
-        self._make_yapfignore(["foo/bar.py", "foo/bar/baz.py"])
-        files = [
-            "bar.py",
-            "foo/bar.py",
-            "foo/baz.py",
-            "foo/bar/baz.py",
-            "foo/bar/foobar.py",
-        ]
-        expected = [
-            "bar.py",
-            "foo/baz.py",
-            "foo/bar/foobar.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfignoreSingleWildcards(self):
-        self._make_yapfignore(["*bar.py", "foo*", "baz*.py"])
-        files = [
-            "bar.py",  # Matched by *bar.py.
-            "bar.txt",
-            "foobar.py",  # Matched by *bar.py, foo*.
-            "foobar.txt",  # Matched by foo*.
-            "bazbar.py",  # Matched by *bar.py, baz*.py.
-            "bazbar.txt",
-            "foo/baz.txt",  # Matched by foo*.
-            "bar/bar.py",  # Matched by *bar.py.
-            "baz/foo.py",  # Matched by baz*.py, foo*.
-            "baz/foo.txt",
-        ]
-        expected = [
-            "bar.txt",
-            "bazbar.txt",
-            "baz/foo.txt",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfignoreMultiplewildcards(self):
-        self._make_yapfignore(["*bar*", "*foo*baz.txt"])
-        files = [
-            "bar.py",  # Matched by *bar*.
-            "bar.txt",  # Matched by *bar*.
-            "abar.py",  # Matched by *bar*.
-            "foobaz.txt",  # Matched by *foo*baz.txt.
-            "foobaz.py",
-            "afoobaz.txt",  # Matched by *foo*baz.txt.
-        ]
-        expected = [
-            "foobaz.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfignoreComments(self):
-        self._make_yapfignore(["test.py", "#test2.py"])
-        files = [
-            "test.py",
-            "test2.py",
-        ]
-        expected = [
-            "test2.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfHandleUtf8(self):
-        self._make_yapfignore(["test.py", "test_🌐.py"])
-        files = [
-            "test.py",
-            "test_🌐.py",
-            "test2.py",
-        ]
-        expected = [
-            "test2.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfignoreBlankLines(self):
-        self._make_yapfignore(["test.py", "", "", "test2.py"])
-        files = [
-            "test.py",
-            "test2.py",
-            "test3.py",
-        ]
-        expected = [
-            "test3.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfignoreWhitespace(self):
-        self._make_yapfignore([" test.py "])
-        files = [
-            "test.py",
-            "test2.py",
-        ]
-        expected = [
-            "test2.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
-    def testYapfignoreNoFiles(self):
-        self._make_yapfignore(["test.py"])
-        self._check_yapf_filtering([], [])
-
-    def testYapfignoreMissingYapfignore(self):
-        files = [
-            "test.py",
-        ]
-        expected = [
-            "test.py",
-        ]
-        self._check_yapf_filtering(files, expected)
-
     @mock.patch("gclient_paths.GetPrimarySolutionPath")
     def testRunMetricsXMLFormatSkipIfPresubmit(self, find_top_dir):
         """Verifies that it skips the formatting if opts.presubmit is True."""
@@ -1060,9 +940,9 @@ class CMDFormatTestCase(unittest.TestCase):
             "if --input_diff_file is given.",
         )
 
-    @mock.patch("cl_format._IsRuffBatchSupported", return_value=False)
+    @mock.patch("subprocess2.communicate", return_value=((b"", b""), 0))
     @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
-    def testInputDiffFile(self, clang_formatter, mock_supported):
+    def testInputDiffFile(self, clang_formatter, mock_communicate):
         """Tests git cl format with --input_diff_file."""
         # Windows doesn't allow a file to be reopened while it's open by
         # another handler.
@@ -1090,29 +970,34 @@ class CMDFormatTestCase(unittest.TestCase):
                 mock.ANY,
                 mock.ANY,
             )
-            cl_format.RunCommand.assert_called_with(
-                [
-                    "vpython3",
-                    mock.ANY,
-                    "--style",
-                    mock.ANY,
-                    "testing/xvfb_unittest.py",
-                    "-l",
-                    "18-24",
-                    "--diff",
+            expected_config = {
+                "root": self._top_dir,
+                "diff": False,
+                "dry_run": True,
+                "full": False,
+                "force_python": True,
+                "files": [
+                    {
+                        "path": "testing/xvfb_unittest.py",
+                        "ranges": [[18, 25]],
+                    }
                 ],
+            }
+            mock_communicate.assert_called_with(
+                ["vpython3", cl_format._GetRuffChromiumPath(), "--batch"],
+                stdin=json.dumps(expected_config).encode("utf-8"),
+                stdout=cl_format.subprocess2.PIPE,
+                stderr=cl_format.subprocess2.PIPE,
                 cwd=self._top_dir,
-                error_ok=True,
-                shell=mock.ANY,
-                stderr=-1,
+                shell=sys.platform == "win32",
             )
         finally:
             os.remove(input_diff.name)
             os.chdir(previous_cwd)
 
-    @mock.patch("cl_format._IsRuffBatchSupported", return_value=False)
+    @mock.patch("subprocess2.communicate", return_value=((b"", b""), 0))
     @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
-    def testInputDiffFile_Stdin(self, clang_formatter, mock_supported):
+    def testInputDiffFile_Stdin(self, clang_formatter, mock_communicate):
         """Tests git cl format with --input_diff_file - reading from stdin."""
         previous_cwd = os.getcwd()
         os.chdir(self._top_dir)
@@ -1136,28 +1021,33 @@ class CMDFormatTestCase(unittest.TestCase):
                 mock.ANY,
                 mock.ANY,
             )
-            cl_format.RunCommand.assert_called_with(
-                [
-                    "vpython3",
-                    mock.ANY,
-                    "--style",
-                    mock.ANY,
-                    "testing/xvfb_unittest.py",
-                    "-l",
-                    "18-24",
-                    "--diff",
+            expected_config = {
+                "root": self._top_dir,
+                "diff": False,
+                "dry_run": True,
+                "full": False,
+                "force_python": True,
+                "files": [
+                    {
+                        "path": "testing/xvfb_unittest.py",
+                        "ranges": [[18, 25]],
+                    }
                 ],
+            }
+            mock_communicate.assert_called_with(
+                ["vpython3", cl_format._GetRuffChromiumPath(), "--batch"],
+                stdin=json.dumps(expected_config).encode("utf-8"),
+                stdout=cl_format.subprocess2.PIPE,
+                stderr=cl_format.subprocess2.PIPE,
                 cwd=self._top_dir,
-                error_ok=True,
-                shell=mock.ANY,
-                stderr=-1,
+                shell=sys.platform == "win32",
             )
         finally:
             os.chdir(previous_cwd)
 
-    @mock.patch("cl_format._IsRuffBatchSupported", return_value=False)
+    @mock.patch("subprocess2.communicate", return_value=((b"", b""), 0))
     @mock.patch("cl_format._RunClangFormatDiff", return_value=0)
-    def testInputDiffFile_Stdin_Buffer(self, clang_formatter, mock_supported):
+    def testInputDiffFile_Stdin_Buffer(self, clang_formatter, mock_communicate):
         """Tests git cl format with --input_diff_file - reading UTF-8 bytes from sys.stdin.buffer."""
         previous_cwd = os.getcwd()
         os.chdir(self._top_dir)
@@ -1185,21 +1075,26 @@ class CMDFormatTestCase(unittest.TestCase):
                 mock.ANY,
                 mock.ANY,
             )
-            cl_format.RunCommand.assert_called_with(
-                [
-                    "vpython3",
-                    mock.ANY,
-                    "--style",
-                    mock.ANY,
-                    "testing/xvfb_unittest.py",
-                    "-l",
-                    "18-24",
-                    "--diff",
+            expected_config = {
+                "root": self._top_dir,
+                "diff": False,
+                "dry_run": True,
+                "full": False,
+                "force_python": True,
+                "files": [
+                    {
+                        "path": "testing/xvfb_unittest.py",
+                        "ranges": [[18, 25]],
+                    }
                 ],
+            }
+            mock_communicate.assert_called_with(
+                ["vpython3", cl_format._GetRuffChromiumPath(), "--batch"],
+                stdin=json.dumps(expected_config).encode("utf-8"),
+                stdout=cl_format.subprocess2.PIPE,
+                stderr=cl_format.subprocess2.PIPE,
                 cwd=self._top_dir,
-                error_ok=True,
-                shell=mock.ANY,
-                stderr=-1,
+                shell=sys.platform == "win32",
             )
         finally:
             os.chdir(previous_cwd)
@@ -1608,28 +1503,14 @@ class TestRuffBatchIntegration(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.test_dir)
         self.addCleanup(os.chdir, self.orig_cwd)
 
-    @mock.patch("cl_format._IsRuffBatchSupported", return_value=False)
-    @mock.patch("cl_format._RunYapf")
-    def test_fallback_to_yapf(self, mock_run_yapf, mock_supported):
-        mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
-        with mock.patch("os.path.exists", return_value=True):
-            cl_format._RunPythonFormat(
-                mock_opts, ["foo.py"], self.test_dir, None
-            )
-        mock_run_yapf.assert_called_once_with(
-            mock_opts, ["foo.py"], self.test_dir, None
-        )
-
-    @mock.patch("cl_format._IsRuffBatchSupported", return_value=True)
     @mock.patch("subprocess2.communicate")
-    def test_ruff_batch_success(self, mock_communicate, mock_supported):
+    def test_ruff_batch_success(self, mock_communicate):
         mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
         mock_communicate.return_value = ((b"", b""), 0)
 
-        with mock.patch("os.path.exists", return_value=True):
-            code = cl_format._RunPythonFormat(
-                mock_opts, ["foo.py"], self.test_dir, None
-            )
+        code = cl_format._RunPythonFormat(
+            mock_opts, ["foo.py"], self.test_dir, None
+        )
 
         self.assertEqual(0, code)
         expected_config = {
@@ -1637,6 +1518,7 @@ class TestRuffBatchIntegration(unittest.TestCase):
             "diff": False,
             "dry_run": False,
             "full": True,
+            "force_python": True,
             "files": [{"path": "foo.py"}],
         }
         self.assertEqual(1, mock_communicate.call_count)

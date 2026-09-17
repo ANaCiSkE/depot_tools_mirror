@@ -158,6 +158,10 @@ class TestShouldUseRuffRouting(unittest.TestCase):
         self.assertFalse(should_use_ruff("subrepo/foo.py", root_dir=sub_dir))
         self.assertFalse(has_yapf_config("subrepo/foo.py", root_dir=sub_dir))
 
+    @unittest.skipIf(
+        sys.platform.startswith("win"),
+        "Symlinks are not supported on Windows",
+    )
     def test_root_dir_boundary_stops_traversal_with_symlinks(self):
         self.write_file("ruff.toml", "")
         self.write_file(".style.yapf", "")
@@ -1309,7 +1313,189 @@ class TestMainTargetDetection(unittest.TestCase):
         mock_call.assert_called_once()
         cmd = mock_call.call_args[0][0]
         self.assertTrue(cmd[1].endswith("yapf"), cmd)
-        self.assertEqual(cmd[2:], ["--line", "1-2"])
+        style_file = os.path.join(self.test_dir, "sub", ".style.yapf")
+        self.assertEqual(cmd[2:], ["--line", "1-2", "--style", style_file])
+
+
+class TestYapfIgnore(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(prefix="ruff_yapfignore_test_")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def _make_yapfignore(self, contents):
+        with open(
+            os.path.join(self.test_dir, ".yapfignore"), "w", encoding="utf-8"
+        ) as f:
+            f.write("\n".join(contents))
+
+    def _check_yapf_filtering(self, files, expected):
+        patterns = depot_tools_ruff.get_yapfignore_patterns(self.test_dir)
+        self.assertEqual(
+            expected,
+            depot_tools_ruff.filter_yapf_ignored_files(
+                files, patterns, self.test_dir
+            ),
+        )
+
+    def test_yapfignore_explicit(self):
+        self._make_yapfignore(["foo/bar.py", "foo/bar/baz.py"])
+        files = [
+            "bar.py",
+            "foo/bar.py",
+            "foo/baz.py",
+            "foo/bar/baz.py",
+            "foo/bar/foobar.py",
+        ]
+        expected = [
+            "bar.py",
+            "foo/baz.py",
+            "foo/bar/foobar.py",
+        ]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapfignore_single_wildcards(self):
+        self._make_yapfignore(["*bar.py", "foo*", "baz*.py"])
+        files = [
+            "bar.py",
+            "bar.txt",
+            "foobar.py",
+            "foobar.txt",
+            "bazbar.py",
+            "bazbar.txt",
+            "foo/baz.txt",
+            "bar/bar.py",
+            "baz/foo.py",
+            "baz/foo.txt",
+        ]
+        expected = [
+            "bar.txt",
+            "bazbar.txt",
+            "baz/foo.txt",
+        ]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapfignore_multiple_wildcards(self):
+        self._make_yapfignore(["*bar*", "*foo*baz.txt"])
+        files = [
+            "bar.py",
+            "bar.txt",
+            "abar.py",
+            "foobaz.txt",
+            "foobaz.py",
+            "afoobaz.txt",
+        ]
+        expected = [
+            "foobaz.py",
+        ]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapfignore_comments(self):
+        self._make_yapfignore(["test.py", "#test2.py"])
+        files = ["test.py", "test2.py"]
+        expected = ["test2.py"]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapf_handle_utf8(self):
+        self._make_yapfignore(["test.py", "test_🌐.py"])
+        files = ["test.py", "test_🌐.py", "test2.py"]
+        expected = ["test2.py"]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapfignore_blank_lines(self):
+        self._make_yapfignore(["test.py", "", "", "test2.py"])
+        files = ["test.py", "test2.py", "test3.py"]
+        expected = ["test3.py"]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapfignore_whitespace(self):
+        self._make_yapfignore([" test.py "])
+        files = ["test.py", "test2.py"]
+        expected = ["test2.py"]
+        self._check_yapf_filtering(files, expected)
+
+    def test_yapfignore_no_files(self):
+        self._make_yapfignore(["test.py"])
+        self._check_yapf_filtering([], [])
+
+    def test_yapfignore_missing_yapfignore(self):
+        files = ["test.py"]
+        expected = ["test.py"]
+        self._check_yapf_filtering(files, expected)
+
+    @patch("depot_tools_ruff_chromium.format_yapf_batch")
+    def test_run_batch_filters_yapfignored_files(self, mock_format_yapf):
+        self._make_yapfignore(["third_party/*"])
+        with open(
+            os.path.join(self.test_dir, ".style.yapf"), "w", encoding="utf-8"
+        ) as f:
+            f.write("[style]\nbased_on_style = pep8\n")
+        mock_format_yapf.return_value = 0
+
+        config = {
+            "root": self.test_dir,
+            "files": [
+                {"path": "third_party/foo.py"},
+                {"path": "allowed/bar.py"},
+            ],
+        }
+        with patch("sys.stdin", io.StringIO(json.dumps(config))):
+            ret = depot_tools_ruff.run_batch()
+
+        self.assertEqual(ret, 0)
+        mock_format_yapf.assert_called_once()
+        files_arg = mock_format_yapf.call_args[0][0]
+        self.assertEqual(len(files_arg), 1)
+        self.assertTrue(files_arg[0][0].endswith("allowed/bar.py"))
+
+    @patch("subprocess.call")
+    def test_main_stdin_yapfignored_echoes_stdin_and_skips_yapf(
+        self, mock_call
+    ):
+        depot_tools_ruff._dir_config_cache.clear()
+        self._make_yapfignore(["third_party/*"])
+        with open(
+            os.path.join(self.test_dir, ".style.yapf"), "w", encoding="utf-8"
+        ) as f:
+            f.write("[style]\nbased_on_style = pep8\n")
+
+        mock_stdin = Mock()
+        mock_stdin.buffer = io.BytesIO(b"x=1+2\n")
+        mock_stdout = Mock()
+        mock_stdout.buffer = io.BytesIO()
+
+        target = os.path.join(self.test_dir, "third_party", "ignored.py")
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "ruff_chromium",
+                    f"--root={self.test_dir}",
+                    "format",
+                    f"--stdin-filename={target}",
+                    "-",
+                ],
+            ),
+            patch("sys.stdin", mock_stdin),
+            patch("sys.stdout", mock_stdout),
+        ):
+            ret = depot_tools_ruff.main()
+
+        self.assertEqual(ret, 0)
+        mock_call.assert_not_called()
+        self.assertEqual(mock_stdout.buffer.getvalue(), b"x=1+2\n")
+
+    def test_translate_args_translates_check_to_quiet(self):
+        # Disk file with --check -> -q (and must NOT append -i)
+        res = depot_tools_ruff.translate_args(["format", "--check", "foo.py"])
+        self.assertEqual(res, ["-q", "foo.py"])
+
+        # Stdin with --check -> -q
+        res_stdin = depot_tools_ruff.translate_args(
+            ["format", "--check", "--stdin-filename=foo.py", "-"]
+        )
+        self.assertEqual(res_stdin, ["-q"])
 
 
 if __name__ == "__main__":

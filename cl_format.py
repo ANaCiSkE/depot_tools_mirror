@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
-import fnmatch
 import io
 import json
 import multiprocessing
@@ -38,7 +37,6 @@ import utils
 
 # Constants
 DEPOT_TOOLS = os.path.dirname(os.path.abspath(__file__))
-YAPF_CONFIG_FILENAME = ".style.yapf"
 
 
 def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
@@ -106,41 +104,6 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
     return line_diffs
 
 
-def _FindYapfConfigFile(
-    fpath: str,
-    yapf_config_cache: dict[str, Optional[str]],
-    top_dir: Optional[str] = None,
-) -> Optional[str]:
-    """Checks if a yapf file is in any parent directory of fpath until top_dir.
-
-    Recursively checks parent directories to find yapf file and if no yapf file
-    is found returns None. Uses yapf_config_cache as a cache for previously found
-    configs.
-    """
-    fpath = os.path.abspath(fpath)
-    # Return result if we've already computed it.
-    if fpath in yapf_config_cache:
-        return yapf_config_cache[fpath]
-
-    parent_dir = os.path.dirname(fpath)
-    if os.path.isfile(fpath):
-        ret = _FindYapfConfigFile(parent_dir, yapf_config_cache, top_dir)
-    else:
-        # Otherwise fpath is a directory
-        yapf_file = os.path.join(fpath, YAPF_CONFIG_FILENAME)
-        if os.path.isfile(yapf_file):
-            ret = yapf_file
-        elif fpath in (top_dir, parent_dir):
-            # If we're at the top level directory, or if we're at root
-            # there is no provided style.
-            ret = None
-        else:
-            # Otherwise recurse on the current directory.
-            ret = _FindYapfConfigFile(parent_dir, yapf_config_cache, top_dir)
-    yapf_config_cache[fpath] = ret
-    return ret
-
-
 def _FindMarkdownConfigFile(
     fpath: str,
     markdown_config_cache: dict[str, Optional[str]],
@@ -175,53 +138,6 @@ def _FindLitTemplateFormatterConfigFile(
             fpath, ".style.lit_template_formatter", top_dir
         )
     return config_cache[fpath]
-
-
-def _GetYapfIgnorePatterns(top_dir):
-    """Returns all patterns in the .yapfignore file.
-
-    yapf is supposed to handle the ignoring of files listed in .yapfignore itself,
-    but this functionality appears to break when explicitly passing files to
-    yapf for formatting. According to
-    https://github.com/google/yapf/blob/HEAD/README.rst#excluding-files-from-formatting-yapfignore,
-    the .yapfignore file should be in the directory that yapf is invoked from,
-    which we assume to be the top level directory in this case.
-
-    Args:
-        top_dir: The top level directory for the repository being formatted.
-
-    Returns:
-        A set of all fnmatch patterns to be ignored.
-    """
-    yapfignore_file = os.path.join(top_dir, ".yapfignore")
-    ignore_patterns = set()
-    if not os.path.exists(yapfignore_file):
-        return ignore_patterns
-
-    for line in gclient_utils.FileRead(yapfignore_file).split("\n"):
-        stripped_line = line.strip()
-        # Comments and blank lines should be ignored.
-        if stripped_line.startswith("#") or stripped_line == "":
-            continue
-        ignore_patterns.add(stripped_line)
-    return ignore_patterns
-
-
-def _FilterYapfIgnoredFiles(filepaths, patterns):
-    """Filters out any filepaths that match any of the given patterns.
-
-    Args:
-        filepaths: An iterable of strings containing filepaths to filter.
-        patterns: An iterable of strings containing fnmatch patterns to filter on.
-
-    Returns:
-        A list of strings containing all the elements of |filepaths| that did not
-        match any of the patterns in |patterns|.
-    """
-    # Not inlined so that tests can use the same implementation.
-    return [
-        f for f in filepaths if not any(fnmatch.fnmatch(f, p) for p in patterns)
-    ]
 
 
 def _RunClangFormatDiff(opts, paths, top_dir, diffs):
@@ -547,30 +463,9 @@ def _RunSwiftFormat(opts, paths, top_dir, diffs):
     return 0
 
 
-_ruff_batch_supported_cache: Optional[bool] = None
-
-
 def _GetRuffChromiumPath() -> str:
     """Returns the absolute path to the ruff_chromium wrapper script."""
     return os.path.join(DEPOT_TOOLS, "ruff_chromium")
-
-
-def _IsRuffBatchSupported(ruff_chromium_path: str) -> bool:
-    """Checks if the ruff_chromium wrapper supports batch formatting.
-
-    It does this by checking if the wrapper defines 'def run_batch('.
-    """
-    global _ruff_batch_supported_cache
-    if _ruff_batch_supported_cache is not None:
-        return _ruff_batch_supported_cache
-
-    try:
-        with open(ruff_chromium_path, "r", encoding="utf-8") as f:
-            _ruff_batch_supported_cache = "def run_batch(" in f.read()
-    except (OSError, UnicodeDecodeError):
-        _ruff_batch_supported_cache = False
-
-    return _ruff_batch_supported_cache
 
 
 def _RunPythonFormat(
@@ -579,25 +474,15 @@ def _RunPythonFormat(
     top_dir: str,
     diffs: Optional[Mapping[str, str]],
 ) -> int:
-    """Formats python files using ruff_chromium in batch mode if supported.
-
-    If ruff_chromium is not present or batch mode is not supported, it falls
-    back to YAPF formatting.
-    """
+    """Formats python files using ruff_chromium in batch mode."""
     ruff_chromium = _GetRuffChromiumPath()
-
-    use_ruff_batch = False
-    if os.path.exists(ruff_chromium):
-        use_ruff_batch = _IsRuffBatchSupported(ruff_chromium)
-
-    if not use_ruff_batch:
-        return _RunYapf(opts, paths, top_dir, diffs)
 
     config = {
         "root": top_dir,
         "diff": bool(opts.diff),
         "dry_run": bool(opts.dry_run),
         "full": bool(opts.full),
+        "force_python": bool(opts.python),
         "files": [],
     }
 
@@ -648,72 +533,6 @@ def _RunPythonFormat(
     except Exception as e:
         sys.stderr.write(f"Failed to run ruff_chromium --batch: {e}\n")
         return 1
-
-
-def _RunYapf(opts, paths, top_dir, diffs):
-    yapf_tool = os.path.join(DEPOT_TOOLS, "yapf")
-
-    # Used for caching.
-    yapf_configs = {}
-    for p in paths:
-        # Find the yapf style config for the current file, defaults to depot
-        # tools default.
-        _FindYapfConfigFile(p, yapf_configs, top_dir)
-
-    # Turn on python formatting by default if a yapf config is specified.
-    # This breaks in the case of this repo though since the specified
-    # style file is also the global default.
-    if opts.python is None:
-        paths = [
-            p
-            for p in paths
-            if _FindYapfConfigFile(p, yapf_configs, top_dir) is not None
-        ]
-
-    # Note: yapf still seems to fix indentation of the entire file
-    # even if line ranges are specified.
-    # See https://github.com/google/yapf/issues/499
-    if paths and diffs:
-        line_diffs = _ComputeFormatDiffLineRanges(paths, diffs)
-
-    yapfignore_patterns = _GetYapfIgnorePatterns(top_dir)
-    paths = _FilterYapfIgnoredFiles(paths, yapfignore_patterns)
-
-    return_value = 0
-    for path in paths:
-        yapf_style = _FindYapfConfigFile(path, yapf_configs, top_dir)
-        # Default to pep8 if not .style.yapf is found.
-        if not yapf_style:
-            yapf_style = "pep8"
-
-        cmd = ["vpython3", yapf_tool, "--style", yapf_style, path]
-
-        if not opts.full:
-            ranges = line_diffs.get(path)
-            if not ranges:
-                continue
-            # Only run yapf over changed line ranges.
-            for diff_start, diff_end in ranges:
-                cmd += ["-l", "{}-{}".format(diff_start, diff_end)]
-
-        if opts.diff or opts.dry_run:
-            cmd += ["--diff"]
-            # Will return non-zero exit code if non-empty diff.
-            stdout = RunCommand(
-                cmd,
-                error_ok=True,
-                stderr=subprocess2.PIPE,
-                cwd=top_dir,
-                shell=sys.platform.startswith("win32"),
-            )
-            if opts.diff:
-                sys.stdout.write(stdout)
-            if opts.dry_run and len(stdout) > 0:
-                return_value = 2
-        else:
-            cmd += ["-i"]
-            RunCommand(cmd, cwd=top_dir, shell=sys.platform.startswith("win32"))
-    return return_value
 
 
 def _RunMarkdownFormat(

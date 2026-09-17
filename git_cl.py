@@ -61,16 +61,11 @@ import git_auth
 from cl_format import (
     CMDformat,  # noqa: F401
     FormatterFunction,  # noqa: F401
-    YAPF_CONFIG_FILENAME,  # noqa: F401
     _ComputeFormatDiffLineRanges,  # noqa: F401
-    _FilterYapfIgnoredFiles,  # noqa: F401
     _FindFilesToFormat,  # noqa: F401
     _FindLitTemplateFormatterConfigFile,  # noqa: F401
     _FindMarkdownConfigFile,  # noqa: F401
-    _FindYapfConfigFile,  # noqa: F401
     _GetRuffChromiumPath,  # noqa: F401
-    _GetYapfIgnorePatterns,  # noqa: F401
-    _IsRuffBatchSupported,  # noqa: F401
     _RunClangFormatDiff,  # noqa: F401
     _RunGnFormat,  # noqa: F401
     _RunGoogleJavaFormat,  # noqa: F401
@@ -83,7 +78,6 @@ from cl_format import (
     _RunPythonFormat,  # noqa: F401
     _RunRustFmt,  # noqa: F401
     _RunSwiftFormat,  # noqa: F401
-    _RunYapf,  # noqa: F401
     _SplitDiffsByFile,  # noqa: F401
 )
 
