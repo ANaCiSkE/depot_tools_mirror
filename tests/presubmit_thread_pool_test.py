@@ -81,15 +81,15 @@ class ThreadPoolTest(unittest.TestCase):
 
         subprocess2.Popen.side_effect = FakePopen
 
-        def parse_multiple(output):
+        def parse_multiple(returncode, output):
             return [
                 presubmit_results._PresubmitError("error 1"),
                 presubmit_results._PresubmitError("error 2"),
                 presubmit_results._PresubmitPromptWarning("warning 1"),
             ]
 
-        def parse_empty(output):
-            return []
+        def parse_empty(returncode, output):
+            return None
 
         mock_tests = [
             presubmit_thread_pool.CommandData(
@@ -574,42 +574,109 @@ class ThreadPoolTest(unittest.TestCase):
         self.assertFalse(handled)
         self.assertIsNone(res)
 
-    def testInvokeOutputParser_Legacy1Arg(self):
-        def legacy_parser(output):
-            if "error" in output:
-                return ["error_found"]
-            return []
-
-        # Error found -> handled
-        handled, res = presubmit_thread_pool.InvokeOutputParser(
-            legacy_parser, 1, "error here"
-        )
-        self.assertTrue(handled)
-        self.assertEqual(["error_found"], res)
-
-        # No error found -> not handled (empty list), falls through
-        handled, res = presubmit_thread_pool.InvokeOutputParser(
-            legacy_parser, 1, "clean output"
-        )
-        self.assertFalse(handled)
-        self.assertEqual([], res)
-
-    def testInvokeOutputParser_LegacyWithStdoutFirstParam(self):
-        # A parser defined as def parser(stdout, context=None) should NOT be
-        # misidentified as code-aware.
+    def testInvokeOutputParser_StderrAware(self):
         called_with = []
 
-        def parser_with_context(stdout, context=None):
-            called_with.append((stdout, context))
-            return ["handled"]
+        def stderr_parser(code, stdout, stderr):
+            called_with.append((code, stdout, stderr))
+            if code == 2:
+                return ["custom_warning"]
+            if code == 1:
+                return []
+            return None
 
+        # code 2 -> handled, returns list
         handled, res = presubmit_thread_pool.InvokeOutputParser(
-            parser_with_context, 1, "stdout_content"
+            stderr_parser, 2, "out", "err"
         )
         self.assertTrue(handled)
-        self.assertEqual(["handled"], res)
-        # Verify it was called with stdout, NOT with returncode as first arg!
-        self.assertEqual([("stdout_content", None)], called_with)
+        self.assertEqual(["custom_warning"], res)
+        self.assertEqual([(2, "out", "err")], called_with)
+
+        # code 1 -> handled, returns [] (suppressed)
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            stderr_parser, 1, "out2", "err2"
+        )
+        self.assertTrue(handled)
+        self.assertEqual([], res)
+
+        # code 0 -> not handled (None), falls through to standard exit code
+        handled, res = presubmit_thread_pool.InvokeOutputParser(
+            stderr_parser, 0, "out3", "err3"
+        )
+        self.assertFalse(handled)
+        self.assertIsNone(res)
+
+    def testOutputParser_StderrAwareExecution(self):
+        captured_kwargs = []
+
+        def FakePopen(cmd, **kwargs):
+            captured_kwargs.append((cmd[0], kwargs))
+            if cmd[0] == "fail_unhandled":
+                return mock.Mock(returncode=1)
+            return mock.Mock(returncode=2)
+
+        subprocess2.Popen.side_effect = FakePopen
+        presubmit_thread_pool.sigint_handler.wait.return_value = (
+            b"stdout_msg",
+            b"stderr_msg",
+        )
+
+        received_args = []
+
+        def parse_with_stderr(code, stdout, stderr):
+            received_args.append((code, stdout, stderr))
+            if code == 2:
+                return [
+                    presubmit_results._PresubmitPromptWarning(
+                        f"out={stdout} err={stderr}"
+                    )
+                ]
+            return None
+
+        mock_tests = [
+            presubmit_thread_pool.CommandData(
+                name="handled_cmd",
+                cmd=["handled_cmd"],
+                kwargs={},
+                output_parser=parse_with_stderr,
+            ),
+            presubmit_thread_pool.CommandData(
+                name="fail_unhandled",
+                cmd=["fail_unhandled"],
+                kwargs={},
+                output_parser=parse_with_stderr,
+            ),
+        ]
+
+        self.assertEqual(subprocess2.PIPE, mock_tests[0].kwargs.get("stderr"))
+
+        t = presubmit_thread_pool.ThreadPool(1)
+        t.AddTests(mock_tests)
+        messages = t.RunAsync()
+        message_strs = [r._message for r in messages]
+
+        self.assertEqual(2, len(messages))
+        self.assertTrue(
+            any("out=stdout_msg err=stderr_msg" in m for m in message_strs)
+        )
+        self.assertTrue(
+            any(
+                "fail_unhandled exit code 1" in m
+                and "stdout_msg\nstderr_msg" in m
+                for m in message_strs
+            )
+        )
+        self.assertEqual(
+            [
+                (2, "stdout_msg", "stderr_msg"),
+                (1, "stdout_msg", "stderr_msg"),
+            ],
+            received_args,
+        )
+        self.assertEqual(2, len(captured_kwargs))
+        self.assertEqual(subprocess2.PIPE, captured_kwargs[0][1].get("stderr"))
+        self.assertEqual(subprocess2.PIPE, captured_kwargs[1][1].get("stderr"))
 
 
 if __name__ == "__main__":

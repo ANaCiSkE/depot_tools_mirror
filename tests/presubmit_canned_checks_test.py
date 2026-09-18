@@ -2033,22 +2033,30 @@ class CheckPatchFormattedTest(unittest.TestCase):
             # Exit code 1 with bypass_warnings=True -> suppressed
             self.assertEqual([], parser(1, "Tool error"))
 
-    def testMockInputApiRunTestsLegacyParserExitCode(self):
-        # Legacy 1-arg parser returning [] on failure falls through to error
-        def legacy_parser(output):
-            return []
+    def testMockInputApiRunTestsOutputParser(self):
+        # 2-arg parser returning None on failure falls through to error
+        def unhandled_parser(code, output):
+            return None
 
         def returncode_aware_parser(code, output):
             if code == 1:
                 return []  # Suppress
             return []
 
+        received_stderr = []
+
+        def stderr_aware_parser(code, stdout, stderr):
+            received_stderr.append((code, stdout, stderr))
+            if code == 1:
+                return [self.output_api.PresubmitPromptWarning(stderr)]
+            return None
+
         from testing_support.presubmit_canned_checks_test_mocks import (
             MockCommand,
         )
 
         cmd1 = MockCommand(
-            "legacy_fail", ["fake_cmd"], {}, output_parser=legacy_parser
+            "unhandled_fail", ["fake_cmd"], {}, output_parser=unhandled_parser
         )
         cmd2 = MockCommand(
             "code_aware_suppressed",
@@ -2056,21 +2064,32 @@ class CheckPatchFormattedTest(unittest.TestCase):
             {},
             output_parser=returncode_aware_parser,
         )
+        cmd3 = MockCommand(
+            "stderr_aware",
+            ["fake_cmd"],
+            {},
+            output_parser=stderr_aware_parser,
+        )
 
         with mock.patch.object(
             self.input_api.subprocess, "Popen"
         ) as mock_popen:
             mock_proc = mock.Mock()
             mock_proc.returncode = 1
-            mock_proc.communicate.return_value = (b"output", b"")
+            mock_proc.communicate.return_value = (b"output", b"stderr_output")
             mock_popen.return_value = mock_proc
 
             results1 = self.input_api.RunTests([cmd1])
             self.assertEqual(1, len(results1))
-            self.assertIn("legacy_fail", results1[0].message)
+            self.assertIn("unhandled_fail", results1[0].message)
 
             results2 = self.input_api.RunTests([cmd2])
             self.assertEqual(0, len(results2))
+
+            results3 = self.input_api.RunTests([cmd3])
+            self.assertEqual(1, len(results3))
+            self.assertEqual("stderr_output", results3[0].message)
+            self.assertEqual([(1, "output", "stderr_output")], received_stderr)
 
     def testMockInputApiRunTestsStdinHandling(self):
         from testing_support.presubmit_canned_checks_test_mocks import (

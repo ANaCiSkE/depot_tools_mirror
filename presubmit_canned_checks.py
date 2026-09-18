@@ -4030,7 +4030,9 @@ def CheckAyeAye(input_api, output_api):
     if not _os.path.exists(alint_path):
         return []
 
-    def parse_output(output):
+    def parse_output(returncode, output):
+        if returncode != 0:
+            return None
         json_dict = input_api.json.loads(output)
         results = [output_api.PresubmitError(x) for x in json_dict["errors"]]
         results += [

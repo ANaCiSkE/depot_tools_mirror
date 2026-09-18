@@ -299,17 +299,26 @@ class MockInputApi(object):
                 stdin_data = kwargs.get("stdin", None)
                 if isinstance(stdin_data, bytes):
                     kwargs["stdin"] = self.subprocess.PIPE
+                if parser and presubmit_thread_pool.AcceptsStderr(parser):
+                    kwargs["stderr"] = self.subprocess.PIPE
                 p = self.subprocess.Popen(test.cmd, **kwargs)
-                stdout, _ = p.communicate(
+                stdout, stderr = p.communicate(
                     input=stdin_data if isinstance(stdin_data, bytes) else None
                 )
                 stdout_str = (
-                    stdout.decode() if isinstance(stdout, bytes) else stdout
+                    stdout.decode()
+                    if isinstance(stdout, bytes)
+                    else (stdout or "")
+                )
+                stderr_str = (
+                    stderr.decode()
+                    if isinstance(stderr, bytes)
+                    else (stderr or "")
                 )
                 if parser:
                     handled, parse_results = (
                         presubmit_thread_pool.InvokeOutputParser(
-                            parser, p.returncode, stdout_str
+                            parser, p.returncode, stdout_str, stderr_str
                         )
                     )
                     if handled:
@@ -321,7 +330,10 @@ class MockInputApi(object):
 
                 if p.returncode:
                     msg_type = test.message or MockOutputApi.PresubmitError
-                    results.append(msg_type(f"{test.name}\n{stdout_str}"))
+                    out_msg = presubmit_thread_pool.CombineOutput(
+                        stdout_str, stderr_str
+                    )
+                    results.append(msg_type(f"{test.name}\n{out_msg}"))
             except Exception as e:
                 msg_type = test.message or MockOutputApi.PresubmitError
                 results.append(

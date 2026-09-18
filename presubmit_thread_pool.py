@@ -21,51 +21,34 @@ from presubmit_results import (
 )
 
 
-def _AcceptsReturncode(parser) -> bool:
-    """Returns True if parser is a 2-arg returncode-aware parser (code, output)."""
-    try:
-        sig = inspect.signature(parser)
-        pos_params = [
-            p
-            for p in sig.parameters.values()
-            if p.kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-        ]
-        if (
-            len(pos_params) >= 2
-            and pos_params[1].default is inspect.Parameter.empty
-        ):
-            # Guard against def my_parser(stdout, context): where first param is stdout/output
-            if pos_params[0].name.lower() in (
-                "stdout",
-                "output",
-                "out",
-                "text",
-                "lines",
-            ):
-                return False
-            return True
-    except (ValueError, TypeError):
-        pass
-    return False
+def AcceptsStderr(parser) -> bool:
+    """Returns True if parser is a 3-arg parser (returncode, stdout, stderr)."""
+    if parser is None:
+        return False
+    return len(inspect.signature(parser).parameters) == 3
 
 
-def InvokeOutputParser(parser, returncode: int, stdout: str):
-    """Invokes parser, supporting legacy 1-arg and returncode-aware 2-arg parsers.
+def CombineOutput(stdout: str, stderr: str) -> str:
+    """Combines stdout and stderr, inserting a newline only if needed."""
+    if stdout and stderr and not stdout.endswith("\n"):
+        return f"{stdout}\n{stderr}"
+    return f"{stdout}{stderr}"
+
+
+def InvokeOutputParser(parser, returncode: int, stdout: str, stderr: str = ""):
+    """Invokes parser, supporting 2-arg and 3-arg parsers.
 
     Returns:
         tuple (handled: bool, results: Any)
+        - For 3-arg parsers (code, stdout, stderr): handled is True if results is not None.
         - For 2-arg parsers (code, output): handled is True if results is not None.
-        - For 1-arg parsers (output): handled is True if results is truthy.
     """
-    if _AcceptsReturncode(parser):
-        results = parser(returncode, stdout)
-        return (results is not None, results)
-    results = parser(stdout)
-    return (bool(results), results)
+    if AcceptsStderr(parser):
+        results = parser(returncode, stdout, stderr)
+    else:
+        output = CombineOutput(stdout, stderr)
+        results = parser(returncode, output)
+    return (results is not None, results)
 
 
 def time_time():
@@ -95,7 +78,10 @@ class CommandData:
         self.stdin = kwargs.get("stdin", None)
         self.kwargs = kwargs.copy()
         self.kwargs["stdout"] = subprocess.PIPE
-        self.kwargs["stderr"] = subprocess.STDOUT
+        if AcceptsStderr(output_parser):
+            self.kwargs["stderr"] = subprocess.PIPE
+        else:
+            self.kwargs["stderr"] = subprocess.STDOUT
         self.kwargs["stdin"] = subprocess.PIPE
         self.message = message
         self.output_parser = output_parser
@@ -309,7 +295,7 @@ class ThreadPool:
 
     def _RunWithTimeout(self, cmd, stdin, kwargs):
         if self._cancel_event.is_set():
-            return -1, "Canceled before execution"
+            return -1, "Canceled before execution", ""
 
         p = subprocess.Popen(cmd, **kwargs)
         with self._active_processes_lock:
@@ -323,13 +309,14 @@ class ThreadPool:
 
         try:
             with Timer(self.timeout, p.terminate) as timer:
-                stdout, _ = sigint_handler.wait(p, stdin)
+                stdout, stderr = sigint_handler.wait(p, stdin)
                 stdout = stdout.decode("utf-8", "ignore")
+                stderr = stderr.decode("utf-8", "ignore") if stderr else ""
                 if timer.completed:
                     stdout = (
                         f"Process timed out after {self.timeout}s\n{stdout}"
                     )
-                return p.returncode, stdout
+                return p.returncode, stdout, stderr
         finally:
             with self._active_processes_lock:
                 self._active_processes.discard(p)
@@ -347,6 +334,11 @@ class ThreadPool:
         This function converts invocation of .py files and invocations of 'python'
         to vpython invocations.
         """
+        if getattr(test, "kwargs", None) is None:
+            test.kwargs = {}
+        if AcceptsStderr(test.output_parser):
+            test.kwargs["stderr"] = subprocess.PIPE
+
         cmd = self._GetCommand(test)
         start = time_time()
 
@@ -360,7 +352,7 @@ class ThreadPool:
             )
 
         try:
-            returncode, stdout = self._RunWithTimeout(
+            returncode, stdout, stderr = self._RunWithTimeout(
                 cmd, test.stdin, test.kwargs
             )
         except Exception:
@@ -369,18 +361,20 @@ class ThreadPool:
         if test.output_parser:
             try:
                 handled, results = InvokeOutputParser(
-                    test.output_parser, returncode, stdout
+                    test.output_parser, returncode, stdout, stderr
                 )
                 if handled:
                     return results
             except Exception:
+                output_for_error = CombineOutput(stdout, stderr)
                 return error_results(
-                    f"Exception while parsing:\n{stdout}",
+                    f"Exception while parsing:\n{output_for_error}",
                     traceback.format_exc(),
                 )
 
         if returncode != 0:
-            return error_results(f"exit code {returncode}", stdout)
+            output_for_error = CombineOutput(stdout, stderr)
+            return error_results(f"exit code {returncode}", output_for_error)
 
         if test.info:
             duration = time_time() - start
