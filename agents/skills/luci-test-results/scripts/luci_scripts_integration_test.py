@@ -104,6 +104,26 @@ class TestLuciScriptsIntegration(unittest.TestCase):
             cls.failure_build_id = None
             cls.failure_build_num = None
 
+        # Dynamically discover a recent try build with a Gerrit change
+        cls.sample_cl = SAMPLE_CL
+        res_try = luci_client.run_prpc(
+            "cr-buildbucket.appspot.com",
+            "buildbucket.v2.Builds.SearchBuilds",
+            {
+                "predicate": {
+                    "builder": {"project": "chromium", "bucket": "try"},
+                },
+                "pageSize": 10,
+                "mask": {"fields": "id,input.gerritChanges"},
+            },
+        )
+        if res_try and res_try.get("builds"):
+            for b in res_try["builds"]:
+                changes = b.get("input", {}).get("gerritChanges", [])
+                if changes:
+                    cls.sample_cl = str(changes[0].get("change"))
+                    break
+
         print(
             f"[DISCOVERY] Target Test Queries: '{SAMPLE_JAVA_TEST_QUERY}' (Java),"
             f" '{SAMPLE_CPP_TEST_QUERY}' (C++ GTest)"
@@ -137,18 +157,20 @@ class TestLuciScriptsIntegration(unittest.TestCase):
 
     def test_find_cl_builds(self):
         # Test default behavior: queries Gerrit REST API for latest patchset
-        builds_latest = find_cl_builds.find_cl_builds(SAMPLE_CL)
+        builds_latest = find_cl_builds.find_cl_builds(self.sample_cl)
         self.assertIsInstance(builds_latest, list)
         self.assertTrue(
             all("builder" in b and "id" in b for b in builds_latest)
         )
         print(
             f"[PASS] find_cl_builds (latest patchset via Gerrit): Found "
-            f"{len(builds_latest)} non-success build(s) for CL {SAMPLE_CL}"
+            f"{len(builds_latest)} non-success build(s) for CL {self.sample_cl}"
         )
 
         # Test show_all=True: returns all builds including SUCCESS/STARTED
-        builds_all = find_cl_builds.find_cl_builds(SAMPLE_CL, show_all=True)
+        builds_all = find_cl_builds.find_cl_builds(
+            self.sample_cl, show_all=True
+        )
         self.assertGreater(len(builds_all), 0)
         self.assertGreaterEqual(len(builds_all), len(builds_latest))
         print(
@@ -185,10 +207,28 @@ class TestLuciScriptsIntegration(unittest.TestCase):
             )
             self.assertGreaterEqual(len(verdicts), 1)
             self.assertEqual(verdicts[0].get("testId"), test_id)
+            summary = test_history.format_summary(
+                verdicts, default_builder=SAMPLE_BUILDER
+            )
+            self.assertIn(f"Builder: {SAMPLE_BUILDER}", summary)
             print(
                 f"[PASS] test_history ({label}): Queried {len(verdicts)} verdict(s)"
-                f" for {test_id.split('!')[-1]} on {SAMPLE_BUILDER}"
+                f" for {test_id.split('!')[-1]} on {SAMPLE_BUILDER}\n{summary}"
             )
+
+        # Verify multi-builder QueryVariants mapping & QueryTests substring search
+        variants = test_history.query_variant_builders(
+            "chromium", SAMPLE_JAVA_TEST_ID
+        )
+        self.assertGreater(len(variants), 0)
+        candidates = test_history.query_tests(
+            "chromium", SAMPLE_JAVA_TEST_QUERY
+        )
+        self.assertIn(SAMPLE_JAVA_TEST_ID, candidates)
+        print(
+            f"[PASS] test_history (variants & fuzzy search): Resolved {len(variants)} "
+            f"variant builders and {len(candidates)} candidate test IDs"
+        )
 
     def test_list_failures_and_fetch_log(self):
         if not self.failure_build_id:

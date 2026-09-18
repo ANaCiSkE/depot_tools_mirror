@@ -409,6 +409,248 @@ class TestLuciScripts(unittest.TestCase):
             },
         )
 
+    @mock.patch("test_history.run_prpc")
+    def test_test_history_pagination(self, mock_prpc):
+        mock_prpc.side_effect = [
+            {
+                "verdicts": [
+                    {"testId": SAMPLE_TEST_ID, "status": "UNEXPECTED"}
+                ],
+                "nextPageToken": "page2",
+            },
+            {
+                "verdicts": [{"testId": SAMPLE_TEST_ID, "status": "EXPECTED"}],
+            },
+        ]
+        verdicts = test_history.test_history(
+            "chromium", SAMPLE_TEST_ID, limit=2
+        )
+        self.assertEqual(len(verdicts), 2)
+        self.assertEqual(mock_prpc.call_count, 2)
+
+    @mock.patch("test_history.run_prpc")
+    def test_query_variant_builders_and_format_summary(self, mock_prpc):
+        mock_prpc.return_value = {
+            "variants": [
+                {
+                    "variantHash": "hash1",
+                    "variant": {"def": {"bucket": "ci", "builder": "bot-fail"}},
+                },
+                {
+                    "variantHash": "hash2",
+                    "variant": {"def": {"bucket": "ci", "builder": "bot-pass"}},
+                },
+            ]
+        }
+        mapping = test_history.query_variant_builders(
+            "chromium", SAMPLE_TEST_ID
+        )
+        self.assertEqual(mapping["hash1"], "ci/bot-fail")
+
+        verdicts = [
+            {
+                "variantHash": "hash1",
+                "status": "UNEXPECTED",
+                "partitionTime": "2026-08-25T12:00:00Z",
+            },
+            {
+                "variantHash": "hash1",
+                "status": "EXPECTED",
+                "partitionTime": "2026-08-25T10:00:00Z",
+            },
+            {
+                "variantHash": "hash2",
+                "status": "EXPECTED",
+                "partitionTime": "2026-08-25T11:00:00Z",
+            },
+        ]
+        summary = test_history.format_summary(
+            verdicts, variant_builders=mapping
+        )
+        self.assertIn("Builder: ci/bot-fail | Pass: 1, Fail: 1", summary)
+        self.assertIn("Recent (newest->oldest): FP", summary)
+        self.assertIn(
+            "100% Passing Builders (1): ci/bot-pass (1 pass)", summary
+        )
+
+    @mock.patch("test_history.run_prpc")
+    def test_query_tests(self, mock_prpc):
+        mock_prpc.return_value = {"testIds": [SAMPLE_TEST_ID]}
+        candidates = test_history.query_tests("chromium", SAMPLE_TEST_QUERY)
+        self.assertEqual(candidates, [SAMPLE_TEST_ID])
+        mock_prpc.assert_called_once_with(
+            "analysis.api.luci.app",
+            "luci.analysis.v1.TestHistory.QueryTests",
+            {"project": "chromium", "testIdSubstring": SAMPLE_TEST_QUERY},
+        )
+
+    @mock.patch("test_history.run_prpc")
+    def test_fetch_multi_builder_history(self, mock_prpc):
+        def side_effect(service, method, payload):
+            if method == "luci.analysis.v1.TestHistory.QueryVariants":
+                return {
+                    "variants": [
+                        {
+                            "variantHash": "h1",
+                            "variant": {
+                                "def": {"bucket": "ci", "builder": "b1"}
+                            },
+                        },
+                        {
+                            "variantHash": "h2",
+                            "variant": {
+                                "def": {"bucket": "ci", "builder": "b2"}
+                            },
+                        },
+                    ]
+                }
+            return {
+                "verdicts": [
+                    {
+                        "testId": SAMPLE_TEST_ID,
+                        "status": "EXPECTED",
+                        "variantHash": "h1",
+                    }
+                ]
+            }
+
+        mock_prpc.side_effect = side_effect
+        verdicts, mapping = test_history.fetch_multi_builder_history(
+            "chromium", SAMPLE_TEST_ID, per_builder_limit=5
+        )
+        self.assertEqual(len(verdicts), 2)
+        self.assertEqual(mapping["h1"], "ci/b1")
+        self.assertEqual(mapping["h2"], "ci/b2")
+
+    @mock.patch("test_history.run_prpc")
+    def test_query_variant_builders_uses_variant_predicate(self, mock_prpc):
+        mock_prpc.return_value = {"variants": []}
+        pred = {"variantPredicate": {"contains": {"def": {"bucket": "ci"}}}}
+        test_history.query_variant_builders(
+            "chromium", SAMPLE_TEST_ID, predicate=pred
+        )
+        mock_prpc.assert_called_once_with(
+            "analysis.api.luci.app",
+            "luci.analysis.v1.TestHistory.QueryVariants",
+            {
+                "project": "chromium",
+                "testId": SAMPLE_TEST_ID,
+                "pageSize": 1000,
+                "variantPredicate": {"contains": {"def": {"bucket": "ci"}}},
+            },
+        )
+
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    @mock.patch("test_history.run_prpc")
+    def test_fetch_multi_builder_history_truncation_notice(
+        self, mock_prpc, mock_stderr
+    ):
+        def side_effect(service, method, payload):
+            if method == "luci.analysis.v1.TestHistory.QueryVariants":
+                return {
+                    "variants": [
+                        {
+                            "variantHash": f"h{i}",
+                            "variant": {
+                                "def": {"bucket": "ci", "builder": f"b{i}"}
+                            },
+                        }
+                        for i in range(3)
+                    ]
+                }
+            return {"verdicts": []}
+
+        mock_prpc.side_effect = side_effect
+        test_history.fetch_multi_builder_history(
+            "chromium", SAMPLE_TEST_ID, max_builders=2
+        )
+        self.assertIn(
+            "Notice: Querying 2 of 3 discovered builders",
+            mock_stderr.getvalue(),
+        )
+
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    @mock.patch("test_history.test_history")
+    @mock.patch("test_history.query_variant_builders")
+    def test_fetch_multi_builder_history_handles_worker_exception(
+        self, mock_variants, mock_history, mock_stderr
+    ):
+        mock_variants.return_value = {"h1": "ci/b1", "h2": "ci/b2"}
+
+        def history_side_effect(project, test_id, **kwargs):
+            if kwargs.get("builder") == "b1":
+                raise RuntimeError("Transient RPC failure")
+            return [
+                {
+                    "testId": SAMPLE_TEST_ID,
+                    "status": "EXPECTED",
+                    "variantHash": "h2",
+                }
+            ]
+
+        mock_history.side_effect = history_side_effect
+        verdicts, _ = test_history.fetch_multi_builder_history(
+            "chromium", SAMPLE_TEST_ID
+        )
+        self.assertEqual(len(verdicts), 1)
+        self.assertIn(
+            "Warning: Failed to fetch history", mock_stderr.getvalue()
+        )
+
+    def test_format_summary_includes_daily_skip_count(self):
+        verdicts = [
+            {
+                "variantHash": "h1",
+                "status": "SKIPPED",
+                "partitionTime": "2026-08-25T12:00:00Z",
+            }
+        ]
+        summary = test_history.format_summary(
+            verdicts, default_builder="ci/bot-skip"
+        )
+        self.assertIn("Skip=1", summary)
+
+    @mock.patch("sys.stdout", new_callable=io.StringIO)
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    @mock.patch("test_history.query_tests")
+    @mock.patch("test_history.test_history")
+    def test_main_empty_verdicts_raw_and_self_filter(
+        self, mock_history, mock_query_tests, mock_stderr, mock_stdout
+    ):
+        mock_history.return_value = []
+        # 1. --raw should print "[]" and not exit with error
+        with mock.patch(
+            "sys.argv",
+            [
+                "test_history.py",
+                "--test-id",
+                SAMPLE_TEST_ID,
+                "--builder",
+                "b1",
+                "--raw",
+            ],
+        ):
+            test_history.main()
+        self.assertEqual(mock_stdout.getvalue().strip(), "[]")
+
+        # 2. Non-raw should filter out args.test_id from suggestions
+        mock_query_tests.return_value = [SAMPLE_TEST_ID, "other_candidate_id"]
+        with mock.patch(
+            "sys.argv",
+            [
+                "test_history.py",
+                "--test-id",
+                SAMPLE_TEST_ID,
+                "--builder",
+                "b1",
+            ],
+        ):
+            with self.assertRaises(SystemExit):
+                test_history.main()
+        stderr_out = mock_stderr.getvalue()
+        self.assertIn("other_candidate_id", stderr_out)
+        self.assertNotIn(f"  {SAMPLE_TEST_ID}", stderr_out)
+
 
 if __name__ == "__main__":
     unittest.main()

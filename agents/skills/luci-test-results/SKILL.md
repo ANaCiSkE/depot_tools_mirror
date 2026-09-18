@@ -11,12 +11,12 @@ description: >
 # LUCI Triage Cheat Sheet
 
 This skill provides modular scripts for deep-diving into **Test-level**
-failures across LUCI shards and tasks.
+failures and test history across LUCI shards and tasks.
 
 > [!TIP]
 > **CLI Help & Flags**: Run any script with `-h` or `--help` (e.g.
 > `vpython3 scripts/list_failures.py -h` or
-> `vpython3 scripts/check_test.py -h`) to view all supported arguments,
+> `vpython3 scripts/test_history.py -h`) to view all supported arguments,
 > defaults, and flags without reading the script source files.
 
 ## 1. Resolve Build ID & Inspect Builds
@@ -77,12 +77,16 @@ grouped by Swarming task:
 vpython3 scripts/list_failures.py \
   --build-id <BUILD_ID> \
   [--ignore-flaky] \
-  [--include-exonerated]
+  [--include-exonerated] \
+  [--limit <LIMIT>]
 
 # Or resolve builder directly:
 vpython3 scripts/list_failures.py \
   --builder "<BUILDER>" \
-  --build-number <NUMBER>
+  --build-number <NUMBER> \
+  [--project chromium] \
+  [--bucket ci] \
+  [--limit <LIMIT>]
 ```
 
 - **Filtering:** By default, exonerated test variants (known flakes and baseline
@@ -106,10 +110,10 @@ vpython3 scripts/fetch_log.py \
   [--raw]
 ```
 
-## 5. Check Specific Test in Build
+## 5. Check Specific Test in a Single Build (`check_test.py`)
 
-Check if a specific test (or tests matching a regex) ran in a build, and see
-its status:
+Query **ResultDB** for all runs (passing and failing) matching a regex inside **1
+specific build**:
 
 ```bash
 vpython3 scripts/check_test.py \
@@ -120,29 +124,61 @@ vpython3 scripts/check_test.py \
 vpython3 scripts/check_test.py \
   --builder "<BUILDER>" \
   --build-number <NUMBER> \
+  [--project chromium] \
+  [--bucket ci] \
   --test-regex "<TEST_REGEX>"
 ```
 
-- **Efficiency:** This command uses server-side filtering via `QueryTestResults`
-  and automatically wraps your regex with `.*` for partial matching. It fetches
-  all results (expected and unexpected) for matching tests.
+- **When to use (`check_test` vs. `list_failures` / `test_history`)**:
+  - Unlike `list_failures.py` (which only returns unexpected failures), `check_test.py`
+    fetches **all** results (`expectancy: ALL`, including `PASS`). Use it to verify
+    that a test actually ran and passed in a specific build, or to discover the full
+    ResultDB `testId` string from a partial class/method regex.
+  - Unlike `test_history.py` (which looks across time/builders), `check_test.py`
+    is strictly scoped to a single build.
 
-## 6. Get Test History
+## 6. Query Test History Across Builds & Builders (`test_history.py`)
 
-Query LUCI Analysis for the historical verdicts of a specific test variant:
+Query **LUCI Analysis** for historical verdicts of **1 specific test ID** across
+time and CI/try builders:
 
 ```bash
+# Formatted per-builder summary (default):
 vpython3 scripts/test_history.py \
-  --project <PROJECT> \
-  --test-id "<TEST_ID>" \
-  [--limit <LIMIT>] \
+  --test-id '<TEST_ID>' \
+  [--project <chromium|chrome>] \
   [--builder <BUILDER>] \
   [--bucket <BUCKET>] \
   [--device-os <DEVICE_OS>] \
   [--device-type <DEVICE_TYPE>] \
   [--os <OS>] \
-  [--test-suite <TEST_SUITE>]
+  [--test-suite <TEST_SUITE>] \
+  [--limit <LIMIT>] \
+  [--raw]
 ```
+
+> [!IMPORTANT]
+> **Single Quotes Required**: ResultDB Test IDs often contain exclamation marks
+> (e.g. `!junit` or `!gtest`). Always enclose `--test-id` in **single quotes**
+> (`'...'`) to prevent Bash from attempting history expansion
+> (`bash: !...: event not found`).
+
+- **When to use**: Once you have a test ID (from `list_failures.py` or `check_test.py`),
+  use `test_history.py` to check if a failure is a fresh trunk regression, a known flake
+  across multiple builders, or isolated to your CL.
+- **Parallel Per-Builder Fair Sampling**: When `--builder` is omitted, discovers
+  active builders via `QueryVariants` and fetches recent verdicts per builder in
+  parallel (`--limit` defaults to `15` verdicts/builder across `ci` builders, or `100`
+  verdicts when a single `--builder` is specified). This prevents high-frequency bots
+  from crowding out slower platform/form-factor bots.
+- **Per-Builder Structuring**: Failing and flaky builders are sorted first, while
+  100% passing builders are condensed into a single summary line.
+- **Timeline Glyphs**: Displays recent verdicts ordered newest →
+  oldest (`P` = Pass, `F` = Fail, `R` = Flaky/Pass on Retry, `S` = Skip), along
+  with daily breakdowns.
+- **Raw Output**: Use `--raw` to print raw JSON verdicts instead of the summary.
+- **Fuzzy Search Fallback**: If an exact test ID returns no verdicts, the script
+  queries `QueryTests` by substring and prints matching candidate Test IDs.
 
 ## Troubleshooting
 
