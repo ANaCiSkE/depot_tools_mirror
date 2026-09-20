@@ -4822,6 +4822,10 @@ class TestGitCl(unittest.TestCase):
             desc.append_footer(footer_line)
             self.assertEqual(desc.description, expected_desc)
 
+    def test_get_reviewers(self):
+        desc = git_cl.ChangeDescription("foo\nR=a@c, b@c\nR=d@c")
+        self.assertEqual(desc.get_reviewers(), ["a@c", "b@c", "d@c"])
+
     def test_update_reviewers(self):
         data = [
             ("foo", [], "foo"),

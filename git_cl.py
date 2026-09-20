@@ -1025,7 +1025,7 @@ _NewUpload = collections.namedtuple(
 class ChangeDescription(object):
     """Contains a parsed form of the change description."""
 
-    R_LINE = r"^[ \t]*(TBR|R)[ \t]*=[ \t]*(.*?)[ \t]*$"
+    R_LINE = r"^[ \t]*(R)[ \t]*=[ \t]*(.*?)[ \t]*$"
     CC_LINE = r"^[ \t]*(CC)[ \t]*=[ \t]*(.*?)[ \t]*$"
     BUG_LINE = r"^[ \t]*(?:(BUG)[ \t]*=|Bug:)[ \t]*(.*?)[ \t]*$"
     FIXED_LINE = r"^[ \t]*Fixed[ \t]*:[ \t]*(.*?)[ \t]*$"
@@ -1225,16 +1225,12 @@ class ChangeDescription(object):
         top_lines.append(line)
         self._description_lines = top_lines + separator + gerrit_footers
 
-    def get_reviewers(self, tbr_only=False):
+    def get_reviewers(self):
         """Retrieves the list of reviewers."""
         matches = [
             re.match(self.R_LINE, line) for line in self._description_lines
         ]
-        reviewers = [
-            match.group(2).strip()
-            for match in matches
-            if match and (not tbr_only or match.group(1).upper() == "TBR")
-        ]
+        reviewers = [match.group(2).strip() for match in matches if match]
         return cleanup_list(reviewers)
 
     def get_cced(self):
@@ -2251,12 +2247,6 @@ class Changelist(object):
             refspec_opts.append("l=Commit-Queue+2")
         elif options.cq_dry_run:
             refspec_opts.append("l=Commit-Queue+1")
-
-        if change_desc.get_reviewers(tbr_only=True):
-            score = gerrit_util.GetCodeReviewTbrScore(
-                self.GetGerritHost(), self.GetGerritProject()
-            )
-            refspec_opts.append("l=Code-Review+%s" % score)
 
         # Gerrit sorts hashtags, so order is not important.
         hashtags = {change_desc.sanitize_hash_tag(t) for t in options.hashtags}
