@@ -647,23 +647,914 @@ class GitCacheTest(unittest.TestCase):
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate(reset_fetch_config=True)
 
-    @mock.patch("gclient_utils.exponential_backoff_retry")
-    def testSetSymbolicRefIgnoreUnknown(self, mock_retry):
-        mock_retry.return_value = "HEAD branch: (unknown)"
-        mirror = git_cache.Mirror(self.origin_dir)
-        with mock.patch.object(mirror, "RunGit") as mock_rungit:
-            mirror._set_symbolic_ref()
-            mock_rungit.assert_not_called()
+    def _assertSetsHead(self, remote_info, branch_refs, expected):
+        """Drives _set_symbolic_ref over a given remote answer and ref list.
 
-    @mock.patch("gclient_utils.exponential_backoff_retry")
-    def testSetSymbolicRefKnown(self, mock_retry):
-        mock_retry.return_value = "HEAD branch: main"
+        Passing expected=None asserts HEAD is left alone.
+        """
         mirror = git_cache.Mirror(self.origin_dir)
-        with mock.patch.object(mirror, "RunGit") as mock_rungit:
-            mirror._set_symbolic_ref()
+        with mock.patch(
+            "gclient_utils.exponential_backoff_retry",
+            return_value=remote_info,
+        ):
+            with mock.patch.object(
+                mirror, "_local_branch_refs", return_value=branch_refs
+            ):
+                with mock.patch.object(mirror, "RunGit") as mock_rungit:
+                    mirror._set_symbolic_ref()
+        if expected is None:
+            for call in mock_rungit.call_args_list:
+                self.assertNotIn("symbolic-ref", call.args[0])
+        else:
             mock_rungit.assert_called_once_with(
-                ["symbolic-ref", "HEAD", "refs/heads/main"]
+                ["symbolic-ref", "HEAD", expected]
             )
+
+    def testSetSymbolicRefUnknownNoLocalBranches(self):
+        self._assertSetsHead("HEAD branch: (unknown)", [], None)
+
+    def testSetSymbolicRefUnknownFallsBackToKnownBranchName(self):
+        self._assertSetsHead(
+            "HEAD branch: (unknown)",
+            ["refs/heads/feature-x", "refs/heads/upstream/main"],
+            "refs/heads/upstream/main",
+        )
+
+    def testSetSymbolicRefUnknownPrefersLiveBranchOverStaleName(self):
+        # The newer upstream/main must beat the frozen master by recency.
+        self._assertSetsHead(
+            "HEAD branch: (unknown)",
+            ["refs/heads/upstream/main", "refs/heads/master"],
+            "refs/heads/upstream/main",
+        )
+
+    def testSetSymbolicRefUnknownFallsBackToNewestBranch(self):
+        self._assertSetsHead(
+            "HEAD branch: (unknown)",
+            ["refs/heads/feature-x", "refs/heads/feature-y"],
+            "refs/heads/feature-x",
+        )
+
+    def testSetSymbolicRefKnown(self):
+        self._assertSetsHead(
+            "HEAD branch: main",
+            ["refs/heads/main", "refs/heads/other"],
+            "refs/heads/main",
+        )
+
+    def testSetSymbolicRefKnownOnEmptyMirror(self):
+        # A freshly init'd bare mirror has no branches yet; the advertised
+        # default is all there is to go on, and the fetch supplies it.
+        self._assertSetsHead("HEAD branch: main", [], "refs/heads/main")
+
+    def testSetSymbolicRefKnownMissingLocallyPicksLiveBranch(self):
+        # Remote names a branch this mirror does not carry: pointing HEAD at
+        # it would just install a different dead HEAD.
+        self._assertSetsHead(
+            "HEAD branch: absent",
+            ["refs/heads/feature-x", "refs/heads/upstream/main"],
+            "refs/heads/upstream/main",
+        )
+
+    def testSetSymbolicRefStripsCarriageReturn(self):
+        # "git remote show" output read on Windows can carry a CR, which would
+        # otherwise be spliced into the refname and rejected by symbolic-ref.
+        self._assertSetsHead(
+            "  HEAD branch: main\r\n  Remote branches:",
+            ["refs/heads/main"],
+            "refs/heads/main",
+        )
+
+    def _mirror_head(self, mirror):
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        return (
+            subprocess.check_output(
+                ["git", "--git-dir", cache_dir, "symbolic-ref", "HEAD"]
+            )
+            .decode("utf-8")
+            .strip()
+        )
+
+    def testSetSymbolicRefAdvertisedBranchMissingFallsBack(self):
+        # A remote can advertise a default branch this mirror does not carry
+        # (restricted fetch specs, or a rename whose branch has not been
+        # fetched yet). Pointing HEAD at it regardless leaves HEAD dangling,
+        # which is the state this module exists to prevent.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        self.git(["branch", "-m", "live"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        with mock.patch(
+            "gclient_utils.exponential_backoff_retry",
+            return_value="HEAD branch: absent",
+        ):
+            mirror._set_symbolic_ref()
+
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        self.assertEqual(
+            subprocess.call(
+                [
+                    "git",
+                    "--git-dir",
+                    cache_dir,
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    "HEAD",
+                ],
+                stdout=subprocess.DEVNULL,
+            ),
+            0,
+            "HEAD must resolve after healing, not dangle",
+        )
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/live")
+
+    def testPopulateHealsDanglingHead(self):
+        # The origin renamed its default branch and its own HEAD dangles, so
+        # it advertises no default branch (as happens to GitHub mirrors on
+        # *.googlesource.com). The mirror must still end up with HEAD on a
+        # live branch.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        self.git(["branch", "-m", "upstream/main"])
+        self.git(["symbolic-ref", "HEAD", "refs/heads/gone"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/upstream/main")
+
+    def testPopulateHealsDanglingHeadWithAmbiguousTag(self):
+        # A tag sharing the branch's name must not derail the fallback:
+        # %(refname:short) would disambiguate the branch as 'heads/main',
+        # which must not be mangled into 'refs/heads/heads/main'.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        self.git(["branch", "-m", "main"])
+        self.git(["tag", "main"])
+        self.git(["symbolic-ref", "HEAD", "refs/heads/gone"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/main")
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        # HEAD must resolve to a commit again.
+        subprocess.check_output(
+            ["git", "--git-dir", cache_dir, "rev-parse", "--verify", "HEAD"]
+        )
+
+    def testPopulateHealsStaleHead(self):
+        # The origin renamed its default branch from master to main but kept
+        # the frozen master around. A mirror created before the rename has
+        # HEAD on master, which still resolves, so only the staleness check
+        # can notice that HEAD must be re-verified against the origin.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        old_date = "2020-01-01T00:00:00 +0000"
+        env = os.environ.copy()
+        env["GIT_AUTHOR_DATE"] = old_date
+        env["GIT_COMMITTER_DATE"] = old_date
+        subprocess.check_call(
+            [
+                "git",
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "old",
+            ],
+            cwd=self.origin_dir,
+            env=env,
+        )
+        self.git(["branch", "-m", "master"])
+        self.git(["checkout", "-q", "-b", "main"])
+        with open(os.path.join(self.origin_dir, "bar"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "bar"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "new",
+            ]
+        )
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        # Simulate a mirror created before the rename.
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/master",
+            ]
+        )
+
+        # A local origin is not a supported_project(), which sends every
+        # populate down the re-init path where _set_symbolic_ref runs
+        # unconditionally. Pin it True so only the staleness check can heal.
+        with mock.patch.object(
+            git_cache.Mirror, "supported_project", return_value=True
+        ):
+            mirror.populate()
+
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/main")
+
+    def testPopulateHealsStaleHeadWithoutAdvertisedDefault(self):
+        # GitHub-mirror layout: frozen master, live upstream/main, dangling
+        # origin HEAD (no advertised default); heal must pick the live branch.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        old_date = "2020-01-01T00:00:00 +0000"
+        env = os.environ.copy()
+        env["GIT_AUTHOR_DATE"] = old_date
+        env["GIT_COMMITTER_DATE"] = old_date
+        subprocess.check_call(
+            [
+                "git",
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "old",
+            ],
+            cwd=self.origin_dir,
+            env=env,
+        )
+        self.git(["branch", "-m", "master"])
+        self.git(["checkout", "-q", "-b", "upstream/main"])
+        with open(os.path.join(self.origin_dir, "bar"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "bar"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "new",
+            ]
+        )
+        self.git(["symbolic-ref", "HEAD", "refs/heads/gone"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/upstream/main")
+
+    def testPopulateKeepsUpstreamMasterHead(self):
+        # A mirror whose HEAD validly points at refs/heads/upstream/master
+        # (GitHub layout, no plain master) must not be clobbered every populate
+        # just because 'master' appears in HEAD.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        self.git(["branch", "-m", "upstream/master"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/upstream/master",
+            ]
+        )
+        # Survives only if the guard does not delete the mirror.
+        sentinel = os.path.join(cache_dir, "not_clobbered")
+        with open(sentinel, "w"):
+            pass
+
+        mirror.populate()
+
+        self.assertTrue(os.path.exists(sentinel))
+        self.assertEqual(
+            self._mirror_head(mirror), "refs/heads/upstream/master"
+        )
+
+    def testHeadStaleCheckIgnoresFutureDatedBranches(self):
+        # A busy default branch must never look stale, even when some side
+        # branch carries a bogus future committer date. Otherwise a repo
+        # like chromium/src would pay the remote default-branch lookup on
+        # every populate.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "current",
+            ]
+        )
+        self.git(["branch", "-m", "main"])
+        self.git(["checkout", "-q", "-b", "weird"])
+        with open(os.path.join(self.origin_dir, "bar"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "bar"])
+        future_date = "2090-01-01T00:00:00 +0000"
+        env = os.environ.copy()
+        env["GIT_AUTHOR_DATE"] = future_date
+        env["GIT_COMMITTER_DATE"] = future_date
+        subprocess.check_call(
+            [
+                "git",
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "future",
+            ],
+            cwd=self.origin_dir,
+            env=env,
+        )
+        self.git(["checkout", "-q", "main"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        self.assertFalse(mirror._head_looks_stale())
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/main")
+
+    def testHeadStaleCheckSurvivesGitStderrNoise(self):
+        # git writes to stderr routinely (credential helpers, redirect
+        # warnings, GIT_TRACE). The staleness check must not read those bytes
+        # as its value: a parse failure there reports "not stale", silently
+        # re-freezing the snapshot this check exists to unfreeze.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        old_date = "2020-01-01T00:00:00 +0000"
+        env = os.environ.copy()
+        env["GIT_AUTHOR_DATE"] = old_date
+        env["GIT_COMMITTER_DATE"] = old_date
+        subprocess.check_call(
+            [
+                "git",
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "old",
+            ],
+            cwd=self.origin_dir,
+            env=env,
+        )
+        self.git(["branch", "-m", "master"])
+        self.git(["checkout", "-q", "-b", "main"])
+        with open(os.path.join(self.origin_dir, "bar"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "bar"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "new",
+            ]
+        )
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/master",
+            ]
+        )
+
+        with mock.patch.dict(os.environ, {"GIT_TRACE": "1"}):
+            self.assertTrue(mirror._head_looks_stale())
+
+    def testUpdateBootstrapFailsWhenGenNumberFails(self):
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        with mock.patch(
+            "subprocess.check_output",
+            side_effect=subprocess.CalledProcessError(1, "git number"),
+        ):
+            with mock.patch.object(mirror, "_set_symbolic_ref") as heal:
+                self.assertFalse(mirror.update_bootstrap())
+                heal.assert_called_once()
+
+    def testUpdateBootstrapReturnsFalseWhenHealFails(self):
+        # The generation number fails and the HEAD repair cannot reach the
+        # remote either. update_bootstrap must report failure rather than let
+        # the network error escape as a traceback.
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        with mock.patch(
+            "subprocess.check_output",
+            side_effect=subprocess.CalledProcessError(1, "git number"),
+        ):
+            with mock.patch.object(
+                mirror,
+                "_set_symbolic_ref",
+                side_effect=subprocess.CalledProcessError(1, "git remote show"),
+            ):
+                self.assertFalse(mirror.update_bootstrap())
+
+    def testUpdateBootstrapHealsBrokenHead(self):
+        self.git(["init", "-q"])
+        with open(os.path.join(self.origin_dir, "foo"), "w") as f:
+            f.write("touched\n")
+        self.git(["add", "foo"])
+        self.git(
+            [
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                "foo",
+            ]
+        )
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        # Break the mirror's HEAD the way a default-branch rename does.
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/gone",
+            ]
+        )
+
+        # Repairs HEAD like _set_symbolic_ref (tested on its own) would,
+        # minus the remote lookup.
+        def heal():
+            branch = (
+                subprocess.check_output(
+                    [
+                        "git",
+                        "--git-dir",
+                        cache_dir,
+                        "for-each-ref",
+                        "--count=1",
+                        "--format=%(refname)",
+                        "refs/heads",
+                    ]
+                )
+                .decode()
+                .strip()
+            )
+            subprocess.check_call(
+                ["git", "--git-dir", cache_dir, "symbolic-ref", "HEAD", branch]
+            )
+
+        real_check_output = subprocess.check_output
+        gen_calls = []
+
+        # git number fails on the broken HEAD, then succeeds after the heal.
+        def fake_check_output(cmd, *args, **kwargs):
+            if "number" in cmd:
+                gen_calls.append(cmd)
+                if len(gen_calls) == 1:
+                    raise subprocess.CalledProcessError(1, cmd)
+                return b"42\n"
+            return real_check_output(cmd, *args, **kwargs)
+
+        with mock.patch("git_cache.Gsutil") as gsutil_cls:
+            gsutil_cls.return_value.check_call_with_retries.return_value = (
+                0,
+                "",
+                "",
+            )
+            # 0 == success; a bare MagicMock would read as a failed upload.
+            gsutil_cls.return_value.call.return_value = 0
+            with mock.patch(
+                "subprocess.check_output", side_effect=fake_check_output
+            ):
+                with mock.patch.object(
+                    mirror, "_set_symbolic_ref", side_effect=heal
+                ) as heal_mock:
+                    self.assertTrue(mirror.update_bootstrap())
+                    heal_mock.assert_called_once()
+        self.assertEqual(len(gen_calls), 2)
+
+    def _commitOrigin(self, name, date=None):
+        env = os.environ.copy()
+        if date:
+            env["GIT_AUTHOR_DATE"] = date
+            env["GIT_COMMITTER_DATE"] = date
+        with open(os.path.join(self.origin_dir, name), "w") as f:
+            f.write(name + "\n")
+        self.git(["add", name])
+        subprocess.check_call(
+            [
+                "git",
+                "-c",
+                "user.name=Test user",
+                "-c",
+                "user.email=joj@test.com",
+                "commit",
+                "-m",
+                name,
+            ],
+            cwd=self.origin_dir,
+            env=env,
+        )
+
+    def _updateBootstrapRecordingUploads(self, mirror, cache_dir):
+        """Runs update_bootstrap with the real heal path, recording uploads.
+
+        `git number` is stubbed to the commit count of whatever HEAD names at
+        the time it runs, so the recorded destination shows which branch the
+        snapshot was cut from.
+        """
+        real_check_output = subprocess.check_output
+        calls = []
+
+        def fake_check_output(cmd, *args, **kwargs):
+            if "number" in cmd:
+                return real_check_output(
+                    [
+                        "git",
+                        "--git-dir",
+                        cache_dir,
+                        "rev-list",
+                        "--count",
+                        "HEAD",
+                    ]
+                )
+            return real_check_output(cmd, *args, **kwargs)
+
+        with mock.patch("git_cache.Gsutil") as gsutil_cls:
+            gs = gsutil_cls.return_value
+            gs.check_call_with_retries.return_value = (0, "", "")
+            gs.call.side_effect = lambda *a: calls.append(a) or 0
+            with mock.patch(
+                "subprocess.check_output", side_effect=fake_check_output
+            ):
+                ok = mirror.update_bootstrap()
+        uploads = [c for c in calls if "rsync" in c]
+        return ok, uploads
+
+    def testUpdateBootstrapUploadsAfterHealingUnadvertisedDefault(self):
+        # The production case: the remote advertises no default branch and the
+        # mirror's HEAD is dead, so the generation number cannot be computed.
+        # Before healing, this uploaded nothing while reporting success, which
+        # is why these repos have no snapshot at all.
+        self.git(["init", "-q"])
+        self._commitOrigin("foo")
+        self.git(["branch", "-m", "live"])
+        # An origin whose HEAD names a missing branch advertises no default.
+        self.git(["symbolic-ref", "HEAD", "refs/heads/does-not-exist"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/gone",
+            ]
+        )
+
+        ok, uploads = self._updateBootstrapRecordingUploads(mirror, cache_dir)
+
+        self.assertEqual(len(uploads), 1, "snapshot must be uploaded")
+        self.assertTrue(uploads[0][-1].endswith("/1"), uploads[0][-1])
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/live")
+        self.assertTrue(ok)
+
+    def testUpdateBootstrapSnapshotTracksLiveBranchNotFrozenHead(self):
+        # A HEAD frozen on a pre-rename branch still resolves, so the
+        # generation number is computable and the upload "succeeds" while
+        # pinning the snapshot to the stale branch forever.
+        self.git(["init", "-q"])
+        self._commitOrigin("old", date="2020-01-01T00:00:00 +0000")
+        self.git(["branch", "-m", "master"])
+        self.git(["checkout", "-q", "-b", "upstream/main"])
+        self._commitOrigin("new1")
+        self._commitOrigin("new2")
+        self.git(["symbolic-ref", "HEAD", "refs/heads/does-not-exist"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        # Model a mirror created before the rename.
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/master",
+            ]
+        )
+        mirror.populate()
+
+        ok, uploads = self._updateBootstrapRecordingUploads(mirror, cache_dir)
+
+        self.assertEqual(len(uploads), 1)
+        # master is 1 commit, upstream/main is 3. The snapshot must be cut from
+        # the live branch, not the frozen one.
+        self.assertTrue(uploads[0][-1].endswith("/3"), uploads[0][-1])
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/upstream/main")
+        self.assertTrue(ok)
+
+    def testUpdateBootstrapCommandExitsNonZeroWhenUnhealable(self):
+        # Nothing to point HEAD at, so no generation number is possible. The
+        # command must exit non-zero: a green builder that uploaded nothing is
+        # how these snapshots went stale unnoticed.
+        self.git(["init", "-q"])
+
+        with mock.patch("git_cache.Gsutil"):
+            rc = git_cache.CMDupdate_bootstrap(
+                git_cache.OptionParser(), [self.origin_dir]
+            )
+
+        self.assertEqual(rc, 1)
+
+    def testPopulateHealsDanglingHeadDespiteGitStderrNoise(self):
+        # The dangling-HEAD detector compares rev-parse's output against the
+        # literal "HEAD". Folding git's stderr into that value disables the
+        # detector silently: unlike a bad int(), nothing raises.
+        self.git(["init", "-q"])
+        self._commitOrigin("foo")
+        self.git(["branch", "-m", "live"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/gone",
+            ]
+        )
+
+        # supported_project() is False for a local origin, which would heal
+        # HEAD via the re-init path regardless. Pin it so only the detector can.
+        with mock.patch.object(
+            git_cache.Mirror, "supported_project", return_value=True
+        ):
+            with mock.patch.dict(os.environ, {"GIT_TRACE": "1"}):
+                mirror.populate()
+
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/live")
+
+    def testUpdateBootstrapFailsWhenUploadFails(self):
+        # The generation number is computable and the snapshot directory is
+        # uploaded, but the upload itself fails. Reporting success here is how
+        # a builder stays green while publishing nothing.
+        self.git(["init", "-q"])
+        self._commitOrigin("foo")
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        real_check_output = subprocess.check_output
+
+        def fake_check_output(cmd, *args, **kwargs):
+            if "number" in cmd:
+                return b"42\n"
+            return real_check_output(cmd, *args, **kwargs)
+
+        with mock.patch("git_cache.Gsutil") as gsutil_cls:
+            gs = gsutil_cls.return_value
+            gs.check_call_with_retries.return_value = (0, "", "")
+            gs.call.side_effect = lambda *a: 1 if "rsync" in a else 0
+            with mock.patch(
+                "subprocess.check_output", side_effect=fake_check_output
+            ):
+                self.assertFalse(mirror.update_bootstrap())
+
+    def testPopulateSkipsRemoteWhenHeadMatchesLocalPreference(self):
+        # A dormant default with a live side branch keeps _head_looks_stale
+        # true forever. Healing cannot change anything there, so consulting the
+        # remote would put a `git remote show` on every populate for good.
+        self.git(["init", "-q"])
+        self._commitOrigin("old", date="2020-01-01T00:00:00 +0000")
+        self.git(["branch", "-m", "main"])
+        self.git(["checkout", "-q", "-b", "feature"])
+        self._commitOrigin("new")
+        self.git(["checkout", "-q", "main"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        self.assertEqual(self._mirror_head(mirror), "refs/heads/main")
+        # Stale, but HEAD is already what the local branches prefer.
+        self.assertTrue(mirror._head_looks_stale())
+
+        with mock.patch.object(
+            git_cache.Mirror, "supported_project", return_value=True
+        ):
+            with mock.patch.object(mirror, "_set_symbolic_ref") as heal:
+                mirror.populate()
+                heal.assert_not_called()
+
+    def testPopulateStopsRecheckingAfterRemoteConfirmsHead(self):
+        # The remote confirms the HEAD we already have, so the staleness
+        # predicate and the local-preference mismatch both stay true. Without a
+        # bound this re-asks the remote on every populate forever.
+        self.git(["init", "-q"])
+        self._commitOrigin("old", date="2020-01-01T00:00:00 +0000")
+        self.git(["branch", "-m", "master"])
+        self.git(["checkout", "-q", "-b", "upstream/main"])
+        self._commitOrigin("new")
+        # The origin advertises the quiet branch, so healing is a no-op.
+        self.git(["symbolic-ref", "HEAD", "refs/heads/master"])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        cache_dir = os.path.join(
+            self.cache_dir, mirror.UrlToCacheDir(self.origin_dir)
+        )
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/master",
+            ]
+        )
+        # The setup populate already spent this mirror's recheck allowance.
+        subprocess.check_call(
+            [
+                "git",
+                "--git-dir",
+                cache_dir,
+                "config",
+                "--unset",
+                "cache.headcheckedat",
+            ]
+        )
+
+        with mock.patch.object(
+            git_cache.Mirror, "supported_project", return_value=True
+        ):
+            with mock.patch.object(mirror, "_set_symbolic_ref") as heal:
+                mirror.populate()
+                mirror.populate()
+                self.assertEqual(
+                    heal.call_count,
+                    1,
+                    "remote must be consulted once, not per populate",
+                )
 
 
 class GitCacheDirTest(unittest.TestCase):
