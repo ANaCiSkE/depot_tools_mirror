@@ -134,28 +134,28 @@ infra/tools/bb/windows-arm64
 	gBOXXcl-PyjxzJRVcX6Zelb8rUvo6CXBlovepykGf00C
 
 infra/tools/crowbar/linux-amd64
-	git_revision:491563da609f0b22d1d3b150a63e134a1d24fde6
-	pNMnfp-JhdPjhzEBuPbYeoOi6BjVhkqdb408o2FSUTYC
+	git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd
+	038MDcNR1UpNnNBzRIup4FPdtlvjs9FJS3KZ3C2TyI8C
 
 infra/tools/crowbar/linux-arm64
-	git_revision:491563da609f0b22d1d3b150a63e134a1d24fde6
-	K897mpF5uOt6W8bP52_D5nWKbWP93Qwbn8r8AaAlVbAC
+	git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd
+	K8zQO_jAXtkQfzD9A-81-O3dTKx85flBSBnuYdIUINsC
 
 infra/tools/crowbar/mac-amd64
-	git_revision:491563da609f0b22d1d3b150a63e134a1d24fde6
-	iaqpEWxCnVsjrDt7TWkD4E1ciwbLfLZ8b870L2Es-YMC
+	git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd
+	kugXieaFLXUCvz7MJLOX9bEIzQ5lcvEiiHcUeS7zLu8C
 
 infra/tools/crowbar/mac-arm64
-	git_revision:491563da609f0b22d1d3b150a63e134a1d24fde6
-	kWrzD70vrwDshsr_O7SCqjeDahL1-aCtvhxHNrgaJi0C
+	git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd
+	9FhjS9M0sXypm1NqsEzRKLjlTVppX7kitqHe7CvbAh0C
 
 infra/tools/crowbar/windows-amd64
-	git_revision:491563da609f0b22d1d3b150a63e134a1d24fde6
-	-uvASy2UO-okRygDspM9lWNMR4RZQYYTgl_yy0Nk-C0C
+	git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd
+	t6T796aOyeX6KgPyq-H0y1yqJyTY7WlkcIxREK7rAkwC
 
 infra/tools/crowbar/windows-arm64
-	git_revision:491563da609f0b22d1d3b150a63e134a1d24fde6
-	OarX__H57Ikks1OWHGIUwRZxH6Z_2rLeJHcv9x52TFwC
+	git_revision:63df9e9df52e8edfd3cd86b642ba79f440e96ecd
+	FTU-aQCSzdfrsMt-HqClwjnAeMAbKvABtpNwvZHCH4oC
 
 infra/tools/dirmd/linux-386
 	git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
