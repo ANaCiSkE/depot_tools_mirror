@@ -348,15 +348,21 @@ class TestLuciScripts(unittest.TestCase):
         mock_prpc.return_value = {
             "testResults": [
                 {
+                    "name": SAMPLE_RESULT_NAME,
                     "testId": SAMPLE_TEST_ID,
-                    "status": "PASS",
-                    "expected": True,
+                    "status": "FAIL",
+                    "failureReason": {
+                        "primaryErrorMessage": "Expected 1 to equal 2"
+                    },
                 }
             ]
         }
         res = check_test.check_test(f"b{SAMPLE_BUILD_ID}", SAMPLE_TEST_QUERY)
         self.assertEqual(len(res), 1)
-        self.assertEqual(res[0]["status"], "PASS")
+        self.assertEqual(res[0]["status"], "FAIL")
+        self.assertFalse(res[0]["expected"])
+        self.assertEqual(res[0]["res"], SAMPLE_RESULT_NAME)
+        self.assertEqual(res[0]["err"], "Expected 1 to equal 2")
         mock_prpc.assert_called_once_with(
             "results.api.luci.app",
             "luci.resultdb.v1.ResultDB.QueryTestResults",
@@ -369,6 +375,14 @@ class TestLuciScripts(unittest.TestCase):
                 "pageSize": 1000,
             },
         )
+
+    @mock.patch("fetch_log.fetch_log_snippet")
+    def test_fetch_log_helper_alias(self, mock_snippet):
+        mock_snippet.return_value = "snippet-text"
+        self.assertEqual(
+            fetch_log.fetch_log(SAMPLE_RESULT_NAME, raw=True), "snippet-text"
+        )
+        mock_snippet.assert_called_once_with(SAMPLE_RESULT_NAME, raw=True)
 
     @mock.patch("test_history.run_prpc")
     def test_test_history(self, mock_prpc):
@@ -650,6 +664,132 @@ class TestLuciScripts(unittest.TestCase):
         stderr_out = mock_stderr.getvalue()
         self.assertIn("other_candidate_id", stderr_out)
         self.assertNotIn(f"  {SAMPLE_TEST_ID}", stderr_out)
+
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    @mock.patch("find_cl_builds.subprocess.check_output")
+    @mock.patch("find_cl_builds.run_prpc")
+    def test_find_cl_builds_fallback_patchset(
+        self, mock_prpc, mock_check_output, mock_stderr
+    ):
+        gerrit_json = (
+            ")]}'\n"
+            '{"current_revision": "rev4", "revisions": {"rev4": {"_number": 4}}}'
+        )
+        mock_check_output.return_value = gerrit_json.encode("utf-8")
+        mock_prpc.side_effect = [
+            # PS 4 (post-submit revision) has 0 builds
+            {"builds": []},
+            # PS 3 has trybot builds
+            {
+                "builds": [
+                    {
+                        "builder": {"builder": "linux-rel"},
+                        "status": "FAILURE",
+                        "id": SAMPLE_BUILD_ID,
+                    }
+                ]
+            },
+        ]
+        builds = find_cl_builds.find_cl_builds(SAMPLE_CL)
+        self.assertEqual(len(builds), 1)
+        self.assertEqual(builds[0]["builder"], "linux-rel")
+        self.assertEqual(builds[0]["patchset"], 3)
+        self.assertEqual(mock_prpc.call_count, 2)
+        self.assertIn(
+            "Notice: No builds on patchset 4; using patchset 3.",
+            mock_stderr.getvalue(),
+        )
+
+    @mock.patch("find_cl_builds.subprocess.check_output")
+    @mock.patch("find_cl_builds.run_prpc")
+    def test_find_cl_builds_rpc_failure_no_fallback(
+        self, mock_prpc, mock_check_output
+    ):
+        gerrit_json = (
+            ")]}'\n"
+            '{"current_revision": "rev4", "revisions": {"rev4": {"_number": 4}}}'
+        )
+        mock_check_output.return_value = gerrit_json.encode("utf-8")
+        mock_prpc.return_value = None
+        builds = find_cl_builds.find_cl_builds(SAMPLE_CL)
+        self.assertEqual(builds, [])
+        # Should stop immediately on None rather than looping across patchsets
+        self.assertEqual(mock_prpc.call_count, 1)
+
+    @mock.patch("sys.stdout", new_callable=io.StringIO)
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    @mock.patch("test_history.query_tests")
+    @mock.patch("test_history.test_history")
+    def test_main_substring_resolution(
+        self, mock_history, mock_query_tests, mock_stderr, mock_stdout
+    ):
+        # Prefix-overlapping and non-delimiter suffix candidates:
+        # bounded suffix match (preceded by ':') should win.
+        prefix_overlap_id = f"{SAMPLE_TEST_ID}NoEmptyElements"
+        non_delim_suffix_id = "://base\\:base_unittests!gtest::OtherJSONReaderTest#ASCIIControlCodes"
+        mock_query_tests.return_value = [
+            prefix_overlap_id,
+            non_delim_suffix_id,
+            SAMPLE_TEST_ID,
+        ]
+        mock_history.return_value = [
+            {"testId": SAMPLE_TEST_ID, "status": "EXPECTED"}
+        ]
+        with mock.patch(
+            "sys.argv",
+            [
+                "test_history.py",
+                "--test-id",
+                "JSONReaderTest#ASCIIControlCodes",
+                "--builder",
+                SAMPLE_BUILDER,
+                "--raw",
+            ],
+        ):
+            test_history.main()
+        mock_history.assert_called_once_with(
+            "chromium",
+            SAMPLE_TEST_ID,
+            limit=test_history.DEFAULT_SINGLE_BUILDER_LIMIT,
+            builder=SAMPLE_BUILDER,
+            bucket=None,
+            device_os=None,
+            device_type=None,
+            os_val=None,
+            test_suite=None,
+        )
+
+        # Unresolved substring should exit early with code 1 without calling test_history
+        mock_history.reset_mock()
+        mock_query_tests.return_value = []
+        with mock.patch(
+            "sys.argv",
+            [
+                "test_history.py",
+                "--test-substring",
+                "NonExistentTest#foo",
+                "--raw",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                test_history.main()
+            self.assertEqual(cm.exception.code, 1)
+        mock_history.assert_not_called()
+
+        # Passing both --test-id and --test-substring is rejected by mutually exclusive group
+        with mock.patch(
+            "sys.argv",
+            [
+                "test_history.py",
+                "--test-id",
+                SAMPLE_TEST_ID,
+                "--test-substring",
+                "JSONReaderTest",
+            ],
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                test_history.main()
+            self.assertEqual(cm.exception.code, 2)
 
 
 if __name__ == "__main__":

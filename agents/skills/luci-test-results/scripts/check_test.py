@@ -51,8 +51,12 @@ def check_test(build_id, test_regex):
         matching_tests.append(
             {
                 "id": tr["testId"],
+                "res": tr.get("name"),
                 "status": tr.get("status"),
-                "expected": tr.get("expected"),
+                "expected": bool(tr.get("expected", False)),
+                "err": (tr.get("failureReason") or {}).get(
+                    "primaryErrorMessage"
+                ),
             }
         )
 

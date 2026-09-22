@@ -95,6 +95,11 @@ def fetch_log_snippet(res_name, raw=False):
     return "\n".join(output_lines[:200])
 
 
+def fetch_log(res_name, raw=False):
+    """Alias for fetch_log_snippet for module import consistency."""
+    return fetch_log_snippet(res_name, raw=raw)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fetch and extract filtered failure logs from ResultDB."
@@ -111,7 +116,7 @@ def main():
     )
 
     args = parser.parse_args()
-    print(fetch_log_snippet(args.res, raw=args.raw))
+    print(fetch_log(args.res, raw=args.raw))
 
 
 if __name__ == "__main__":

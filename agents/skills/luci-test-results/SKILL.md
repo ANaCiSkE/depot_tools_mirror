@@ -63,7 +63,10 @@ vpython3 scripts/find_cl_builds.py \
 > - By default, this command only returns builds that did not succeed
 >   (e.g., FAILURE, INFRA_FAILURE). Use `--all` to include SUCCESSFUL builds.
 > - If `--patchset` is omitted, the script auto-detects the latest patchset via
->   the Gerrit REST API.
+>   the Gerrit REST API. If the latest patchset has 0 builds, it retries up to 3
+>   preceding patchsets and reports which one it used in the `patchset` field of
+>   each returned build (plus a `stderr` notice). Always check `patchset` before
+>   attributing results to your current code.
 > - **Gerrit Auth Issue**: Auto-detecting patchset for internal CLs
 >   (on `chromium-review.git.corp.google.com`) might fail with auth errors.
 >   Workaround: Provide `--patchset` explicitly.
@@ -131,21 +134,23 @@ vpython3 scripts/check_test.py \
 
 - **When to use (`check_test` vs. `list_failures` / `test_history`)**:
   - Unlike `list_failures.py` (which only returns unexpected failures), `check_test.py`
-    fetches **all** results (`expectancy: ALL`, including `PASS`). Use it to verify
-    that a test actually ran and passed in a specific build, or to discover the full
-    ResultDB `testId` string from a partial class/method regex.
+    fetches **all** results (`expectancy: ALL`, including `PASS`), returning each
+    result's `res` resource name (usable directly with `fetch_log.py --res <RES>`)
+    and `err` (`primaryErrorMessage`). Use it to verify that a test actually ran and
+    passed in a specific build, or to discover the full ResultDB `testId` string from
+    a partial class/method regex.
   - Unlike `test_history.py` (which looks across time/builders), `check_test.py`
     is strictly scoped to a single build.
 
 ## 6. Query Test History Across Builds & Builders (`test_history.py`)
 
-Query **LUCI Analysis** for historical verdicts of **1 specific test ID** across
-time and CI/try builders:
+Query **LUCI Analysis** for historical verdicts of **1 specific test ID** (or
+substring) across time and CI/try builders:
 
 ```bash
 # Formatted per-builder summary (default):
 vpython3 scripts/test_history.py \
-  --test-id '<TEST_ID>' \
+  (--test-id '<TEST_ID>' | --test-substring '<CLASS_OR_METHOD_SUBSTRING>') \
   [--project <chromium|chrome>] \
   [--builder <BUILDER>] \
   [--bucket <BUCKET>] \
@@ -164,8 +169,9 @@ vpython3 scripts/test_history.py \
 > (`bash: !...: event not found`).
 
 - **When to use**: Once you have a test ID (from `list_failures.py` or `check_test.py`),
-  use `test_history.py` to check if a failure is a fresh trunk regression, a known flake
-  across multiple builders, or isolated to your CL.
+  or a `Class#method` substring (`--test-substring`, mutually exclusive with
+  `--test-id`), use `test_history.py` to check if a failure is a fresh trunk
+  regression, a known flake across multiple builders, or isolated to your CL.
 - **Parallel Per-Builder Fair Sampling**: When `--builder` is omitted, discovers
   active builders via `QueryVariants` and fetches recent verdicts per builder in
   parallel (`--limit` defaults to `15` verdicts/builder across `ci` builders, or `100`
@@ -177,8 +183,10 @@ vpython3 scripts/test_history.py \
   oldest (`P` = Pass, `F` = Fail, `R` = Flaky/Pass on Retry, `S` = Skip), along
   with daily breakdowns.
 - **Raw Output**: Use `--raw` to print raw JSON verdicts instead of the summary.
-- **Fuzzy Search Fallback**: If an exact test ID returns no verdicts, the script
-  queries `QueryTests` by substring and prints matching candidate Test IDs.
+- **Substring Resolution & Fuzzy Search Fallback**: Pass `--test-substring` (or a
+  short `Class#method` to `--test-id`) to auto-resolve via `QueryTests`
+  (`--test-id` and `--test-substring` are mutually exclusive). If no verdicts are
+  found, matching candidate Test IDs are printed.
 
 ## Troubleshooting
 
