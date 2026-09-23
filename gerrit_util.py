@@ -615,6 +615,8 @@ class SSOAuthenticator(_Authenticator):
         sso_info = self._get_sso_info()
         conn.proxy = sso_info.proxy_url
         conn.req_headers.update(sso_info.headers)
+        conn.req_headers.setdefault("User-Agent", "git/0.0 (depot_tools)")
+        conn.cookie_jar = sso_info.cookies
 
         # Now we must rewrite:
         #   https://xxx.googlesource.com ->
@@ -1214,6 +1216,7 @@ class HttpConn:
         req_body: Optional[str],
         timeout: int = 300,
         proxy: Optional[str] = None,
+        cookie_jar: Optional[http.cookiejar.CookieJar] = None,
     ) -> None:
         self.req_host = req_host
         self.req_uri = req_uri
@@ -1223,6 +1226,7 @@ class HttpConn:
         self.req_body = req_body
         self.timeout = timeout
         self.proxy = proxy
+        self.cookie_jar = cookie_jar
 
     @property
     def req_params(self) -> ReqParams:
@@ -1259,6 +1263,8 @@ class HttpConn:
             req.add_unredirected_header(k, v)
 
         handlers: list[urllib.request.BaseHandler] = []
+        if self.cookie_jar is not None:
+            handlers.append(urllib.request.HTTPCookieProcessor(self.cookie_jar))
         if self.proxy:
             handlers.append(
                 urllib.request.ProxyHandler(

@@ -13,6 +13,8 @@ import sys
 import threading
 import unittest
 
+import email.message
+import http.cookiejar
 import io
 from io import StringIO
 from pathlib import Path
@@ -20,6 +22,7 @@ from typing import Optional
 from unittest import mock
 import urllib.error
 import urllib.request
+import urllib.response
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1307,6 +1310,163 @@ class SSOAuthenticatorTest(unittest.TestCase):
         out = self.sso.attempt_authenticate_with_reauth(conn, reauth_context)
         mockAuthenticate.assert_called()
         self.assertTrue(out)
+
+    @staticmethod
+    def _make_cookie(
+        name: str, value: str, domain: str
+    ) -> http.cookiejar.Cookie:
+        return http.cookiejar.Cookie(
+            version=0,
+            name=name,
+            value=value,
+            port=None,
+            port_specified=False,
+            domain=domain,
+            domain_specified=True,
+            domain_initial_dot=domain.startswith("."),
+            path="/",
+            path_specified=True,
+            secure=False,
+            expires=None,
+            discard=True,
+            comment=None,
+            comment_url=None,
+            rest={},
+        )
+
+    @staticmethod
+    def _make_http_response(
+        url: str,
+        status: int,
+        headers: dict[str, str],
+        body: bytes = b"",
+    ) -> urllib.response.addinfourl:
+        msg = email.message.Message()
+        for k, v in headers.items():
+            msg[k] = v
+        resp = urllib.response.addinfourl(io.BytesIO(body), msg, url, status)
+        resp.msg = resp.reason = "OK" if status == 200 else "Found"
+        return resp
+
+    def testAuthenticateSetsCookieJarAndUserAgent(self):
+        jar = http.cookiejar.CookieJar()
+        jar.set_cookie(self._make_cookie("sid", "val", ".google.com"))
+        sso_info = gerrit_util.SSOAuthenticator.SSOInfo(
+            proxy_host="127.0.0.1",
+            proxy_port=8080,
+            headers={"X-Custom": "1"},
+            cookies=jar,
+        )
+        conn = gerrit_util.HttpConn(
+            req_host="chromium-review.googlesource.com",
+            req_uri="https://chromium-review.googlesource.com/a/changes/",
+            req_method="GET",
+            req_headers={},
+            req_body=None,
+        )
+        with mock.patch.object(
+            self.sso, "_get_sso_info", return_value=sso_info
+        ):
+            self.sso.authenticate(conn)
+
+        self.assertEqual(conn.proxy, "http://127.0.0.1:8080")
+        self.assertIs(conn.cookie_jar, jar)
+        self.assertEqual(
+            conn.req_headers["User-Agent"], "git/0.0 (depot_tools)"
+        )
+        self.assertEqual(conn.req_headers["X-Custom"], "1")
+        self.assertEqual(
+            conn.req_uri,
+            "http://chromium-review.git.corp.google.com/a/changes/",
+        )
+
+    def testRedirectSendsAndPersistsCookies(self):
+        jar = http.cookiejar.CookieJar()
+        jar.set_cookie(self._make_cookie("session", "old", ".example.com"))
+        jar.set_cookie(
+            self._make_cookie("login_token", "secret", "login.example.com")
+        )
+        sso_info = gerrit_util.SSOAuthenticator.SSOInfo(
+            proxy_host="",
+            proxy_port=0,
+            headers={},
+            cookies=jar,
+        )
+        conn = gerrit_util.HttpConn(
+            req_host="review.example.com",
+            req_uri="https://review.example.com/a/changes/",
+            req_method="GET",
+            req_headers={},
+            req_body=None,
+        )
+        with mock.patch.object(
+            self.sso, "_get_sso_info", return_value=sso_info
+        ):
+            self.sso.authenticate(conn)
+        conn.proxy = None
+
+        seen_requests: list[tuple[str, Optional[str], Optional[str]]] = []
+
+        def fake_http_open(_handler, req: urllib.request.Request):
+            seen_requests.append(
+                (
+                    req.full_url,
+                    req.get_header("Cookie"),
+                    req.get_header("User-agent"),
+                )
+            )
+            step = len(seen_requests)
+            if step == 1:
+                return self._make_http_response(
+                    req.full_url,
+                    302,
+                    {"Location": "http://login.example.com/auth"},
+                )
+            if step == 2:
+                return self._make_http_response(
+                    req.full_url,
+                    302,
+                    {
+                        "Location": "http://review.example.com/a/changes/",
+                        "Set-Cookie": (
+                            "session=renewed; Domain=.example.com; Path=/"
+                        ),
+                    },
+                )
+            return self._make_http_response(req.full_url, 200, {}, b")]}'\n{}")
+
+        with mock.patch.object(
+            urllib.request.HTTPHandler, "http_open", autospec=True
+        ) as mock_http_open:
+            mock_http_open.side_effect = fake_http_open
+            resp, body = conn.request()
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(body, b")]}'\n{}")
+        self.assertEqual(
+            seen_requests,
+            [
+                (
+                    "http://review.example.com/a/changes/",
+                    "session=old",
+                    "git/0.0 (depot_tools)",
+                ),
+                (
+                    "http://login.example.com/auth",
+                    "session=old; login_token=secret",
+                    "git/0.0 (depot_tools)",
+                ),
+                (
+                    "http://review.example.com/a/changes/",
+                    "session=renewed",
+                    "git/0.0 (depot_tools)",
+                ),
+            ],
+        )
+        cookies_by_domain = {(c.domain, c.name): c.value for c in jar}
+        self.assertEqual(
+            cookies_by_domain[(".example.com", "session")], "renewed"
+        )
 
 
 class SSOHelperTest(unittest.TestCase):
