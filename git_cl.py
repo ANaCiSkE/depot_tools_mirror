@@ -6461,13 +6461,7 @@ def CMDpresubmit(parser, args):
 
     start = time.time()
     try:
-        # For upload checks (-u), use the local git commit message to avoid a
-        # Gerrit RPC.
-        if (
-            not options.upload
-            and "PRESUBMIT_SKIP_NETWORK" not in os.environ
-            and cl.GetIssue()
-        ):
+        if "PRESUBMIT_SKIP_NETWORK" not in os.environ and cl.GetIssue():
             description = cl.FetchDescription()
         else:
             description = _create_description_from_log([base_branch])
