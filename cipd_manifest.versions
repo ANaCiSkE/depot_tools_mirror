@@ -686,12 +686,12 @@ infra/tools/luci/vpython3/windows-arm64
 	3sqWaD5FPaogj-1oOpw7931P6_n0uRp818iyZr04EEwC
 
 infra/tools/mac_toolchain/mac-amd64
-	git_revision:07e67ff89ff11ed0e3071867ed6bb49319a91b05
-	ZOsCbhyT2U-KjvNoMypbrV2GhuqMs_BCebvoqL9gnsgC
+	git_revision:ed58ac9443fe1754e84d596bdaf9961cbaa6e85b
+	hRygCWyj-fcOjaK2VxFUX2fAHBCNQ-Lb8W_ChJfaHYUC
 
 infra/tools/mac_toolchain/mac-arm64
-	git_revision:07e67ff89ff11ed0e3071867ed6bb49319a91b05
-	0SHibe0nxWtZUQN5mFFzxT_xai_H92PFLVdR-f0EcJcC
+	git_revision:ed58ac9443fe1754e84d596bdaf9961cbaa6e85b
+	HlIDFaRjjMQzZUTC_alMf4jb_Bp-rpAl5jNVVoUfknoC
 
 infra/tools/prpc/linux-386
 	git_revision:58bbad7b3ee46a273ce42a5d840c2b72c19f2bd4
