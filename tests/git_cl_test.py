@@ -8802,7 +8802,7 @@ class CMDPresubmitTestCase(CMDTestCaseBase):
             verbose=2,
             parallel=True,
             upstream="upstream",
-            description="fetch description",
+            description="get description",
             all_files=True,
             files=None,
             resultdb=True,
