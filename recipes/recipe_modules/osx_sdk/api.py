@@ -15,7 +15,7 @@ from recipe_engine import recipe_api
 # implemented with a proto message.
 _PROPERTY_DEFAULTS = {
   "toolchain_pkg": "infra/tools/mac_toolchain/${platform}",
-  "toolchain_ver": "git_revision:07e67ff89ff11ed0e3071867ed6bb49319a91b05",
+  "toolchain_ver": "git_revision:ed58ac9443fe1754e84d596bdaf9961cbaa6e85b",
 }
 
 # Rationalized from https://en.wikipedia.org/wiki/Xcode.
