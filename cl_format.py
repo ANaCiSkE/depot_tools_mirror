@@ -85,11 +85,6 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
                 # Matches +12
                 diff_start, diff_count = match, 1
 
-            # if the original lines were removed without replacements,
-            # the diff count is 0. Then, no formatting is necessary.
-            if diff_count == 0:
-                continue
-
             # diff_count contains the diff_start line, and the line numbers
             # given to formatter args are inclusive. For example, in
             # google-java-format "--lines 5:10" includes 5th-10th lines.
@@ -97,6 +92,9 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
             diff_count = int(diff_count)
             diff_end = diff_start + diff_count - 1 + expand
             diff_start = max(prev_end + 1, diff_start - expand)
+            # Hunks that only remove lines have a count of 0, and so yield a
+            # range only when expand > 0. Formatting around them is what
+            # collapses the blank lines that deletions leave behind.
             if diff_start <= diff_end:
                 prev_end = diff_end
                 line_diffs[file].append((diff_start, diff_end))
@@ -305,21 +303,8 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
         # of blank lines will be added between symbols.
         line_diffs = _ComputeFormatDiffLineRanges(paths, diffs, expand=2)
 
-    def RunFormat(cmd, path, range_args, **kwds):
-        stdout = RunCommand(cmd + range_args + [path], **kwds)
-
-        if changed_lines_only:
-            # google-java-format will not remove unused imports because they
-            # do not fall within the changed lines. Run the command again to
-            # remove them.
-            if opts.diff:
-                stdout = RunCommand(
-                    cmd + ["--fix-imports-only", "-"],
-                    stdin=stdout.encode(),
-                    **kwds,
-                )
-            else:
-                stdout += RunCommand(cmd + ["--fix-imports-only", path], **kwds)
+    def RunFormat(cmd, path, **kwds):
+        stdout = RunCommand(cmd + [path], **kwds)
 
         # If --diff is passed, google-java-format will output formatted content.
         # Diff it with the existing file in the checkout and output the result.
@@ -337,19 +322,21 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
     kwds = {"error_ok": True, "cwd": top_dir}
     with multiprocessing.pool.ThreadPool() as pool:
         for path in paths:
-            cmd = base_cmd.copy()
-            range_args = []
+            cmd = base_cmd
             if changed_lines_only:
                 ranges = line_diffs.get(path)
                 if not ranges:
-                    # E.g. There were only deleted lines.
+                    # E.g. The diff has no hunks (a mode-only change).
                     continue
-                range_args = ["--lines={}:{}".format(a, b) for a, b in ranges]
+                # --lines constrains only the reformatting. Unused imports are
+                # always removed and imports are always sorted.
+                # --lines may not be used with more than one file.
+                cmd = base_cmd + [
+                    "--lines={}:{}".format(a, b) for a, b in ranges
+                ]
 
             results.append(
-                pool.apply_async(
-                    RunFormat, args=[cmd, path, range_args], kwds=kwds
-                )
+                pool.apply_async(RunFormat, args=[cmd, path], kwds=kwds)
             )
 
         return_value = 0

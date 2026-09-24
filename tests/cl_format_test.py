@@ -1819,6 +1819,79 @@ class TestGnFormatBatch(unittest.TestCase):
         )
 
 
+class TestGoogleJavaFormat(unittest.TestCase):
+    @mock.patch("cl_format.RunCommand", return_value="")
+    @mock.patch("google_java_format.FindGoogleJavaFormat", return_value="gjf")
+    @mock.patch("os.path.exists", return_value=True)
+    def testFormatsEachFileWithASingleInvocation(
+        self, _mock_exists, _mock_find, mock_run_cmd
+    ):
+        # google-java-format fixes imports for the whole file even when --lines
+        # is passed, so it must not be invoked a second time per file.
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        files = ["Foo.java", "Bar.java"]
+        diffs = {
+            "Foo.java": "@@ -10,1 +10,1 @@",
+            "Bar.java": "@@ -20,1 +20,1 @@",
+        }
+        top_dir = "dummy_top_dir"
+
+        ret = cl_format._RunGoogleJavaFormat(mock_opts, files, top_dir, diffs)
+
+        self.assertEqual(0, ret)
+        self.assertEqual(
+            [
+                mock.call(
+                    ["gjf", "--aosp", "--dry-run", "--lines=8:12", "Foo.java"],
+                    error_ok=True,
+                    cwd=top_dir,
+                ),
+                mock.call(
+                    ["gjf", "--aosp", "--dry-run", "--lines=18:22", "Bar.java"],
+                    error_ok=True,
+                    cwd=top_dir,
+                ),
+            ],
+            mock_run_cmd.call_args_list,
+        )
+
+    @mock.patch("cl_format.RunCommand", return_value="Foo.java\n")
+    @mock.patch("google_java_format.FindGoogleJavaFormat", return_value="gjf")
+    @mock.patch("os.path.exists", return_value=True)
+    def testDryRunReturnsTwoWhenFormattingIsRequired(
+        self, _mock_exists, _mock_find, _mock_run_cmd
+    ):
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        diffs = {"Foo.java": "@@ -10,1 +10,1 @@"}
+
+        ret = cl_format._RunGoogleJavaFormat(
+            mock_opts, ["Foo.java"], "dummy_top_dir", diffs
+        )
+
+        self.assertEqual(2, ret)
+
+    @mock.patch("cl_format.RunCommand", return_value="")
+    @mock.patch("google_java_format.FindGoogleJavaFormat", return_value="gjf")
+    @mock.patch("os.path.exists", return_value=True)
+    def testDeletionOnlyHunksAreStillFormatted(
+        self, _mock_exists, _mock_find, mock_run_cmd
+    ):
+        # Deletions commonly leave imports unused, so the file must still be
+        # passed to google-java-format.
+        mock_opts = mock.Mock(dry_run=True, diff=False)
+        diffs = {"Foo.java": "@@ -10,1 +9,0 @@"}
+
+        cl_format._RunGoogleJavaFormat(
+            mock_opts, ["Foo.java"], "dummy_top_dir", diffs
+        )
+
+        mock_run_cmd.assert_called_once_with(
+            ["gjf", "--aosp", "--dry-run", "--lines=7:10", "Foo.java"],
+            error_ok=True,
+            cwd="dummy_top_dir",
+        )
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG if "-v" in sys.argv else logging.ERROR
