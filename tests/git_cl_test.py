@@ -8717,6 +8717,7 @@ class CMDPresubmitTestCase(CMDTestCaseBase):
         mock.patch(
             "git_cl.Changelist.RunHook", return_value=self._RUN_HOOK_RETURN
         ).start()
+        mock.patch("git_cl.Changelist.AsyncWarmChangeDetail").start()
 
     def testDefaultCase(self):
         self.assertEqual(0, git_cl.main(["presubmit"]))
@@ -8815,6 +8816,59 @@ class CMDPresubmitTestCase(CMDTestCaseBase):
         mock_write_json.assert_called_once_with(
             "file.json", self._RUN_HOOK_RETURN
         )
+
+    def testWarmsChangeDetailBeforeBlocking(self):
+        # The whole point of the warm is that the RPC is in flight while the
+        # `git status` scan runs, so assert on ordering rather than just that
+        # the call happened.
+        calls = []
+        git_cl.Changelist.AsyncWarmChangeDetail.side_effect = lambda *_args: (
+            calls.append("warm")
+        )
+        git_common.async_is_dirty_git_tree.return_value = lambda: calls.append(
+            "dirty_check"
+        )
+        git_cl.Changelist.FetchDescription.side_effect = lambda *_a, **_kw: (
+            calls.append("fetch") or "fetch description"
+        )
+
+        self.assertEqual(0, git_cl.main(["presubmit", "-u"]))
+
+        self.assertEqual(["warm", "dirty_check", "fetch"], calls)
+        # The warm must request exactly what FetchDescription() needs,
+        # otherwise it is a cache miss and costs a second RPC.
+        git_cl.Changelist.AsyncWarmChangeDetail.assert_called_once_with(
+            git_cl._DESCRIPTION_DETAIL_OPTIONS
+        )
+
+    @mock.patch.dict(os.environ, {"PRESUBMIT_SKIP_NETWORK": "1"})
+    def testSkipNetwork(self):
+        self.assertEqual(0, git_cl.main(["presubmit", "-u"]))
+        git_cl.Changelist.AsyncWarmChangeDetail.assert_not_called()
+        git_cl.Changelist.FetchDescription.assert_not_called()
+        self.assertEqual(
+            "get description",
+            git_cl.Changelist.RunHook.call_args.kwargs["description"],
+        )
+
+    def testFetchDescriptionFailureFallsBackToLog(self):
+        git_cl.Changelist.FetchDescription.side_effect = Exception("boom")
+        self.assertEqual(0, git_cl.main(["presubmit", "-u"]))
+        self.assertEqual(
+            "get description",
+            git_cl.Changelist.RunHook.call_args.kwargs["description"],
+        )
+
+    def testDirtyTree(self):
+        git_common.async_is_dirty_git_tree.return_value = lambda: True
+        self.assertEqual(1, git_cl.main(["presubmit"]))
+        git_cl.Changelist.RunHook.assert_not_called()
+
+    def testDirtyTreeForce(self):
+        # --force skips the scan entirely rather than ignoring its result.
+        self.assertEqual(0, git_cl.main(["presubmit", "--force"]))
+        git_common.async_is_dirty_git_tree.assert_not_called()
+        git_cl.Changelist.RunHook.assert_called_once()
 
 
 class CMDTryResultsTestCase(CMDTestCaseBase):

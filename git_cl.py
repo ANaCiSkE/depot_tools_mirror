@@ -199,6 +199,11 @@ _IS_BEING_TESTED = False
 
 _GOOGLESOURCE = "googlesource.com"
 
+# Gerrit change detail options required to read a CL description. Shared so
+# that callers pre-warming the cache request exactly what FetchDescription()
+# needs, which keeps it a cache hit rather than a second RPC.
+_DESCRIPTION_DETAIL_OPTIONS = ("CURRENT_REVISION", "CURRENT_COMMIT")
+
 _KNOWN_GERRIT_TO_SHORT_URLS = {
     "https://chrome-internal-review.googlesource.com": "https://crrev.com/i",
     "https://chromium-review.googlesource.com": "https://crrev.com/c",
@@ -1763,7 +1768,7 @@ class Changelist(object):
         assert self.GetIssue(), "issue is required to query Gerrit"
 
         if self.description is None:
-            data = self._GetChangeDetail(["CURRENT_REVISION", "CURRENT_COMMIT"])
+            data = self._GetChangeDetail(_DESCRIPTION_DETAIL_OPTIONS)
             current_rev = data["current_revision"]
             self.description = data["revisions"][current_rev]["commit"][
                 "message"
@@ -6448,11 +6453,28 @@ def CMDpresubmit(parser, args):
     )
     options, args = parser.parse_args(args)
 
-    if not options.force and git_common.is_dirty_git_tree("presubmit"):
+    use_network = "PRESUBMIT_SKIP_NETWORK" not in os.environ
+
+    # Run the ~350ms `git status` scan (on repositories the size of
+    # chromium/src) in a background thread so that it overlaps the CL
+    # description RPC started below rather than running before it.
+    wait_dirty_check = None
+    if not options.force:
+        wait_dirty_check = git_common.async_is_dirty_git_tree("presubmit")
+
+    cl = Changelist()
+
+    # Pre-warm the change details cache (as CMDupload does) so that
+    # FetchDescription() below is a cache hit instead of a blocking RPC.
+    # Purely an optimization, so failures here are ignored and left for
+    # FetchDescription() to report.
+    if use_network:
+        cl.AsyncWarmChangeDetail(_DESCRIPTION_DETAIL_OPTIONS)
+
+    if wait_dirty_check and wait_dirty_check():
         print("use --force to check even if tree is dirty.")
         return 1
 
-    cl = Changelist()
     if args:
         base_branch = args[0]
     else:
@@ -6461,7 +6483,14 @@ def CMDpresubmit(parser, args):
 
     start = time.time()
     try:
-        if "PRESUBMIT_SKIP_NETWORK" not in os.environ and cl.GetIssue():
+        # Once a CL has been uploaded, the canonical description lives on
+        # Gerrit: the (default) squash workflow never amends local commits, so
+        # description edits and footers added via the upload editor, `git cl
+        # description`, or the Gerrit UI are not reflected in `git log`. Use
+        # the Gerrit description so that these checks agree with the ones
+        # `git cl upload` runs. PRESUBMIT_SKIP_NETWORK opts out of this and
+        # accepts the (possibly stale) local commit messages instead.
+        if use_network and cl.GetIssue():
             description = cl.FetchDescription()
         else:
             description = _create_description_from_log([base_branch])
