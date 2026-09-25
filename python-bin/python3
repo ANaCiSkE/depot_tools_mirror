@@ -2,8 +2,13 @@
 
 DEPOT_TOOLS=$(dirname "$0")/..
 
-# Platforms without a hermetic CPython CIPD package (e.g. ppc64, s390x) fall
-# back to the system python3 on $PATH.
+# Platforms without a hermetic CPython CIPD package can opt out of the
+# hermetic interpreter by setting DEPOT_TOOLS_BOOTSTRAP_PYTHON3=0.
+if [[ "X$DEPOT_TOOLS_BOOTSTRAP_PYTHON3" == "X0" ]]; then
+  exec python3 "$@"
+fi
+
+# Same opt out for platforms with no hermetic CPython CIPD package.
 case "$HOSTTYPE" in
   s390x | powerpc64 | powerpc64le)
     exec python3 "$@"
