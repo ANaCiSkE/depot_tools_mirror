@@ -37,9 +37,13 @@ class GitClCoreTest(unittest.TestCase):
         self.assertTrue(len(chunks) >= 1)
         self.assertEqual(sum(len(c) for c in chunks), 500)
 
+    # GetConfig must be mocked too: _SafeSetConfig reads the current value
+    # before writing, which would otherwise shell out to git against the
+    # fake root below. None means "unset", so every write still happens.
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
     @mock.patch("scm.GIT.SetConfig")
     def testLoadCodereviewSettingsFromFileWithExplicitRoot(
-        self, mock_set_config
+        self, mock_set_config, mock_get_config
     ):
         content = "CODE_REVIEW_SERVER: https://example.com\nCC_LIST: a@b.com"
         file_obj = io.StringIO(content)
@@ -76,9 +80,10 @@ class GitClCoreTest(unittest.TestCase):
             finally:
                 os.chdir(orig_cwd)
 
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
     @mock.patch("scm.GIT.SetConfig")
     def testLoadCodereviewSettingsFromFileWithGerritSkipEnsureAuthenticated(
-        self, mock_set_config
+        self, mock_set_config, mock_get_config
     ):
         content = "GERRIT_SKIP_ENSURE_AUTHENTICATED: True\n"
         file_obj = io.StringIO(content)
@@ -89,9 +94,10 @@ class GitClCoreTest(unittest.TestCase):
             "/custom/root", "gerrit.skip-ensure-authenticated", "True"
         )
 
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
     @mock.patch("scm.GIT.SetConfig")
     def testLoadCodereviewSettingsFromFileWithPushUrlConfig(
-        self, mock_set_config
+        self, mock_set_config, mock_get_config
     ):
         content = (
             "PUSH_URL_CONFIG: url.ssh://gitrw.chromium.org.pushinsteadof\n"

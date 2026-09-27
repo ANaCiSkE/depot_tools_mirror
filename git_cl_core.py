@@ -188,12 +188,24 @@ def LoadCodereviewSettingsFromFile(fileobj, root=None):
     if root is None:
         root = settings.GetRoot()
 
+    # This runs on every `git cl` invocation. Tools like `jj fix` run many
+    # `git cl format` processes in parallel, which would all contend for
+    # .git/config.lock. So only write values that actually changed, and treat
+    # losing that race as non-fatal.
+    def _SafeSetConfig(key, val, **kwargs):
+        if scm.GIT.GetConfig(root, key, None) == val:
+            return
+        try:
+            scm.GIT.SetConfig(root, key, val, **kwargs)
+        except subprocess2.CalledProcessError as e:
+            logging.warning("Failed to update git config %s: %s", key, e)
+
     def SetProperty(name, setting):
         fullname = f"rietveld.{name}"
         if setting in keyvals:
-            scm.GIT.SetConfig(root, fullname, keyvals[setting])
+            _SafeSetConfig(fullname, keyvals[setting])
         else:
-            scm.GIT.SetConfig(root, fullname, None, modify_all=True)
+            _SafeSetConfig(fullname, None, modify_all=True)
 
     if not keyvals.get("GERRIT_HOST", False):
         SetProperty("server", "CODE_REVIEW_SERVER")
@@ -209,19 +221,18 @@ def LoadCodereviewSettingsFromFile(fileobj, root=None):
     SetProperty("format-full-by-default", "FORMAT_FULL_BY_DEFAULT")
 
     if "FORMAT_JS" in keyvals:
-        scm.GIT.SetConfig(root, "cl.format-js", keyvals["FORMAT_JS"])
+        _SafeSetConfig("cl.format-js", keyvals["FORMAT_JS"])
 
     if "GERRIT_HOST" in keyvals:
-        scm.GIT.SetConfig(root, "gerrit.host", keyvals["GERRIT_HOST"])
+        _SafeSetConfig("gerrit.host", keyvals["GERRIT_HOST"])
 
     if "GERRIT_SQUASH_UPLOADS" in keyvals:
-        scm.GIT.SetConfig(
-            root, "gerrit.squash-uploads", keyvals["GERRIT_SQUASH_UPLOADS"]
+        _SafeSetConfig(
+            "gerrit.squash-uploads", keyvals["GERRIT_SQUASH_UPLOADS"]
         )
 
     if "GERRIT_SKIP_ENSURE_AUTHENTICATED" in keyvals:
-        scm.GIT.SetConfig(
-            root,
+        _SafeSetConfig(
             "gerrit.skip-ensure-authenticated",
             keyvals["GERRIT_SKIP_ENSURE_AUTHENTICATED"],
         )
@@ -230,8 +241,7 @@ def LoadCodereviewSettingsFromFile(fileobj, root=None):
         # should be of the form
         # PUSH_URL_CONFIG: url.ssh://gitrw.chromium.org.pushinsteadof
         # ORIGIN_URL_CONFIG: http://src.chromium.org/git
-        scm.GIT.SetConfig(
-            root,
+        _SafeSetConfig(
             keyvals["PUSH_URL_CONFIG"],
             keyvals["ORIGIN_URL_CONFIG"],
         )
