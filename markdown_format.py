@@ -150,7 +150,8 @@ def process_files(args: argparse.Namespace) -> int:
             continue
 
         # Opt-in check: only format if a marker file is found.
-        if not utils.find_config_file(path, _CONFIG_FILENAME):
+        target_path = args.assume_filename or path
+        if not utils.find_config_file(target_path, _CONFIG_FILENAME):
             continue
 
         with open(path, "r", encoding="utf-8") as f:

@@ -178,7 +178,9 @@ class CMDFormatTestCase(unittest.TestCase):
         )
 
         files = [to_be_fixed_md, remain_intact_md]
-        mock_opts = mock.Mock(check=False, dry_run=False, diff=False)
+        mock_opts = mock.Mock(
+            check=False, dry_run=False, diff=False, stdin_filename=None
+        )
 
         # Only agents/to_be_fixed.md should be formatted because of the config file.
         # other/remain_intact.md won't be formatted.
@@ -201,7 +203,9 @@ class CMDFormatTestCase(unittest.TestCase):
         )
 
         files = [foo_md]
-        mock_opts = mock.Mock(check=False, dry_run=False, diff=False)
+        mock_opts = mock.Mock(
+            check=False, dry_run=False, diff=False, stdin_filename=None
+        )
 
         ret = cl_format._RunMarkdownFormat(
             mock_opts, files, self._top_dir, None
@@ -220,7 +224,7 @@ class CMDFormatTestCase(unittest.TestCase):
 
         files = [foo_md]
         # --check should return 2 if files are unformatted
-        mock_opts = mock.Mock(dry_run=True, diff=False)
+        mock_opts = mock.Mock(dry_run=True, diff=False, stdin_filename=None)
         self.assertEqual(
             cl_format._RunMarkdownFormat(mock_opts, files, self._top_dir, None),
             2,
@@ -251,7 +255,7 @@ class CMDFormatTestCase(unittest.TestCase):
 
         files = [foo_md]
         # --diff should return 2 if there's a diff, but not modify the file.
-        mock_opts = mock.Mock(dry_run=False, diff=True)
+        mock_opts = mock.Mock(dry_run=False, diff=True, stdin_filename=None)
         ret = cl_format._RunMarkdownFormat(
             mock_opts, files, self._top_dir, None
         )
@@ -316,7 +320,7 @@ class CMDFormatTestCase(unittest.TestCase):
 
         # 1. Normal format: only foo_html_ts should be formatted (bar_html_ts skipped).
         mock_call.return_value = 0
-        mock_opts = mock.Mock(dry_run=False, diff=False)
+        mock_opts = mock.Mock(dry_run=False, diff=False, stdin_filename=None)
         self.assertEqual(
             0,
             cl_format._RunLitTemplateFormatter(
@@ -331,7 +335,7 @@ class CMDFormatTestCase(unittest.TestCase):
         # 2. Dry-run mode: should pass --dry-run and return 2 when unformatted.
         mock_call.reset_mock()
         mock_call.return_value = 2
-        mock_opts = mock.Mock(dry_run=True, diff=False)
+        mock_opts = mock.Mock(dry_run=True, diff=False, stdin_filename=None)
         self.assertEqual(
             2,
             cl_format._RunLitTemplateFormatter(
@@ -352,7 +356,7 @@ class CMDFormatTestCase(unittest.TestCase):
         # 3. Diff mode: should pass --diff.
         mock_call.reset_mock()
         mock_call.return_value = 0
-        mock_opts = mock.Mock(dry_run=False, diff=True)
+        mock_opts = mock.Mock(dry_run=False, diff=True, stdin_filename=None)
         self.assertEqual(
             0,
             cl_format._RunLitTemplateFormatter(
@@ -381,7 +385,9 @@ class CMDFormatTestCase(unittest.TestCase):
     def testClangFormatDryRun(self):
         diffs = cl_format._SplitDiffsByFile(test_format_input_diff)
         files = [f for f in diffs if f.endswith(".h")]
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
         for f in files:
             self._make_temp_file(f, ["// test"])
 
@@ -580,7 +586,9 @@ class CMDFormatTestCase(unittest.TestCase):
     @mock.patch("os.cpu_count", return_value=4)
     def testClangFormatDryRunParallel(self, _):
         files = [f"file_{i}.cc" for i in range(12)]
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
         for f in files:
             self._make_temp_file(f, ["// test"])
 
@@ -604,7 +612,9 @@ class CMDFormatTestCase(unittest.TestCase):
     @mock.patch("os.cpu_count", return_value=1)
     def testClangFormatDryRunSingleCpuFallback(self, _):
         files = [f"file_{i}.cc" for i in range(6)]
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
         for f in files:
             self._make_temp_file(f, ["// test"])
 
@@ -629,7 +639,9 @@ class CMDFormatTestCase(unittest.TestCase):
     @mock.patch("os.cpu_count", return_value=4)
     def testClangFormatDryRunUnformattedParallel(self, _):
         files = [f"file_{i}.cc" for i in range(6)]
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
         for f in files:
             self._make_temp_file(f, ["// unformatted"])
 
@@ -659,7 +671,9 @@ class CMDFormatTestCase(unittest.TestCase):
         self._make_temp_file(filename, [utf8_content])
         self._make_temp_file("other_1.cc", ["// other 1"])
         self._make_temp_file("other_2.cc", ["// other 2"])
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
 
         try:
             previous_cwd = os.getcwd()
@@ -689,7 +703,9 @@ class CMDFormatTestCase(unittest.TestCase):
 
     @mock.patch("os.cpu_count", return_value=4)
     def testClangFormatDryRunFileErrorParallel(self, _):
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
         try:
             previous_cwd = os.getcwd()
             os.chdir(self._top_dir)
@@ -714,7 +730,9 @@ class CMDFormatTestCase(unittest.TestCase):
             os.chdir(previous_cwd)
 
     def testClangFormatDryRunFileErrorSequential(self):
-        mock_opts = mock.Mock(full=True, dry_run=True, diff=False)
+        mock_opts = mock.Mock(
+            full=True, dry_run=True, diff=False, stdin_filename=None
+        )
         try:
             previous_cwd = os.getcwd()
             os.chdir(self._top_dir)
@@ -791,7 +809,11 @@ class CMDFormatTestCase(unittest.TestCase):
         """Checks if the command line arguments do not contain the input path."""
         find_top_dir.return_value = self._top_dir
         mock_opts = mock.Mock(
-            full=True, dry_run=False, diff=False, presubmit=False
+            full=True,
+            dry_run=False,
+            diff=False,
+            presubmit=False,
+            stdin_filename=None,
         )
         files = [
             os.path.join(self._top_dir, "tools", "metrics", "ukm", "ukm.xml"),
@@ -813,7 +835,11 @@ class CMDFormatTestCase(unittest.TestCase):
         """Checks if the command line arguments contain the input file paths."""
         find_top_dir.return_value = self._top_dir
         mock_opts = mock.Mock(
-            full=True, dry_run=False, diff=False, presubmit=False
+            full=True,
+            dry_run=False,
+            diff=False,
+            presubmit=False,
+            stdin_filename=None,
         )
         files = [
             os.path.join(
@@ -1315,7 +1341,11 @@ diff --git a/ui/webui/resources/tools/bar.html.ts b/ui/webui/resources/tools/bar
             diff_file = f.name
         try:
             opts = optparse.Values(
-                {"input_diff_file": diff_file, "full": False}
+                {
+                    "input_diff_file": diff_file,
+                    "full": False,
+                    "stdin_filename": None,
+                }
             )
             files, diffs = cl_format._FindFilesToFormat(opts, None, "HEAD")
             self.assertIsInstance(files, list)
@@ -1337,7 +1367,9 @@ diff --git a/ui/webui/resources/tools/bar.html.ts b/ui/webui/resources/tools/bar
         ),
     )
     def testFindFilesToFormatDiffReturnsList(self, mock_diff):
-        opts = optparse.Values({"input_diff_file": None, "full": False})
+        opts = optparse.Values(
+            {"input_diff_file": None, "full": False, "stdin_filename": None}
+        )
         files, diffs = cl_format._FindFilesToFormat(opts, None, "HEAD")
         self.assertIsInstance(files, list)
         self.assertEqual(["bar.py"], files)
@@ -1345,7 +1377,9 @@ diff --git a/ui/webui/resources/tools/bar.html.ts b/ui/webui/resources/tools/bar
 
     @mock.patch("cl_format.RunGitDiffCmd", return_value="baz.gn\n")
     def testFindFilesToFormatFullReturnsList(self, mock_diff):
-        opts = optparse.Values({"input_diff_file": None, "full": True})
+        opts = optparse.Values(
+            {"input_diff_file": None, "full": True, "stdin_filename": None}
+        )
         files, diffs = cl_format._FindFilesToFormat(opts, None, "HEAD")
         self.assertIsInstance(files, list)
         self.assertEqual(["baz.gn"], files)
@@ -1505,7 +1539,16 @@ class TestRuffBatchIntegration(unittest.TestCase):
 
     @mock.patch("subprocess2.communicate")
     def test_ruff_batch_success(self, mock_communicate):
-        mock_opts = mock.Mock(python=True, full=True, diff=False, dry_run=False)
+        # stdin_filename must be explicit: _RunPythonFormat reads it, and a
+        # bare mock.Mock() would auto-create a truthy attribute, sending this
+        # down the stdin fast-path.
+        mock_opts = mock.Mock(
+            python=True,
+            full=True,
+            diff=False,
+            dry_run=False,
+            stdin_filename=None,
+        )
         mock_communicate.return_value = ((b"", b""), 0)
 
         code = cl_format._RunPythonFormat(
@@ -1890,6 +1933,192 @@ class TestGoogleJavaFormat(unittest.TestCase):
             error_ok=True,
             cwd="dummy_top_dir",
         )
+
+
+class TestStdinFilenameFormatting(unittest.TestCase):
+    RUSTFMT_TOML = b'ignore = ["third_party/**"]\n'
+
+    def setUp(self):
+        super(TestStdinFilenameFormatting, self).setUp()
+        self.test_dir = self.enterContext(tempfile.TemporaryDirectory())
+
+    def _write(self, rel_path, content):
+        """Writes content under the test dir and returns the absolute path.
+
+        Always binary: CMDformat writes the stdin temp file in binary, so text
+        mode's "\\n" -> "\\r\\n" translation on Windows would not match what
+        production hands to the formatters.
+        """
+        path = os.path.join(self.test_dir, *rel_path.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(content)
+        return path
+
+    def _read(self, path):
+        with open(path, "rb") as f:
+            return f.read()
+
+    @mock.patch("gclient_paths.GetPrimarySolutionPath")
+    @mock.patch(
+        "rustfmt.FindRustfmtToolInChromiumTree", return_value="/fake/rustfmt"
+    )
+    @mock.patch("cl_format.RunCommand")
+    def test_rust_stdin_formats_in_mirror(
+        self, mock_run, mock_find_tool, mock_solution_path
+    ):
+        """rustfmt runs in place on a mirror of the checkout layout."""
+        mock_solution_path.return_value = self.test_dir
+        toml_path = self._write(".rustfmt.toml", self.RUSTFMT_TOML)
+        temp_file = self._write("temp.rs", b"fn  main() {   }\n")
+        mirrors = []
+
+        def fake_rustfmt(cmd, **kwargs):
+            config_path = cmd[1].removeprefix("--config-path=")
+            target_path = cmd[-1]
+            mirror_dir = os.path.dirname(config_path)
+            mirrors.append(mirror_dir)
+            self.assertEqual(
+                ["/fake/rustfmt", "--unstable-features", "--skip-children"],
+                [cmd[0]] + cmd[2:4],
+            )
+            # A copy of the config, next to the real content at the same
+            # relative path, outside of the checkout.
+            self.assertNotEqual(toml_path, config_path)
+            self.assertEqual(self.RUSTFMT_TOML, self._read(config_path))
+            self.assertEqual(b"fn  main() {   }\n", self._read(target_path))
+            rel_path = os.path.relpath(target_path, mirror_dir)
+            if not rel_path.startswith("third_party"):
+                with open(target_path, "wb") as f:
+                    f.write(b"fn main() {}\n")
+            return ""
+
+        mock_run.side_effect = fake_rustfmt
+
+        def run_rustfmt(stdin_filename):
+            opts = mock.Mock(
+                stdin_filename=stdin_filename, dry_run=False, diff=False
+            )
+            return cl_format._RunRustFmt(opts, [temp_file], self.test_dir, None)
+
+        # Ignored: rustfmt leaves the mirrored file alone.
+        self.assertEqual(0, run_rustfmt("third_party/foo/lib.rs"))
+        self.assertEqual(b"fn  main() {   }\n", self._read(temp_file))
+        # The mirror is cleaned up, and the checkout is untouched.
+        self.assertFalse(os.path.exists(mirrors[-1]))
+        self.assertEqual(
+            [".rustfmt.toml", "temp.rs"], sorted(os.listdir(self.test_dir))
+        )
+
+        # Not ignored: the formatted mirror file is copied back.
+        self.assertEqual(0, run_rustfmt("base/foo.rs"))
+        self.assertEqual(b"fn main() {}\n", self._read(temp_file))
+
+        # Paths outside of the config's directory land at the mirror's root.
+        self._write("temp.rs", b"fn  main() {   }\n")
+        self.assertEqual(0, run_rustfmt("../elsewhere/foo.rs"))
+        self.assertEqual(
+            os.path.join(mirrors[-1], "foo.rs"), mock_run.call_args[0][0][-1]
+        )
+        self.assertEqual(b"fn main() {}\n", self._read(temp_file))
+
+    @mock.patch("metrics_xml_format.FindMetricsXMLFormatterTool")
+    @mock.patch("metrics_xml_format.GetMetricsDir")
+    @mock.patch("cl_format.RunCommand", return_value="")
+    def test_metrics_xml_stdin_filename(
+        self, mock_run, mock_get_dir, mock_find_tool
+    ):
+        """Tool lookup uses the real path; the temp file is what gets edited."""
+        rel_path = "tools/metrics/histograms/metadata/UMA/histograms.xml"
+        mock_find_tool.return_value = "/fake/pretty_print.py"
+        mock_get_dir.return_value = os.path.join(
+            self.test_dir, "tools", "metrics", "histograms"
+        )
+
+        temp_file = os.path.join(self.test_dir, "temp_histograms.xml")
+        opts = mock.Mock(
+            stdin_filename=rel_path,
+            presubmit=False,
+            dry_run=False,
+            diff=False,
+        )
+        ret = cl_format._RunMetricsXMLFormat(
+            opts, [temp_file], self.test_dir, None
+        )
+        self.assertEqual(0, ret)
+
+        # normpath: --stdin-filename is POSIX-style even on Windows, so joining
+        # it onto top_dir yields mixed separators.
+        expected_target = os.path.join(self.test_dir, *rel_path.split("/"))
+        self.assertEqual(
+            expected_target, os.path.normpath(mock_find_tool.call_args[0][0])
+        )
+        self.assertEqual(self.test_dir, mock_get_dir.call_args[0][0])
+        self.assertEqual(
+            expected_target, os.path.normpath(mock_get_dir.call_args[0][1])
+        )
+        self.assertIn(temp_file, mock_run.call_args[0][0])
+
+    @mock.patch("subprocess2.communicate")
+    @mock.patch(
+        "cl_format._GetRuffChromiumPath", return_value="/fake/ruff_chromium"
+    )
+    def test_python_stdin_filename_invokes_ruff_directly(
+        self, mock_ruff_path, mock_communicate
+    ):
+        temp_file = self._write("temp.py", b"x=1+2\n")
+
+        mock_communicate.return_value = (b"x = 1 + 2\n", b""), 0
+        opts = mock.Mock(
+            stdin_filename="foo/bar.py",
+            diff=False,
+            dry_run=False,
+            full=True,
+        )
+        ret = cl_format._RunPythonFormat(opts, [temp_file], self.test_dir, None)
+        self.assertEqual(0, ret)
+        # --root bounds ruff_chromium's upward config search; without it a
+        # stray config above the checkout would be picked up.
+        mock_communicate.assert_called_once_with(
+            [
+                "vpython3",
+                "/fake/ruff_chromium",
+                "format",
+                f"--root={self.test_dir}",
+                "--stdin-filename=foo/bar.py",
+                "-",
+            ],
+            stdin=b"x=1+2\n",
+            stdout=cl_format.subprocess2.PIPE,
+            stderr=cl_format.subprocess2.PIPE,
+            cwd=self.test_dir,
+            shell=sys.platform == "win32",
+        )
+        self.assertEqual(b"x = 1 + 2\n", self._read(temp_file))
+
+    def test_stdin_filename_rejects_incompatible_flags(self):
+        # On the stdin path stdout is the formatted-content channel, so a diff
+        # written there would land inside the caller's file, and a non-zero
+        # exit makes `jj fix` discard the result. These must be refused.
+        for flag in ("--diff", "--dry-run", "--input_diff_file=foo.diff"):
+            stderr = io.StringIO()
+            # CMDformat consults settings while registering options, which
+            # would otherwise require a real checkout.
+            with (
+                mock.patch("cl_format.settings") as mock_settings,
+                mock.patch("sys.stderr", stderr),
+                self.assertRaises(SystemExit) as cm,
+            ):
+                mock_settings.GetFormatJs.return_value = False
+                mock_settings.GetFormatFullByDefault.return_value = False
+                cl_format.CMDformat(
+                    optparse.OptionParser(),
+                    ["--stdin-filename=foo.py", flag],
+                )
+            self.assertEqual(1, cm.exception.code, flag)
+            self.assertIn(
+                "cannot be used with --stdin-filename", stderr.getvalue()
+            )
 
 
 if __name__ == "__main__":
