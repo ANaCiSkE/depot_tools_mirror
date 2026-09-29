@@ -188,6 +188,7 @@ _EXTENDED_LICENSE_CLASSIFIERS = frozenset(
         "BSD-4-Clause-Wasabi",
         "Caffe",
         "CERN",
+        "CLARIN-PUB-BY",
         "dso",
         "Entenssa",
         "FFT2D",
