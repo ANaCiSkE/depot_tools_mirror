@@ -66,25 +66,43 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn("b.txt", args)
         self.assertIn("--full-tree", args)
 
-    def testFullTreeExecutionLargeCL(self):
-        # 1001 files, should run full tree scan
+    def testEmptyFilesToCheckSkipsLsTree(self) -> None:
+        self.input_api.files = []
+        self.input_api.change.AffectedSubmodules = mock.Mock(return_value=[])
+        self.input_api.subprocess.check_output = mock.Mock(return_value=b"")
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+        calls = self.input_api.subprocess.check_output.call_args_list
+        for call in calls:
+            self.assertNotIn("ls-tree", call[0][0])
+
+    def testChunkedExecutionLargeCL(self) -> None:
         self.input_api.files = [
             MockFile(os.path.join("/tmp/repo", f"f{i}.txt"), [])
             for i in range(1001)
         ]
 
-        # Mock check_output
         self.input_api.subprocess.check_output = mock.Mock(return_value=b"")
 
         presubmit_canned_checks.CheckForCommitObjects(
             self.input_api, self.output_api
         )
 
-        # Verify check_output was called with --full-tree
-        args = self.input_api.subprocess.check_output.call_args[0][0]
-        self.assertIn("ls-tree", args)
-        self.assertIn("--full-tree", args)
-        self.assertNotIn("f0.txt", args)
+        calls = self.input_api.subprocess.check_output.call_args_list
+        self.assertEqual(4, len(calls))
+        all_checked = []
+        for call in calls[1:]:
+            args = call[0][0]
+            self.assertIn("ls-tree", args)
+            self.assertIn("--full-tree", args)
+            self.assertNotIn("-r", args)
+            all_checked.extend(args[args.index("--") + 1 :])
+        self.assertEqual(1001, len(all_checked))
+        self.assertIn("f0.txt", all_checked)
+        self.assertIn("f1000.txt", all_checked)
 
     def testFullTreeExecutionWhenDepsModified(self):
         # Small CL but DEPS is modified, should run full tree scan
@@ -154,6 +172,40 @@ class CheckForCommitObjectsTest(unittest.TestCase):
         self.assertIn("a.txt", args)
         self.assertIn("third_party/perl", args)
         self.assertIn("--full-tree", args)
+
+    def testSurrogateEscapePathDecoding(self) -> None:
+        self.input_api.files = [MockRelativeFile("submodule", [])]
+        git_show_output = b""
+        git_ls_tree_output = b"160000 commit 1234\tsub_\xff\xfe\0"
+        self.input_api.subprocess.check_output = mock.Mock(
+            side_effect=[
+                git_show_output,
+                git_ls_tree_output,
+            ]
+        )
+
+        results = presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(len(results), 1)
+        self.assertIn("sub_\udcff\udcfe", results[0].items)
+
+    def testRepositoryRootEvaluatedOnce(self) -> None:
+        call_count = 0
+
+        def counting_repo_root() -> str:
+            nonlocal call_count
+            call_count += 1
+            return "/tmp/repo"
+
+        self.input_api.change.RepositoryRoot = counting_repo_root
+        self.input_api.files = [MockRelativeFile("a.txt", [])]
+        self.input_api.subprocess.check_output = mock.Mock(return_value=b"")
+
+        presubmit_canned_checks.CheckForCommitObjects(
+            self.input_api, self.output_api
+        )
+        self.assertEqual(1, call_count)
 
 
 if __name__ == "__main__":
