@@ -10,13 +10,16 @@ import io
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+from types import FrameType
+from typing import Any, Callable, Optional
 import unittest
-import zipfile
-import urllib.request
 from unittest import mock
+import urllib.request
+import zipfile
 
 # Add depot_tools to path
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -184,6 +187,55 @@ class GsutilUnitTests(unittest.TestCase):
         self,
     ):
         self.assertFalse(gsutil._is_luci_auth_supported_platform())
+
+    @mock.patch("signal.SIGKILL", 9, create=True)
+    @mock.patch("gsutil.IS_WINDOWS", False)
+    def test__run_subprocess_forwards_sigterm(self) -> None:
+        mock_proc = mock.MagicMock()
+        mock_proc.__enter__.return_value = mock_proc
+        mock_proc.pid = 12345
+        mock_proc.returncode = -signal.SIGKILL
+
+        captured_handler: dict[
+            str, Callable[[int, Optional[FrameType]], Any]
+        ] = {}
+
+        def fake_communicate() -> tuple[bytes, bytes]:
+            captured_handler["handler"](signal.SIGTERM, None)
+            return (b"out", b"err")
+
+        mock_proc.communicate.side_effect = fake_communicate
+
+        orig_signal = signal.getsignal(signal.SIGTERM)
+
+        def fake_signal(sig: int, handler: Any) -> Any:
+            if sig == signal.SIGTERM and callable(handler):
+                captured_handler["handler"] = handler
+            return orig_signal
+
+        with (
+            mock.patch(
+                "subprocess.Popen", return_value=mock_proc
+            ) as mock_popen,
+            mock.patch("os.killpg", create=True) as mock_killpg,
+            mock.patch("signal.signal", side_effect=fake_signal) as mock_sig,
+            self.assertRaises(SystemExit) as cm,
+        ):
+            gsutil._run_subprocess(["fake_cmd"])
+
+        self.assertEqual(cm.exception.code, 128 + signal.SIGTERM)
+        mock_popen.assert_called_once_with(
+            ["fake_cmd"],
+            shell=False,
+            start_new_session=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        mock_killpg.assert_called_once_with(12345, signal.SIGKILL)
+        self.assertEqual(mock_sig.call_count, 2)
+        self.assertEqual(
+            mock_sig.call_args_list[1], mock.call(signal.SIGTERM, orig_signal)
+        )
 
 
 if __name__ == "__main__":

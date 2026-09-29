@@ -78,6 +78,23 @@ class AutoninjaTest(trial_dir.TestCase):
                 ],
             )
 
+    @mock.patch("subprocess.Popen")
+    def test_upload_sisolog(self, mock_popen: mock.MagicMock) -> None:
+        out_dir = os.path.join("out", "dir")
+        autoninja._upload_sisolog(["autoninja.py", "-C", out_dir], "test-id")
+        mock_popen.assert_not_called()
+
+        metrics_file = os.path.join(out_dir, "siso_metrics.json")
+        write(metrics_file, "{}")
+        autoninja._upload_sisolog(["autoninja.py", "-C", out_dir], "test-id")
+        mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        self.assertEqual(
+            cmd[:5],
+            [sys.executable, autoninja._GSUTIL_PY, "-q", "cp", "-r"],
+        )
+        self.assertEqual(cmd[5], metrics_file)
+
     def test_autoninja(self):
         """Test that by default (= no GN args) autoninja delegates to ninja."""
         with mock.patch("ninja.main", return_value=0) as ninja_main:

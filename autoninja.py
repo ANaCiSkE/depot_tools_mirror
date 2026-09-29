@@ -646,11 +646,14 @@ def _upload_ninjalog(args, exit_code, build_duration):
     )
 
 
-def _upload_sisolog(input_args: list[str], build_id: str):
+def _upload_sisolog(input_args: list[str], build_id: str) -> None:
     timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     top_dir = time.strftime("%Y/%m/%d/siso/", time.gmtime())
     _, out_dir = ninja.parse_args(input_args)
     for file in _SISO_FILES_TO_UPLOAD:
+        siso_logs_file = os.path.join(out_dir, file)
+        if not os.path.exists(siso_logs_file):
+            continue
         # This folder structure mimics the recipe used by the RBE workers
         # https://source.chromium.org/chromium/infra/infra_superproject/+/main:build/recipes/recipe_modules/siso/api.py
         formatted_gcs_path = os.path.join(
@@ -659,7 +662,6 @@ def _upload_sisolog(input_args: list[str], build_id: str):
             f"reports.{timestamp}.{build_id}",
             file,
         )
-        siso_logs_file = os.path.join(out_dir, file)
 
         # Run upload script without wait.
         creationflags = 0
@@ -668,6 +670,7 @@ def _upload_sisolog(input_args: list[str], build_id: str):
         cmd = [
             sys.executable,
             _GSUTIL_PY,
+            "-q",
             "cp",
             "-r",
             siso_logs_file,

@@ -11,9 +11,12 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+from types import FrameType
+from typing import Any, Optional
 import urllib.request
 
 import gclient_utils
@@ -195,9 +198,27 @@ def _luci_auth_cmd(luci_cmd, wrapped_cmds=None, interactive=False):
     return _run_subprocess(cmd, interactive)
 
 
-def _run_subprocess(cmd, interactive=False, env=None):
+def _kill_proc(proc: subprocess.Popen) -> None:
+    if IS_WINDOWS:
+        proc.terminate()
+        return
+    with contextlib.suppress(OSError):
+        os.killpg(proc.pid, signal.SIGKILL)
+
+
+def _handle_sigterm(signum: int, _frame: Optional[FrameType]) -> None:
+    raise SystemExit(128 + signum)
+
+
+def _run_subprocess(
+    cmd: list[str],
+    interactive: bool = False,
+    env: Optional[dict[str, str]] = None,
+) -> subprocess.CompletedProcess:
     """Wrapper to run the given command within a subprocess."""
-    kwargs = {"shell": IS_WINDOWS}
+    kwargs: dict[str, Any] = {"shell": IS_WINDOWS}
+    if not IS_WINDOWS:
+        kwargs["start_new_session"] = True
 
     if env:
         kwargs["env"] = dict(os.environ, **env)
@@ -206,7 +227,19 @@ def _run_subprocess(cmd, interactive=False, env=None):
         kwargs["stdout"] = subprocess.PIPE
         kwargs["stderr"] = subprocess.PIPE
 
-    return subprocess.run(cmd, **kwargs)
+    with subprocess.Popen(cmd, **kwargs) as proc:
+        old_sigterm = None
+        try:
+            with contextlib.suppress(ValueError):
+                old_sigterm = signal.signal(signal.SIGTERM, _handle_sigterm)
+            stdout, stderr = proc.communicate()
+        except BaseException:
+            _kill_proc(proc)
+            raise
+        finally:
+            if old_sigterm is not None:
+                signal.signal(signal.SIGTERM, old_sigterm)
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
 def _print_subprocess_result(p):

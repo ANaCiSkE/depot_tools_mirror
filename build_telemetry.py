@@ -38,13 +38,11 @@ class Config:
 
         if not config:
             config = {
-                "user": check_auth().get("email", ""),
+                "user": "",
                 "status": None,
                 "countdown": countdown,
                 "version": VERSION,
             }
-        if not config.get("user"):
-            config["user"] = check_auth().get("email", "")
         self._config = config
 
     def save(self):
@@ -64,8 +62,10 @@ class Config:
         return self.user.endswith("@google.com")
 
     @property
-    def user(self):
-        return self._config.get("user", "")
+    def user(self) -> str:
+        if not self._config.get("user"):
+            self._config["user"] = check_auth().get("email", "")
+        return self._config["user"]
 
     @property
     def countdown(self):
@@ -75,7 +75,9 @@ class Config:
     def version(self):
         return self._config.get("version")
 
-    def enabled(self):
+    def enabled(self) -> bool:
+        if os.environ.get("DEPOT_TOOLS_BUILD_TELEMETRY") == "0":
+            return False
         if not self.is_googler or not self.is_corp_machine:
             return False
         if self._config.get("status") == "opt-out":

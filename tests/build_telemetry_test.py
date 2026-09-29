@@ -164,6 +164,28 @@ class BuildTelemetryTest(unittest.TestCase):
                 cfg = build_telemetry.load_config(cfg_path)
                 self.assertFalse(cfg.enabled())
 
+    @unittest.mock.patch("shutil.which")
+    def test_disabled_by_env_var(
+        self, mock_shutil: unittest.mock.MagicMock
+    ) -> None:
+        test_countdown = 2
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_shutil.return_value = "path"
+            cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
+            with (
+                unittest.mock.patch("build_telemetry.check_auth") as check_auth,
+                unittest.mock.patch.dict(
+                    os.environ, {"DEPOT_TOOLS_BUILD_TELEMETRY": "0"}
+                ),
+            ):
+                check_auth.return_value = {"email": "bob@google.com"}
+                cfg = build_telemetry.load_config(cfg_path, test_countdown)
+                cfg._show_notice = unittest.mock.MagicMock()
+                self.assertFalse(cfg.enabled())
+                self.assertEqual(cfg.countdown, test_countdown)
+                cfg._show_notice.assert_not_called()
+                check_auth.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
