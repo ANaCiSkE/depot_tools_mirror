@@ -2175,5 +2175,115 @@ class EnsureAccountExistsTest(unittest.TestCase):
         mock_get_account.assert_called_once()
 
 
+class GerritFlowsTest(unittest.TestCase):
+    def testComputeScheduleTime_DefaultJitter(self):
+        # 123456 % 240 = 96 mins -> 19:00 + 1h36m = 20:36
+        self.assertEqual(
+            "20:36",
+            gerrit_util.ComputeScheduleTime(123456),
+        )
+        self.assertEqual(
+            "19:00",
+            gerrit_util.ComputeScheduleTime(0),
+        )
+        self.assertEqual(
+            "19:00",
+            gerrit_util.ComputeScheduleTime(None),
+        )
+        # Boundary: issue 239 -> 22:59
+        self.assertEqual(
+            "22:59",
+            gerrit_util.ComputeScheduleTime(239),
+        )
+        # Boundary: issue 240 -> 19:00
+        self.assertEqual(
+            "19:00",
+            gerrit_util.ComputeScheduleTime(240),
+        )
+
+    def testComputeScheduleTime_CustomTime(self):
+        self.assertEqual(
+            "20:30",
+            gerrit_util.ComputeScheduleTime(123456, custom_time="20:30"),
+        )
+        self.assertEqual(
+            "00:00",
+            gerrit_util.ComputeScheduleTime(123456, custom_time="00:00"),
+        )
+        self.assertEqual(
+            "23:59",
+            gerrit_util.ComputeScheduleTime(123456, custom_time="23:59"),
+        )
+
+    def testComputeScheduleTime_InvalidCustomTime(self):
+        invalid_times = ["", "   ", "8pm", "25:00", "today at 20:30", 1234]
+        for t in invalid_times:
+            with self.assertRaises(ValueError):
+                gerrit_util.ComputeScheduleTime(123456, custom_time=t)
+
+    @mock.patch("gerrit_util.CallGerritApi")
+    def testCreateScheduledSubmitFlow_DefaultJitter(self, mockCallGerritApi):
+        mockCallGerritApi.return_value = {"uuid": "test-uuid"}
+        result = gerrit_util.CreateScheduledSubmitFlow("example.com", 123456)
+        self.assertEqual(result, {"uuid": "test-uuid"})
+        mockCallGerritApi.assert_called_once_with(
+            "example.com",
+            "changes/123456/flows",
+            reqtype="POST",
+            body={
+                "stage_expressions": [
+                    {
+                        "condition": (
+                            "https://example.com/c/123456 is is:submittable, "
+                            "wait until today at 20:36 in America/Los_Angeles"
+                        ),
+                        "action": {
+                            "name": "vote",
+                            "parameters": ["Commit-Queue+2"],
+                        },
+                    }
+                ]
+            },
+            accept_statuses=(200, 201),
+        )
+
+    @mock.patch("gerrit_util.CallGerritApi")
+    def testCreateScheduledSubmitFlow_CustomTime(self, mockCallGerritApi):
+        mockCallGerritApi.return_value = {"uuid": "test-uuid"}
+        result = gerrit_util.CreateScheduledSubmitFlow(
+            "example.com", 123456, custom_time="20:30"
+        )
+        self.assertEqual(result, {"uuid": "test-uuid"})
+        mockCallGerritApi.assert_called_once_with(
+            "example.com",
+            "changes/123456/flows",
+            reqtype="POST",
+            body={
+                "stage_expressions": [
+                    {
+                        "condition": (
+                            "https://example.com/c/123456 is is:submittable, "
+                            "wait until today at 20:30 in America/Los_Angeles"
+                        ),
+                        "action": {
+                            "name": "vote",
+                            "parameters": ["Commit-Queue+2"],
+                        },
+                    }
+                ]
+            },
+            accept_statuses=(200, 201),
+        )
+
+
+    @mock.patch("gerrit_util.CallGerritApi")
+    def testCreateScheduledSubmitFlow_ApiFailure(self, mockCallGerritApi):
+        mockCallGerritApi.side_effect = gerrit_util.GerritError(
+            500, "Internal Server Error"
+        )
+        with self.assertRaises(gerrit_util.GerritError):
+            gerrit_util.CreateScheduledSubmitFlow("example.com", 123456)
+
+
 if __name__ == "__main__":
     unittest.main()

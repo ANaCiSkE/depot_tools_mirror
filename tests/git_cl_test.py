@@ -12010,6 +12010,166 @@ class TestCMDDescription(unittest.TestCase):
         mock_prompt.assert_called_once()
 
 
+class CMDScheduledSubmitFlowTestCase(CMDTestCaseBase):
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("gerrit_util.CreateScheduledSubmitFlow")
+    def testCreateScheduledSubmitFlow_DefaultJitter(
+        self, mockCreateScheduledSubmitFlow
+    ):
+        mockCreateScheduledSubmitFlow.return_value = {"uuid": "test-uuid"}
+        cl = git_cl.Changelist(issue=123456)
+        self.assertEqual(0, cl.CreateScheduledSubmitFlow())
+        mockCreateScheduledSubmitFlow.assert_called_once_with(
+            "chromium-review.googlesource.com",
+            123456,
+            custom_time=None,
+            tz="America/Los_Angeles",
+        )
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("gerrit_util.CreateScheduledSubmitFlow")
+    def testCreateScheduledSubmitFlow_CustomTime(
+        self, mockCreateScheduledSubmitFlow
+    ):
+        mockCreateScheduledSubmitFlow.return_value = {"uuid": "test-uuid"}
+        cl = git_cl.Changelist(issue=123456)
+        self.assertEqual(0, cl.CreateScheduledSubmitFlow(custom_time="20:30"))
+        mockCreateScheduledSubmitFlow.assert_called_once_with(
+            "chromium-review.googlesource.com",
+            123456,
+            custom_time="20:30",
+            tz="America/Los_Angeles",
+        )
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    def testCreateScheduledSubmitFlow_InvalidCustomTime(self):
+        cl = git_cl.Changelist(issue=123456)
+        for t in ["", "   ", "8pm", "25:00", "today at 20:30"]:
+            with self.assertRaisesRegex(
+                ValueError,
+                r'Invalid time ".*"\. Expected 24-hour format "HH:MM" in PT / '
+                r'MTV time \(e\.g\. "19:45"\)\.',
+            ):
+                cl.CreateScheduledSubmitFlow(custom_time=t)
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("git_cl.Changelist.CreateScheduledSubmitFlow")
+    def testSetCommitNightly(self, mockCreateScheduledSubmitFlow):
+        mockCreateScheduledSubmitFlow.return_value = 0
+        self.assertEqual(0, git_cl.main(["set-commit", "--nightly"]))
+        mockCreateScheduledSubmitFlow.assert_called_once_with(custom_time=None)
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("git_cl.Changelist.CreateScheduledSubmitFlow")
+    def testSetCommitSubmitAt(self, mockCreateScheduledSubmitFlow):
+        mockCreateScheduledSubmitFlow.return_value = 0
+        self.assertEqual(0, git_cl.main(["set-commit", "--submit-at", "21:00"]))
+        mockCreateScheduledSubmitFlow.assert_called_once_with(
+            custom_time="21:00"
+        )
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    def testSetCommit_MutuallyExclusiveOptions(self):
+        with self.assertRaises(SystemExit):
+            git_cl.main(["set-commit", "--dry-run", "--nightly"])
+        with self.assertRaises(SystemExit):
+            git_cl.main(["set-commit", "--clear", "--submit-at", "21:00"])
+        with self.assertRaises(SystemExit):
+            git_cl.main(["set-commit", "--nightly", "--submit-at", "21:00"])
+        with self.assertRaises(SystemExit):
+            git_cl.main(["set-commit", "--submit-at", "invalid"])
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("git_cl.Changelist.EnsureAuthenticated")
+    @mock.patch("gerrit_util.AsyncEnsureAccountExists")
+    def testUpload_MutuallyExclusiveOptions(self, _mockAccount, _mockAuth):
+        with self.assertRaises(SystemExit):
+            git_cl.main(["upload", "--nightly", "--submit-at", "21:00"])
+        with self.assertRaises(SystemExit):
+            git_cl.main(["upload", "--use-commit-queue", "--nightly"])
+        with self.assertRaises(SystemExit):
+            git_cl.main(["upload", "--cq-dry-run", "--submit-at", "21:00"])
+        with self.assertRaises(SystemExit):
+            git_cl.main(["upload", "--submit-at", "invalid"])
+
+    @mock.patch("git_cl.Changelist.CreateScheduledSubmitFlow")
+    def testPostUploadUpdates_MockOptionsDoesNotTriggerFlow(
+        self, mockCreateFlow
+    ):
+        cl = git_cl.Changelist()
+        options = mock.MagicMock()
+        new_upload = mock.MagicMock()
+        new_upload.reviewers = []
+        new_upload.ccs = []
+        with (
+            mock.patch.object(cl, "SetPatchset"),
+            mock.patch.object(cl, "_GitSetBranchConfigValue"),
+            mock.patch(
+                "git_cl.Settings.GetRunPostUploadHook", return_value=False
+            ),
+        ):
+            cl.PostUploadUpdates(
+                options, new_upload, "123456", update_reviewers=False
+            )
+            mockCreateFlow.assert_not_called()
+
+    @mock.patch("git_cl.Changelist.CreateScheduledSubmitFlow")
+    def testPostUploadUpdates_NightlyTriggersFlow(self, mockCreateFlow):
+        cl = git_cl.Changelist()
+        options = mock.MagicMock()
+        options.nightly = True
+        options.submit_at = None
+        new_upload = mock.MagicMock()
+        new_upload.reviewers = []
+        new_upload.ccs = []
+        with (
+            mock.patch.object(cl, "SetPatchset"),
+            mock.patch.object(cl, "_GitSetBranchConfigValue"),
+            mock.patch(
+                "git_cl.Settings.GetRunPostUploadHook", return_value=False
+            ),
+        ):
+            cl.PostUploadUpdates(
+                options, new_upload, "123456", update_reviewers=False
+            )
+            mockCreateFlow.assert_called_once_with(custom_time=None)
+
+    @mock.patch("git_cl.Changelist.CreateScheduledSubmitFlow")
+    def testPostUploadUpdates_SubmitAtTriggersFlow(self, mockCreateFlow):
+        cl = git_cl.Changelist()
+        options = mock.MagicMock()
+        options.nightly = False
+        options.submit_at = "19:45"
+        new_upload = mock.MagicMock()
+        new_upload.reviewers = []
+        new_upload.ccs = []
+        with (
+            mock.patch.object(cl, "SetPatchset"),
+            mock.patch.object(cl, "_GitSetBranchConfigValue"),
+            mock.patch(
+                "git_cl.Settings.GetRunPostUploadHook", return_value=False
+            ),
+        ):
+            cl.PostUploadUpdates(
+                options, new_upload, "123456", update_reviewers=False
+            )
+            mockCreateFlow.assert_called_once_with(custom_time="19:45")
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG if "-v" in sys.argv else logging.ERROR

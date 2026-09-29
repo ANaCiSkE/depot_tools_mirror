@@ -2484,6 +2484,14 @@ class Changelist(object):
                 notify=bool(options.send_mail),
             )
 
+        has_nightly = getattr(options, "nightly", False) is True
+        submit_at = getattr(options, "submit_at", None)
+        has_submit_at = isinstance(submit_at, str)
+        if has_nightly or has_submit_at:
+            self.CreateScheduledSubmitFlow(
+                custom_time=submit_at if has_submit_at else None
+            )
+
     def CMDUpload(self, options, git_diff_args, orig_args):
         """Uploads a change to codereview."""
         custom_cl_base = None
@@ -2598,6 +2606,22 @@ class Changelist(object):
             )
             # Still raise exception so that stack trace is printed.
             raise
+
+    def CreateScheduledSubmitFlow(
+        self,
+        tz: str = "America/Los_Angeles",
+        custom_time: Optional[str] = None,
+    ) -> int:
+        """Creates a Gerrit Flow to trigger submit at scheduled time once
+        submittable.
+        """
+        issue = self.GetIssue()
+        if not issue:
+            raise RuntimeError("Must upload the issue first.")
+        gerrit_util.CreateScheduledSubmitFlow(
+            self.GetGerritHost(), issue, custom_time=custom_time, tz=tz
+        )
+        return 0
 
     def GetGerritHost(self) -> Optional[str]:
         # Populate self._gerrit_host
@@ -4000,6 +4024,14 @@ class Changelist(object):
                 reviewers,
                 cc,
                 notify=bool(options.send_mail),
+            )
+
+        has_nightly = getattr(options, "nightly", False) is True
+        submit_at = getattr(options, "submit_at", None)
+        has_submit_at = isinstance(submit_at, str)
+        if self.GetIssue() and (has_nightly or has_submit_at):
+            self.CreateScheduledSubmitFlow(
+                custom_time=submit_at if has_submit_at else None
             )
 
         return 0
@@ -6816,6 +6848,21 @@ def CMDupload(parser, args):
         "enabled",
     )
     parser.add_option(
+        "--nightly",
+        action="store_true",
+        dest="nightly",
+        help="Schedule CL submission for offpeak hours (between 19:00 - 23:00 "
+        "PT / MTV time) once approved. Mutually exclusive with --submit-at.",
+    )
+    parser.add_option(
+        "--submit-at",
+        type=str,
+        dest="submit_at",
+        metavar="TIME",
+        help="Specific 24-hour time for submission in PT / MTV time "
+        '(e.g. "19:45"). Mutually exclusive with --nightly.',
+    )
+    parser.add_option(
         "--enable-owners-override",
         action="store_true",
         help="Adds the Owners-Override label to your change.",
@@ -6986,14 +7033,27 @@ def CMDupload(parser, args):
             )
         options.message = gclient_utils.FileRead(options.message_file)
 
+    if options.nightly and options.submit_at is not None:
+        parser.error("Cannot specify both --nightly and --submit-at.")
+
+    if options.submit_at is not None:
+        try:
+            options.submit_at = gerrit_util.ComputeScheduleTime(
+                custom_time=options.submit_at
+            )
+        except ValueError as e:
+            parser.error(str(e))
+
+    has_nightly = options.nightly or (options.submit_at is not None)
     if [
         options.cq_dry_run,
         options.use_commit_queue,
         options.retry_failed,
+        has_nightly,
     ].count(True) > 1:
         parser.error(
-            "Only one of --use-commit-queue, --cq-dry-run or "
-            "--retry-failed is allowed."
+            "Only one of --use-commit-queue, --cq-dry-run, --retry-failed, "
+            "or --nightly/--submit-at is allowed."
         )
 
     if options.skip_title and options.title:
@@ -8326,6 +8386,21 @@ def CMDset_commit(parser, args):
         "-c", "--clear", action="store_true", help="stop CQ run, if any"
     )
     parser.add_option(
+        "--nightly",
+        action="store_true",
+        dest="nightly",
+        help="Queue CL for submission during offpeak hours (between 19:00 - "
+        "23:00 PT / MTV time). Mutually exclusive with --submit-at.",
+    )
+    parser.add_option(
+        "--submit-at",
+        type=str,
+        dest="submit_at",
+        metavar="TIME",
+        help="Specific 24-hour time for submission in PT / MTV time "
+        '(e.g. "19:45"). Mutually exclusive with --nightly.',
+    )
+    parser.add_option(
         "-i",
         "--issue",
         type=int,
@@ -8335,14 +8410,29 @@ def CMDset_commit(parser, args):
     options, args = parser.parse_args(args)
     if args:
         parser.error("Unrecognized args: %s" % " ".join(args))
-    if [options.dry_run, options.clear].count(True) > 1:
-        parser.error("Only one of --dry-run, and --clear are allowed.")
+    if options.nightly and options.submit_at is not None:
+        parser.error("Cannot specify both --nightly and --submit-at.")
+    if options.submit_at is not None:
+        try:
+            options.submit_at = gerrit_util.ComputeScheduleTime(
+                custom_time=options.submit_at
+            )
+        except ValueError as e:
+            parser.error(str(e))
+    has_nightly = options.nightly or (options.submit_at is not None)
+    if [options.dry_run, options.clear, has_nightly].count(True) > 1:
+        parser.error(
+            "Only one of --dry-run, --clear, and --nightly/--submit-at are "
+            "allowed."
+        )
 
     cl = Changelist(issue=options.issue)
     if not cl.GetIssue():
         parser.error("Must upload the issue first.")
 
-    if options.clear:
+    if has_nightly:
+        return cl.CreateScheduledSubmitFlow(custom_time=options.submit_at)
+    elif options.clear:
         state = _CQState.NONE
     elif options.dry_run:
         state = _CQState.DRY_RUN

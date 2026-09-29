@@ -2686,3 +2686,82 @@ def ChangeIdentifier(project, change_number):
     """
     assert int(change_number)
     return "%s~%s" % (urllib.parse.quote(project, ""), change_number)
+
+
+def ComputeScheduleTime(
+    issue: Optional[Union[int, str]] = None,
+    custom_time: Optional[str] = None,
+) -> str:
+    """Computes target time string for submission flow.
+
+    If custom_time is provided, validates that it is in 24-hour "HH:MM" format
+    in PT / MTV time (e.g. "19:45"). Otherwise, computes a deterministic time
+    between 19:00 - 23:00 PT / MTV time based on the issue number.
+    """
+    if custom_time is not None:
+        if not isinstance(custom_time, str):
+            raise ValueError(
+                f'Invalid time "{custom_time}". Expected 24-hour format '
+                '"HH:MM" in PT / MTV time (e.g. "19:45").'
+            )
+        custom_time = custom_time.strip()
+        # Validate 24-hour HH:MM format (00:00 to 23:59)
+        if not re.match(r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$", custom_time):
+            raise ValueError(
+                f'Invalid time "{custom_time}". Expected 24-hour format '
+                '"HH:MM" in PT / MTV time (e.g. "19:45").'
+            )
+        return custom_time
+
+    # Deterministic jitter across 240-minute window (19:00 to 23:00)
+    issue_num = int(issue) if issue else 0
+    offset_minutes = issue_num % 240
+    target_hour = 19 + (offset_minutes // 60)
+    target_min = offset_minutes % 60
+    return f"{target_hour:02d}:{target_min:02d}"
+
+
+def CreateScheduledSubmitFlow(
+    host: str,
+    issue: Union[int, str],
+    custom_time: Optional[str] = None,
+    tz: str = "America/Los_Angeles",
+) -> Dict[str, Any]:
+    """Creates a Gerrit Flow to trigger CQ+2 at scheduled time once
+    submittable.
+    """
+    target_time = ComputeScheduleTime(issue, custom_time)
+    cl_url = f"https://{host}/c/{issue}"
+    condition = (
+        f"{cl_url} is is:submittable, "
+        f"wait until today at {target_time} in {tz}"
+    )
+    body = {
+        "stage_expressions": [
+            {
+                "condition": condition,
+                "action": {
+                    "name": "vote",
+                    "parameters": ["Commit-Queue+2"],
+                },
+            }
+        ]
+    }
+    try:
+        res = CallGerritApi(
+            host,
+            f"changes/{issue}/flows",
+            reqtype="POST",
+            body=body,
+            accept_statuses=(200, 201),
+        )
+        print(
+            f"Created submit flow for CL {issue} "
+            f"(scheduled for today at {target_time} in {tz})."
+        )
+        return res
+    except Exception as e:
+        print(f"WARNING: Failed to create submit flow for CL {issue}: {e}")
+        raise
+
+
