@@ -1472,6 +1472,8 @@ class TestGitCl(unittest.TestCase):
                 (
                     [
                         "git",
+                        "-c",
+                        "push.negotiate=false",
                         "push",
                         "https://%s.googlesource.com/my/repo" % short_hostname,
                         ref_to_push

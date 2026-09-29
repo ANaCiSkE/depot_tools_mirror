@@ -3623,7 +3623,19 @@ class Changelist(object):
                 all_push_options.append(superproject_option)
 
             remote_url = self.GetRemoteUrl()
-            push_cmd = ["git", "push", remote_url, refspec]
+            # Explicitly disable push.negotiate. This is a feature that does an
+            # extra network request to try to find a closer ancestor than
+            # origin/main. For non-stacked changes, it's always a no-op. For
+            # stacked changes, it's still almost always faster to just send all
+            # patches in the stack than to pay the extra network request.
+            push_cmd = [
+                "git",
+                "-c",
+                "push.negotiate=false",
+                "push",
+                remote_url,
+                refspec,
+            ]
             if all_push_options:
                 for opt in all_push_options:
                     push_cmd.extend(["-o", opt])
