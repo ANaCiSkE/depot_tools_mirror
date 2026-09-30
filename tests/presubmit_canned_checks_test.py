@@ -1116,7 +1116,8 @@ class CheckAyeAyeTest(unittest.TestCase):
             results[0].message,
             "AyeAye execution failed (exit code 128):\n"
             "fatal: bad object HEAD:third_party/litert/src\n"
-            "Failed to build request proto",
+            "Failed to build request proto\n"
+            "Please file a bug at http://go/alint-bug if you think this is an issue.",
         )
 
     def test_ayeaye_execution_error_no_output(self):
@@ -1141,7 +1142,73 @@ class CheckAyeAyeTest(unittest.TestCase):
         self.assertEqual(results[0].type, "warning")
         self.assertEqual(
             results[0].message,
-            "AyeAye execution failed (exit code 1)",
+            "AyeAye execution failed (exit code 1)\n"
+            "Please file a bug at http://go/alint-bug if you think this is an issue.",
+        )
+
+    def test_ayeaye_execution_error_ai_agent(self) -> None:
+        json_output = json.dumps(
+            {
+                "errors": [],
+                "warnings": ["[AyeAye/CommitMatch] Minor warning"],
+                "execution_error": {
+                    "exit_code": 128,
+                    "output": "fatal: bad object HEAD",
+                },
+            }
+        ).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+        self.input_api.environ = {"ANTIGRAVITY_AGENT": "1"}
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].type, "notify")
+        self.assertEqual(
+            results[0].message, "[AyeAye/CommitMatch] Minor warning"
+        )
+        self.assertEqual(results[1].type, "notify")
+        self.assertEqual(
+            results[1].message,
+            "AyeAye execution failed (exit code 128):\n"
+            "fatal: bad object HEAD\n"
+            "Please file a bug at http://go/alint-bug if you think this "
+            "is an issue.",
+        )
+
+    def test_ayeaye_execution_error_headless(self) -> None:
+        json_output = json.dumps(
+            {
+                "errors": [],
+                "warnings": ["[AyeAye/CommitMatch] Minor warning"],
+                "execution_error": {
+                    "exit_code": 1,
+                    "output": "",
+                },
+            }
+        ).encode("utf-8")
+        self.mock_proc.communicate.return_value = (json_output, b"")
+        self.mock_proc.returncode = 0
+        self.input_api.environ = {"CHROME_HEADLESS": "1"}
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].type, "notify")
+        self.assertEqual(
+            results[0].message, "[AyeAye/CommitMatch] Minor warning"
+        )
+        self.assertEqual(results[1].type, "notify")
+        self.assertEqual(
+            results[1].message,
+            "AyeAye execution failed (exit code 1)\n"
+            "Please file a bug at http://go/alint-bug if you think this "
+            "is an issue.",
         )
 
 

@@ -106,6 +106,7 @@ class MockInputApi(object):
         self.presubmit_local_path = os.path.dirname(__file__)
         self.logging = logging.getLogger("PRESUBMIT")
         self.Command = MockCommand
+        self.environ = {}
 
     @property
     def is_windows(self):

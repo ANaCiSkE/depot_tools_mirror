@@ -12,6 +12,7 @@ import re as _re
 import sys as _sys
 import time
 
+import gclient_utils
 import metadata.discover
 import metadata.validate
 
@@ -4065,16 +4066,26 @@ def CheckAyeAye(input_api, output_api):
         if returncode != 0:
             return None
         json_dict = input_api.json.loads(output)
+        warning_factory = (
+            output_api.PresubmitNotifyResult
+            if (
+                gclient_utils.IsEnvAi(input_api.environ)
+                or input_api.environ.get("CHROME_HEADLESS") == "1"
+            )
+            else output_api.PresubmitPromptWarning
+        )
         results = [output_api.PresubmitError(x) for x in json_dict["errors"]]
-        results += [
-            output_api.PresubmitPromptWarning(x) for x in json_dict["warnings"]
-        ]
+        results += [warning_factory(x) for x in json_dict["warnings"]]
         if "execution_error" in json_dict:
             err = json_dict["execution_error"]
             msg = f"AyeAye execution failed (exit code {err['exit_code']})"
             if err.get("output"):
                 msg += f":\n{err['output']}"
-            results.append(output_api.PresubmitPromptWarning(msg))
+            msg += (
+                "\nPlease file a bug at http://go/alint-bug if you think this "
+                "is an issue."
+            )
+            results.append(warning_factory(msg))
         return results
 
     cmd = [
