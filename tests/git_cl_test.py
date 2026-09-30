@@ -6999,6 +6999,23 @@ class TestGitCl(unittest.TestCase):
             0, git_cl.main(["comments", "-i", "1", "-j", "output.json"])
         )
 
+    def test_get_remote_url_with_pushurl(self):
+        pushurl = "sso://chrome-internal/clank/internal/apps.git"
+        scm.GIT.SetConfig("", "remote.origin.url", "https://chromium.googlesource.com/my/repo")
+        scm.GIT.SetConfig("", "remote.origin.pushurl", pushurl)
+        cl = git_cl.Changelist(issue=1)
+        self.assertEqual(cl.GetRemoteUrl(), pushurl)
+        self.assertEqual(cl.GetRemoteUrl(), pushurl)  # Must be cached.
+
+    def test_get_remote_url_with_mirror_and_pushurl(self):
+        pushurl = "sso://chrome-internal/clank/internal/apps.git"
+        scm.GIT.SetConfig("", "remote.origin.url", "/usr/local/btrfs_mount/git_cache/repo")
+        scm.GIT.SetConfig("", "remote.origin.pushurl", pushurl)
+        cl = git_cl.Changelist(issue=1)
+        # Should directly resolve to pushurl without trying to inspect the local directory.
+        self.assertEqual(cl.GetRemoteUrl(), pushurl)
+        self.assertEqual(cl.GetRemoteUrl(), pushurl)
+
     def test_get_remote_url_with_mirror(self):
         original_os_path_isdir = os.path.isdir
 
