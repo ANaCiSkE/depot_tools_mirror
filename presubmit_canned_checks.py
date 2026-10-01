@@ -11,6 +11,7 @@ import os as _os
 import re as _re
 import sys as _sys
 import time
+from typing import Any, Callable, Optional
 
 import gclient_utils
 import metadata.discover
@@ -3914,6 +3915,7 @@ def CheckInclusiveLanguage(
     output_api,
     excluded_directories_relative_path=None,
     non_inclusive_terms=_NON_INCLUSIVE_TERMS,
+    source_file_filter: Optional[Callable[[Any], bool]] = None,
 ):
     """Make sure that banned non-inclusive terms are not used."""
 
@@ -3983,7 +3985,7 @@ def CheckInclusiveLanguage(
         excluded_paths.append(words[0])
 
     excluded_paths = set(excluded_paths)
-    for f in input_api.AffectedFiles():
+    for f in input_api.AffectedFiles(file_filter=source_file_filter):
         for line_num, line in f.ChangedContents():
             for term, message, error in non_inclusive_terms:
                 if IsExcludedFile(f, excluded_paths):

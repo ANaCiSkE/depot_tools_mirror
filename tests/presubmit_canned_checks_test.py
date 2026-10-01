@@ -410,6 +410,39 @@ class InclusiveLanguageCheckTest(unittest.TestCase):
         self.assertTrue(os.path.normpath("dir1/1.py") not in errors[0].message)
         self.assertTrue(os.path.normpath("dir2/2.py") in errors[0].message)
 
+    def testSourceFileFilter(self) -> None:
+        input_api = MockInputApi()
+        input_api.change.RepositoryRoot = lambda: ""
+        input_api.presubmit_local_path = ""
+        input_api.files = [
+            MockFile(
+                os.path.normpath(
+                    "infra/inclusive_language_presubmit_exempt_dirs.txt"
+                ),
+                [],
+            ),
+            MockFile(
+                os.path.normpath("included.py"),
+                ["banned_term = 1"],
+            ),
+            MockFile(
+                os.path.normpath("excluded.py"),
+                ["banned_term = 2"],
+            ),
+        ]
+
+        errors = presubmit_canned_checks.CheckInclusiveLanguage(
+            input_api,
+            MockOutputApi(),
+            non_inclusive_terms=[
+                ("banned_term", ("Do not use banned_term",), True)
+            ],
+            source_file_filter=lambda f: "excluded" not in f.LocalPath(),
+        )
+        self.assertEqual(1, len(errors))
+        self.assertIn("included.py", errors[0].message)
+        self.assertNotIn("excluded.py", errors[0].message)
+
 
 class CheckLongLinesTest(unittest.TestCase):
     def testCheckJavaLongLines(self):
