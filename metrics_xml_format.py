@@ -44,7 +44,7 @@ def log(msg, verbose):
 
 def FindMetricsXMLFormatterTool(path, verbose=False):
     """Returns a path to the metrics XML formatter executable."""
-    top_dir = gclient_paths.GetPrimarySolutionPath()
+    top_dir = gclient_paths.GetChromiumSrcPath()
     if not top_dir:
         log("Not executed in a Chromium checkout; skip formatting", verbose)
         return ""

@@ -39,7 +39,7 @@ def PruneVirtualEnv():
 def FindGnTool():
     # Try in primary solution location first, with the gn binary having been
     # downloaded by cipd in the projects DEPS.
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
+    primary_solution_path = gclient_paths.GetChromiumSrcPath()
     if primary_solution_path:
         gn_path = os.path.join(
             primary_solution_path,

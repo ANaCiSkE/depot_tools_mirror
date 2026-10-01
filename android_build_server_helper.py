@@ -33,7 +33,7 @@ def _print_status(local_dev_server_path, build_id):
 
 
 def _get_server_path():
-    src_dir = gclient_paths.GetPrimarySolutionPath()
+    src_dir = gclient_paths.GetChromiumSrcPath()
     return os.path.join(src_dir, "build/android/fast_local_dev_server.py")
 
 

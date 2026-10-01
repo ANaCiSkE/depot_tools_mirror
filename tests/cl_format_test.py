@@ -277,7 +277,7 @@ class CMDFormatTestCase(unittest.TestCase):
         )
         self.assertEqual(expected_diff, stdout_val)
 
-    @mock.patch("gclient_paths.GetPrimarySolutionPath")
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
     @mock.patch("cl_format.subprocess2.call")
     def testLitTemplateFormatter(self, mock_call, mock_solution_path):
         """Note: This test does not run the real formatter. It validates that
@@ -788,7 +788,7 @@ class CMDFormatTestCase(unittest.TestCase):
             )
             mock_stdout_write.assert_called_once_with(expected_output)
 
-    @mock.patch("gclient_paths.GetPrimarySolutionPath")
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
     def testRunMetricsXMLFormatSkipIfPresubmit(self, find_top_dir):
         """Verifies that it skips the formatting if opts.presubmit is True."""
         find_top_dir.return_value = self._top_dir
@@ -804,7 +804,7 @@ class CMDFormatTestCase(unittest.TestCase):
         cl_format.RunCommand.assert_not_called()
         self.assertEqual(0, return_value)
 
-    @mock.patch("gclient_paths.GetPrimarySolutionPath")
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
     def testRunMetricsFormatWithUkm(self, find_top_dir):
         """Checks if the command line arguments do not contain the input path."""
         find_top_dir.return_value = self._top_dir
@@ -830,7 +830,7 @@ class CMDFormatTestCase(unittest.TestCase):
             cwd=self._top_dir,
         )
 
-    @mock.patch("gclient_paths.GetPrimarySolutionPath")
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
     def testRunMetricsFormatWithHistograms(self, find_top_dir):
         """Checks if the command line arguments contain the input file paths."""
         find_top_dir.return_value = self._top_dir
@@ -1959,7 +1959,7 @@ class TestStdinFilenameFormatting(unittest.TestCase):
         with open(path, "rb") as f:
             return f.read()
 
-    @mock.patch("gclient_paths.GetPrimarySolutionPath")
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
     @mock.patch(
         "rustfmt.FindRustfmtToolInChromiumTree", return_value="/fake/rustfmt"
     )
@@ -2022,14 +2022,16 @@ class TestStdinFilenameFormatting(unittest.TestCase):
         )
         self.assertEqual(b"fn main() {}\n", self._read(temp_file))
 
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
     @mock.patch("metrics_xml_format.FindMetricsXMLFormatterTool")
     @mock.patch("metrics_xml_format.GetMetricsDir")
     @mock.patch("cl_format.RunCommand", return_value="")
     def test_metrics_xml_stdin_filename(
-        self, mock_run, mock_get_dir, mock_find_tool
+        self, mock_run, mock_get_dir, mock_find_tool, mock_src_path
     ):
         """Tool lookup uses the real path; the temp file is what gets edited."""
         rel_path = "tools/metrics/histograms/metadata/UMA/histograms.xml"
+        mock_src_path.return_value = self.test_dir
         mock_find_tool.return_value = "/fake/pretty_print.py"
         mock_get_dir.return_value = os.path.join(
             self.test_dir, "tools", "metrics", "histograms"

@@ -17,7 +17,7 @@ import sys
 def FindGoogleJavaFormat():
     """Returns the path to the google-java-format executable."""
     # Allow non-chromium projects to use a custom location.
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
+    primary_solution_path = gclient_paths.GetChromiumSrcPath()
     if primary_solution_path:
         override = os.environ.get("GOOGLE_JAVA_FORMAT_PATH")
         if override:

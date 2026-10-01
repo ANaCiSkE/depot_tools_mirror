@@ -12,7 +12,7 @@ import sys
 
 def FindKtfmt():
     """Returns the path to the ktfmt executable."""
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
+    primary_solution_path = gclient_paths.GetChromiumSrcPath()
     if not primary_solution_path:
         return None
 

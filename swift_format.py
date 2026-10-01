@@ -27,7 +27,7 @@ class NotFoundError(Exception):
 
 def FindSwiftFormatToolInChromiumTree():
     """Return a path to the rustfmt executable, or die trying."""
-    chromium_src_path = gclient_paths.GetPrimarySolutionPath()
+    chromium_src_path = gclient_paths.GetChromiumSrcPath()
     if not chromium_src_path:
         raise NotFoundError(
             "Could not find checkout in any parent of the current path.\n"

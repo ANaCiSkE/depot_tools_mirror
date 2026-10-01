@@ -206,6 +206,46 @@ class GetPrimarySolutionPathTest(TestBase):
         self.assertIsNone(gclient_paths.GetPrimarySolutionPath())
 
 
+class GetChromiumSrcPathTest(TestBase):
+    def testPrimarySolutionIsSrc(self):
+        self.make_file_tree(
+            {".gclient": 'solutions = [{"name": "src"}]', "src": ""}
+        )
+        self.cwd = os.path.join(self.root, "src", "foo")
+
+        self.assertEqual(
+            os.path.join(self.root, "src"), gclient_paths.GetChromiumSrcPath()
+        )
+
+    def testPrimarySolutionNestedInSrc(self):
+        self.make_file_tree(
+            {".gclient": 'solutions = [{"name": "src/foo"}]', "src": ""}
+        )
+        self.cwd = os.path.join(self.root, "src", "foo")
+
+        self.assertEqual(
+            os.path.join(self.root, "src"), gclient_paths.GetChromiumSrcPath()
+        )
+
+    def testPrimarySolutionNotInSrc(self):
+        self.make_file_tree({".gclient": 'solutions = [{"name": "foo"}]'})
+        self.cwd = os.path.join(self.root, "foo")
+
+        self.assertEqual(
+            os.path.join(self.root, "foo"), gclient_paths.GetChromiumSrcPath()
+        )
+
+    def testPrimarySolutionIsRootWithSrcDir(self):
+        self.make_file_tree(
+            {".gclient": 'solutions = [{"name": "."}]', "src": ""}
+        )
+        self.cwd = self.root
+
+        self.assertEqual(
+            os.path.join(self.root, "."), gclient_paths.GetChromiumSrcPath()
+        )
+
+
 class GetBuildtoolsPathTest(TestBase):
     def testEnvVarOverride(self):
         os.environ = {"CHROMIUM_BUILDTOOLS_PATH": "foo"}
