@@ -21,20 +21,25 @@ function cipd_bin_setup {
         ROOT=$(<"${CIPD_ROOT_OVERRIDE_FILE}")
     fi
 
-    local CACHED_ENSURE="$ROOT/.cipd_manifest.txt"
-    local CACHED_VERSIONS="$ROOT/.cipd_manifest.versions"
-    local CACHED_CLIENT="$ROOT/.cipd_client_version"
+    local CACHE_DIR="$ROOT/.cipd/tmp"
+    local CACHED_ENSURE="$CACHE_DIR/.cipd_manifest.txt"
+    local CACHED_VERSIONS="$CACHE_DIR/.cipd_manifest.versions"
+    local CACHED_CLIENT="$CACHE_DIR/.cipd_client_version"
 
     # CIPD ensure is slow (hundreds of milliseconds). We cache the result by
     # storing copies of the input files and comparing them on subsequent runs.
     # We use `cmp` (content-based) instead of `mtime` comparison to avoid
     # false-positive cache misses on CI bots where git checkouts reset mtimes.
+    # Cache files live in `.cipd/tmp`, which `cipd ensure` automatically removes
+    # whenever it modifies packages (even if invoked by an older checkout's
+    # `cipd_bin_setup.sh` that predates this cache).
     if [ ! -f "$CACHED_ENSURE" ] || \
        ! cmp -s "$ENSURE" "$CACHED_ENSURE" || \
        ! cmp -s "$MYPATH/cipd_manifest.versions" "$CACHED_VERSIONS" || \
        ! cmp -s "$MYPATH/cipd_client_version" "$CACHED_CLIENT"; then
 
-        rm -f "$CACHED_ENSURE"
+        rm -rf "$CACHE_DIR"
+        rm -f "$ROOT/.cipd_manifest.txt" "$ROOT/.cipd_manifest.versions" "$ROOT/.cipd_client_version"
 
         (
         source "$MYPATH/cipd" ensure \
@@ -43,6 +48,7 @@ function cipd_bin_setup {
             -root "$ROOT"
         )
         if [ $? -eq 0 ]; then
+            mkdir -p "$CACHE_DIR" && \
             cp "$ENSURE" "$CACHED_ENSURE" && \
             cp "$MYPATH/cipd_manifest.versions" "$CACHED_VERSIONS" && \
             cp "$MYPATH/cipd_client_version" "$CACHED_CLIENT"
