@@ -75,6 +75,26 @@ class FindGclientRootTest(TestBase):
             ),
         )
 
+    def testGclientRootInParentDir_SymlinkedSubdir(self) -> None:
+        self.make_file_tree(
+            {
+                ".gclient": "",
+                ".gclient_entries": 'entries = {"src": "..."}',
+            }
+        )
+        symlink_out = os.path.join(self.root, "src", "c_icu", "Release")
+        external_cache = os.path.join(
+            self.root + "_cache", "out_icu", "Release"
+        )
+        with mock.patch(
+            "os.path.realpath",
+            side_effect=lambda p: external_cache if p == symlink_out else p,
+        ):
+            self.assertEqual(
+                self.root,
+                gclient_paths.FindGclientRoot(symlink_out),
+            )
+
     def testGclientRootInParentDir_NotInGclientEntries(self):
         self.make_file_tree(
             {
@@ -202,6 +222,12 @@ class GetPrimarySolutionPathTest(TestBase):
     def testGclientRootNotFound_NotInAGitRepo_NoBuildtools(self):
         self.cwd = os.path.join(self.root, "foo")
         subprocess2.check_output.side_effect = EXCEPTION
+
+        self.assertIsNone(gclient_paths.GetPrimarySolutionPath())
+
+    def testGclientRootNotFound_GitMissing(self) -> None:
+        self.cwd = os.path.join(self.root, "foo")
+        subprocess2.check_output.side_effect = OSError("No such file: git")
 
         self.assertIsNone(gclient_paths.GetPrimarySolutionPath())
 

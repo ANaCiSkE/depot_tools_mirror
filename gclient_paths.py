@@ -62,16 +62,17 @@ def FindGclientRoot(from_dir, filename=".gclient"):
         )
         for k in scope["entries"].keys()
     )
-    path_to_check = os.path.relpath(
-        os.path.realpath(real_from_dir), start=os.path.realpath(path)
-    )
-    while path_to_check:
-        if path_to_check in all_directories:
-            return path
-        path_to_check = os.path.dirname(path_to_check)
+    for from_path, root_path in (
+        (os.path.realpath(real_from_dir), os.path.realpath(path)),
+        (real_from_dir, path),
+    ):
+        path_to_check = os.path.relpath(from_path, start=root_path)
+        while path_to_check:
+            if path_to_check in all_directories:
+                return path
+            path_to_check = os.path.dirname(path_to_check)
 
     return None
-
 
 @functools.lru_cache
 def _GetPrimarySolutionPathInternal(cwd):
@@ -91,7 +92,7 @@ def _GetPrimarySolutionPathInternal(cwd):
         )
         top_dir = top_dir.decode("utf-8", "replace")
         top_dir = os.path.normpath(top_dir.strip())
-    except subprocess2.CalledProcessError:
+    except (subprocess2.CalledProcessError, OSError):
         pass
 
     if os.path.exists(

@@ -115,8 +115,13 @@ def main(args):
     tool, out_dir = parse_args(args[1:])
 
     # Get gclient root + src.
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
-    gclient_root_path = gclient_paths.FindGclientRoot(out_dir)
+    primary_solution_path = (
+        gclient_paths.GetPrimarySolutionPath(out_dir)
+        or gclient_paths.GetPrimarySolutionPath()
+    )
+    gclient_root_path = gclient_paths.FindGclientRoot(
+        out_dir
+    ) or gclient_paths.FindGclientRoot(os.getcwd())
     gclient_src_root_path = None
     if gclient_root_path:
         gclient_src_root_path = os.path.join(gclient_root_path, "src")
