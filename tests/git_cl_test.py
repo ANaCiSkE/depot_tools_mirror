@@ -7001,7 +7001,9 @@ class TestGitCl(unittest.TestCase):
 
     def test_get_remote_url_with_pushurl(self):
         pushurl = "sso://chrome-internal/clank/internal/apps.git"
-        scm.GIT.SetConfig("", "remote.origin.url", "https://chromium.googlesource.com/my/repo")
+        scm.GIT.SetConfig(
+            "", "remote.origin.url", "https://chromium.googlesource.com/my/repo"
+        )
         scm.GIT.SetConfig("", "remote.origin.pushurl", pushurl)
         cl = git_cl.Changelist(issue=1)
         self.assertEqual(cl.GetRemoteUrl(), pushurl)
@@ -7009,7 +7011,9 @@ class TestGitCl(unittest.TestCase):
 
     def test_get_remote_url_with_mirror_and_pushurl(self):
         pushurl = "sso://chrome-internal/clank/internal/apps.git"
-        scm.GIT.SetConfig("", "remote.origin.url", "/usr/local/btrfs_mount/git_cache/repo")
+        scm.GIT.SetConfig(
+            "", "remote.origin.url", "/usr/local/btrfs_mount/git_cache/repo"
+        )
         scm.GIT.SetConfig("", "remote.origin.pushurl", pushurl)
         cl = git_cl.Changelist(issue=1)
         # Should directly resolve to pushurl without trying to inspect the local directory.
@@ -10943,6 +10947,11 @@ class TestRunGitPushWithTraces(unittest.TestCase):
         patcher = mock.patch("git_cl._is_ai_agent", return_value=False)
         patcher.start()
         self.addCleanup(patcher.stop)
+        conv_patcher = mock.patch.object(
+            git_cl.settings, "GetUploadConversationId", return_value=False
+        )
+        conv_patcher.start()
+        self.addCleanup(conv_patcher.stop)
 
     @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
     @mock.patch(
@@ -11081,6 +11090,86 @@ class TestRunGitPushWithTraces(unittest.TestCase):
             "custom-keyed-value=rootRepo:chromium/chromium/src@d3adb33f",
             push_cmd,
         )
+
+    @mock.patch(
+        "git_cl._prepare_conversation_push_option",
+        return_value="custom-keyed-value=conv:12345678-1234-1234-1234-123456789abc",
+    )
+    @mock.patch("git_cl._prepare_superproject_push_option", return_value=None)
+    @mock.patch(
+        "git_cl.gclient_utils.CheckCallAndFilter",
+        return_value=b"remote: ok",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteUrl",
+        return_value="https://example.com/repo",
+    )
+    @mock.patch("git_cl.Changelist._WriteGitPushTraces")
+    @mock.patch("git_cl.Changelist._CleanUpOldTraces")
+    @mock.patch("git_cl.gclient_utils.rmtree")
+    def test_run_git_push_with_traces_with_conversation_push_option(
+        self,
+        mock_rmtree,
+        mock_cleanup,
+        mock_write_traces,
+        _mock_url,
+        mock_call,
+        _mock_superproject,
+        _mock_conv,
+    ) -> None:
+        cl = git_cl.Changelist()
+        metadata = {}
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GIT_CL_TRACE", None)
+            out = cl._RunGitPushWithTraces(
+                "refspec",
+                [],
+                metadata,
+                git_push_options=["user_opt=1"],
+            )
+        self.assertEqual(out, "remote: ok")
+        self.assertEqual(mock_call.call_count, 1)
+        push_cmd = mock_call.call_args[0][0]
+        self.assertEqual(push_cmd.count("-o"), 2)
+        self.assertIn("user_opt=1", push_cmd)
+        self.assertIn(
+            "custom-keyed-value=conv:12345678-1234-1234-1234-123456789abc",
+            push_cmd,
+        )
+
+    def test_prepare_conversation_push_option(self) -> None:
+        conv_id = "12345678-1234-1234-1234-123456789abc"
+        with (
+            mock.patch.object(
+                git_cl.settings, "GetUploadConversationId", return_value=True
+            ),
+            mock.patch.dict(
+                os.environ, {"ANTIGRAVITY_CONVERSATION_ID": conv_id}, clear=True
+            ),
+        ):
+            self.assertEqual(
+                git_cl._prepare_conversation_push_option(),
+                f"custom-keyed-value=conv:{conv_id}",
+            )
+
+        with (
+            mock.patch.object(
+                git_cl.settings, "GetUploadConversationId", return_value=False
+            ),
+            mock.patch.dict(
+                os.environ, {"ANTIGRAVITY_CONVERSATION_ID": conv_id}, clear=True
+            ),
+        ):
+            self.assertIsNone(git_cl._prepare_conversation_push_option())
+
+        with (
+            mock.patch.object(
+                git_cl.settings, "GetUploadConversationId", return_value=True
+            ) as mock_get_cfg,
+            mock.patch.dict(os.environ, {}, clear=True),
+        ):
+            self.assertIsNone(git_cl._prepare_conversation_push_option())
+            mock_get_cfg.assert_not_called()
 
 
 class TestAIAgentProgressSuppression(unittest.TestCase):

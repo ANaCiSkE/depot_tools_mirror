@@ -129,6 +129,18 @@ class GitClCoreTest(unittest.TestCase):
             git_cl_core.DieWithError("error msg", change_desc=mock_desc)
         mock_backup.assert_called_once_with(mock_desc)
 
+    @mock.patch("scm.GIT.GetConfigBool", return_value=True)
+    @mock.patch("scm.GIT.GetConfig", return_value="false")
+    def testGetUploadConversationId(self, _mock_get_config, mock_get_bool):
+        s = git_cl_core.Settings()
+        s.root = "/fake/root"
+        self.assertIsNone(s.upload_conversation_id)
+        self.assertTrue(s.GetUploadConversationId())
+        self.assertTrue(s.upload_conversation_id)
+        mock_get_bool.assert_called_once_with(
+            "/fake/root", "cl.upload-conversation-id"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

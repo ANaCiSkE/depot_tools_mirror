@@ -757,6 +757,14 @@ def _prepare_superproject_push_option(
         return None
 
 
+def _prepare_conversation_push_option() -> Optional[str]:
+    """Returns the push option associating the CL with a conversation ID."""
+    conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "").strip()
+    if not conv_id or not settings.GetUploadConversationId():
+        return None
+    return f"custom-keyed-value=conv:{conv_id}"
+
+
 @dataclasses.dataclass
 class CommentInfo:
     # Fields from REST API, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-change-comments.
@@ -3651,12 +3659,14 @@ class Changelist(object):
         has_error = True
         try:
             # Combine user-provided push options with the potential
-            # superproject push option.
+            # superproject and conversation push options.
             all_push_options = []
             if git_push_options:
                 all_push_options.extend(git_push_options)
             if superproject_option := _prepare_superproject_push_option():
                 all_push_options.append(superproject_option)
+            if conversation_option := _prepare_conversation_push_option():
+                all_push_options.append(conversation_option)
 
             remote_url = self.GetRemoteUrl()
             # Explicitly disable push.negotiate. This is a feature that does an

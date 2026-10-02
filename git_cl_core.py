@@ -264,6 +264,7 @@ class Settings:
         self.format_full_by_default = None
         self.is_status_commit_order_by_date = None
         self.format_js = None
+        self.upload_conversation_id = None
 
     def _LazyUpdateIfNeeded(self):
         """Updates the settings from a codereview.settings file, if available."""
@@ -400,6 +401,13 @@ class Settings:
         if self.format_js is None:
             self.format_js = self._GetConfig("cl.format-js").lower() == "true"
         return self.format_js
+
+    def GetUploadConversationId(self) -> bool:
+        if self.upload_conversation_id is None:
+            self.upload_conversation_id = self._GetConfigBool(
+                "cl.upload-conversation-id"
+            )
+        return self.upload_conversation_id
 
     def _GetConfig(self, key, default=""):
         self._LazyUpdateIfNeeded()
