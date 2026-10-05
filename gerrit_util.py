@@ -1766,6 +1766,12 @@ def GetChangeComments(host, change):
     return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
+def GetChangeChecks(host, change, revision="current"):
+    """Get automated findings from the Gerrit Findings plugin."""
+    path = "changes/%s/revisions/%s/list_checks" % (change, revision)
+    return ReadHttpJsonResponse(CreateHttpConn(host, path))
+
+
 def CreateDraft(host, change, revision="current", body=None):
     """Creates a draft comment on a revision.
 

@@ -5,6 +5,8 @@
 # found in the LICENSE file.
 """Unit tests for gerrit_client.py."""
 
+import contextlib
+import io
 import logging
 import os
 import sys
@@ -133,6 +135,67 @@ class TestGerritClient(unittest.TestCase):
             start=20,
             o_params=None,
         )
+
+    @mock.patch("gerrit_client.write_result")
+    @mock.patch("gerrit_util.GetChangeChecks")
+    def test_checks_revision_json(self, util_mock, write_result_mock):
+        checks = [
+            {"check_name": "ClangTidy", "results": [{"message": "finding"}]}
+        ]
+        util_mock.return_value = checks
+
+        gerrit_client.main(
+            [
+                "checks",
+                "--host",
+                "https://example.org/foo",
+                "--change",
+                "8265612",
+                "--revision",
+                "1",
+                "--json_file",
+                "checks.json",
+            ]
+        )
+
+        util_mock.assert_called_once_with(
+            "example.org", "8265612", revision="1"
+        )
+        write_result_mock.assert_called_once()
+        result, opt = write_result_mock.call_args.args
+        self.assertIs(checks, result)
+        self.assertEqual("checks.json", opt.json_file)
+
+    @mock.patch("gerrit_util.GetChangeChecks", return_value=[])
+    def test_checks_defaults(self, util_mock):
+        gerrit_client.main(
+            [
+                "checks",
+                "--host",
+                "https://example.org/foo",
+                "--change",
+                "project~branch~Ichange",
+            ]
+        )
+
+        util_mock.assert_called_once_with(
+            "example.org",
+            "project~branch~Ichange",
+            revision="current",
+        )
+
+    @mock.patch("gerrit_util.GetChangeChecks")
+    def test_checks_requires_change(self, util_mock):
+        stderr = io.StringIO()
+        with (
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as error,
+        ):
+            gerrit_client.main(["checks", "--host", "https://example.org"])
+
+        self.assertEqual(2, error.exception.code)
+        self.assertIn("--change is required", stderr.getvalue())
+        util_mock.assert_not_called()
 
     @mock.patch("gerrit_client.write_result")
     @mock.patch("gerrit_util.GetChangeComments")

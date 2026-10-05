@@ -1140,6 +1140,22 @@ class GerritUtilTest(unittest.TestCase):
             body={"destination": "destination", "allow_conflicts": True},
         )
 
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.CreateHttpConn")
+    def testGetChangeChecks(self, mockCreateHttpConn, mockReadHttpJsonResponse):
+        checks = [{"check_name": "ClangTidy", "results": []}]
+        mockReadHttpJsonResponse.return_value = checks
+
+        result = gerrit_util.GetChangeChecks("host", "change", revision="7")
+
+        self.assertIs(checks, result)
+        mockCreateHttpConn.assert_called_once_with(
+            "host", "changes/change/revisions/7/list_checks"
+        )
+        mockReadHttpJsonResponse.assert_called_once_with(
+            mockCreateHttpConn.return_value
+        )
+
     @mock.patch("gerrit_util.ReadHttpResponse")
     @mock.patch("gerrit_util.CreateHttpConn")
     def testGetPatchDefaults(self, mockCreateHttpConn, mockReadHttpResponse):
