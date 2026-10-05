@@ -52,6 +52,18 @@ def main(
         )
         return 1
 
+    # Attempt to preserve relative path to current directory.
+    relative_path = os.path.relpath(
+        os.path.realpath("."), os.path.realpath(primary_solution_path)
+    )
+
+    if relative_path == ".." or relative_path.startswith("../"):
+        # This won't work, so just stay in the solution root. Note that any
+        # relative paths on the command line (such as a relative -C argument)
+        # will be interpreted relative to the solution root rather than the
+        # original working directory and may fail.
+        relative_path = "."
+
     virtual_path = env.get(
         "DEPOT_TOOLS_VIRTUAL_BUILD_PATH", "/tmp/depot_tools_virtual_build_path"
     )
@@ -62,9 +74,19 @@ def main(
 
     os.makedirs(virtual_path, exist_ok=True)
 
+    target_dir = os.path.normpath(os.path.join(virtual_path, relative_path))
+
     # TODO(b/528372534): run `siso proxy` outside namespace
     uid = os.getuid()
-    bash_cmd = f"mount --rbind {shlex.quote(primary_solution_path)} {shlex.quote(virtual_path)} && cd {shlex.quote(virtual_path)} && unshare --map-user={uid} {shlex.join(cmd_args)}"
+    bash_cmd = " && ".join(
+        [
+            shlex.join(
+                ["mount", "--rbind", primary_solution_path, virtual_path]
+            ),
+            shlex.join(["cd", target_dir]),
+            shlex.join(["unshare", f"--map-user={uid}", *cmd_args]),
+        ]
+    )
     unshare_cmd = [
         "luci-auth",
         "context",

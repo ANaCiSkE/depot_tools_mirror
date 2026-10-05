@@ -56,6 +56,7 @@ def test_main_runs_in_virtual_path(mocker: Any) -> None:
     mocker.patch(
         "gclient_paths.GetPrimarySolutionPath", return_value="/workspace/src"
     )
+    mocker.patch("os.getcwd", return_value="/workspace/src")
     mocker.patch("os.getuid", return_value=1001)
     mocker.patch("os.makedirs")
     mock_stderr = mocker.patch("sys.stderr", new_callable=io.StringIO)
@@ -105,6 +106,7 @@ def test_main_custom_virtual_path(mocker: Any) -> None:
     mocker.patch(
         "gclient_paths.GetPrimarySolutionPath", return_value="/workspace/src"
     )
+    mocker.patch("os.getcwd", return_value="/workspace/src")
     mocker.patch("os.getuid", return_value=1001)
     mocker.patch("os.makedirs")
     runner = mocker.Mock(return_value=0)
@@ -123,6 +125,130 @@ def test_main_custom_virtual_path(mocker: Any) -> None:
         "mount --rbind /workspace/src /custom/virtual_path && "
         "cd /custom/virtual_path && "
         "unshare --map-user=1001 siso ninja"
+    )
+    assert cmd[-1] == expected_bash_cmd
+
+
+def test_main_preserves_relative_path(mocker: Any) -> None:
+    mocker.patch("sys.platform", new="linux")
+    mocker.patch(
+        "gclient_paths.GetPrimarySolutionPath", return_value="/workspace/src"
+    )
+    mocker.patch("os.getcwd", return_value="/workspace/src/out/Release")
+    mocker.patch("os.getuid", return_value=1001)
+    mocker.patch("os.makedirs")
+    runner = mocker.Mock(return_value=0)
+
+    ret = run_in_virtual_path.main(
+        ["run_in_virtual_path.py", "autoninja", "chrome"],
+        env={},
+        runner=runner,
+    )
+    assert ret == 0
+
+    cmd = runner.call_args[0][0]
+    expected_bash_cmd = (
+        "mount --rbind /workspace/src /tmp/depot_tools_virtual_build_path && "
+        "cd /tmp/depot_tools_virtual_build_path/out/Release && "
+        "unshare --map-user=1001 autoninja chrome"
+    )
+    assert cmd[-1] == expected_bash_cmd
+
+
+def test_main_outside_solution_path(mocker: Any) -> None:
+    mocker.patch("sys.platform", new="linux")
+    mocker.patch(
+        "gclient_paths.GetPrimarySolutionPath", return_value="/workspace/src"
+    )
+    mocker.patch("os.getcwd", return_value="/other/dir")
+    mocker.patch("os.getuid", return_value=1001)
+    mocker.patch("os.makedirs")
+    runner = mocker.Mock(return_value=0)
+
+    ret = run_in_virtual_path.main(
+        [
+            "run_in_virtual_path.py",
+            "autoninja",
+            "-C",
+            "/workspace/src/out/Release",
+            "chrome",
+        ],
+        env={},
+        runner=runner,
+    )
+    assert ret == 0
+
+    cmd = runner.call_args[0][0]
+    expected_bash_cmd = (
+        "mount --rbind /workspace/src /tmp/depot_tools_virtual_build_path && "
+        "cd /tmp/depot_tools_virtual_build_path && "
+        "unshare --map-user=1001 autoninja -C /workspace/src/out/Release chrome"
+    )
+    assert cmd[-1] == expected_bash_cmd
+
+
+def test_main_parent_of_solution_path(mocker: Any) -> None:
+    mocker.patch("sys.platform", new="linux")
+    mocker.patch(
+        "gclient_paths.GetPrimarySolutionPath", return_value="/workspace/src"
+    )
+    mocker.patch("os.getcwd", return_value="/workspace")
+    mocker.patch("os.getuid", return_value=1001)
+    mocker.patch("os.makedirs")
+    runner = mocker.Mock(return_value=0)
+
+    ret = run_in_virtual_path.main(
+        [
+            "run_in_virtual_path.py",
+            "autoninja",
+            "-C",
+            "/workspace/src/out/Release",
+            "chrome",
+        ],
+        env={},
+        runner=runner,
+    )
+    assert ret == 0
+
+    cmd = runner.call_args[0][0]
+    expected_bash_cmd = (
+        "mount --rbind /workspace/src /tmp/depot_tools_virtual_build_path && "
+        "cd /tmp/depot_tools_virtual_build_path && "
+        "unshare --map-user=1001 autoninja -C /workspace/src/out/Release chrome"
+    )
+    assert cmd[-1] == expected_bash_cmd
+
+
+def test_main_symlink_solution_path(mocker: Any) -> None:
+    mocker.patch("sys.platform", new="linux")
+    mocker.patch(
+        "gclient_paths.GetPrimarySolutionPath",
+        return_value="/symlink/workspace/src",
+    )
+    mocker.patch(
+        "os.path.realpath",
+        side_effect=lambda p: (
+            "/real/workspace/src/out/Release"
+            if p == "."
+            else "/real/workspace/src"
+        ),
+    )
+    mocker.patch("os.getuid", return_value=1001)
+    mocker.patch("os.makedirs")
+    runner = mocker.Mock(return_value=0)
+
+    ret = run_in_virtual_path.main(
+        ["run_in_virtual_path.py", "autoninja", "chrome"],
+        env={},
+        runner=runner,
+    )
+    assert ret == 0
+
+    cmd = runner.call_args[0][0]
+    expected_bash_cmd = (
+        "mount --rbind /symlink/workspace/src /tmp/depot_tools_virtual_build_path && "
+        "cd /tmp/depot_tools_virtual_build_path/out/Release && "
+        "unshare --map-user=1001 autoninja chrome"
     )
     assert cmd[-1] == expected_bash_cmd
 
