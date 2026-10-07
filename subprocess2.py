@@ -128,6 +128,13 @@ class Popen(subprocess.Popen):
             kwargs["env"] = {
                 ensure_str(k): ensure_str(v) for k, v in kwargs["env"].items()
             }
+        if sys.platform == "win32":
+            if kwargs.get("env") is None:
+                os.environ.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
+            else:
+                kwargs["env"].setdefault(
+                    "NoDefaultCurrentDirectoryInExePath", "1"
+                )
         if kwargs.get("shell") is None:
             # *Sigh*:  Windows needs shell=True, or else it won't search %PATH%
             # for the executable, but shell=True makes subprocess on Linux fail

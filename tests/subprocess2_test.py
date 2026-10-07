@@ -86,10 +86,38 @@ class DefaultsTest(unittest.TestCase):
 
     @mock.patch("subprocess.Popen.__init__")
     def test_env_type(self, mockPopen):
-        subprocess2.Popen(["foo"], env={b"key": b"value"})
-        mockPopen.assert_called_with(
-            ["foo"], env={"key": "value"}, shell=mock.ANY
-        )
+        with mock.patch("sys.platform", "non-win32"):
+            subprocess2.Popen(["foo"], env={b"key": b"value"})
+            mockPopen.assert_called_with(
+                ["foo"], env={"key": "value"}, shell=mock.ANY
+            )
+
+    @mock.patch("subprocess.Popen.__init__", return_value=None)
+    def test_win32_no_default_cwd_in_exe_path(self, mockPopen):
+        with mock.patch("sys.platform", "win32"):
+            with mock.patch.dict("os.environ", {}, clear=True):
+                subprocess2.Popen(["foo"])
+                self.assertEqual(
+                    os.environ.get("NoDefaultCurrentDirectoryInExePath"), "1"
+                )
+                mockPopen.assert_called_with(["foo"], shell=True)
+
+            caller_env = {"FOO": "bar"}
+            subprocess2.Popen(["foo"], env=caller_env)
+            self.assertNotIn("NoDefaultCurrentDirectoryInExePath", caller_env)
+            mockPopen.assert_called_with(
+                ["foo"],
+                env={"FOO": "bar", "NoDefaultCurrentDirectoryInExePath": "1"},
+                shell=True,
+            )
+
+            custom_env = {"NoDefaultCurrentDirectoryInExePath": "0"}
+            subprocess2.Popen(["foo"], env=custom_env)
+            mockPopen.assert_called_with(
+                ["foo"],
+                env={"NoDefaultCurrentDirectoryInExePath": "0"},
+                shell=True,
+            )
 
 
 def _run_test(with_subprocess=True):
