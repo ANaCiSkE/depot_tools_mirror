@@ -233,8 +233,8 @@ def rebase_branch(
     # base branch on top of whatever commit is before them.
     back_ups = 0
     orig_parent = parent
-    while git.run("log", "-n1", "--format=%s", parent, "--").startswith(
-        git.FREEZE
+    while git.FREEZE_MATCHER.match(
+        git.run("log", "-n1", "--format=%B", parent, "--").strip()
     ):
         back_ups += 1
         parent = git.run("rev-parse", parent + "~")

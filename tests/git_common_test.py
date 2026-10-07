@@ -1350,6 +1350,33 @@ class GitFreezeThaw(git_test_utils.GitRepoReadWriteTestBase):
 
         self.repo.run(inner)
 
+    def testFreezeMatcherAndThawSpoofedCommit(self):
+        self.assertIsNotNone(self.gc.FREEZE_MATCHER.match("FREEZE.indexed"))
+        self.assertIsNotNone(self.gc.FREEZE_MATCHER.match("FREEZE.unindexed"))
+        self.assertIsNone(self.gc.FREEZE_MATCHER.match("FREEZE_indexed"))
+        self.assertIsNone(self.gc.FREEZE_MATCHER.match("FREEZE-indexed"))
+        self.assertIsNone(
+            self.gc.FREEZE_MATCHER.match("FREEZE.indexed: fix bug")
+        )
+        self.assertIsNone(
+            self.gc.FREEZE_MATCHER.match("FREEZE.indexed\n\nExtra body")
+        )
+
+        def inner():
+            self.repo.git("checkout", "-b", "spoof_freeze_branch")
+            with open("some/files/file1", "w") as f:
+                f.write("legitimate change")
+            self.repo.git("add", "some/files/file1")
+            self.repo.git(
+                "commit", "-m", "FREEZE.indexed\n\nNot actually a freeze commit"
+            )
+            head_before = self.repo.git("rev-parse", "HEAD").stdout.strip()
+            self.assertEqual(self.gc.thaw(), "Nothing to thaw.")
+            head_after = self.repo.git("rev-parse", "HEAD").stdout.strip()
+            self.assertEqual(head_before, head_after)
+
+        self.repo.run(inner)
+
 
 class GitMakeWorkdir(git_test_utils.GitRepoReadOnlyTestBase, GitCommonTestBase):
     def setUp(self):
@@ -1690,6 +1717,23 @@ class ExtractGitPathFromGitBatTest(GitCommonTestBase):
             "Relative\\Path\\To\\Git\\cmd\\git.exe",
         )
         self.assertEqual(actual, expected)
+
+    def test_win_find_git_prefers_exe_and_ignores_dot(self):
+        with tempfile.TemporaryDirectory() as td:
+            dir_bat = os.path.join(td, "bat_dir")
+            dir_exe = os.path.join(td, "exe_dir")
+            os.makedirs(dir_bat)
+            os.makedirs(dir_exe)
+            bat_file = os.path.join(dir_bat, "git.bat")
+            exe_file = os.path.join(dir_exe, "git.exe")
+            with open(bat_file, "w") as f:
+                f.write("@echo off\n")
+            with open(exe_file, "w") as f:
+                f.write("exe")
+
+            path_val = os.pathsep.join(["", ".", dir_bat, dir_exe])
+            with mock.patch.dict("os.environ", {"PATH": path_val}):
+                self.assertEqual(self.gc.win_find_git(), exe_file)
 
 
 class GitRepoFastImportTest(unittest.TestCase):

@@ -59,8 +59,13 @@ TEST_MODE = False
 
 
 def win_find_git() -> str:
-    for elem in os.environ.get("PATH", "").split(os.pathsep):
-        for candidate in ("git.exe", "git.bat"):
+    path_entries = [
+        elem.strip()
+        for elem in os.environ.get("PATH", "").split(os.pathsep)
+        if elem.strip() and os.path.normpath(elem.strip()) != "."
+    ]
+    for candidate in ("git.exe", "git.bat"):
+        for elem in path_entries:
             path = os.path.join(elem, candidate)
             if os.path.isfile(path):
                 # shell=True or invoking git.bat causes Windows to invoke
@@ -110,7 +115,7 @@ GIT_BLAME_IGNORE_REV_FILE = ".git-blame-ignore-revs"
 
 FREEZE = "FREEZE"
 FREEZE_SECTIONS = {"indexed": "soft", "unindexed": "mixed"}
-FREEZE_MATCHER = re.compile(r"%s.(%s)" % (FREEZE, "|".join(FREEZE_SECTIONS)))
+FREEZE_MATCHER = re.compile(r"^%s\.(%s)$" % (FREEZE, "|".join(FREEZE_SECTIONS)))
 
 # Matches and extracts the ahead commit count from Git's %(upstream:track) output (e.g., "[ahead 2]").
 AHEAD_MATCHER = re.compile(r"ahead (\d+)")
@@ -1526,9 +1531,9 @@ def thaw():
     with run_stream("rev-list", "HEAD", "--") as stream:
         for sha in stream:
             sha = sha.strip().decode("utf-8")
-            msg = run("show", "--format=%f%b", "-s", "HEAD", "--")
+            msg = run("show", "--format=%B", "-s", "HEAD", "--")
             assert isinstance(msg, str)
-            match = FREEZE_MATCHER.match(msg)
+            match = FREEZE_MATCHER.match(msg.strip())
             if not match:
                 if not took_action:
                     return "Nothing to thaw."
