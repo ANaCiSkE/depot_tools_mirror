@@ -74,6 +74,7 @@ def FindGclientRoot(from_dir, filename=".gclient"):
 
     return None
 
+
 @functools.lru_cache
 def _GetPrimarySolutionPathInternal(cwd):
     gclient_root = FindGclientRoot(cwd)
@@ -83,21 +84,21 @@ def _GetPrimarySolutionPathInternal(cwd):
         return os.path.join(gclient_root, source_dir_name)
 
     # Some projects might not use .gclient. Try to see whether we're in a git
-    # checkout that contains a "buildtools" directory or "codereview.settings"
-    # file.
+    # checkout that contains a "buildtools" directory.
     top_dir = cwd
     try:
         top_dir = subprocess2.check_output(
-            ["git", "rev-parse", "--show-toplevel"], stderr=subprocess2.DEVNULL
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
+            stderr=subprocess2.DEVNULL,
+            shell=False,
         )
         top_dir = top_dir.decode("utf-8", "replace")
         top_dir = os.path.normpath(top_dir.strip())
     except (subprocess2.CalledProcessError, OSError):
         pass
 
-    if os.path.exists(
-        os.path.join(top_dir, "codereview.settings")
-    ) or os.path.exists(os.path.join(top_dir, "buildtools")):
+    if os.path.exists(os.path.join(top_dir, "buildtools")):
         return top_dir
     return None
 
@@ -110,18 +111,21 @@ def GetPrimarySolutionPath(from_dir=None):
     return _GetPrimarySolutionPathInternal(from_dir)
 
 
-def GetChromiumSrcPath():
+def GetChromiumSrcPath(from_dir=None):
     """Returns Chromium's src directory.
 
     This is the primary solution, unless the primary solution is nested inside
     src (e.g. Electron's "src/electron").
     """
-    gclient_root = FindGclientRoot(os.getcwd())
+    if not from_dir:
+        from_dir = os.getcwd()
+    from_dir = os.path.abspath(from_dir)
+    gclient_root = FindGclientRoot(from_dir)
     if gclient_root:
         name = GetGClientPrimarySolutionName(gclient_root) or ""
         if name.startswith("src/"):
             return os.path.join(gclient_root, "src")
-    return GetPrimarySolutionPath()
+    return GetPrimarySolutionPath(from_dir)
 
 
 @functools.lru_cache
@@ -129,16 +133,22 @@ def _GetBuildtoolsPathInternal(cwd, override):
     if override is not None:
         return override
 
-    primary_solution = GetPrimarySolutionPath()
+    primary_solution = GetPrimarySolutionPath(cwd)
     if not primary_solution:
         return None
+
+    chromium_src = GetChromiumSrcPath(cwd)
+    if chromium_src and chromium_src != primary_solution:
+        src_buildtools_path = os.path.join(chromium_src, "buildtools")
+        if os.path.exists(src_buildtools_path):
+            return src_buildtools_path
 
     buildtools_path = os.path.join(primary_solution, "buildtools")
     if os.path.exists(buildtools_path):
         return buildtools_path
 
     # buildtools may be in the gclient root.
-    gclient_root = FindGclientRoot(os.getcwd())
+    gclient_root = FindGclientRoot(cwd)
     if not gclient_root:
         return None
     buildtools_path = os.path.join(gclient_root, "buildtools")

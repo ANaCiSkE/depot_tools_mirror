@@ -231,6 +231,22 @@ class GetPrimarySolutionPathTest(TestBase):
 
         self.assertIsNone(gclient_paths.GetPrimarySolutionPath())
 
+    def testGclientRootNotFound_CodereviewSettingsOnlyIgnored(self):
+        self.make_file_tree({os.path.join("foo", "codereview.settings"): ""})
+        self.cwd = os.path.join(self.root, "foo", "bar")
+        subprocess2.check_output.return_value = (
+            os.path.join(self.root, "foo").replace(os.sep, "/").encode("utf-8")
+            + b"\n"
+        )
+
+        self.assertIsNone(gclient_paths.GetPrimarySolutionPath())
+        subprocess2.check_output.assert_called_once_with(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=self.cwd,
+            stderr=subprocess2.DEVNULL,
+            shell=False,
+        )
+
 
 class GetChromiumSrcPathTest(TestBase):
     def testPrimarySolutionIsSrc(self):
@@ -317,6 +333,21 @@ class GetBuildtoolsPathTest(TestBase):
             {
                 ".gclient": 'solutions = [{"name": "src/foo"}]',
                 os.path.join("src", "buildtools"): "",
+            }
+        )
+        self.cwd = os.path.join(self.root, "src", "foo")
+
+        self.assertEqual(
+            os.path.join(self.root, "src", "buildtools"),
+            gclient_paths.GetBuildtoolsPath(),
+        )
+
+    def testNestedSolutionDoesNotShadowSrcBuildtools(self):
+        self.make_file_tree(
+            {
+                ".gclient": 'solutions = [{"name": "src/foo"}]',
+                os.path.join("src", "buildtools"): "",
+                os.path.join("src", "foo", "buildtools"): "",
             }
         )
         self.cwd = os.path.join(self.root, "src", "foo")
