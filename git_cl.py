@@ -7417,29 +7417,86 @@ def UploadAllSquashed(
         )
 
     # Post push updates
-    regex = re.compile(r"remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s?.*")
-    change_numbers = [
-        m.group(1) for m in map(regex.search, push_stdout.splitlines()) if m
-    ]
+    gerrit_url_regex = re.compile(
+        r"remote:\s+https?://[\w\-\.\+\/#]*/(\d+)\s?(.*)"
+    )
 
-    if len(change_numbers) != len(uploads_by_cl):
-        DieWithError(
-            "Created|Updated %d issues on Gerrit, but %d expected.\n"
-            "Detected change numbers: %s\n"
-            "Full git push output:\n%s"
-            % (
-                len(change_numbers),
-                len(uploads_by_cl),
-                change_numbers,
-                push_stdout,
+    # Gerrit might wrap long URLs, splitting them across lines.
+    # Join split lines before parsing.
+    def _is_continuation(line: str) -> bool:
+        return "remote:" not in line and not line.lstrip().startswith(
+            ("To ", "* ")
+        )
+
+    joined_lines = []
+    for line in push_stdout.splitlines():
+        prev = joined_lines[-1] if joined_lines else ""
+        prev_is_remote_url = "remote:" in prev and (
+            "https://" in prev or "http://" in prev
+        )
+
+        if prev_is_remote_url and _is_continuation(line):
+            joined_lines[-1] = prev.rstrip() + line.lstrip()
+        else:
+            joined_lines.append(line)
+
+    parsed_outputs = []
+    for line in joined_lines:
+        m = gerrit_url_regex.search(line)
+        if m:
+            parsed_outputs.append((m.group(1), m.group(2).strip()))
+
+    change_numbers = [x[0] for x in parsed_outputs]
+
+    if len(change_numbers) == len(uploads_by_cl):
+        # Update local Git configurations sequentially to prevent .git/config.lock collisions.
+        for i, (cl, new_upload) in enumerate(uploads_by_cl):
+            cl.PostUploadUpdates(
+                options, new_upload, change_numbers[i], update_reviewers=False
             )
+    else:
+        print(
+            "WARNING: Number of uploaded changes (%d) does not match "
+            "number of branches in stack (%d)."
+            % (len(change_numbers), len(uploads_by_cl))
         )
-
-    # Update local Git configurations sequentially to prevent .git/config.lock collisions.
-    for i, (cl, new_upload) in enumerate(uploads_by_cl):
-        cl.PostUploadUpdates(
-            options, new_upload, change_numbers[i], update_reviewers=False
-        )
+        print("Attempting to match changes by subject...")
+        for cl, new_upload in uploads_by_cl:
+            subject = new_upload.change_desc.description.splitlines()[0].strip()
+            found = False
+            for change_number, url_subject in parsed_outputs:
+                if url_subject and (
+                    url_subject.startswith(subject)
+                    or subject.startswith(url_subject)
+                ):
+                    print(
+                        'Matched branch "%s" (subject: "%s") to CL %s'
+                        % (cl.GetBranch(), subject, change_number)
+                    )
+                    cl.PostUploadUpdates(
+                        options,
+                        new_upload,
+                        change_number,
+                        update_reviewers=False,
+                    )
+                    found = True
+                    break
+            if not found:
+                DieWithError(
+                    "Created|Updated %d issues on Gerrit, but %d expected.\n"
+                    'Could not find matching CL for branch "%s" '
+                    '(subject: "%s").\n'
+                    "Detected change numbers: %s\n"
+                    "Full git push output:\n%s"
+                    % (
+                        len(change_numbers),
+                        len(uploads_by_cl),
+                        cl.GetBranch(),
+                        subject,
+                        change_numbers,
+                        push_stdout,
+                    )
+                )
 
     # Run remote Gerrit reviewer updates concurrently across worker threads.
     def _AddRemoteReviewers(item):

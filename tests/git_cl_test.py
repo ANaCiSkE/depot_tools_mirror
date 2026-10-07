@@ -3672,6 +3672,226 @@ class TestGitCl(unittest.TestCase):
     )
     @mock.patch(
         "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        side_effect=["current-upstream-ancestor", "next-upstream-ancestor"],
+    )
+    @mock.patch("git_cl.Changelist.PostUploadUpdates")
+    @mock.patch("git_cl.Changelist._RunGitPushWithTraces")
+    @mock.patch("git_cl._UploadAllPrecheck")
+    @mock.patch("git_cl.Changelist.PrepareSquashedCommit")
+    def test_upload_all_squashed_wrapped_url(
+        self,
+        mockSquashedCommit,
+        mockUploadAllPrecheck,
+        mockRunGitPush,
+        mockPostUploadUpdates,
+        *_mocks,
+    ):
+        cls = [
+            git_cl.Changelist(
+                branchref="refs/heads/current-branch", issue="12345"
+            ),
+            git_cl.Changelist(branchref="refs/heads/upstream-branch"),
+        ]
+        mockUploadAllPrecheck.return_value = (cls, False)
+
+        reviewers = []
+        ccs = []
+        prev_patchset = 2
+        new_upload_current = git_cl._NewUpload(
+            reviewers,
+            ccs,
+            "commit-to-push",
+            "new-last-upload",
+            "next-upstream-ancestor",
+            git_cl.ChangeDescription("stonks\nChange-Id:ec15e81197380"),
+            prev_patchset,
+        )
+        new_upload_upstream = git_cl._NewUpload(
+            reviewers,
+            ccs,
+            "upstream_push_commit",
+            "upstrea-last-upload",
+            "origin-commit",
+            git_cl.ChangeDescription("kwak"),
+            prev_patchset,
+        )
+        mockSquashedCommit.side_effect = [
+            new_upload_upstream,
+            new_upload_current,
+        ]
+
+        options = optparse.Values()
+        options.send_mail = options.private = False
+        options.squash = True
+        options.title = None
+        options.message = "Initial upload"
+        options.topic = "main-topic"
+        options.enable_auto_submit = False
+        options.enable_owners_override = False
+        options.set_bot_commit = False
+        options.cq_dry_run = False
+        options.use_commit_queue = False
+        options.hashtags = ["cow"]
+        options.target_branch = None
+        options.push_options = ["uploadvalidator~skip"]
+
+        # Gerrit wraps long remote progress lines at 80 characters, which can
+        # split the URL inside the project path or inside the CL number itself.
+        mockRunGitPush.return_value = (
+            "remote:   https://chromium-review.googlesource.com/c/chromiumos/"
+            "overlays/board-\n"
+            "overlays/+/1233 kwak\n"
+            "remote:   https://chromium-review.googlesource.com/c/chromiumos/"
+            "overlays/board/+/12\n"
+            "34 stonks\n"
+        )
+
+        self.calls = [
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
+        git_cl.UploadAllSquashed(options, [])
+
+        self.assertEqual(
+            mockPostUploadUpdates.mock_calls,
+            [
+                mock.call(
+                    options,
+                    new_upload_upstream,
+                    "1233",
+                    update_reviewers=False,
+                ),
+                mock.call(
+                    options,
+                    new_upload_current,
+                    "1234",
+                    update_reviewers=False,
+                ),
+            ],
+        )
+
+    @mock.patch(
+        "git_cl.Changelist.GetGerritHost",
+        return_value="chromium-review.googlesource.com",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteBranch",
+        return_value=("origin", "refs/remotes/origin/main"),
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
+        side_effect=["current-upstream-ancestor", "next-upstream-ancestor"],
+    )
+    @mock.patch("git_cl.Changelist.PostUploadUpdates")
+    @mock.patch("git_cl.Changelist._RunGitPushWithTraces")
+    @mock.patch("git_cl._UploadAllPrecheck")
+    @mock.patch("git_cl.Changelist.PrepareSquashedCommit")
+    def test_upload_all_squashed_match_by_subject(
+        self,
+        mockSquashedCommit,
+        mockUploadAllPrecheck,
+        mockRunGitPush,
+        mockPostUploadUpdates,
+        *_mocks,
+    ):
+        cls = [
+            git_cl.Changelist(
+                branchref="refs/heads/current-branch", issue="12345"
+            ),
+            git_cl.Changelist(branchref="refs/heads/upstream-branch"),
+        ]
+        mockUploadAllPrecheck.return_value = (cls, False)
+
+        reviewers = []
+        ccs = []
+        prev_patchset = 2
+        new_upload_current = git_cl._NewUpload(
+            reviewers,
+            ccs,
+            "commit-to-push",
+            "new-last-upload",
+            "next-upstream-ancestor",
+            git_cl.ChangeDescription("stonks\nChange-Id:ec15e81197380"),
+            prev_patchset,
+        )
+        new_upload_upstream = git_cl._NewUpload(
+            reviewers,
+            ccs,
+            "upstream_push_commit",
+            "upstrea-last-upload",
+            "origin-commit",
+            git_cl.ChangeDescription("kwak"),
+            prev_patchset,
+        )
+        mockSquashedCommit.side_effect = [
+            new_upload_upstream,
+            new_upload_current,
+        ]
+
+        options = optparse.Values()
+        options.send_mail = options.private = False
+        options.squash = True
+        options.title = None
+        options.message = "Initial upload"
+        options.topic = "main-topic"
+        options.enable_auto_submit = False
+        options.enable_owners_override = False
+        options.set_bot_commit = False
+        options.cq_dry_run = False
+        options.use_commit_queue = False
+        options.hashtags = ["cow"]
+        options.target_branch = None
+        options.push_options = ["uploadvalidator~skip"]
+
+        # When the number of URLs in push_stdout does not match uploads_by_cl,
+        # branches should be matched to CL numbers using their commit subjects.
+        mockRunGitPush.return_value = (
+            "remote:   https://chromium-review.googlesource.com/c/chromium/"
+            "depot_tools/+/1232 base\n"
+            "remote:   https://chromium-review.googlesource.com/c/chromium/"
+            "depot_tools/+/1233 kwak\n"
+            "remote:   https://chromium-review.googlesource.com/c/chromium/"
+            "depot_tools/+/1234 stonks [NEW]\n"
+        )
+
+        self.calls = [
+            ((["git", "checkout", "-q", "--detach", "upstream-branch"],), ""),
+            ((["git", "checkout", "-q", "--detach", "current-branch"],), ""),
+            ((["git", "checkout", "-q", "main"],), ""),
+        ]
+
+        git_cl.UploadAllSquashed(options, [])
+
+        self.assertEqual(
+            mockPostUploadUpdates.mock_calls,
+            [
+                mock.call(
+                    options,
+                    new_upload_upstream,
+                    "1233",
+                    update_reviewers=False,
+                ),
+                mock.call(
+                    options,
+                    new_upload_current,
+                    "1234",
+                    update_reviewers=False,
+                ),
+            ],
+        )
+
+    @mock.patch(
+        "git_cl.Changelist.GetGerritHost",
+        return_value="chromium-review.googlesource.com",
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetRemoteBranch",
+        return_value=("origin", "refs/remotes/origin/main"),
+    )
+    @mock.patch(
+        "git_cl.Changelist.GetCommonAncestorWithUpstream",
         return_value="current-upstream-ancestor",
     )
     @mock.patch("git_cl.Changelist._UpdateWithExternalChanges")
