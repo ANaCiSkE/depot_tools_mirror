@@ -154,6 +154,7 @@ KNOWN_HTTP_PATHS = {
     "changes/comments": re.compile(r"(/a)?/changes/.*/comments"),
     "changes/detail": re.compile(r"(/a)?/changes/.*/detail"),
     "changes/edit": re.compile(r"(/a)?/changes/.*/edit"),
+    "changes/flows": re.compile(r"(/a)?/changes/.*/flows"),
     "changes/message": re.compile(r"(/a)?/changes/.*/message"),
     "changes/restore": re.compile(r"(/a)?/changes/.*/restore"),
     "changes/reviewers": re.compile(r"(/a)?/changes/.*/reviewers/.*"),
