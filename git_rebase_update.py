@@ -205,10 +205,12 @@ def rebase_branch(
 ):
     """Rebases `branch` onto `parent` from `start_hash`.
 
-    Attempts fast in-memory rebasing via `git replay` for background branches
-    to avoid disk I/O and checkout churn. Falls back to standard porcelain
-    `git rebase` (and optional commit squashing) when conflicts occur, or when
-    operating on active/worktree branches or repositories with GPG signing enabled.
+    Attempts fast in-memory rebasing via `git replay` to avoid disk I/O and
+    checkout churn. Falls back to standard porcelain `git rebase` (and optional
+    commit squashing) when conflicts occur, for the currently checked-out
+    branch, for branches checked out in other worktrees, or when GPG signing
+    is enabled. Callers can detach HEAD beforehand so that the current branch
+    is also rebased in memory.
 
     Args:
         branch: The local branch name to rebase.
@@ -251,8 +253,14 @@ def rebase_branch(
         # Try a plain rebase first
         print("Rebasing:", format_branch_name(branch))
 
-        # Only attempt in-memory fast-forward/replay for background branches
-        # (not the currently checked-out branch, nor branches in other worktrees).
+        # Attempt an in-memory fast-forward/replay, which only updates the
+        # branch ref, so skip branches whose checked-out files would be left
+        # stale:
+        # - The current branch: the porcelain rebase below updates the working
+        #   tree. Callers can detach HEAD beforehand, like main() does, so the
+        #   current branch can be replayed too.
+        # - Branches checked out in other worktrees: don't move their ref behind
+        #   that worktree's back. This matches `git rebase` behavior.
         # We also bypass git replay when commit.gpgsign is enabled because
         # git replay does not sign commits and would produce unsigned commits.
         # Note: git replay is experimental in upstream Git; any failure or conflict
@@ -477,6 +485,11 @@ def main(args=None):
 
     logging.debug("branch_tree: %s" % pformat(branch_tree))
     logging.debug("merge_base: %s" % pformat(merge_base))
+
+    # Detach HEAD, without changing the working tree, so that every branch can
+    # be rebased in memory. The return branch is checked out again at the end.
+    if git.current_branch() != "HEAD":
+        git.run("checkout", "--quiet", "--detach")
 
     retcode = 0
     unrebased_branches = []
