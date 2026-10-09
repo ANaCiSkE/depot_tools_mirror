@@ -615,7 +615,7 @@ class SSOAuthenticator(_Authenticator):
         sso_info = self._get_sso_info()
         conn.proxy = sso_info.proxy_url
         conn.req_headers.update(sso_info.headers)
-        conn.req_headers.setdefault("User-Agent", "git/0.0 (depot_tools)")
+        conn.req_headers.setdefault("User-Agent", "depot_tools")
         conn.cookie_jar = sso_info.cookies
 
         # Now we must rewrite:
@@ -2739,8 +2739,7 @@ def CreateScheduledSubmitFlow(
     target_time = ComputeScheduleTime(issue, custom_time)
     cl_url = f"https://{host}/c/{issue}"
     condition = (
-        f"{cl_url} is is:submittable, "
-        f"wait until today at {target_time} in {tz}"
+        f"{cl_url} is is:submittable, wait until today at {target_time} in {tz}"
     )
     body = {
         "stage_expressions": [
@@ -2769,5 +2768,3 @@ def CreateScheduledSubmitFlow(
     except Exception as e:
         print(f"WARNING: Failed to create submit flow for CL {issue}: {e}")
         raise
-
-

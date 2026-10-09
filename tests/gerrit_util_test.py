@@ -1387,9 +1387,7 @@ class SSOAuthenticatorTest(unittest.TestCase):
 
         self.assertEqual(conn.proxy, "http://127.0.0.1:8080")
         self.assertIs(conn.cookie_jar, jar)
-        self.assertEqual(
-            conn.req_headers["User-Agent"], "git/0.0 (depot_tools)"
-        )
+        self.assertEqual(conn.req_headers["User-Agent"], "depot_tools")
         self.assertEqual(conn.req_headers["X-Custom"], "1")
         self.assertEqual(
             conn.req_uri,
@@ -1465,17 +1463,17 @@ class SSOAuthenticatorTest(unittest.TestCase):
                 (
                     "http://review.example.com/a/changes/",
                     "session=old",
-                    "git/0.0 (depot_tools)",
+                    "depot_tools",
                 ),
                 (
                     "http://login.example.com/auth",
                     "session=old; login_token=secret",
-                    "git/0.0 (depot_tools)",
+                    "depot_tools",
                 ),
                 (
                     "http://review.example.com/a/changes/",
                     "session=renewed",
-                    "git/0.0 (depot_tools)",
+                    "depot_tools",
                 ),
             ],
         )
@@ -2290,7 +2288,6 @@ class GerritFlowsTest(unittest.TestCase):
             },
             accept_statuses=(200, 201),
         )
-
 
     @mock.patch("gerrit_util.CallGerritApi")
     def testCreateScheduledSubmitFlow_ApiFailure(self, mockCallGerritApi):
