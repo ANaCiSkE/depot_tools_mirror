@@ -289,9 +289,8 @@ class OwnersClientTest(unittest.TestCase):
             self.client.SuggestMinimalOwners(["bar/foo/", "baz/baz/baz"]),
         )
 
-        # If no common owner exists, fallback to returning multiple owners
         self.assertEqual(
-            [alice, bob, chris],
+            [bob, chris],
             self.client.SuggestMinimalOwners(
                 [
                     "bar/everyone/foo.txt",
@@ -301,6 +300,96 @@ class OwnersClientTest(unittest.TestCase):
                 ],
                 exclude=[emily],
             ),
+        )
+
+        # A path whose every owner is excluded cannot be covered. Suggest the
+        # owners that cover the rest.
+        self.assertEqual(
+            [bob],
+            self.client.SuggestMinimalOwners(
+                ["bar/everyone/foo.txt", "bar/everyone/bar.txt", "baz/baz/baz"],
+                exclude=[emily, chris, dave],
+            ),
+        )
+
+        # If no path can be covered at all, suggest nobody.
+        self.assertEqual(
+            [],
+            self.client.SuggestMinimalOwners(
+                ["baz/baz/baz"], exclude=[chris, dave, emily]
+            ),
+        )
+
+        # An empty change needs no owners either.
+        self.assertEqual([], self.client.SuggestMinimalOwners([]))
+
+        # A path anybody can approve needs no reviewer of its own.
+        self.client.owners_by_path["qux/qux"] = [
+            owners_client.OwnersClient.EVERYONE
+        ]
+        self.assertEqual(
+            [bob, chris],
+            self.client.SuggestMinimalOwners(
+                [
+                    "bar/everyone/foo.txt",
+                    "bar/everyone/bar.txt",
+                    "bar/foo/",
+                    "baz/baz/baz",
+                    "qux/qux",
+                ],
+                exclude=[emily],
+            ),
+        )
+
+    def testSuggestMinimalOwnersEveryoneCanApprove(self):
+        client = TestClient(
+            {
+                "a": [alice, owners_client.OwnersClient.EVERYONE],
+                "b": [bob, owners_client.OwnersClient.EVERYONE],
+            }
+        )
+        # Any one of the owners can approve it all.
+        suggested = client.SuggestMinimalOwners(["a", "b"])
+        self.assertEqual(1, len(suggested))
+        self.assertIn(suggested[0], [alice, bob])
+
+        # With no owner left to name, anybody can still approve it.
+        client = TestClient({"a": [alice, owners_client.OwnersClient.EVERYONE]})
+        self.assertEqual(
+            [owners_client.OwnersClient.EVERYONE],
+            client.SuggestMinimalOwners(["a"], exclude=[alice]),
+        )
+
+        # Unless anybody is ruled out too.
+        self.assertEqual(
+            [],
+            client.SuggestMinimalOwners(
+                ["a"], exclude=[alice, owners_client.OwnersClient.EVERYONE]
+            ),
+        )
+
+    def testSuggestMinimalOwnersIgnoresPathsAnybodyCanApprove(self):
+        # Whoever reviews a.cc can approve BUILD.gn too, so bob is not needed.
+        client = TestClient(
+            {
+                "a.cc": [alice],
+                "BUILD.gn": [bob, owners_client.OwnersClient.EVERYONE],
+            }
+        )
+        self.assertEqual(
+            [alice], client.SuggestMinimalOwners(["a.cc", "BUILD.gn"])
+        )
+
+        # Owning q does not make bob a better choice than alice.
+        client = TestClient(
+            {
+                "p1": [bob, alice],
+                "p2": [alice],
+                "q": [bob, owners_client.OwnersClient.EVERYONE],
+            }
+        )
+        self.assertEqual(
+            [alice], client.SuggestMinimalOwners(["p1", "p2", "q"])
         )
 
 

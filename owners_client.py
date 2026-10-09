@@ -124,36 +124,56 @@ class OwnersClient(object):
     ) -> list[str]:
         """
         Suggest a set of owners for the given paths. Never return an owner in
-        the |exclude| list.
+        the `exclude` list.
 
         Aims to provide only one, but will provide more if it's unable to
         find a common owner.
+
+        Unlike SuggestOwners, which walks owners in per-path score order and so
+        tends to pick every path's nearest owner, this prefers owners who cover
+        many paths at once.
         """
-        exclude = exclude or []
-
+        exclude = set(exclude or ())
         owners_by_path = self.BatchListOwners(paths)
-        if not owners_by_path:
-            return []
 
-        common_owners = set(owners_by_path.popitem()[1]) - set(exclude)
-        for _, owners in owners_by_path.items():
-            common_owners = common_owners.intersection(set(owners))
-
-        if not common_owners:
-            # This likely means some of the files had `noparent` set.
-            # Fall back to the default suggestion algorithm, which accounts
-            # for noparent but is liable to return many different owners
-            return self.SuggestOwners(paths, exclude)
-
-        # Return an arbitrary common owner, preferring those with a good score
-        sorted_common_owners = [
-            owner
-            for owner in self.ScoreOwners(paths, exclude=exclude)
-            if owner in common_owners
+        # A path anybody can approve needs no reviewer of its own: whoever
+        # reviews the rest of the change can approve it too.
+        constrained = [
+            path
+            for path, owners in owners_by_path.items()
+            if self.EVERYONE not in owners
         ]
 
-        # Return a singleton list so this function has a consistent return type
-        return sorted_common_owners[:1]
+        # Anybody can approve the whole change, so one owner is enough. Name
+        # one if possible, else suggest EVERYONE.
+        if not constrained:
+            ranked = self.ScoreOwners(paths, exclude=exclude)
+            named = [o for o in ranked if o != self.EVERYONE]
+            return (named or ranked)[:1]
+
+        paths_by_owner = {}
+        for path in constrained:
+            for owner in set(owners_by_path[path]) - exclude:
+                paths_by_owner.setdefault(owner, set()).add(path)
+
+        # Candidates are in score order, and max() returns the first of the
+        # equally-covering ones, so ties fall to the better-scored owner.
+        candidates = self.ScoreOwners(constrained, exclude=exclude)
+        missing = set(constrained)
+        selected = []
+        while missing and candidates:
+            owner = max(
+                candidates, key=lambda o: len(paths_by_owner[o] & missing)
+            )
+            covered = paths_by_owner[owner] & missing
+            if not covered:
+                # Whatever is left has no owner we are allowed to suggest.
+                break
+            selected.append(owner)
+            missing -= covered
+            candidates.remove(owner)
+
+        return selected
 
 
 class GerritClient(OwnersClient):

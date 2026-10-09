@@ -10073,6 +10073,12 @@ class CMDOwnersTestCase(CMDTestCaseBase):
         self.assertIn("a@example.com", sys.stdout.getvalue())
         self.assertIn("b@example.com", sys.stdout.getvalue())
 
+    def testMinimal(self):
+        self.assertEqual(0, git_cl.main(["owners", "--minimal"]))
+        self.assertEqual(
+            "a@example.com\nb@example.com\n", sys.stdout.getvalue()
+        )
+
 
 class CMDLintTestCase(CMDTestCaseBase):
     bad_indent = "\n".join(

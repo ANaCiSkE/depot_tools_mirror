@@ -8639,6 +8639,11 @@ def CMDowners(parser, args):
         action="store_true",
         help="Do not run interactively, just suggest some",
     )
+    parser.add_option(
+        "--minimal",
+        action="store_true",
+        help="Like --batch, but suggest the smallest set of owners",
+    )
     # TODO: Consider moving this to another command, since other
     #       git-cl owners commands deal with owners for a given CL.
     parser.add_option(
@@ -8675,6 +8680,13 @@ def CMDowners(parser, args):
         base_branch = cl.GetCommonAncestorWithUpstream()
 
     affected_files = cl.GetAffectedFiles(base_branch)
+
+    if options.minimal:
+        owners = cl.owners_client.SuggestMinimalOwners(
+            affected_files, exclude=[author]
+        )
+        print("\n".join(owners))
+        return 0
 
     if options.batch:
         owners = cl.owners_client.SuggestOwners(
