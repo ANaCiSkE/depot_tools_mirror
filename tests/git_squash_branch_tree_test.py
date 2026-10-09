@@ -143,6 +143,69 @@ class GitSquashBranchTreeTest(git_test_utils.GitRepoReadWriteTestBase):
         )
         self.assertEqual(self._getCountAheadOfUpstream("branchC"), 1)
 
+    def testAlreadySquashedTreeIsUnchanged(self):
+        self.repo.run(
+            git_squash_branch_tree.main,
+            ["--branch", "branchA", "--ignore-no-upstream"],
+        )
+        before = {
+            b: self.repo.run(git_common.hash_one, b)
+            for b in ("branchA", "branchB", "branchC")
+        }
+
+        self.repo.run(
+            git_squash_branch_tree.main,
+            ["--branch", "branchA", "--ignore-no-upstream"],
+        )
+
+        for branch, sha in before.items():
+            self.assertEqual(self.repo.run(git_common.hash_one, branch), sha)
+
+    def testMixedChainOnlyRewritesWhatIsNeeded(self):
+        # Build: main <- front1 (1) <- front2 (1) <- middle (2) <- back (1)
+        self.repo.git("checkout", "-B", "front1", "--track", "main")
+        self._createFileAndCommit("front1File")
+        self.repo.git("checkout", "-B", "front2", "--track", "front1")
+        self._createFileAndCommit("front2File")
+        self.repo.git("checkout", "-B", "middle", "--track", "front2")
+        self._createFileAndCommit("middleFile1")
+        self._createFileAndCommit("middleFile2")
+        self.repo.git("checkout", "-B", "back", "--track", "middle")
+        self._createFileAndCommit("backFile")
+        before = {
+            b: self.repo.run(git_common.hash_one, b)
+            for b in ("front1", "front2", "middle", "back")
+        }
+
+        self.repo.run(
+            git_squash_branch_tree.main,
+            ["--branch", "front1", "--ignore-no-upstream"],
+        )
+
+        self._assertCounts({"front1": 1, "front2": 1, "middle": 1, "back": 1})
+        # Single-commit branches on unchanged parents are left untouched.
+        self.assertEqual(
+            self.repo.run(git_common.hash_one, "front1"), before["front1"]
+        )
+        self.assertEqual(
+            self.repo.run(git_common.hash_one, "front2"), before["front2"]
+        )
+        # middle is squashed on top of the unchanged front2.
+        self.assertNotEqual(
+            self.repo.run(git_common.hash_one, "middle"), before["middle"]
+        )
+        self.assertEqual(
+            self.repo.run(git_common.hash_one, "middle^"), before["front2"]
+        )
+        # back has a single commit, but must be rebuilt on the new middle.
+        self.assertNotEqual(
+            self.repo.run(git_common.hash_one, "back"), before["back"]
+        )
+        self.assertEqual(
+            self.repo.run(git_common.hash_one, "back^"),
+            self.repo.run(git_common.hash_one, "middle"),
+        )
+
     def testFailsWhenUpstreamDiverged(self):
         # Advance upstream 'main' with a commit that branchA does not have
         self.repo.git("checkout", "main")

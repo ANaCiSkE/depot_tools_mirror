@@ -43,6 +43,12 @@ def stage_squash_branch(
     parent_sha = new_shas.get(parent)
     if parent_sha is None:
         parent_sha = git.hash_one(merge_base)
+    # If the branch already consists of a single commit directly on top of
+    # `parent_sha`, keep it as-is. Rewriting it would change its SHA (and
+    # thus the base of every downstream branch) for no benefit.
+    if git.run("rev-parse", f"{branch}^@").split() == [parent_sha]:
+        print(f"Branch {branch} already has a single commit; skipping.")
+        return git.hash_one(branch)
     msg = git.get_squash_message(branch, merge_base)
     commit_sha = git.create_squash_commit(
         branch,
