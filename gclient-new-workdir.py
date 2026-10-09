@@ -10,6 +10,7 @@
 import argparse
 import ctypes
 import ctypes.util
+import glob
 import os
 import random
 import shutil
@@ -76,6 +77,14 @@ def parse_options():
         """sub-directories of the workspace, and so on. A value of -1 means """
         """there is no limit. The default is 1 if copy-on-write is used, """
         """otherwise the default is -1.""",
+    )
+    parser.add_argument(
+        "--copy-gn-args",
+        action="store_true",
+        help="""Copy each <solution>/out/<build_dir>/args.gn from the """
+        """repository to the new workdir. Existing files are left """
+        """untouched. This has no effect with copy-on-write, which """
+        """already copies the out/ directories.""",
     )
     args = parser.parse_args()
 
@@ -308,6 +317,40 @@ def create_git_worktree(src, workdir):
     )
 
 
+def copy_gn_args(repository, new_workdir):
+    """Copies each <solution>/out/<build_dir>/args.gn into new_workdir.
+
+    Existing files (e.g. already copied by copy-on-write, or reached through a
+    symlinked out/ directory) are left untouched.
+
+    This step is best-effort: failures are reported as warnings and never
+    abort the creation of the new workdir.
+    """
+    pattern = os.path.join(repository, "*", "out", "*", "args.gn")
+    copied = 0
+    for src_args in sorted(glob.glob(pattern)):
+        rel_path = os.path.relpath(src_args, repository)
+        dest_args = os.path.join(new_workdir, rel_path)
+        if os.path.lexists(dest_args):
+            print(f"Skipping {rel_path}: already exists.")
+            continue
+        try:
+            os.makedirs(os.path.dirname(dest_args), exist_ok=True)
+            shutil.copyfile(src_args, dest_args)
+        except OSError as e:
+            print(
+                f"Warning: failed to copy GN args {rel_path}: {e}",
+                file=sys.stderr,
+            )
+            continue
+        print(f"Copied GN args: {rel_path}")
+        copied += 1
+    if copied:
+        print(
+            "Run `gn gen out/<build_dir>` in the new workdir before building."
+        )
+
+
 def main():
     args = parse_options()
 
@@ -423,6 +466,9 @@ def main():
                 link_git_repo(
                     root, workdir, use_copy_on_write=args.copy_on_write
                 )
+
+        if args.copy_gn_args:
+            copy_gn_args(args.repository, args.new_workdir)
 
         if args.copy_on_write:
             print(

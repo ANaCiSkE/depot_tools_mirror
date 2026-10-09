@@ -2,6 +2,7 @@ import importlib.machinery
 import importlib.util
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -343,6 +344,129 @@ class TestGclientNewWorkdir(unittest.TestCase):
             ],
             cwd="/fake/dest",
         )
+
+
+@unittest.skipIf(
+    sys.platform == "win32", "gclient-new-workdir not supported on Windows"
+)
+class TestCopyGnArgs(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = os.path.join(self._tmp.name, "repo")
+        self.dest = os.path.join(self._tmp.name, "dest")
+        os.makedirs(os.path.join(self.dest, "src"))
+
+    def _write(self, path, contents):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(contents)
+
+    def _read(self, path):
+        with open(path) as f:
+            return f.read()
+
+    def test_copies_each_build_dir(self):
+        default_args = os.path.join(
+            self.repo, "src", "out", "Default", "args.gn"
+        )
+        android_args = os.path.join(
+            self.repo, "src", "out", "Android", "args.gn"
+        )
+        self._write(default_args, "is_debug = true\n")
+        self._write(android_args, 'target_os = "android"\n')
+        # Build dirs without an args.gn are ignored.
+        os.makedirs(os.path.join(self.repo, "src", "out", "NoArgs"))
+
+        gclient_new_workdir.copy_gn_args(self.repo, self.dest)
+
+        for src_args in (default_args, android_args):
+            dest_args = os.path.join(
+                self.dest, os.path.relpath(src_args, self.repo)
+            )
+            self.assertFalse(os.path.islink(dest_args))
+            self.assertEqual(self._read(dest_args), self._read(src_args))
+        self.assertFalse(
+            os.path.exists(os.path.join(self.dest, "src", "out", "NoArgs"))
+        )
+        # The repository is left untouched.
+        self.assertEqual(self._read(default_args), "is_debug = true\n")
+
+    def test_keeps_existing_args(self):
+        src_args = os.path.join(self.repo, "src", "out", "Default", "args.gn")
+        dest_args = os.path.join(self.dest, "src", "out", "Default", "args.gn")
+        self._write(src_args, "is_debug = true\n")
+        self._write(dest_args, "is_debug = false\n")
+
+        gclient_new_workdir.copy_gn_args(self.repo, self.dest)
+
+        self.assertEqual(self._read(dest_args), "is_debug = false\n")
+
+    def test_keeps_existing_symlink(self):
+        src_args = os.path.join(self.repo, "src", "out", "Default", "args.gn")
+        dest_args = os.path.join(self.dest, "src", "out", "Default", "args.gn")
+        other = os.path.join(self._tmp.name, "other_args.gn")
+        self._write(src_args, "is_debug = true\n")
+        self._write(other, "is_debug = false\n")
+        os.makedirs(os.path.dirname(dest_args))
+        os.symlink(other, dest_args)
+
+        gclient_new_workdir.copy_gn_args(self.repo, self.dest)
+
+        self.assertEqual(os.readlink(dest_args), other)
+        self.assertEqual(self._read(other), "is_debug = false\n")
+
+    def test_skips_build_dir_shared_through_symlink(self):
+        src_args = os.path.join(self.repo, "src", "out", "Default", "args.gn")
+        self._write(src_args, "is_debug = true\n")
+        # A symlinked out/ copied as-is points at the repository's out/.
+        os.symlink(
+            os.path.join(self.repo, "src", "out"),
+            os.path.join(self.dest, "src", "out"),
+        )
+
+        gclient_new_workdir.copy_gn_args(self.repo, self.dest)
+
+        self.assertEqual(self._read(src_args), "is_debug = true\n")
+
+    @patch("os.walk")
+    @patch("os.path.exists")
+    @patch("os.makedirs")
+    @patch("os.symlink")
+    @patch.object(gclient_new_workdir, "copy_gn_args")
+    def _run_main(
+        self,
+        copy_gn_args_flag,
+        mock_copy,
+        mock_symlink,
+        mock_makedirs,
+        mock_exists,
+        mock_walk,
+    ):
+        mock_args = MagicMock()
+        mock_args.repository = "/fake/repo"
+        mock_args.new_workdir = "/fake/dest"
+        mock_args.copy_on_write = False
+        mock_args.max_depth = None
+        mock_args.copy_gn_args = copy_gn_args_flag
+        mock_walk.return_value = []
+        mock_exists.side_effect = lambda path: path == "/fake/repo/.gclient"
+        with (
+            patch.object(
+                gclient_new_workdir, "parse_options", return_value=mock_args
+            ),
+            patch.object(
+                gclient_new_workdir, "is_btrfs_subvolume", return_value=False
+            ),
+        ):
+            self.assertEqual(gclient_new_workdir.main(), 0)
+        return mock_copy
+
+    def test_main_copies_gn_args_when_requested(self):
+        self._run_main(True).assert_called_once_with("/fake/repo", "/fake/dest")
+
+    def test_main_does_not_copy_gn_args_by_default(self):
+        self._run_main(False).assert_not_called()
 
 
 if __name__ == "__main__":
