@@ -318,7 +318,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.repo.git("rebase", "--skip")
 
         output, _ = self.repo.capture_stdio(self.reup.main, [])
-        self.assertIn("branch_L landed upstream\n", output)
+        self.assertIn("branch_L landed upstream (was ", output)
         self.assertIn("Deleted branch branch_G", output)
         self.assertIn("Deleted branch branch_L", output)
         self.assertIn("'branch_G' was merged", output)
@@ -404,6 +404,170 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.assertEqual(
             self.repo.git("rev-parse", "unrelated").stdout.strip(), unrelated
         )
+
+    def _createStack(self):
+        """Creates a stack of 3 branches that all modify the same line."""
+        self._createStackBranch("cl_1", "origin/main", "1\n")
+        self._createStackBranch("cl_2", "cl_1", "2\n")
+        self._createStackBranch("cl_3", "cl_2", "3\n")
+
+    def testLandedStack(self):
+        self._createStack()
+        # Rebasing cl_1 and cl_2 conflicts, as later changes modified the same
+        # line.
+        self._landChange("1\n")
+        self._landChange("2\n")
+        self._landChange("3\n")
+
+        self.repo.git("checkout", "cl_1")
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertIn("cl_1 landed upstream along with cl_3", output)
+        self.assertIn("cl_2 landed upstream along with cl_3", output)
+        self.assertIn("Deleted branch cl_1", output)
+        self.assertIn("Deleted branch cl_2", output)
+        self.assertIn("Deleted branch cl_3", output)
+        self.assertFalse(self.repo.run(self.gc.in_rebase))
+
+    def testLandedStackPrefix(self):
+        self._createStack()
+        self._landChange("1\n")
+        self._landChange("2\n")
+
+        self.repo.git("checkout", "cl_1")
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertIn("cl_1 landed upstream along with cl_2", output)
+        self.assertIn("Deleted branch cl_1", output)
+        self.assertIn("Deleted branch cl_2", output)
+        self.assertNotIn("Deleted branch cl_3", output)
+        self.assertIn("Reparented cl_3 to track origin/main", output)
+        self.assertFalse(self.repo.run(self.gc.in_rebase))
+        self.assertEqual(
+            self.repo.git("show", "cl_3:stack").stdout.splitlines(), ["3"]
+        )
+
+    def testLandedStackWithLocalChanges(self):
+        self._createStack()
+        # cl_1 has a change that did not land, which cl_2 and cl_3 include.
+        self.repo.git("checkout", "cl_1")
+        with self.repo.open("unlanded", "w") as f:
+            f.write("unlanded")
+        self.repo.git("add", "unlanded")
+        self.repo.git(
+            "commit", "--amend", "--no-edit", env=self.repo.get_git_commit_env()
+        )
+        self.repo.git("rebase", "cl_1", "cl_2")
+        self.repo.git("rebase", "cl_2", "cl_3")
+        self._landChange("1\n")
+        self._landChange("2\n")
+        self._landChange("3\n")
+
+        self.repo.git("checkout", "cl_1")
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertNotIn("landed upstream along with", output)
+        self.assertNotIn("Deleted branch cl_1", output)
+        self.assertTrue(self.repo.run(self.gc.in_rebase))
+        self.repo.git("rebase", "--abort")
+
+    def testLandedStackWithStaleDescendant(self):
+        self._createStack()
+        self._landChange("1\n")
+        self._landChange("2\n")
+        self._landChange("3\n")
+        # cl_1 is amended after cl_2 and cl_3 were last rebased, so they don't
+        # reflect its latest changes.
+        self.repo.git("checkout", "cl_1")
+        with self.repo.open("unlanded", "w") as f:
+            f.write("unlanded")
+        self.repo.git("add", "unlanded")
+        self.repo.git(
+            "commit", "--amend", "--no-edit", env=self.repo.get_git_commit_env()
+        )
+
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertNotIn("landed upstream along with", output)
+        self.assertNotIn("Deleted branch cl_1", output)
+        self.assertTrue(self.repo.run(self.gc.in_rebase))
+        self.repo.git("rebase", "--abort")
+
+    def testLandedStackReverted(self):
+        self._createStack()
+        self._landChange("1\n")
+        self._landChange("2\n")
+        self._landChange("3\n")
+        # The stack gets reverted, then someone else modifies the same line.
+        self._landChange("other\n")
+
+        self.repo.git("checkout", "cl_1")
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertNotIn("landed upstream along with", output)
+        self.assertNotIn("Deleted branch cl_1", output)
+        self.assertTrue(self.repo.run(self.gc.in_rebase))
+        self.repo.git("rebase", "--abort")
+
+    def testLandedStackDescendantRevertsBranch(self):
+        self._createStackBranch("cl_1", "origin/main", "1\n")
+        # cl_2 reverts cl_1, so the stack as a whole changes nothing.
+        self.repo.git("checkout", "-b", "cl_2", "cl_1")
+        self.repo.git("branch", "--set-upstream-to", "cl_1", "cl_2")
+        self.repo.git("rm", "stack")
+        self.repo.git_commit("cl_2")
+        # Rebasing cl_1 conflicts with an unrelated change to the same file.
+        self._landChange("other\n")
+
+        self.repo.git("checkout", "cl_1")
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertNotIn("landed upstream along with", output)
+        self.assertNotIn("Deleted branch cl_1", output)
+        self.assertTrue(self.repo.run(self.gc.in_rebase))
+        self.repo.git("rebase", "--abort")
+
+    def testLandedStackNoSquash(self):
+        self._createStack()
+        self._landChange("1\n")
+        self._landChange("2\n")
+        self._landChange("3\n")
+
+        self.repo.git("checkout", "cl_1")
+        output, _ = self.repo.capture_stdio(self.reup.main, ["--no-squash"])
+
+        self.assertNotIn("landed upstream", output)
+        self.assertNotIn("Deleted branch cl_1", output)
+        self.assertTrue(self.repo.run(self.gc.in_rebase))
+        self.repo.git("rebase", "--abort")
+
+    def testLandedCheckSkipsDescendantsIfBranchMergesCleanly(self):
+        # Replaying cl_1 commit by commit conflicts, but its changes as a whole
+        # merge cleanly into origin/main without being contained in it: part of
+        # it landed, and `unlanded` didn't.
+        self._createStackBranch("cl_1", "origin/main", "x\n")
+        with self.repo.open("stack", "w") as f:
+            f.write("1\n")
+        with self.repo.open("unlanded", "w") as f:
+            f.write("unlanded")
+        self.repo.git("add", "stack", "unlanded")
+        self.repo.git_commit("cl_1 fixup")
+        self._createStackBranch("cl_2", "cl_1", "2\n")
+        self._landChange("1\n")
+
+        # cl_1 did not land, so its descendants are not examined.
+        self.repo.git("checkout", "cl_1")
+        with mock.patch(
+            "git_common.is_branch_contained_in",
+            wraps=self.gc.is_branch_contained_in,
+        ) as is_branch_contained_in:
+            output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        is_branch_contained_in.assert_not_called()
+        self.assertNotIn("landed upstream", output)
+        # The in-memory replay failed, so `git rebase` was left mid-rebase.
+        self.assertTrue(self.repo.run(self.gc.in_rebase))
+        self.repo.git("rebase", "--abort")
 
     def testRebaseUpdateSkipWorktrees(self):
         self.repo.git("checkout", "branch_L")

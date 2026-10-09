@@ -196,12 +196,69 @@ def format_branch_name(branch):
     return BRIGHT + branch + RESET
 
 
+def get_descendants(branch, branch_tree):
+    """Returns the descendants of `branch` in `branch_tree`, nearest first."""
+    children = collections.defaultdict(list)
+    for child, parent in branch_tree.items():
+        children[parent].append(child)
+    descendants = []
+    queue = collections.deque(sorted(children[branch]))
+    while queue:
+        descendant = queue.popleft()
+        descendants.append(descendant)
+        queue.extend(sorted(children[descendant]))
+    return descendants
+
+
+def find_landed_with(branch, parent, start_hash, descendants):
+    """Returns the branch whose changes show that `branch` landed in `parent`.
+
+    `branch` landed if its own changes since `start_hash` are contained in
+    `parent`, e.g. when it landed squashed.
+
+    If merging these changes into `parent` conflicts instead, later commits
+    that landed after `branch`, e.g. a stacked child CL, may have modified the
+    same lines. In that case, the changes of the whole stack from `branch` up
+    to one of its descendants are contained in `parent`.
+
+    Returns `branch`, one of `descendants`, or None if `branch` did not land.
+    """
+    parent_tree = git.run("rev-parse", f"{parent}^{{tree}}")
+    tree = git.merge_tree(parent, branch, start_hash)
+    if tree == parent_tree:
+        return branch
+    if tree is not None:
+        # The merge is clean but modifies `parent`: some changes of `branch`
+        # did not land.
+        return None
+    start_tree = git.run("rev-parse", f"{start_hash}^{{tree}}")
+    for descendant in descendants:
+        # Ignore descendants that are not based on the current `branch`, e.g.
+        # when it was amended after they were last rebased: they would not
+        # reflect the latest changes of `branch`.
+        if (
+            git.run_with_retcode(
+                "merge-base", "--is-ancestor", branch, descendant
+            )
+            != 0
+        ):
+            continue
+        # Ignore descendants that undo all of the stack's changes, e.g. a
+        # revert of `branch`: they are trivially contained in any target.
+        if git.run("rev-parse", f"{descendant}^{{tree}}") == start_tree:
+            continue
+        if git.is_branch_contained_in(descendant, start_hash, parent):
+            return descendant
+    return None
+
+
 def rebase_branch(
     branch,
     parent,
     start_hash,
     no_squash,
     branches_in_other_worktrees,
+    descendants=(),
 ):
     """Rebases `branch` onto `parent` from `start_hash`.
 
@@ -218,9 +275,12 @@ def rebase_branch(
         branch: The local branch name to rebase.
         parent: The upstream parent ref or branch name.
         start_hash: The merge-base commit SHA between branch and parent.
-        no_squash: If True, does not check whether the changes of `branch` as a
-            whole (i.e. squashed) landed when it can't be replayed.
+        no_squash: If True, does not check whether the changes of `branch`,
+            alone or together with its descendants, landed squashed when it
+            can't be replayed.
         branches_in_other_worktrees: Set of branch names checked out in other worktrees.
+        descendants: Descendants of `branch`, nearest first. Used to detect that
+            `branch` landed along with one of them.
 
     Returns:
         True if the branch rebased successfully, False on failure.
@@ -280,15 +340,20 @@ def rebase_branch(
             elif not git.get_gpg_sign_args():
                 new_sha = git.replay_rebase(parent, start_hash, branch)
 
-            # Rebasing a branch that landed squashed conflicts. Detect it in
-            # memory, before `git rebase` checks it out.
-            if (
-                new_sha is None
-                and not no_squash
-                and git.is_branch_contained_in(branch, start_hash, parent)
-            ):
-                print(f"{format_branch_name(branch)} landed upstream")
-                new_sha = git.hash_one(parent)
+            # Rebasing a branch that landed conflicts, e.g. when it landed
+            # squashed or along with later changes to the same lines. Detect
+            # it in memory, before `git rebase` checks it out.
+            if new_sha is None and not no_squash:
+                landed_with = find_landed_with(
+                    branch, parent, start_hash, descendants
+                )
+                if landed_with:
+                    message = f"{format_branch_name(branch)} landed upstream"
+                    if landed_with != branch:
+                        landed_with_name = format_branch_name(landed_with)
+                        message += f" along with {landed_with_name}"
+                    print(f"{message} (was {old_sha[:10]})")
+                    new_sha = git.hash_one(parent)
 
             if new_sha:
                 git.update_refs_atomic(
@@ -501,6 +566,7 @@ def main(args=None):
                 merge_base[branch],
                 opts.no_squash,
                 branches_in_other_worktrees,
+                get_descendants(branch, branch_tree),
             )
             if not ret:
                 retcode = 1

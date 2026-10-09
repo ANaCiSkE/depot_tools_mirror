@@ -958,28 +958,39 @@ def replay_rebase(parent: str, start: str, branch: str) -> Optional[str]:
         return None
 
 
-def is_branch_contained_in(branch: str, start: str, target: str) -> bool:
-    """Returns whether `branch`'s changes since `start` are contained in `target`.
+def merge_tree(target: str, branch: str, merge_base: str) -> Optional[str]:
+    """Merges `branch` into `target` in memory, using `merge_base`.
 
-    Merges `branch` into `target` in memory with `git merge-tree`, using `start`
-    as the merge base. This is equivalent to squashing the commits in
-    `start..branch` and replaying them onto `target`, without touching the
-    working tree, the index or any ref. The changes are contained in `target`
-    if the merge is clean and leaves `target`'s tree unmodified.
+    This is equivalent to squashing the commits in `merge_base..branch` and
+    replaying them onto `target`, without touching the working tree, the index
+    or any ref.
+
+    Returns the resulting tree, or None if the merge conflicts.
     """
     try:
         out = run(
             "merge-tree",
             "--write-tree",
-            f"--merge-base={start}",
+            f"--merge-base={merge_base}",
             target,
             branch,
         )
     except subprocess2.CalledProcessError:
         # Conflicts or an invalid ref.
-        return False
+        return None
     assert isinstance(out, str)
-    return out == run("rev-parse", f"{target}^{{tree}}")
+    return out
+
+
+def is_branch_contained_in(branch: str, start: str, target: str) -> bool:
+    """Returns whether `branch`'s changes since `start` are contained in `target`.
+
+    The changes are contained in `target` if merging them into `target` (see
+    `merge_tree`) is clean and leaves `target`'s tree unmodified.
+    """
+    return merge_tree(target, branch, start) == run(
+        "rev-parse", f"{target}^{{tree}}"
+    )
 
 
 def remove_merge_base(branch):

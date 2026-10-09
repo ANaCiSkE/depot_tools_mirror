@@ -4,10 +4,10 @@
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
 .\"      Date: 10/08/2026
 .\"    Manual: Chromium depot_tools Manual
-.\"    Source: depot_tools 9b6b68a83
+.\"    Source: depot_tools 2103662cf
 .\"  Language: English
 .\"
-.TH "GIT\-REBASE\-UPDATE" "1" "10/08/2026" "depot_tools 9b6b68a83" "Chromium depot_tools Manual"
+.TH "GIT\-REBASE\-UPDATE" "1" "10/08/2026" "depot_tools 2103662cf" "Chromium depot_tools Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -81,7 +81,11 @@ will do\&. Because of that,
 \fBgit rebase\-update\fR
 will check whether the squashed version of your conflicted branch is already contained in its upstream\&.
 .sp
-If it is, your branch is reset to its upstream and removed in the
+Conflicts also happen when several branches of a stack landed and a later one modified the same lines as an earlier one\&.
+\fBgit rebase\-update\fR
+therefore also checks whether your conflicted branch, squashed together with one of its downstream branches, is already contained in its upstream\&.
+.sp
+If your branch landed, it is reset to its upstream and removed in the
 \fICleanup\fR
 phase\&. Otherwise, it will be left in mid\-rebase and
 \fBgit rebase\-update\fR
