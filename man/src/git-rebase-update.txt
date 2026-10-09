@@ -41,13 +41,13 @@ Things get interesting when there are merge conflicts on rebase. The *most
 common* cause for conflicts is when your branch has been committed to the
 upstream in squashed form, ala linkgit:git-squash-branch[1], which is what
 linkgit:git-cl[1] and the 'Commit Queue' will do. Because of that, `git
-rebase-update` will attempt to squash your conflicted branch to see if the
-squashed version applies cleanly to its upstream.
+rebase-update` will check whether the squashed version of your conflicted
+branch is already contained in its upstream.
 +
-If it does not apply cleanly, then your original (non-squashed) branch will be
-left in mid-rebase and `git rebase-update` will exit. You can deal with this
-like any other conflicted rebase. When you're done, just `git rebase-update`
-again to pick up where you left off.
+If it is, your branch is reset to its upstream and removed in the 'Cleanup'
+phase. Otherwise, it will be left in mid-rebase and `git rebase-update` will
+exit. You can deal with this like any other conflicted rebase. When you're
+done, just `git rebase-update` again to pick up where you left off.
 
 If you'd like to rebase all rebaseable branches in one pass and manually process
 the unrebaseable ones later, use -k or --keep-going. Cleanup will not happen
@@ -79,7 +79,8 @@ OPTIONS
   Skip the `git fetch` phase of rebase-update.
 
 --no-squash::
-  Skip the squash phase of rebase-update if there are merge conflicts.
+  Do not check whether a branch's commits already landed upstream in squashed
+  form.
 
 -v::
 --verbose::

@@ -2,12 +2,12 @@
 .\"     Title: git-rebase-update
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 06/15/2026
+.\"      Date: 10/08/2026
 .\"    Manual: Chromium depot_tools Manual
-.\"    Source: depot_tools b26951427
+.\"    Source: depot_tools 9b6b68a83
 .\"  Language: English
 .\"
-.TH "GIT\-REBASE\-UPDATE" "1" "06/15/2026" "depot_tools b26951427" "Chromium depot_tools Manual"
+.TH "GIT\-REBASE\-UPDATE" "1" "10/08/2026" "depot_tools 9b6b68a83" "Chromium depot_tools Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -79,9 +79,11 @@ and the
 \fICommit Queue\fR
 will do\&. Because of that,
 \fBgit rebase\-update\fR
-will attempt to squash your conflicted branch to see if the squashed version applies cleanly to its upstream\&.
+will check whether the squashed version of your conflicted branch is already contained in its upstream\&.
 .sp
-If it does not apply cleanly, then your original (non\-squashed) branch will be left in mid\-rebase and
+If it is, your branch is reset to its upstream and removed in the
+\fICleanup\fR
+phase\&. Otherwise, it will be left in mid\-rebase and
 \fBgit rebase\-update\fR
 will exit\&. You can deal with this like any other conflicted rebase\&. When you\(cqre done, just
 \fBgit rebase\-update\fR
@@ -127,7 +129,7 @@ phase of rebase\-update\&.
 .PP
 \-\-no\-squash
 .RS 4
-Skip the squash phase of rebase\-update if there are merge conflicts\&.
+Do not check whether a branch\(cqs commits already landed upstream in squashed form\&.
 .RE
 .PP
 \-v, \-\-verbose

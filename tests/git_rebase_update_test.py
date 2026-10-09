@@ -5,6 +5,7 @@
 """Unit tests for git_rebase_update.py"""
 
 import os
+import shutil
 import sys
 from unittest import mock
 
@@ -200,7 +201,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
 
         self.repo.git("checkout", "sub_K")
         output, _ = self.repo.capture_stdio(self.rp.main, ["foobar"])
-        self.assertIn("Squashing failed", output)
+        self.assertIn("You probably have a real merge conflict", output)
 
         self.assertTrue(self.repo.run(self.gc.in_rebase))
 
@@ -317,7 +318,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.repo.git("rebase", "--skip")
 
         output, _ = self.repo.capture_stdio(self.reup.main, [])
-        self.assertIn("Failed! Attempting to squash", output)
+        self.assertIn("branch_L landed upstream\n", output)
         self.assertIn("Deleted branch branch_G", output)
         self.assertIn("Deleted branch branch_L", output)
         self.assertIn("'branch_G' was merged", output)
@@ -358,6 +359,51 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.assertIn("--keep-going set, continuing with next branch.", output)
         self.assertIn("could not be cleanly rebased:", output)
         self.assertIn("  branch_K", output)
+
+    def _landChange(self, content):
+        """Commits `content` to the file `stack` on origin's main branch."""
+        with self.origin.open("stack", "w") as f:
+            f.write(content)
+        self.origin.git("add", "stack")
+        self.origin.git_commit(f"Land {content.strip()}")
+        return self.origin.git("rev-parse", "HEAD").stdout.strip()
+
+    def _createStackBranch(self, name, upstream, content):
+        """Creates `name` tracking `upstream`, writing `content` to `stack`."""
+        self.repo.git("checkout", "-b", name, upstream)
+        self.repo.git("branch", "--set-upstream-to", upstream, name)
+        with self.repo.open("stack", "w") as f:
+            f.write(content)
+        self.repo.git("add", "stack")
+        self.repo.git_commit(name)
+
+    def testSquashLandedBranchCheckedOutInOtherWorktree(self):
+        self._createStackBranch("unrelated", "origin/main", "unrelated\n")
+        # cl_1 landed squashed: its first commit conflicts with what landed.
+        self._createStackBranch("cl_1", "origin/main", "x\n")
+        with self.repo.open("stack", "w") as f:
+            f.write("1\n")
+        self.repo.git("add", "stack")
+        self.repo.git_commit("cl_1 fixup")
+        self._landChange("1\n")
+        # cl_1 is checked out in another worktree, so `git rebase` refuses to
+        # rebase it: git's error must be reported, and no other branch touched.
+        worktree = self.repo.repo_path + "_worktree"
+        self.addCleanup(shutil.rmtree, worktree, ignore_errors=True)
+        self.repo.git("checkout", "unrelated")
+        self.repo.git("worktree", "add", worktree, "cl_1")
+        unrelated = self.repo.git("rev-parse", "unrelated").stdout.strip()
+
+        output, _ = self.repo.capture_stdio(self.reup.main, [])
+
+        self.assertIn("Failed to rebase cl_1:", output)
+        self.assertIn("already used by worktree", output)
+        self.assertNotIn("mid-rebase", output)
+        self.assertNotIn("landed upstream", output)
+        self.assertFalse(self.repo.run(self.gc.in_rebase))
+        self.assertEqual(
+            self.repo.git("rev-parse", "unrelated").stdout.strip(), unrelated
+        )
 
     def testRebaseUpdateSkipWorktrees(self):
         self.repo.git("checkout", "branch_L")

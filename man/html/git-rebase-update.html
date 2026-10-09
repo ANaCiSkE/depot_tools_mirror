@@ -804,12 +804,12 @@ Rebasing
 common</strong> cause for conflicts is when your branch has been committed to the
 upstream in squashed form, ala <a href="git-squash-branch.html">git-squash-branch(1)</a>, which is what
 <a href="git-cl.html">git-cl(1)</a> and the <em>Commit Queue</em> will do. Because of that, <code>git
-rebase-update</code> will attempt to squash your conflicted branch to see if the
-squashed version applies cleanly to its upstream.</p></div>
-<div class="paragraph"><p>If it does not apply cleanly, then your original (non-squashed) branch will be
-left in mid-rebase and <code>git rebase-update</code> will exit. You can deal with this
-like any other conflicted rebase. When you&#8217;re done, just <code>git rebase-update</code>
-again to pick up where you left off.</p></div>
+rebase-update</code> will check whether the squashed version of your conflicted
+branch is already contained in its upstream.</p></div>
+<div class="paragraph"><p>If it is, your branch is reset to its upstream and removed in the <em>Cleanup</em>
+phase. Otherwise, it will be left in mid-rebase and <code>git rebase-update</code> will
+exit. You can deal with this like any other conflicted rebase. When you&#8217;re
+done, just <code>git rebase-update</code> again to pick up where you left off.</p></div>
 </dd>
 </dl></div>
 <div class="paragraph"><p>If you&#8217;d like to rebase all rebaseable branches in one pass and manually process
@@ -873,7 +873,8 @@ Restoration
 </dt>
 <dd>
 <p>
-  Skip the squash phase of rebase-update if there are merge conflicts.
+  Do not check whether a branch&#8217;s commits already landed upstream in squashed
+  form.
 </p>
 </dd>
 <dt class="hdlist1">
@@ -973,7 +974,7 @@ by checking out the <a href="https://chromium.googlesource.com/chromium/tools/de
 <div id="footer">
 <div id="footer-text">
 Last updated
- 2026-06-15 06:32:09 UTC
+ 2026-10-08 14:45:05 EDT
 </div>
 </div>
 </body>

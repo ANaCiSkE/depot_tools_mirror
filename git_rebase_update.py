@@ -206,17 +206,20 @@ def rebase_branch(
     """Rebases `branch` onto `parent` from `start_hash`.
 
     Attempts fast in-memory rebasing via `git replay` to avoid disk I/O and
-    checkout churn. Falls back to standard porcelain `git rebase` (and optional
-    commit squashing) when conflicts occur, for the currently checked-out
-    branch, for branches checked out in other worktrees, or when GPG signing
-    is enabled. Callers can detach HEAD beforehand so that the current branch
-    is also rebased in memory.
+    checkout churn. If that is not possible (e.g. GPG signing is enabled) or
+    conflicts, checks in memory whether `branch` already landed in `parent`,
+    in which case it is moved to `parent`. Otherwise, falls back to standard
+    porcelain `git rebase`, which is always the case for the currently
+    checked-out branch and for branches checked out in other worktrees.
+    Callers can detach HEAD beforehand so that the current branch is also
+    rebased in memory.
 
     Args:
         branch: The local branch name to rebase.
         parent: The upstream parent ref or branch name.
         start_hash: The merge-base commit SHA between branch and parent.
-        no_squash: If True, disables automated commit squashing on rebase failure.
+        no_squash: If True, does not check whether the changes of `branch` as a
+            whole (i.e. squashed) landed when it can't be replayed.
         branches_in_other_worktrees: Set of branch names checked out in other worktrees.
 
     Returns:
@@ -250,31 +253,42 @@ def rebase_branch(
         )
 
     if git.hash_one(parent) != start_hash:
-        # Try a plain rebase first
         print("Rebasing:", format_branch_name(branch))
 
-        # Attempt an in-memory fast-forward/replay, which only updates the
-        # branch ref, so skip branches whose checked-out files would be left
-        # stale:
+        # Moving a branch in memory only updates its ref, so skip branches
+        # whose checked-out files would be left stale:
         # - The current branch: the porcelain rebase below updates the working
         #   tree. Callers can detach HEAD beforehand, like main() does, so the
-        #   current branch can be replayed too.
+        #   current branch can be moved in memory too.
         # - Branches checked out in other worktrees: don't move their ref behind
         #   that worktree's back. This matches `git rebase` behavior.
-        # We also bypass git replay when commit.gpgsign is enabled because
-        # git replay does not sign commits and would produce unsigned commits.
-        # Note: git replay is experimental in upstream Git; any failure or conflict
-        # gracefully falls back to standard porcelain git.rebase below.
         if (
             branch != git.current_branch()
             and branch not in branches_in_other_worktrees
-            and not git.get_gpg_sign_args()
         ):
             old_sha = git.hash_one(branch)
+            new_sha = None
+
+            # Branches without commits of their own are simply fast-forwarded.
+            # Otherwise, attempt in-memory replay. We bypass git replay when
+            # commit.gpgsign is enabled because git replay does not sign
+            # commits and would produce unsigned commits.
+            # Note: git replay is experimental in upstream Git; any failure or
+            # conflict gracefully falls back to the steps below.
             if old_sha == start_hash:
                 new_sha = git.hash_one(parent)
-            else:
+            elif not git.get_gpg_sign_args():
                 new_sha = git.replay_rebase(parent, start_hash, branch)
+
+            # Rebasing a branch that landed squashed conflicts. Detect it in
+            # memory, before `git rebase` checks it out.
+            if (
+                new_sha is None
+                and not no_squash
+                and git.is_branch_contained_in(branch, start_hash, parent)
+            ):
+                print(f"{format_branch_name(branch)} landed upstream")
+                new_sha = git.hash_one(parent)
 
             if new_sha:
                 git.update_refs_atomic(
@@ -284,77 +298,45 @@ def rebase_branch(
                 git.get_or_create_merge_base(branch, orig_parent)
                 return True
 
-        consider_squashing = git.get_num_commits(branch) != 1 and not (
-            no_squash
-        )
-        rebase_ret = git.rebase(
-            parent, start_hash, branch, abort=consider_squashing
-        )
+        rebase_ret = git.rebase(parent, start_hash, branch)
         if not rebase_ret.success:
-            mid_rebase_message = textwrap.dedent(
-                """\
+            # `git rebase` can fail before starting, e.g. when `branch` is
+            # checked out in another worktree. Report git's own error then.
+            if not git.in_rebase():
+                print(f"Failed to rebase {format_branch_name(branch)}:")
+                print((rebase_ret.stderr or rebase_ret.stdout).strip())
+                if branch in branches_in_other_worktrees:
+                    print(
+                        textwrap.dedent(
+                            f"""\
+
+                        {branch} is checked out in another worktree. Either:
+                         * detach HEAD in that worktree
+                           (`git checkout --detach` there) so it can be
+                           rebased here; OR
+                         * skip it by passing `--skip-worktrees`.
+
+                        And then run `git rebase-update -n` to resume.
+                        """
+                        )
+                    )
+                return False
+            print(
+                textwrap.dedent(
+                    f"""\
+                Failed! You probably have a real merge conflict.
+
                 Your working copy is in mid-rebase. Either:
                  * completely resolve like a normal git-rebase; OR
                  * abort the rebase and mark this branch as dormant:
                        git rebase --abort && \\
-                       git config branch.%s.dormant true
+                       git config branch.{branch}.dormant true
 
                 And then run `git rebase-update -n` to resume.
                 """
-                % branch
+                )
             )
-            if not consider_squashing:
-                print(mid_rebase_message)
-                return False
-            print(
-                "Failed! Attempting to squash",
-                format_branch_name(branch),
-                "...",
-                end=" ",
-            )
-            sys.stdout.flush()
-            squash_branch = branch + "_squash_attempt"
-            git.run("checkout", "-b", squash_branch)
-            git.squash_current_branch(merge_base=start_hash)
-
-            # Try to rebase the branch_squash_attempt branch to see if it's
-            # empty.
-            squash_ret = git.rebase(
-                parent, start_hash, squash_branch, abort=True
-            )
-            empty_rebase = git.hash_one(squash_branch) == git.hash_one(parent)
-            git.run("checkout", branch)
-            git.run("branch", "-D", squash_branch)
-            if squash_ret.success and empty_rebase:
-                print("Success!")
-                git.squash_current_branch(merge_base=start_hash)
-                git.rebase(parent, start_hash, branch)
-            else:
-                print("Failed!")
-                print()
-
-                # rebase and leave in mid-rebase state.
-                # This second rebase attempt should always fail in the same
-                # way that the first one does.  If it magically succeeds then
-                # something very strange has happened.
-                second_rebase_ret = git.rebase(parent, start_hash, branch)
-                if second_rebase_ret.success:  # pragma: no cover
-                    print("Second rebase succeeded unexpectedly!")
-                    print("Please see: http://crbug.com/425696")
-                    print("First rebased failed with:")
-                    print(rebase_ret.stderr)
-                else:
-                    print("Here's what git-rebase (squashed) had to say:")
-                    print()
-                    print(squash_ret.stdout)
-                    print(squash_ret.stderr)
-                    print(
-                        textwrap.dedent("""\
-          Squashing failed. You probably have a real merge conflict.
-          """)
-                    )
-                    print(mid_rebase_message)
-                    return False
+            return False
     else:
         print("%s up-to-date" % format_branch_name(branch))
 
@@ -420,7 +402,8 @@ def main(args=None):
     parser.add_argument(
         "--no-squash",
         action="store_true",
-        help="Will not try to squash branches if rebasing fails.",
+        help="Do not check whether a branch's commits already landed upstream "
+        "in squashed form.",
     )
     parser.add_argument(
         "--skip-worktrees",
