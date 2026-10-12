@@ -32,7 +32,7 @@ def path_to_source_root(path):
     return candidate
 
 
-def main():
+def main(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--file-path",
@@ -46,30 +46,22 @@ def main():
         required=True,
     )
 
-    options = parser.parse_args()
+    options = parser.parse_args(args)
 
     src_dir = path_to_source_root(os.path.abspath(options.file_path))
     abs_build_dir = os.path.join(src_dir, options.build_dir)
     src_relpath = os.path.relpath(options.file_path, abs_build_dir)
 
-    print("Building %s" % options.file_path)
-
-    carets = "^"
-    if sys.platform == "win32":
-        # The caret character has to be escaped on Windows as it's an escape
-        # character.
-        carets = "^^"
+    print(f"Building {options.file_path}")
 
     command = [
         sys.executable,
         os.path.join(DEPOT_TOOLS_DIR, "autoninja.py"),
         "-C",
         abs_build_dir,
-        "%s%s" % (src_relpath, carets),
+        f"{src_relpath}^",
     ]
-    # |shell| should be set to True on Windows otherwise the carets characters
-    # get dropped from the command line.
-    return subprocess.call(command, shell=sys.platform == "win32")
+    return subprocess.call(command, shell=False)
 
 
 if __name__ == "__main__":
