@@ -595,6 +595,31 @@ class TestGerritClient(unittest.TestCase):
         util_mock.assert_not_called()
         get_comments_mock.assert_called_once_with("example.org", "123")
 
+    @mock.patch("gerrit_util.CallGerritApi", return_value={})
+    def test_rawapi(self, util_mock):
+        gerrit_client.main(
+            [
+                "rawapi",
+                "--host",
+                "https://example.org/foo",
+                "--path",
+                "/changes/123/revisions/current/drafts",
+                "--method",
+                "PUT",
+                "--accept_status",
+                "200,201",
+                "--body",
+                '{"path": "/PATCHSET_LEVEL", "message": "Draft"}',
+            ]
+        )
+        util_mock.assert_called_once_with(
+            "example.org",
+            "/changes/123/revisions/current/drafts",
+            reqtype="PUT",
+            accept_statuses=[200, 201],
+            body={"path": "/PATCHSET_LEVEL", "message": "Draft"},
+        )
+
     @mock.patch("gerrit_util.GetPatch", return_value=b"formatted patch\n")
     def test_patch_defaults(self, util_mock):
         with mock.patch("gerrit_client.sys.stdout") as stdout_mock:

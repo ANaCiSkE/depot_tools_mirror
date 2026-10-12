@@ -1557,8 +1557,39 @@ def ReadHttpJsonResponse(
     return json.loads(s)
 
 
+# Callers such as `gerrit_client.py rawapi` invoke Gerrit REST endpoints
+# directly via CallGerritApi without going through CreateDraft or SetReview.
+# Match draft and review endpoints here too so AI agent comments are still
+# tagged with "is_ai": True.
+_GERRIT_DRAFTS_PATH_RE = re.compile(
+    r"^(?:a/)?changes/.+/revisions/[^/]+/drafts(?:/[^/]+)?$"
+)
+_GERRIT_REVIEW_PATH_RE = re.compile(
+    r"^(?:a/)?changes/.+/revisions/[^/]+/review$"
+)
+
+
+def _SetAiReviewComments(comments):
+    if not isinstance(comments, dict):
+        return
+    for comment_list in comments.values():
+        if isinstance(comment_list, list):
+            for comment in comment_list:
+                if isinstance(comment, dict):
+                    comment.setdefault("is_ai", True)
+
+
 def CallGerritApi(host, path, **kwargs):
     """Helper for calling a Gerrit API that returns a JSON response."""
+    reqtype = (kwargs.get("reqtype") or "GET").upper()
+    body = kwargs.get("body")
+    if isinstance(body, dict) and gclient_utils.IsEnvAi():
+        norm_path = urllib.parse.urlsplit(path).path.strip("/")
+        if reqtype == "PUT" and _GERRIT_DRAFTS_PATH_RE.match(norm_path):
+            body.setdefault("is_ai", True)
+        elif reqtype == "POST" and _GERRIT_REVIEW_PATH_RE.match(norm_path):
+            _SetAiReviewComments(body.get("comments"))
+
     conn_kwargs = {}
     conn_kwargs.update(
         (k, kwargs[k]) for k in ["reqtype", "headers", "body"] if k in kwargs
@@ -2154,11 +2185,7 @@ def SetReview(
         body["labels"] = labels
     if comments:
         if gclient_utils.IsEnvAi():
-            for comment_list in comments.values():
-                if isinstance(comment_list, list):
-                    for comment in comment_list:
-                        if isinstance(comment, dict):
-                            comment.setdefault("is_ai", True)
+            _SetAiReviewComments(comments)
         body["comments"] = comments
     if notify is not None:
         body["notify"] = "ALL" if notify else "NONE"

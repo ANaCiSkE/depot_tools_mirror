@@ -1128,6 +1128,155 @@ class GerritUtilTest(unittest.TestCase):
 
     @mock.patch("gerrit_util.CreateHttpConn")
     @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.gclient_utils.IsEnvAi", return_value=True)
+    def testCallGerritApi_Drafts_Ai(
+        self, mockIsEnvAi, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockJsonResponse.return_value = {}
+        body = {"path": "/PATCHSET_LEVEL", "message": "hello"}
+        gerrit_util.CallGerritApi(
+            "chromium",
+            "/changes/123456/revisions/current/drafts",
+            reqtype="PUT",
+            body=body,
+            accept_statuses=[200, 201],
+        )
+
+        expected_body = {
+            "path": "/PATCHSET_LEVEL",
+            "message": "hello",
+            "is_ai": True,
+        }
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "/changes/123456/revisions/current/drafts",
+            reqtype="PUT",
+            body=expected_body,
+        )
+        mockJsonResponse.assert_called_once_with(
+            mockCreateHttpConn.return_value, accept_statuses=[200, 201]
+        )
+
+        # Updating an existing draft at /a/changes/.../drafts/<id> also injects
+        # is_ai, while respecting an explicit is_ai=False when provided.
+        mockCreateHttpConn.reset_mock()
+        update_body = {"path": "foo.cc", "line": 1, "message": "updated"}
+        gerrit_util.CallGerritApi(
+            "chromium",
+            "/a/changes/123456/revisions/current/drafts/draft-uuid",
+            reqtype="PUT",
+            body=update_body,
+        )
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "/a/changes/123456/revisions/current/drafts/draft-uuid",
+            reqtype="PUT",
+            body={
+                "path": "foo.cc",
+                "line": 1,
+                "message": "updated",
+                "is_ai": True,
+            },
+        )
+
+        mockCreateHttpConn.reset_mock()
+        explicit_body = {
+            "path": "/PATCHSET_LEVEL",
+            "message": "human override",
+            "is_ai": False,
+        }
+        gerrit_util.CallGerritApi(
+            "chromium",
+            "/changes/123456/revisions/current/drafts",
+            reqtype="PUT",
+            body=explicit_body,
+        )
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "/changes/123456/revisions/current/drafts",
+            reqtype="PUT",
+            body={
+                "path": "/PATCHSET_LEVEL",
+                "message": "human override",
+                "is_ai": False,
+            },
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.gclient_utils.IsEnvAi", return_value=False)
+    def testCallGerritApi_Drafts_NotAi(
+        self, mockIsEnvAi, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockJsonResponse.return_value = {}
+        body = {"path": "/PATCHSET_LEVEL", "message": "hello"}
+        gerrit_util.CallGerritApi(
+            "chromium",
+            "/changes/123456/revisions/current/drafts",
+            reqtype="PUT",
+            body=body,
+        )
+
+        expected_body = {"path": "/PATCHSET_LEVEL", "message": "hello"}
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "/changes/123456/revisions/current/drafts",
+            reqtype="PUT",
+            body=expected_body,
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.gclient_utils.IsEnvAi", return_value=True)
+    def testCallGerritApi_Review_Ai(
+        self, mockIsEnvAi, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockJsonResponse.return_value = {}
+        body = {"comments": {"file.py": [{"line": 1, "message": "hello"}]}}
+        gerrit_util.CallGerritApi(
+            "chromium",
+            "/changes/123456/revisions/current/review",
+            reqtype="POST",
+            body=body,
+        )
+
+        expected_body = {
+            "comments": {
+                "file.py": [{"line": 1, "message": "hello", "is_ai": True}]
+            }
+        }
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "/changes/123456/revisions/current/review",
+            reqtype="POST",
+            body=expected_body,
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.gclient_utils.IsEnvAi", return_value=True)
+    def testCallGerritApi_OtherEndpoint_Ai(
+        self, mockIsEnvAi, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockJsonResponse.return_value = {}
+        body = {"message": "abandoning"}
+        gerrit_util.CallGerritApi(
+            "chromium",
+            "/changes/123456/abandon",
+            reqtype="POST",
+            body=body,
+        )
+
+        expected_body = {"message": "abandoning"}
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "/changes/123456/abandon",
+            reqtype="POST",
+            body=expected_body,
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
     def testCherryPickWithConflicts(self, mockJsonResponse, mockCreateHttpConn):
         mockJsonResponse.return_value = {"_number": 1}
         gerrit_util.CherryPick(
