@@ -557,6 +557,142 @@ def CMDaddpatchsetcomment(parser, args):
 
 
 @subcommand.usage("[args ...]")
+def CMDadddraftcomment(parser, args):
+    """Adds a draft comment to a given change at given revision."""
+    parser.add_option(
+        "-c",
+        "--change",
+        type=str,
+        help="This accepts both gerrit Change-ID or change number.",
+    )
+    parser.add_option(
+        "-r",
+        "--revision",
+        type=str,
+        help="revision ID (defaults to 'current', or parent comment's patchset "
+        "when --in-reply-to is used without --path). See "
+        "https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id "
+        "for acceptable format",
+    )
+    parser.add_option("-m", "--message", type=str, help="message to add")
+    parser.add_option(
+        "--path",
+        type=str,
+        help="file path for comment (defaults to parent comment's path when "
+        "--in-reply-to is used, or /PATCHSET_LEVEL otherwise)",
+    )
+    parser.add_option(
+        "-l",
+        "--line",
+        type=int,
+        help="line number for comment",
+    )
+    parser.add_option(
+        "--side",
+        type=str,
+        help="side of the file for comment (REVISION or PARENT)",
+    )
+    parser.add_option(
+        "--in-reply-to",
+        "--in_reply_to",
+        dest="in_reply_to",
+        type=str,
+        help="UUID of comment to reply to",
+    )
+    parser.add_option(
+        "--unresolved",
+        action="store_true",
+        help="Mark the comment as unresolved",
+    )
+    parser.add_option(
+        "--resolved",
+        dest="unresolved",
+        action="store_false",
+        help="Mark the comment as resolved",
+    )
+    parser.add_option(
+        "--body",
+        dest="body",
+        help="CommentInput JSON body contents",
+    )
+    (opt, args) = parser.parse_args(args)
+    if not opt.change:
+        parser.error("--change is required")
+
+    body = {}
+    if opt.body is not None:
+        try:
+            parsed_body = json.loads(opt.body)
+        except ValueError as e:
+            parser.error(f"Invalid --body JSON: {e}")
+        if not isinstance(parsed_body, dict):
+            parser.error("--body must be a JSON object")
+        body.update(parsed_body)
+
+    if opt.message is not None:
+        body["message"] = opt.message
+    if opt.path is not None:
+        body["path"] = opt.path
+    if opt.line is not None:
+        body["line"] = opt.line
+    if opt.side is not None:
+        body["side"] = opt.side
+    if opt.in_reply_to is not None:
+        body["in_reply_to"] = opt.in_reply_to
+    if opt.unresolved is not None:
+        body["unresolved"] = opt.unresolved
+
+    if not body.get("message"):
+        parser.error("--message is required")
+
+    host = urllib.parse.urlparse(opt.host).netloc
+    revision = opt.revision or "current"
+
+    # Gerrit's CreateDraft endpoint (PUT .../drafts) takes a single
+    # CommentInput object rather than a {path: [CommentInput]} map, so Gerrit
+    # requires `path` in the payload and does not infer it from `in_reply_to`.
+    # When replying without an explicit `path`, look up the parent comment via
+    # GetChangeComments to inherit its path (and location/patchset if omitted).
+    if body.get("in_reply_to") and not body.get("path"):
+        in_reply_to = body["in_reply_to"]
+        file_comments = gerrit_util.GetChangeComments(host, opt.change)
+        parent_comment = None
+        parent_path = None
+        for path, comments in file_comments.items():
+            for c in comments:
+                if c.get("id") == in_reply_to:
+                    parent_comment = c
+                    parent_path = path
+                    break
+            if parent_comment:
+                break
+        if not parent_comment:
+            parser.error(
+                f"Could not find comment with UUID {in_reply_to} to reply to"
+            )
+        body["path"] = parent_path
+        for key in ("line", "range", "side"):
+            if key in parent_comment and key not in body:
+                body[key] = parent_comment[key]
+        if opt.revision is None and "patch_set" in parent_comment:
+            revision = str(parent_comment["patch_set"])
+
+    if not body.get("path"):
+        body["path"] = "/PATCHSET_LEVEL"
+    if body.get("line") is not None and body["path"] == "/PATCHSET_LEVEL":
+        parser.error("--path is required when --line is specified")
+
+    result = gerrit_util.CreateDraft(
+        host,
+        opt.change,
+        revision=revision,
+        body=body,
+    )
+    logging.info(result)
+    write_result(result, opt)
+
+
+@subcommand.usage("[args ...]")
 def CMDaddMessage(parser, args):
     """Adds a message to a given change at given revision."""
     parser.add_option("-c", "--change", type=int, help="change number")

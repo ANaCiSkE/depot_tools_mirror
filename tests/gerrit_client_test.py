@@ -357,6 +357,244 @@ class TestGerritClient(unittest.TestCase):
             automatic_attention_set_update=None,
         )
 
+    @mock.patch("gerrit_util.CreateDraft", return_value={})
+    def test_adddraftcomment_defaults(self, util_mock):
+        gerrit_client.main(
+            [
+                "adddraftcomment",
+                "--host",
+                "https://example.org/foo",
+                "-c",
+                "123",
+                "-m",
+                "Draft comment",
+            ]
+        )
+        util_mock.assert_called_once_with(
+            "example.org",
+            "123",
+            revision="current",
+            body={"path": "/PATCHSET_LEVEL", "message": "Draft comment"},
+        )
+
+    @mock.patch("gerrit_client.write_result")
+    @mock.patch("gerrit_util.CreateDraft")
+    def test_adddraftcomment_options(self, util_mock, write_result_mock):
+        draft = {"id": "draft-1", "message": "Inline reply"}
+        util_mock.return_value = draft
+        gerrit_client.main(
+            [
+                "adddraftcomment",
+                "--host",
+                "https://example.org/foo",
+                "-c",
+                "123",
+                "-r",
+                "2",
+                "--path",
+                "src/foo.cc",
+                "--line",
+                "42",
+                "--side",
+                "REVISION",
+                "--in-reply-to",
+                "comment-uuid",
+                "--unresolved",
+                "-m",
+                "Inline reply",
+                "--json_file",
+                "draft.json",
+            ]
+        )
+        util_mock.assert_called_once_with(
+            "example.org",
+            "123",
+            revision="2",
+            body={
+                "path": "src/foo.cc",
+                "line": 42,
+                "side": "REVISION",
+                "in_reply_to": "comment-uuid",
+                "unresolved": True,
+                "message": "Inline reply",
+            },
+        )
+        write_result_mock.assert_called_once()
+        result, opt = write_result_mock.call_args.args
+        self.assertIs(draft, result)
+        self.assertEqual("draft.json", opt.json_file)
+
+    @mock.patch("gerrit_util.CreateDraft", return_value={})
+    def test_adddraftcomment_body_and_override(self, util_mock):
+        gerrit_client.main(
+            [
+                "adddraftcomment",
+                "--host",
+                "https://example.org/foo",
+                "-c",
+                "123",
+                "--body",
+                '{"path": "src/foo.cc", "line": 10, "message": "From body"}',
+                "--resolved",
+            ]
+        )
+        util_mock.assert_called_once_with(
+            "example.org",
+            "123",
+            revision="current",
+            body={
+                "path": "src/foo.cc",
+                "line": 10,
+                "message": "From body",
+                "unresolved": False,
+            },
+        )
+
+    @mock.patch("gerrit_util.CreateDraft", return_value={})
+    @mock.patch("gerrit_util.GetChangeComments")
+    def test_adddraftcomment_in_reply_to_resolves_parent(
+        self, get_comments_mock, create_draft_mock
+    ):
+        get_comments_mock.return_value = {
+            "/PATCHSET_LEVEL": [{"id": "ps-uuid", "patch_set": 1}],
+            "src/foo.cc": [
+                {
+                    "id": "comment-uuid",
+                    "patch_set": 2,
+                    "line": 42,
+                    "side": "PARENT",
+                    "range": {
+                        "start_line": 42,
+                        "start_character": 0,
+                        "end_line": 42,
+                        "end_character": 10,
+                    },
+                }
+            ],
+        }
+        gerrit_client.main(
+            [
+                "adddraftcomment",
+                "--host",
+                "https://example.org/foo",
+                "-c",
+                "123",
+                "--in-reply-to",
+                "comment-uuid",
+                "--resolved",
+                "-m",
+                "Done.",
+            ]
+        )
+        get_comments_mock.assert_called_once_with("example.org", "123")
+        create_draft_mock.assert_called_once_with(
+            "example.org",
+            "123",
+            revision="2",
+            body={
+                "path": "src/foo.cc",
+                "line": 42,
+                "side": "PARENT",
+                "range": {
+                    "start_line": 42,
+                    "start_character": 0,
+                    "end_line": 42,
+                    "end_character": 10,
+                },
+                "in_reply_to": "comment-uuid",
+                "unresolved": False,
+                "message": "Done.",
+            },
+        )
+
+    @mock.patch("gerrit_util.GetChangeComments", return_value={})
+    @mock.patch("gerrit_util.CreateDraft")
+    def test_adddraftcomment_validation(self, util_mock, get_comments_mock):
+        for args, expected_err in [
+            (
+                [
+                    "adddraftcomment",
+                    "--host",
+                    "https://example.org",
+                    "-m",
+                    "hi",
+                ],
+                "--change is required",
+            ),
+            (
+                [
+                    "adddraftcomment",
+                    "--host",
+                    "https://example.org",
+                    "-c",
+                    "123",
+                ],
+                "--message is required",
+            ),
+            (
+                [
+                    "adddraftcomment",
+                    "--host",
+                    "https://example.org",
+                    "-c",
+                    "123",
+                    "--body",
+                    "{bad",
+                ],
+                "Invalid --body JSON",
+            ),
+            (
+                [
+                    "adddraftcomment",
+                    "--host",
+                    "https://example.org",
+                    "-c",
+                    "123",
+                    "--body",
+                    "[]",
+                ],
+                "--body must be a JSON object",
+            ),
+            (
+                [
+                    "adddraftcomment",
+                    "--host",
+                    "https://example.org",
+                    "-c",
+                    "123",
+                    "--line",
+                    "42",
+                    "-m",
+                    "hi",
+                ],
+                "--path is required when --line is specified",
+            ),
+            (
+                [
+                    "adddraftcomment",
+                    "--host",
+                    "https://example.org",
+                    "-c",
+                    "123",
+                    "--in-reply-to",
+                    "missing-uuid",
+                    "-m",
+                    "hi",
+                ],
+                "Could not find comment with UUID missing-uuid to reply to",
+            ),
+        ]:
+            stderr = io.StringIO()
+            with (
+                contextlib.redirect_stderr(stderr),
+                self.assertRaises(SystemExit) as error,
+            ):
+                gerrit_client.main(args)
+            self.assertEqual(2, error.exception.code)
+            self.assertIn(expected_err, stderr.getvalue())
+        util_mock.assert_not_called()
+        get_comments_mock.assert_called_once_with("example.org", "123")
+
     @mock.patch("gerrit_util.GetPatch", return_value=b"formatted patch\n")
     def test_patch_defaults(self, util_mock):
         with mock.patch("gerrit_client.sys.stdout") as stdout_mock:
