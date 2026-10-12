@@ -31,13 +31,66 @@ def PruneVirtualEnv():
         [
             p
             for p in os.environ.get("PATH", "").split(os.pathsep)
-            if not os.path.isfile(os.path.join(p, "activate_this.py"))
+            if p
+            and p != "."
+            and not os.path.isfile(os.path.join(p, "activate_this.py"))
         ]
     )
 
 
+def _FindGnInPath():
+    env_path = os.environ.get("PATH")
+    if not env_path:
+        return None
+    cwd = os.path.realpath(os.getcwd())
+    filtered_dirs = [
+        p
+        for p in env_path.split(os.pathsep)
+        if p and p != "." and os.path.realpath(p) != cwd
+    ]
+    if not filtered_dirs:
+        return None
+    orig_path = os.environ.get("PATH")
+    try:
+        os.environ["PATH"] = os.pathsep.join(filtered_dirs)
+        gn_path = gclient_paths.FindInPath("gn")
+        return os.path.abspath(gn_path) if gn_path else None
+    finally:
+        if orig_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = orig_path
+
+
 def FindGnTool():
-    # Try in primary solution location first, with the gn binary having been
+    # Try the locations inside of buildtools first so an untrusted working-tree
+    # binary at third_party/gn/gn cannot shadow the CIPD-managed gn binary.
+    bin_path = gclient_paths.GetBuildtoolsPlatformBinaryPath()
+    paths = []
+    if bin_path:
+        if os.environ.get("CHROMIUM_BUILDTOOLS_PATH"):
+            print(
+                "Using $CHROMIUM_BUILDTOOLS_PATH to find gn. "
+                "CHROMIUM_BUILDTOOLS_PATH is highly unsupported "
+                "and may break gn.",
+                file=sys.stderr,
+            )
+
+        # TODO(b/328065301): Once chromium/src CL has landed to migrate
+        # buildtools/<platform>/gn to buildtools/<platform>/gn/gn, only return
+        # gn/gn path.
+        old_gn_path = os.path.join(
+            bin_path, f"gn{gclient_paths.GetExeSuffix()}"
+        )
+        new_gn_path = os.path.join(
+            bin_path, "gn", f"gn{gclient_paths.GetExeSuffix()}"
+        )
+        paths = [new_gn_path, old_gn_path]
+        for path in paths:
+            if os.path.isfile(path):
+                return path
+
+    # Otherwise try in primary solution location, with the gn binary having been
     # downloaded by cipd in the projects DEPS.
     primary_solution_path = gclient_paths.GetChromiumSrcPath()
     if primary_solution_path:
@@ -45,46 +98,26 @@ def FindGnTool():
             primary_solution_path,
             "third_party",
             "gn",
-            "gn" + gclient_paths.GetExeSuffix(),
+            f"gn{gclient_paths.GetExeSuffix()}",
         )
         if os.path.exists(gn_path):
             return gn_path
 
-    # Otherwise try the old .sha1 and download_from_google_storage locations
-    # inside of buildtools.
-    bin_path = gclient_paths.GetBuildtoolsPlatformBinaryPath()
     if not bin_path:
-        gn_path = gclient_paths.FindInPath("gn")
+        gn_path = _FindGnInPath()
         if gn_path:
             return gn_path
         print("gn.py: Unable to find gn in your $PATH", file=sys.stderr)
         print("Hint: `which -a gn` should output two entries", file=sys.stderr)
         return None
-    if os.environ.get("CHROMIUM_BUILDTOOLS_PATH"):
-        print(
-            "Using $CHROMIUM_BUILDTOOLS_PATH to find gn. "
-            + "CHROMIUM_BUILDTOOLS_PATH is highly unsupported "
-            + "and may break gn.",
-            file=sys.stderr,
-        )
 
-    # TODO(b/328065301): Once chromium/src CL has landed to migrate
-    # buildtools/<platform>/gn to buildtools/<platform>/gn/gn, only return
-    # gn/gn path.
-    old_gn_path = os.path.join(bin_path, "gn" + gclient_paths.GetExeSuffix())
-    new_gn_path = os.path.join(
-        bin_path, "gn", "gn" + gclient_paths.GetExeSuffix()
-    )
-    paths = [new_gn_path, old_gn_path]
-    for path in paths:
-        if os.path.isfile(path):
-            return path
-    print("gn.py: Could not find gn executable at: %s" % paths, file=sys.stderr)
+    print(f"gn.py: Could not find gn executable at: {paths}", file=sys.stderr)
     print(
         "Either GN isn't installed on your system, or you're not running in "
-        + "a checkout with a preinstalled gn binary.",
+        "a checkout with a preinstalled gn binary.",
         file=sys.stderr,
     )
+    return None
 
 
 def main(args):
@@ -95,10 +128,12 @@ def main(args):
     # reference python.exe from the VirtualEnv generated from depot_tools' own
     # .vpython3 file (or lack thereof), but instead reference the default python
     # from the PATH.
+    if sys.platform.startswith(("cygwin", "win")):
+        os.environ.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
     PruneVirtualEnv()
     gn = FindGnTool()
     if gn:
-        return subprocess.call([gn] + args[1:])
+        return subprocess.call([os.path.abspath(gn)] + args[1:])
     return 2
 
 
