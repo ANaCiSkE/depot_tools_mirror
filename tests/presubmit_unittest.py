@@ -2863,19 +2863,6 @@ class ChangeUnittest(PresubmitTestsBase):
         self.assertEqual(["bar", "foo"], change.ReviewersFromDescription())
         self.assertEqual("bar,foo", change.R)
 
-    def testTBRsFromDescription(self):
-        change = presubmit.Change(
-            "",
-            "foo\nTBR=foo,bar\n\nChange-Id: asdf\nTBR: baz",
-            self.fake_root_dir,
-            [],
-            0,
-            0,
-            "",
-        )
-        self.assertEqual(["bar", "baz", "foo"], change.TBRsFromDescription())
-        self.assertEqual("bar,baz,foo", change.TBR)
-
 
 class CannedChecksUnittest(PresubmitTestsBase):
     """Tests presubmit_canned_checks.py."""
@@ -2908,7 +2895,6 @@ class CannedChecksUnittest(PresubmitTestsBase):
 
         input_api.change = change
         input_api.is_committing = committing
-        input_api.tbr = False
         input_api.dry_run = None
         input_api.python_executable = "pyyyyython"
         input_api.python3_executable = "pyyyyython3"
@@ -4804,7 +4790,6 @@ the current line as well!
 
     def AssertOwnersWorks(
         self,
-        tbr=False,
         issue="1",
         approvers=None,
         modified_files=None,
@@ -4842,7 +4827,6 @@ the current line as well!
         change.ReviewersFromDescription.return_value = (
             manually_specified_reviewers
         )
-        change.TBRsFromDescription.return_value = []
         change.author_email = "john@example.com"
         change.issue = issue
 
@@ -4856,7 +4840,6 @@ the current line as well!
         input_api = self.MockInputApi(change, False)
         input_api.gerrit = presubmit.GerritAccessor("host")
         input_api.is_committing = is_committing
-        input_api.tbr = tbr
         input_api.dry_run = dry_run
         input_api.gerrit._FetchChangeDetail = lambda _: response
         input_api.gerrit.IsCodeOwnersEnabledOnRepo = lambda: True
@@ -4877,12 +4860,6 @@ the current line as well!
         else:
             self.assertEqual(sys.stdout.getvalue(), expected_output)
         sys.stdout.truncate(0)
-
-    def testCannedCheckOwners_TBRIgnored(self):
-        self.AssertOwnersWorks(tbr=True, expected_output="")
-        self.AssertOwnersWorks(
-            tbr=True, is_committing=False, expected_output=""
-        )
 
     @mock.patch("io.open", mock.mock_open())
     def testCannedRunUnitTests(self):

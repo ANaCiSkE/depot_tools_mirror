@@ -785,11 +785,6 @@ class InputApi(object):
         """Returns submodule paths for current change's repo."""
         return self.change._repo_submodules()
 
-    @property
-    def tbr(self):
-        """Returns if a change is TBR'ed."""
-        return "TBR" in self.change.tags or self.change.TBRsFromDescription()
-
     def RunTests(self, tests_mix, parallel=True):
         tests = []
         msgs = []
@@ -1302,16 +1297,6 @@ class Change(object):
         ]
         return sorted(set(tags))
 
-    def TBRsFromDescription(self):
-        """Returns all TBR reviewers listed in the commit description."""
-        tags = [
-            r.strip() for r in self.tags.get("TBR", "").split(",") if r.strip()
-        ]
-        # TODO(crbug.com/839208): Remove support for 'Tbr:' when TBRs are
-        # programmatically determined by self-CR+1s.
-        footers = self.GitFootersFromDescription().get("Tbr", [])
-        return sorted(set(tags + footers))
-
     # TODO(crbug.com/753425): Delete these once we're sure they're unused.
     @property
     def BUG(self):
@@ -1320,10 +1305,6 @@ class Change(object):
     @property
     def R(self):
         return ",".join(self.ReviewersFromDescription())
-
-    @property
-    def TBR(self):
-        return ",".join(self.TBRsFromDescription())
 
     def UpstreamBranch(self):
         """Returns the upstream branch for the change.

@@ -2438,7 +2438,6 @@ def _ReviewersFromChange(change):
     """Return the reviewers specified in the |change|, if any."""
     reviewers = set()
     reviewers.update(change.ReviewersFromDescription())
-    reviewers.update(change.TBRsFromDescription())
 
     # Drop reviewers that aren't specified in email address format.
     return set(reviewer for reviewer in reviewers if "@" in reviewer)
