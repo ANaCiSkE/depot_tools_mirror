@@ -592,6 +592,15 @@ class GitWrapper(SCMWrapper):
             )
         return "".join(tmp_ref)
 
+    @staticmethod
+    def _add_end_of_options(cmd):
+        if git_common.meets_git_version((2, 44, 0)):
+            cmd.append("--end-of-options")
+
+    @staticmethod
+    def _get_cherry_pick_rev_filter(target_rev, base_rev, pr):
+        return ["^" + target_rev, "^" + base_rev, pr]
+
     def apply_patch_ref(
         self, patch_repo, patch_rev, target_rev, options, file_list
     ):
@@ -682,7 +691,13 @@ class GitWrapper(SCMWrapper):
                         mirror, options, "branch", target_rev
                     )
                 self._Capture(
-                    ["fetch", "--no-tags", "--", self.remote, target_rev]
+                    [
+                        "fetch",
+                        "--no-tags",
+                        "--",
+                        self.remote,
+                        f"+{target_rev}:{remote_ref}",
+                    ]
                 )
                 target_rev = remote_ref
         elif not scm.GIT.IsValidRevision(self.checkout_path, target_rev):
@@ -720,8 +735,7 @@ class GitWrapper(SCMWrapper):
 
             if not options.rebase_patch_ref:
                 checkout_cmd = ["checkout"]
-                if git_common.meets_git_version((2, 44, 0)):
-                    checkout_cmd.append("--end-of-options")
+                self._add_end_of_options(checkout_cmd)
                 checkout_cmd.append(pr)
                 self._Capture(checkout_cmd)
                 # Adjust base_rev to be the first parent of our checked out
@@ -733,17 +747,16 @@ class GitWrapper(SCMWrapper):
                 target_rev_hash = self._Capture(
                     ["rev-parse", "--verify", "--end-of-options", target_rev]
                 )
-                commit_list = self._Capture(
-                    [
-                        "log",
-                        "--oneline",
-                        "--end-of-options",
-                        target_rev + ".." + pr,
-                    ]
+                rev_filter = self._get_cherry_pick_rev_filter(
+                    target_rev, base_rev, pr
                 )
+                log_cmd = ["log", "--oneline"]
+                self._add_end_of_options(log_cmd)
+                log_cmd.extend(rev_filter)
+                commit_list = self._Capture(log_cmd)
                 self.Print(
-                    "Will cherrypick %r (%r) .. %r on top of %r:"
-                    % (target_rev_hash, target_rev, pr, base_rev)
+                    "Will cherrypick %s on top of %r (target_rev is %r):"
+                    % (" ".join(rev_filter), base_rev, target_rev_hash)
                 )
                 self.Print(commit_list)
                 try:
@@ -763,10 +776,14 @@ class GitWrapper(SCMWrapper):
                         # If |patch_rev| is an ancestor of |target_rev|, check
                         # it out.
                         checkout_cmd = ["checkout"]
-                        if git_common.meets_git_version((2, 44, 0)):
-                            checkout_cmd.append("--end-of-options")
+                        self._add_end_of_options(checkout_cmd)
                         checkout_cmd.append(pr)
                         self._Capture(checkout_cmd)
+                    elif not commit_list.strip():
+                        self.Print(
+                            "All changes from %s are already present in HEAD."
+                            % pr
+                        )
                     else:
                         # If a change was uploaded on top of another change,
                         # which has already landed, one of the commits in the
@@ -774,13 +791,13 @@ class GitWrapper(SCMWrapper):
                         # already landed and its changes incorporated in the
                         # tree. We pass '--keep-redundant-commits' to ignore
                         # those changes.
-                        self._Capture(
-                            [
-                                "cherry-pick",
-                                target_rev + ".." + pr,
-                                "--keep-redundant-commits",
-                            ]
-                        )
+                        cherry_pick_cmd = [
+                            "cherry-pick",
+                            "--keep-redundant-commits",
+                        ]
+                        self._add_end_of_options(cherry_pick_cmd)
+                        cherry_pick_cmd.extend(rev_filter)
+                        self._Capture(cherry_pick_cmd)
 
                 except subprocess2.CalledProcessError as e:
                     self.Print("Failed to apply patch.")
@@ -788,8 +805,8 @@ class GitWrapper(SCMWrapper):
                         "Revision to patch was %r @ %r." % (patch_repo, pr)
                     )
                     self.Print(
-                        "Tried to cherrypick %r .. %r on top of %r."
-                        % (target_rev, pr, base_rev)
+                        "Tried to cherrypick %s on top of %r."
+                        % (" ".join(rev_filter), base_rev)
                     )
                     self.Print("Current dir is %r" % self.checkout_path)
                     self.Print(

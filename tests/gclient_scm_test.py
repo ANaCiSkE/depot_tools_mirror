@@ -2080,6 +2080,65 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
             self.githash("repo_1", 1), self.gitrevparse(self.root_dir)
         )
 
+    def testApplyPatchWithStaleTargetRev(self):
+        """Test applying a patch when target_rev points to an older commit
+        than patch base.
+
+        We checkout commit 4 (tip of main). The patch refs/changes/35/1235/1
+        contains commits 5 and 6 and is based on commit 3 (which is an ancestor
+        of commit 4).
+        If target_rev is stale and points to commit 2 (older than commit 3),
+        target_rev does not contain commit 3. However, commit 3 is already in
+        HEAD (commit 4).
+        The final result must contain commits 1, 2, 3, 4, 5, 6 without
+        re-applying or conflicting on commit 3.
+        """
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
+        file_list = []
+
+        self.options.revision = self.githash("repo_1", 4)
+        git_wrapper.update(self.options, None, file_list)
+        self.assertEqual(
+            self.githash("repo_1", 4), self.gitrevparse(self.root_dir)
+        )
+
+        git_wrapper.apply_patch_ref(
+            self.url,
+            "refs/changes/35/1235/1",
+            self.githash("repo_1", 2),
+            self.options,
+            file_list,
+        )
+
+        self.assertCommits([1, 2, 3, 4, 5, 6])
+        self.assertEqual(
+            self.githash("repo_1", 4), self.gitrevparse(self.root_dir)
+        )
+
+    def testApplyPatchAlreadyInBaseRev(self):
+        """Test applying a patch when all commits are already in base_rev."""
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
+        file_list = []
+
+        self.options.revision = self.githash("repo_1", 4)
+        git_wrapper.update(self.options, None, file_list)
+        self.assertEqual(
+            self.githash("repo_1", 4), self.gitrevparse(self.root_dir)
+        )
+
+        git_wrapper.apply_patch_ref(
+            self.url,
+            self.githash("repo_1", 3),
+            self.githash("repo_1", 2),
+            self.options,
+            file_list,
+        )
+
+        self.assertCommits([1, 2, 3, 4])
+        self.assertEqual(
+            self.githash("repo_1", 4), self.gitrevparse(self.root_dir)
+        )
+
     def testCheckoutOriginFeature(self):
         """Tests that we can apply a patch on a branch other than main."""
         git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
