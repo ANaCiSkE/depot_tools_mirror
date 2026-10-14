@@ -3320,7 +3320,7 @@ def CheckNewDEPSHooksHasRequiredReviewers(input_api, output_api):
 
     def _get_hooks_names(dep_contents):
         deps = _ParseDeps("\n".join(dep_contents))
-        hooks = deps.get("hooks", [])
+        hooks = deps.get("hooks", []) + deps.get("pre_deps_hooks", [])
         return set(hook.get("name") for hook in hooks)
 
     old_hooks = _get_hooks_names(dep_file.OldContents())

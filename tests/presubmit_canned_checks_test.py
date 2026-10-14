@@ -954,6 +954,26 @@ class CheckNewDEPSHooksHasRequiredReviewersTest(unittest.TestCase):
                 "new_contents": ['hooks = [{"name": "old_hook"}]'],
                 "reviewers": [],
             },
+            {
+                "name": "add new pre_deps_hook and require review",
+                "old_contents": ['pre_deps_hooks = [{"name": "old_pre_hook"}]'],
+                "new_contents": [
+                    'pre_deps_hooks = [{"name": "old_pre_hook"}, {"name": "new_pre_hook"}]'
+                ],
+                "reviewers": [],
+                "expected_error_msg": "New DEPS hook (new_pre_hook) is found. Please "
+                "request review from one of the following reviewers:\n "
+                "* foo@chromium.org\n * bar@chromium.org\n * baz@chromium.org",
+            },
+            {
+                "name": "add new pre_deps_hook and reviewer already approves",
+                "old_contents": ['pre_deps_hooks = [{"name": "old_pre_hook"}]'],
+                "new_contents": [
+                    'pre_deps_hooks = [{"name": "old_pre_hook"}, {"name": "new_pre_hook"}]'
+                ],
+                "submitting": True,
+                "reviewers": ["foo@chromium.org"],
+            },
         ]
         for case in test_cases:
             with self.subTest(case_name=case["name"]):
@@ -971,9 +991,8 @@ class CheckNewDEPSHooksHasRequiredReviewersTest(unittest.TestCase):
                         new_contents=case["new_contents"],
                     ),
                 ]
-                if case.get("submitting", False):
-                    self.input_api.is_committing = True
-                    self.input_api.dry_run = False
+                self.input_api.is_committing = case.get("submitting", False)
+                self.input_api.dry_run = False
                 gerrit_mock.GetChangeReviewers.return_value = case["reviewers"]
                 results = presubmit_canned_checks.CheckNewDEPSHooksHasRequiredReviewers(
                     self.input_api,
