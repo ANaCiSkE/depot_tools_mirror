@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 """Unit tests for git_cache.py"""
 
+import contextlib
 from io import StringIO
 import logging
 import os
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -1480,6 +1482,242 @@ class GitCacheTest(unittest.TestCase):
                 "subprocess.check_output", side_effect=fake_check_output
             ):
                 self.assertFalse(mirror.update_bootstrap())
+
+    @contextlib.contextmanager
+    def _recordUpdateBootstrap(self, mirror, on_upload=None, fail_git=None):
+        """Records the git and gsutil calls of update_bootstrap, in order.
+
+        Git really runs, leaving the mirror as it would be uploaded; gsutil is
+        faked. Yields a list of ("git", cmd) and ("gsutil", args) events.
+        on_upload runs as the snapshot is rsync'd, and the git subcommand named
+        by fail_git fails instead of running.
+        """
+        events = []
+        real_run_git = mirror.RunGit
+        real_check_output = subprocess.check_output
+
+        def record_git(cmd, *args, **kwargs):
+            events.append(("git", list(cmd)))
+            if cmd[0] == fail_git:
+                raise subprocess.CalledProcessError(1, ["git"] + cmd)
+            return real_run_git(cmd, *args, **kwargs)
+
+        def record_gsutil(*args):
+            events.append(("gsutil", args))
+            if on_upload and "rsync" in args:
+                on_upload()
+            return 0
+
+        def fake_check_output(cmd, *args, **kwargs):
+            # `git number` is a depot_tools script; any number will do.
+            if "number" in cmd:
+                return b"42\n"
+            return real_check_output(cmd, *args, **kwargs)
+
+        with (
+            mock.patch("git_cache.Gsutil") as gsutil_cls,
+            mock.patch(
+                "subprocess.check_output", side_effect=fake_check_output
+            ),
+            mock.patch.object(mirror, "RunGit", side_effect=record_git),
+        ):
+            gs = gsutil_cls.return_value
+            gs.check_call_with_retries.return_value = (0, "", "")
+            gs.call.side_effect = record_gsutil
+            yield events
+
+    @staticmethod
+    def _gitCommands(events):
+        return [args for kind, args in events if kind == "git"]
+
+    def _assertGitDoneBeforeUpload(self, events):
+        uploads = [
+            i
+            for i, (kind, args) in enumerate(events)
+            if kind == "gsutil" and "rsync" in args
+        ]
+        self.assertEqual(len(uploads), 1, events)
+        self.assertEqual(
+            self._gitCommands(events[uploads[0] :]),
+            [],
+            "git must be done with the mirror before it is uploaded",
+        )
+
+    @staticmethod
+    def _looseObjects(git_dir):
+        """Returns the loose object files in git_dir, as rsync would see them."""
+        objects_dir = os.path.join(git_dir, "objects")
+        return sorted(
+            os.path.join(d, f)
+            for d in os.listdir(objects_dir)
+            if len(d) == 2 and all(c in "0123456789abcdef" for c in d)
+            for f in os.listdir(os.path.join(objects_dir, d))
+        )
+
+    def testUpdateBootstrapGcCommands(self):
+        self._makeGitRepo()
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        with self._recordUpdateBootstrap(mirror) as events:
+            self.assertTrue(mirror.update_bootstrap(gc_aggressive=False))
+
+        # gc prunes unreachable objects itself; no separate prune is needed.
+        self.assertEqual(
+            self._gitCommands(events),
+            [["pack-refs", "--all"], ["gc", "--prune=all"]],
+        )
+        self._assertGitDoneBeforeUpload(events)
+
+    def testUpdateBootstrapGcAggressiveCommands(self):
+        self._makeGitRepo()
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        with self._recordUpdateBootstrap(mirror) as events:
+            self.assertTrue(mirror.update_bootstrap(gc_aggressive=True))
+
+        self.assertEqual(
+            self._gitCommands(events),
+            [
+                ["pack-refs", "--all"],
+                ["reflog", "expire", "--all"],
+                # -a, not -A or --unpack-unreachable, which would explode
+                # unreachable packed objects into loose files.
+                [
+                    "repack",
+                    "-d",
+                    "-l",
+                    "-f",
+                    "--depth=50",
+                    "--window=250",
+                    "-a",
+                    "--window-memory=1g",
+                ],
+                # repack never deletes unreachable loose objects.
+                ["prune", "--expire=now"],
+            ],
+        )
+        self._assertGitDoneBeforeUpload(events)
+
+    def testUpdateBootstrapGcAggressiveDoesNotUploadWhenPruneFails(self):
+        # A failed prune can leave the loose objects behind or point at a
+        # corrupt mirror; either way, the mirror must not be published.
+        self._makeGitRepo()
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+
+        with self._recordUpdateBootstrap(mirror, fail_git="prune") as events:
+            with self.assertRaises(subprocess.CalledProcessError):
+                mirror.update_bootstrap(gc_aggressive=True)
+
+        self.assertIn(("git", ["prune", "--expire=now"]), events)
+        self.assertEqual(
+            [args for kind, args in events if kind == "gsutil"],
+            [],
+            "neither the snapshot nor its .ready marker may be uploaded",
+        )
+
+    def _assertUpdateBootstrapUploadsNoLooseObjects(self, gc_aggressive):
+        git = "git.bat" if sys.platform == "win32" else "git"
+        self._makeGitRepo()
+        self.git(["checkout", "-q", "-b", "doomed"])
+        self._commitOrigin("doomed")
+        self.git(["checkout", "-q", "-"])
+        mirror = git_cache.Mirror(self.origin_dir)
+        mirror.populate()
+        mirror_git = [git, "--git-dir", mirror.mirror_path]
+
+        def rev_parse(rev):
+            out = subprocess.check_output(mirror_git + ["rev-parse", rev])
+            return out.decode("utf-8").strip()
+
+        # Long-lived mirrors collect unreachable loose objects: small fetches
+        # land loose (below transfer.unpackLimit), and `fetch --prune` later
+        # drops the refs that kept them reachable...
+        doomed = rev_parse("refs/heads/doomed")
+        self.git(["branch", "-q", "-D", "doomed"])
+        mirror.populate()
+        # ...while interrupted fetches leave objects no ref ever pointed at...
+        orphan = (
+            subprocess.run(
+                mirror_git + ["hash-object", "-w", "--stdin"],
+                input=b"orphan\n",
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .strip()
+        )
+        # ...and unreachable objects in a pack whose mtime is ahead of the
+        # clock would be loosened by 'repack -A --unpack-unreachable=all'.
+        packed = (
+            subprocess.run(
+                mirror_git + ["hash-object", "-w", "--stdin"],
+                input=b"packed unreachable\n",
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .strip()
+        )
+        pack_dir = os.path.join(mirror.mirror_path, "objects", "pack")
+        pack_hash = (
+            subprocess.run(
+                mirror_git
+                + ["pack-objects", "-q", os.path.join(pack_dir, "pack")],
+                input=(packed + "\n").encode("utf-8"),
+                stdout=subprocess.PIPE,
+                check=True,
+            )
+            .stdout.decode("utf-8")
+            .strip()
+        )
+        subprocess.check_call(mirror_git + ["prune-packed"])
+        # 'repack -a' (gc_aggressive=True) drops unreachable packs regardless
+        # of mtime, whereas 'gc --prune=all' passes 'all' to pack-objects
+        # which approxidate() evaluates as current time.
+        pack_mtime = time.time() + (3600 if gc_aggressive else -3600)
+        for ext in ("pack", "idx"):
+            os.utime(
+                os.path.join(pack_dir, f"pack-{pack_hash}.{ext}"),
+                (pack_mtime, pack_mtime),
+            )
+        loose_before = self._looseObjects(mirror.mirror_path)
+        self.assertIn(os.path.join(doomed[:2], doomed[2:]), loose_before)
+        self.assertIn(os.path.join(orphan[:2], orphan[2:]), loose_before)
+        self.assertNotIn(os.path.join(packed[:2], packed[2:]), loose_before)
+        head = rev_parse("HEAD")
+
+        uploaded = []
+
+        def on_upload():
+            uploaded.append(self._looseObjects(mirror.mirror_path))
+
+        with self._recordUpdateBootstrap(mirror, on_upload=on_upload):
+            self.assertTrue(
+                mirror.update_bootstrap(gc_aggressive=gc_aggressive)
+            )
+
+        self.assertEqual(uploaded, [[]], "loose objects were uploaded")
+        for oid in (doomed, orphan, packed):
+            self.assertNotEqual(
+                subprocess.call(
+                    mirror_git + ["cat-file", "-e", oid],
+                    stderr=subprocess.DEVNULL,
+                ),
+                0,
+                f"unreachable object {oid} survived",
+            )
+        # Pruning must not take any reachable history with it.
+        subprocess.check_call(mirror_git + ["cat-file", "-e", head])
+        subprocess.check_call(mirror_git + ["fsck", "--connectivity-only"])
+
+    def testUpdateBootstrapUploadsNoLooseObjects(self):
+        self._assertUpdateBootstrapUploadsNoLooseObjects(gc_aggressive=False)
+
+    def testUpdateBootstrapGcAggressiveUploadsNoLooseObjects(self):
+        self._assertUpdateBootstrapUploadsNoLooseObjects(gc_aggressive=True)
 
     def testPopulateSkipsRemoteWhenHeadMatchesLocalPreference(self):
         # A dormant default with a live side branch keeps _head_looks_stale

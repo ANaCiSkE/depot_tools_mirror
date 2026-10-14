@@ -1054,7 +1054,10 @@ class Mirror(object):
             # normally run by 'gc --aggressive', so it shouldn't hurt.
             self.RunGit(["reflog", "expire", "--all"])
 
-            # These are the default repack settings for 'gc --aggressive'.
+            # These are the default repack settings for 'gc --aggressive',
+            # except using '-a' instead of '-A --unpack-unreachable=all' so
+            # unreachable packed objects are dropped rather than unpacked into
+            # loose files that would be uploaded and downloaded individually.
             gc_args = [
                 "repack",
                 "-d",
@@ -1062,8 +1065,7 @@ class Mirror(object):
                 "-f",
                 "--depth=50",
                 "--window=250",
-                "-A",
-                "--unpack-unreachable=all",
+                "-a",
             ]
             # A 1G memory limit seems to provide comparable pack results as the
             # default, even for our largest repos, while preventing runaway
@@ -1077,6 +1079,12 @@ class Mirror(object):
             # it might be worth trying if the repos grow much larger and the
             # packs don't seem to be getting compressed enough.
         self.RunGit(gc_args)
+        if gc_aggressive:
+            # Unlike 'gc --prune=all', repack never deletes unreachable loose
+            # objects (e.g. from small fetches whose refs were since pruned),
+            # so they would pile up across runs and be uploaded. Delete them
+            # before uploading, as 'gc --prune=now' would.
+            self.RunGit(["prune", "--expire=now"])
 
         self.DeleteTmpPackFiles(self.mirror_path)
 
