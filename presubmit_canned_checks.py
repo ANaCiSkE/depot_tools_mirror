@@ -3619,8 +3619,8 @@ def CheckChangedLUCIConfigs(input_api, output_api):
         """convert luci-config v2 config_set object to v1 format."""
         rev = cs.get("revision", {})
         return {
-            "config_set": cs.get("name"),
-            "location": cs.get("url"),
+            "config_set": cs.get("name") or "",
+            "location": cs.get("url") or "",
             "revision": {
                 "id": rev.get("id"),
                 "url": rev.get("url"),
@@ -3642,24 +3642,41 @@ def CheckChangedLUCIConfigs(input_api, output_api):
         return [
             output_api.PresubmitPromptWarning("No config_sets were returned")
         ]
-    loc_pref = "%s/+/%s/" % (remote_host_url, remote_branch)
+    loc_pref = f"{remote_host_url}/+/{remote_branch}/"
     logging.debug("Derived location prefix: %s", loc_pref)
+    # Even with shell=False, Windows CreateProcessW runs .bat files via cmd.exe,
+    # and lucicfg.bat re-expands %*, so strictly validate server-supplied tokens.
+    safe_token_re = input_api.re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_./-]*\Z")
+
+    def _is_safe_token(token):
+        return bool(safe_token_re.match(token)) and not any(
+            part in ("", ".", "..") or part.startswith("-")
+            for part in token.split("/")
+        )
+
     dir_to_config_set = {}
     for cs in config_sets:
-        if (
-            cs["location"].startswith(loc_pref)
-            or ("%s/" % cs["location"]) == loc_pref
-        ):
-            path = cs["location"][len(loc_pref) :].rstrip("/")
+        loc = cs["location"] or ""
+        config_set = cs["config_set"] or ""
+        if loc.startswith(loc_pref) or f"{loc}/" == loc_pref:
+            path = loc[len(loc_pref) :].rstrip("/")
+            if not _is_safe_token(config_set) or (
+                path and not _is_safe_token(path)
+            ):
+                return [
+                    output_api.PresubmitError(
+                        "Invalid config_set or location returned by luci-config"
+                    )
+                ]
             d = input_api.os_path.join(*path.split("/")) if path else "."
-            dir_to_config_set[d] = cs["config_set"]
+            dir_to_config_set[d] = config_set
     if not dir_to_config_set:
         warning_long_text_lines = [
-            "No config_set found for %s." % loc_pref,
+            f"No config_set found for {loc_pref}.",
             "Found the following:",
         ]
-        for loc in sorted(cs["location"] for cs in config_sets):
-            warning_long_text_lines.append("  %s" % loc)
+        for loc in sorted(cs["location"] or "" for cs in config_sets):
+            warning_long_text_lines.append(f"  {loc}")
         warning_long_text_lines.append("")
         warning_long_text_lines.append(
             "If the requested location is internal,"
@@ -3710,7 +3727,7 @@ def CheckChangedLUCIConfigs(input_api, output_api):
             out, _ = input_api.subprocess.communicate(
                 cmd,
                 stderr=input_api.subprocess.PIPE,
-                shell=input_api.is_windows,  # to resolve *.bat
+                shell=False,
                 cwd=repo_root,
             )
             logging.debug(
@@ -3803,7 +3820,7 @@ def CheckLucicfgGenOutput(input_api, output_api, entry_script):
             ],
             {
                 "stderr": input_api.subprocess.STDOUT,
-                "shell": input_api.is_windows,  # to resolve *.bat
+                "shell": False,
                 "cwd": input_api.PresubmitLocalPath(),
             },
             output_api.PresubmitError,

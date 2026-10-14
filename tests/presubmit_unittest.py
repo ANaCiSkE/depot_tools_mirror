@@ -3332,7 +3332,7 @@ class CannedChecksUnittest(PresubmitTestsBase):
             ],
             cwd=self.fake_root_dir,
             stderr=subprocess.PIPE,
-            shell=input_api.is_windows,
+            shell=False,
         )
 
     @mock.patch("git_cl.Changelist")
@@ -3470,7 +3470,7 @@ class CannedChecksUnittest(PresubmitTestsBase):
             ],
             cwd=self.fake_root_dir,
             stderr=subprocess.PIPE,
-            shell=input_api.is_windows,
+            shell=False,
         )
 
     @mock.patch("git_cl.Changelist")
@@ -3513,6 +3513,93 @@ class CannedChecksUnittest(PresubmitTestsBase):
             input_api, presubmit.OutputApi
         )
         self.assertEqual(len(results), 0)
+
+    @mock.patch("git_cl.Changelist")
+    @mock.patch("auth.Authenticator")
+    def testCannedCheckChangedLUCIConfigsInvalidResponse(
+        self, mockGetAuth, mockCl
+    ):
+        affected_file = mock.MagicMock(presubmit.GitAffectedFile)
+        affected_file.LocalPath.return_value = "foo.cfg"
+        mockGetAuth().get_access_token().token = 123
+
+        host = "https://host.com"
+        branch = "branch"
+        mockCl().GetRemoteBranch.return_value = ("remote", branch)
+        mockCl().GetRemoteUrl.return_value = host
+
+        change1 = presubmit.Change(
+            "foo", "foo1", self.fake_root_dir, None, 0, 0, None
+        )
+        for bad_cs, bad_path in (
+            ("project/deadbeef&calc", ""),
+            ("project/deadbeef", "a&calc&b"),
+            ("project/deadbeef", "../outside"),
+            ("project/../deadbeef", "generated"),
+            ("project/deadbeef\n", ""),
+            ("project/deadbeef", "generated\n"),
+            ("project/deadbeef", "-flag"),
+            ("project/-flag", "generated"),
+            ("project/deadbeef", "./generated"),
+        ):
+            with self.subTest(bad_cs=bad_cs, bad_path=bad_path):
+                input_api = self.MockInputApi(change1, False)
+                input_api.is_windows = True
+                url = (
+                    f"{host}/+/{branch}/{bad_path}"
+                    if bad_path
+                    else f"{host}/+/{branch}"
+                )
+                http_resp = b")]}'\n" + json.dumps(
+                    {"configSets": [{"name": bad_cs, "url": url}]}
+                ).encode("utf-8")
+                input_api.urllib_request.urlopen().read.return_value = http_resp
+                input_api.AffectedFiles = lambda **_: (affected_file,)
+
+                results = presubmit_canned_checks.CheckChangedLUCIConfigs(
+                    input_api, presubmit.OutputApi
+                )
+                self.assertEqual(len(results), 1)
+                self.assertIsInstance(
+                    results[0], presubmit.OutputApi.PresubmitError
+                )
+                subprocess.Popen.assert_not_called()
+
+        # Verify None location in configSets doesn't raise TypeError when
+        # sorting locations for the fallback warning.
+        input_api = self.MockInputApi(change1, False)
+        http_resp = b")]}'\n" + json.dumps(
+            {
+                "configSets": [
+                    {
+                        "name": "project/other",
+                        "url": "https://other.com/+/main",
+                    },
+                    {"name": "project/null", "url": None},
+                ]
+            }
+        ).encode("utf-8")
+        input_api.urllib_request.urlopen().read.return_value = http_resp
+        input_api.AffectedFiles = lambda **_: (affected_file,)
+        results = presubmit_canned_checks.CheckChangedLUCIConfigs(
+            input_api, presubmit.OutputApi
+        )
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(
+            results[0], presubmit.OutputApi.PresubmitPromptWarning
+        )
+
+    def testCannedCheckLucicfgGenOutput(self):
+        change1 = presubmit.Change(
+            "foo", "foo1", self.fake_root_dir, None, 0, 0, None
+        )
+        input_api = self.MockInputApi(change1, False)
+        input_api.is_windows = True
+        cmds = presubmit_canned_checks.CheckLucicfgGenOutput(
+            input_api, presubmit.OutputApi, "main.star"
+        )
+        self.assertEqual(len(cmds), 1)
+        self.assertIs(cmds[0].kwargs["shell"], False)
 
     def testCannedCheckChangeHasNoTabs(self):
         self.ContentTest(
