@@ -1316,7 +1316,9 @@ class RunAlintTest(unittest.TestCase):
             mock_chdir.assert_called_once_with("/repo")
             mock_popen.assert_called_once()
             called_args, called_kwargs = mock_popen.call_args
-            self.assertEqual(called_args[0], ["/bin/alint", "--", "-t=30s"])
+            self.assertEqual(
+                called_args[0], ["/bin/alint", "--", "-t=30s", "--commit=HEAD"]
+            )
             self.assertEqual(called_kwargs["stdout"], subprocess.PIPE)
             self.assertEqual(called_kwargs["stderr"], subprocess.STDOUT)
             self.assertIn("GIT_CONFIG_PARAMETERS", called_kwargs["env"])

@@ -54,7 +54,9 @@ def main():
     # alint requires running from inside a git repository to detect changes.
     os.chdir(repo_root)
 
-    cmd = [alint_path, "--"] + sys.argv[3:]
+    # git cl requires a clean tree, so lint HEAD directly instead of letting
+    # alint scan the worktree to choose between HEAD and uncommitted changes.
+    cmd = [alint_path, "--"] + sys.argv[3:] + ["--commit=HEAD"]
     try:
         env = os.environ.copy()
         git_params = env.get("GIT_CONFIG_PARAMETERS", "").strip()
