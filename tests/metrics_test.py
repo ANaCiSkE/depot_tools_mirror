@@ -43,6 +43,7 @@ class MetricsCollectorTest(unittest.TestCase):
         # So that we don't have to update the tests every time we change the
         # version.
         mock.patch("metrics.metrics_utils.CURRENT_VERSION", 0).start()
+        mock.patch("metrics_utils.REPORT_BUILD", None).start()
         mock.patch("metrics.urllib.request", self.urllib_request).start()
         mock.patch("metrics.subprocess2.Popen", self.Popen).start()
         mock.patch("metrics.gclient_utils.FileWrite", self.FileWrite).start()
@@ -144,18 +145,69 @@ class MetricsCollectorTest(unittest.TestCase):
         self.assertFalse(self.collector.config.opted_in)
         self.assertEqual(self.collector.config.countdown, 10)
 
-    def assert_collects_metrics(self, update_metrics=None):
+    def assert_collects_metrics(
+        self, update_metrics=None, expected_vpython=None
+    ):
         expected_metrics = self.default_metrics
         self.default_metrics.update(update_metrics or {})
+        if expected_vpython is None:
+            expected_vpython = os.path.join(
+                metrics.DEPOT_TOOLS,
+                "vpython3.bat" if sys.platform == "win32" else "vpython3",
+            )
         # Assert we invoked the script to upload them.
         self.Popen.assert_called_with(
-            ["vpython3", metrics.UPLOAD_SCRIPT], stdin=metrics.subprocess2.PIPE
+            [
+                expected_vpython,
+                metrics.UPLOAD_SCRIPT,
+            ],
+            stdin=metrics.subprocess2.PIPE,
         )
         # Assert we collected the right metrics.
         write_call = self.Popen.return_value.stdin.write.call_args
         collected_metrics = json.loads(write_call[0][0])
         self.assertTrue(self.collector.collecting_metrics)
         self.assertEqual(collected_metrics, expected_metrics)
+
+    @mock.patch("metrics.sys.platform", "win32")
+    def test_upload_uses_absolute_vpython3_bat_on_windows(self):
+        """Tests that Windows upload resolves vpython3.bat in DEPOT_TOOLS."""
+        self.FileRead.side_effect = [
+            '{"is-googler": true, "countdown": 0, "opt-in": null, "version": 0}'
+        ]
+
+        @self.collector.collect_metrics("fun")
+        def fun():
+            pass
+
+        fun()
+        self.Popen.assert_called_with(
+            [
+                os.path.join(metrics.DEPOT_TOOLS, "vpython3.bat"),
+                metrics.UPLOAD_SCRIPT,
+            ],
+            stdin=metrics.subprocess2.PIPE,
+        )
+
+    @mock.patch("metrics.sys.platform", "linux")
+    def test_upload_uses_absolute_vpython3_on_posix(self):
+        """Tests that POSIX metrics upload resolves vpython3 in DEPOT_TOOLS."""
+        self.FileRead.side_effect = [
+            '{"is-googler": true, "countdown": 0, "opt-in": null, "version": 0}'
+        ]
+
+        @self.collector.collect_metrics("fun")
+        def fun():
+            pass
+
+        fun()
+        self.Popen.assert_called_with(
+            [
+                os.path.join(metrics.DEPOT_TOOLS, "vpython3"),
+                metrics.UPLOAD_SCRIPT,
+            ],
+            stdin=metrics.subprocess2.PIPE,
+        )
 
     def test_collects_system_information(self):
         """Tests that we collect information about the runtime environment."""
@@ -248,7 +300,8 @@ class MetricsCollectorTest(unittest.TestCase):
                         "builder": "b",
                     },
                 }
-            }
+            },
+            expected_vpython="vpython3",
         )
         # We shouldn't have tried to read the config file.
         self.assertFalse(self.FileRead.called)

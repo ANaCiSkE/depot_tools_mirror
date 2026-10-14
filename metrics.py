@@ -198,8 +198,13 @@ class MetricsCollector(object):
 
     def _upload_metrics_data(self):
         """Upload the metrics data to the AppEngine app."""
+        vpython_exe = "vpython3"
+        if not metrics_utils.REPORT_BUILD:
+            if sys.platform == "win32":
+                vpython_exe += ".bat"
+            vpython_exe = os.path.join(DEPOT_TOOLS, vpython_exe)
         p = subprocess2.Popen(
-            ["vpython3", UPLOAD_SCRIPT], stdin=subprocess2.PIPE
+            [vpython_exe, UPLOAD_SCRIPT], stdin=subprocess2.PIPE
         )
         # We invoke a subprocess, and use stdin.write instead of communicate(),
         # so that we are able to return immediately, leaving the upload running
