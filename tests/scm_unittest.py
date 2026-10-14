@@ -171,6 +171,35 @@ class GitWrapperTestCase(unittest.TestCase):
         ]
         self.assertEqual(scm.GIT.ListSubmodules("root"), [])
 
+    @mock.patch("scm.GIT.Capture")
+    def testGenerateDiff(self, mockCapture):
+        raw_diff = "\n".join(
+            [
+                "diff --git a/added.txt b/added.txt",
+                "new file mode 100644",
+                "index 0000000..1111111",
+                "--- /dev/null",
+                "+++ b/added.txt",
+                "@@ -0,0 +1,2 @@",
+                "+# \r--- /dev/null\rdiff --git a/ghost b/ghost",
+                "+normal line",
+                "diff --git a/deleted_flag.txt b/deleted_flag.txt",
+                "index 2222222..3333333 100644",
+                "--- a/deleted_flag.txt",
+                "+++ b/deleted_flag.txt",
+                "@@ -1 +0,0 @@",
+                "--- /dev/null",
+                "",
+            ]
+        )
+        mockCapture.return_value = raw_diff
+        res = scm.GIT.GenerateDiff(
+            self.root_dir, branch="origin/main", allow_prefix=True
+        )
+        self.assertIn("--- b/added.txt\n+++ b/added.txt\n", res)
+        self.assertIn("+# \r--- /dev/null\rdiff --git a/ghost b/ghost\n", res)
+        self.assertTrue(res.endswith("@@ -1 +0,0 @@\n--- /dev/null\n"))
+
 
 class RealGitTest(fake_repos.FakeReposTestBase):
     def setUp(self):

@@ -133,6 +133,102 @@ class ProvidedDiffChangeTest(fake_repos.FakeReposTestBase):
         self.assertEqual(test("@@ -292 +292,1 @@"), [(292, "  foo2")])
         self.assertEqual(test("@@ -293,1 +293,1 @@"), [(293, "  foo2")])
 
+    def test_changed_contents_ignores_embedded_cr_and_unicode_separators(self):
+        diff = "\n".join(
+            [
+                "diff --git a/foo b/foo",
+                "index d7ba659f..b7957f3 100644",
+                "--- a/foo",
+                "+++ b/foo",
+                "@@ -1,1 +1,2 @@",
+                "+safe\r@@ -99 +99 @@\rhidden_violation",
+                "+line2\u2028hidden_u2028\u2029hidden_u2029",
+            ]
+        )
+        change = self._create_change(diff)
+        afs = change.AffectedFiles()
+        self.assertEqual(len(afs), 1)
+        self.assertEqual(
+            afs[0].ChangedContents(),
+            [
+                (1, "safe\r@@ -99 +99 @@\rhidden_violation"),
+                (2, "line2\u2028hidden_u2028\u2029hidden_u2029"),
+            ],
+        )
+
+    def test_old_and_new_contents_ignore_embedded_cr_and_unicode_separators(
+        self,
+    ):
+        raw_old = "old1\rold_cr\x0cold_ff\nold2\u2028old_ls\u2029old_ps\n"
+        raw_new = (
+            "new1\rnew_cr\x0cnew_ff\nnew2\u2028new_ls\u2029new_ps\x85new_nel\n"
+        )
+        diff_cache = mock.MagicMock()
+        diff_cache.GetOldContents.return_value = raw_old
+        af = presubmit_support.GitAffectedFile(
+            "foo.py", "M", self.repo, diff_cache
+        )
+        with mock.patch("gclient_utils.FileRead", return_value=raw_new):
+            self.assertEqual(
+                af.OldContents(),
+                [
+                    "old1\rold_cr\x0cold_ff",
+                    "old2\u2028old_ls\u2029old_ps",
+                ],
+            )
+            self.assertEqual(
+                af.NewContents(),
+                [
+                    "new1\rnew_cr\x0cnew_ff",
+                    "new2\u2028new_ls\u2029new_ps\x85new_nel",
+                ],
+            )
+
+    def test_git_change_generate_diff_hardened_against_embedded_dev_null(self):
+        raw_git_diff = "\n".join(
+            [
+                "diff --git a/DEPS b/DEPS",
+                "new file mode 100644",
+                "index 0000000..1111111",
+                "--- /dev/null",
+                "+++ b/DEPS",
+                "@@ -0,0 +1,2 @@",
+                "+# \r--- /dev/null\rdiff --git a/ghost b/ghost",
+                "+bad_dep_line",
+                "diff --git a/flags.txt b/flags.txt",
+                "index 2222222..3333333 100644",
+                "--- a/flags.txt",
+                "+++ b/flags.txt",
+                "@@ -1 +0,0 @@",
+                "--- /dev/null",
+                "",
+            ]
+        )
+        with (
+            mock.patch("scm.GIT.Capture", return_value=raw_git_diff),
+            mock.patch("scm.GIT.ListSubmodules", return_value=[]),
+        ):
+            change = presubmit_support.GitChange(
+                "mychange",
+                "description",
+                self.repo,
+                [("A", "DEPS"), ("M", "flags.txt")],
+                0,
+                0,
+                None,
+                upstream="origin/main",
+                end_commit="HEAD",
+            )
+            afs = {af.LocalPath(): af for af in change.AffectedFiles()}
+            self.assertEqual(
+                afs["DEPS"].ChangedContents(),
+                [
+                    (1, "# \r--- /dev/null\rdiff --git a/ghost b/ghost"),
+                    (2, "bad_dep_line"),
+                ],
+            )
+            self.assertEqual(afs["flags.txt"].ChangedContents(), [])
+
     def test_unix_local_paths(self):
         if sys.platform == "win32":
             self.assertIn(r"somewhere\else", self.change.LocalPaths())
@@ -364,6 +460,137 @@ diff --git a/ffoo b/foo
 """
         with self.assertRaises(presubmit_support.PresubmitFailure):
             presubmit_support._parse_unified_diff(diff)
+
+    def test_parse_unified_diff_duplicate_file_section_raises(self):
+        diff = "\n".join(
+            [
+                "diff --git a/foo b/foo",
+                "index 1111111..2222222 100644",
+                "--- a/foo",
+                "+++ b/foo",
+                "@@ -1 +1 @@",
+                "-old",
+                "+new",
+                "diff --git a/foo b/foo",
+                "index 2222222..3333333 100644",
+                "--- a/foo",
+                "+++ b/foo",
+                "@@ -1 +1 @@",
+                "-new",
+                "+forged",
+                "",
+            ]
+        )
+        with self.assertRaisesRegex(
+            presubmit_support.PresubmitFailure,
+            "Duplicate diff section for foo",
+        ):
+            presubmit_support._parse_unified_diff(diff)
+
+        # A deleted file section followed by a non-'new file mode' section for
+        # the same path must also be rejected.
+        non_typechange_dup = "\n".join(
+            [
+                "diff --git a/foo b/foo",
+                "deleted file mode 100644",
+                "index 1111111..0000000",
+                "--- a/foo",
+                "+++ /dev/null",
+                "@@ -1 +0,0 @@",
+                "-old",
+                "diff --git a/foo b/foo",
+                "index 2222222..3333333 100644",
+                "--- a/foo",
+                "+++ b/foo",
+                "@@ -1 +1 @@",
+                "-new",
+                "+forged",
+                "",
+            ]
+        )
+        with self.assertRaisesRegex(
+            presubmit_support.PresubmitFailure,
+            "Duplicate diff section for foo",
+        ):
+            presubmit_support._parse_unified_diff(non_typechange_dup)
+
+    def test_parse_unified_diff_git_typechange_merges_and_marks_modified(self):
+        diff = "\n".join(
+            [
+                "diff --git a/foo b/foo",
+                "deleted file mode 100644",
+                "index 1111111..0000000",
+                "--- a/foo",
+                "+++ /dev/null",
+                "@@ -1 +0,0 @@",
+                "-regular_content",
+                "diff --git a/foo b/foo",
+                "new file mode 120000",
+                "index 0000000..2222222",
+                "--- /dev/null",
+                "+++ b/foo",
+                "@@ -0,0 +1 @@",
+                "+symlink_target",
+                "",
+            ]
+        )
+        parsed = presubmit_support._parse_unified_diff(diff)
+        self.assertEqual(list(parsed.keys()), ["foo"])
+        self.assertIn("deleted file mode 100644\n", parsed["foo"])
+        self.assertIn("new file mode 120000\n", parsed["foo"])
+        self.assertEqual(
+            presubmit_support._diffs_to_change_files(parsed),
+            [("M", "foo")],
+        )
+
+        # A third section for the same path after a valid typechange must still
+        # be rejected.
+        triple_diff = diff + "\n".join(
+            [
+                "diff --git a/foo b/foo",
+                "new file mode 100644",
+                "index 0000000..3333333",
+                "--- /dev/null",
+                "+++ b/foo",
+                "@@ -0,0 +1 @@",
+                "+extra",
+                "",
+            ]
+        )
+        with self.assertRaisesRegex(
+            presubmit_support.PresubmitFailure,
+            "Duplicate diff section for foo",
+        ):
+            presubmit_support._parse_unified_diff(triple_diff)
+
+    def test_parse_unified_diff_embedded_cr_and_unicode_do_not_forge_headers(
+        self,
+    ):
+        for sep in ("\r", "\u2028", "\u2029", "\x85"):
+            diff = "\n".join(
+                [
+                    "diff --git a/DEPS b/DEPS",
+                    "index 1111111..2222222 100644",
+                    "--- a/DEPS",
+                    "+++ b/DEPS",
+                    "@@ -1 +1 @@",
+                    "+real_violation",
+                    "diff --git a/zzz.py b/zzz.py",
+                    "new file mode 100644",
+                    "--- /dev/null",
+                    "+++ b/zzz.py",
+                    "@@ -0,0 +1,2 @@",
+                    f"+carrier{sep}diff --git a/DEPS b/DEPS",
+                    "+@@ -1 +1 @@",
+                    "",
+                ]
+            )
+            res = presubmit_support._parse_unified_diff(diff)
+            self.assertIn("+real_violation\n", res["DEPS"])
+            self.assertNotIn("carrier", res["DEPS"])
+            self.assertIn(
+                f"+carrier{sep}diff --git a/DEPS b/DEPS\n", res["zzz.py"]
+            )
 
     def test_diffs_to_change_files_with_empty_diff(self):
         res = presubmit_support._diffs_to_change_files({"file": ""})

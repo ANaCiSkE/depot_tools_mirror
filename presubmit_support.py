@@ -1035,9 +1035,11 @@ class AffectedFile(object):
         Note: The carriage returns (LF or CR) are stripped off.
         """
         if self._cached_old_contents is None:
-            self._cached_old_contents = self._diff_cache.GetOldContents(
-                self.LocalPath(), self._local_root
-            ).splitlines()
+            self._cached_old_contents = _split_diff_lines(
+                self._diff_cache.GetOldContents(
+                    self.LocalPath(), self._local_root
+                )
+            )
         return self._cached_old_contents[:]
 
     def NewContents(self, flush_cache=False):
@@ -1054,9 +1056,9 @@ class AffectedFile(object):
         if self._cached_new_contents is None or flush_cache:
             self._cached_new_contents = []
             try:
-                self._cached_new_contents = gclient_utils.FileRead(
-                    self.AbsoluteLocalPath(), "rU"
-                ).splitlines()
+                self._cached_new_contents = _split_diff_lines(
+                    gclient_utils.FileRead(self.AbsoluteLocalPath(), "rU")
+                )
             except IOError:
                 pass  # File not found?  That's fine; maybe it was deleted.
             except UnicodeDecodeError as e:
@@ -1081,9 +1083,9 @@ class AffectedFile(object):
         result = []
         line_num = 0
 
-        # The keeplinebreaks parameter to splitlines must be True or else the
-        # CheckForWindowsLineEndings presubmit will be a NOP.
-        for line in self.GenerateScmDiff().splitlines(keeplinebreaks):
+        # The keeplinebreaks parameter to _split_diff_lines must be True or else
+        # the CheckForWindowsLineEndings presubmit will be a NOP.
+        for line in _split_diff_lines(self.GenerateScmDiff(), keeplinebreaks):
             m = re.match(
                 r"^@@ -[0-9]+(?:,[0-9]+)? \+([0-9]+)(?:,[0-9]+)? @@", line
             )
@@ -2324,9 +2326,15 @@ def _parse_gerrit_options(parser, options):
     return gerrit_obj
 
 
+def _split_diff_lines(text, keepends=False):
+    """Splits diff text strictly on LF, avoiding universal-newline splits."""
+    return scm.split_diff_lines(text, keepends=keepends)
+
+
 def _parse_unified_diff(diff):
-    """Parses a unified git diff and returns a list of (path, diff) tuples."""
+    """Parses a unified git diff and returns a dict of {path: diff}."""
     diffs = {}
+    merged_typechanges = set()
 
     # This regex matches the path twice, separated by a space. Note that
     # filename itself may contain spaces.
@@ -2334,18 +2342,47 @@ def _parse_unified_diff(diff):
         "^diff --git (?:a/)?(?P<filename>.*) (?:b/)?(?P=filename)$"
     )
     current_diff = []
-    keep_line_endings = True
-    for x in diff.splitlines(keep_line_endings):
+    current_filename = None
+    expect_new_file_mode = False
+    for x in _split_diff_lines(diff, keepends=True):
+        if expect_new_file_mode:
+            if not x.startswith("new file mode "):
+                raise PresubmitFailure(
+                    f"Duplicate diff section for {current_filename}"
+                )
+            expect_new_file_mode = False
         match = file_marker.match(x)
         if match:
+            raw_filename = match.group("filename")
+            filename = normpath(raw_filename)
+            if filename in diffs:
+                prev = diffs[filename]
+                if (
+                    filename not in merged_typechanges
+                    and len(prev) > 1
+                    and prev[1].startswith("deleted file mode ")
+                ):
+                    merged_typechanges.add(filename)
+                    current_diff = prev
+                    current_diff.append(x)
+                    current_filename = raw_filename
+                    expect_new_file_mode = True
+                    continue
+                raise PresubmitFailure(
+                    f"Duplicate diff section for {raw_filename}"
+                )
             # Marks the start of a new per-file section.
-            diffs[match.group("filename")] = current_diff = [x]
+            diffs[filename] = current_diff = [x]
+            current_filename = raw_filename
         elif x.startswith("diff --git"):
-            raise PresubmitFailure("Unexpected diff line: %s" % x)
+            raise PresubmitFailure(f"Unexpected diff line: {x}")
         else:
             current_diff.append(x)
 
-    return dict((normpath(path), "".join(diff)) for path, diff in diffs.items())
+    if expect_new_file_mode:
+        raise PresubmitFailure(f"Duplicate diff section for {current_filename}")
+
+    return {path: "".join(diff_lines) for path, diff_lines in diffs.items()}
 
 
 def _process_diff_file(diff_file):
@@ -2382,13 +2419,17 @@ def _diffs_to_change_files(diffs):
             change_files.append(("M", file))
             continue
 
-        header_line = file_diff.splitlines()[1]
-        if not header_line:
+        lines = _split_diff_lines(file_diff)
+        if len(lines) < 2 or not lines[1]:
             raise PresubmitFailure("diff header is empty")
+        header_line = lines[1]
         if header_line.startswith("new"):
             action = "A"
         elif header_line.startswith("deleted"):
-            action = "D"
+            if any(line.startswith("new file mode ") for line in lines[2:]):
+                action = "M"
+            else:
+                action = "D"
         else:
             action = "M"
         change_files.append((action, file))

@@ -49,6 +49,22 @@ def determine_scm(root):
         return "diff"
 
 
+def split_diff_lines(text: str, keepends: bool = False) -> list[str]:
+    """Splits diff text strictly on LF, avoiding universal-newline splits."""
+    if not text:
+        return []
+    parts = text.split("\n")
+    if keepends:
+        lines = [f"{p}\n" for p in parts[:-1]]
+        if parts[-1]:
+            lines.append(parts[-1])
+        return lines
+    lines = [p[:-1] if p.endswith("\r") else p for p in parts[:-1]]
+    if parts[-1]:
+        lines.append(parts[-1])
+    return lines
+
+
 GitConfigScope = Literal["system", "global", "local", "worktree"]
 GitScopeOrder: list[GitConfigScope] = ["system", "global", "local", "worktree"]
 GitFlatConfigData = Mapping[str, Mapping[str, Sequence[str]]]
@@ -1154,12 +1170,22 @@ class GIT(object):
             command.extend(files)
         output = GIT.Capture(command, cwd=cwd, strip_out=False)
         assert isinstance(output, str)
-        diff = output.splitlines(True)
+        diff = split_diff_lines(output, keepends=True)
+        in_header = False
         for i in range(len(diff)):
-            # In the case of added files, replace /dev/null with the path to the
-            # file being added.
-            if diff[i].startswith("--- /dev/null"):
-                diff[i] = "--- %s" % diff[i + 1][4:]
+            if diff[i].startswith("diff --git "):
+                in_header = True
+            elif diff[i].startswith("@@"):
+                in_header = False
+            elif (
+                in_header
+                and diff[i] in ("--- /dev/null\n", "--- /dev/null\r\n")
+                and i + 1 < len(diff)
+                and diff[i + 1].startswith("+++ ")
+            ):
+                # In the case of added files, replace /dev/null with the path to
+                # the file being added.
+                diff[i] = f"--- {diff[i + 1][4:]}"
         return "".join(diff)
 
     @staticmethod
