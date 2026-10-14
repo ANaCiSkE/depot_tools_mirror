@@ -9,6 +9,7 @@ This will be executed by vpython with the right pylint versions.
 
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PYLINT = os.path.join(HERE, "pylint_main.py")
@@ -55,11 +56,15 @@ def main(argv):
     # normally overridden by the depot_tools config.
     os.environ.setdefault("PYLINTRC", rc_file)
 
-    # This import has to happen after PYLINTRC is set because the module tries
-    # to resolve the config file location on load.
-    from pylint import lint
+    with tempfile.TemporaryDirectory(prefix="pylint_home_") as pylint_home:
+        os.environ["PYLINTHOME"] = pylint_home
 
-    lint.Run(argv)
+        # This import has to happen after PYLINTRC and PYLINTHOME are set
+        # because the module tries to resolve the config file location and cache
+        # directory on load.
+        from pylint import lint
+
+        lint.Run(argv)
 
 
 if __name__ == "__main__":

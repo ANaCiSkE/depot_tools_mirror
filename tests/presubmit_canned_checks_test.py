@@ -3288,6 +3288,57 @@ class GetPylintTest(unittest.TestCase):
         )
         self.assertEqual(targets, [])
 
+    def test_pylint_main_isolates_pylinthome(self):
+        import pylint_main
+
+        captured = {}
+
+        def fake_run(argv):
+            pylint_home = os.environ.get("PYLINTHOME")
+            captured["argv"] = argv
+            captured["pylint_home"] = pylint_home
+            captured["exists_during_run"] = bool(
+                pylint_home and os.path.isdir(pylint_home)
+            )
+
+        fake_lint = mock.MagicMock()
+        fake_lint.Run.side_effect = fake_run
+        fake_pylint = mock.MagicMock()
+        fake_pylint.lint = fake_lint
+
+        with (
+            mock.patch.dict(
+                os.environ, {"PYLINTHOME": "/preexisting/path"}, clear=False
+            ),
+            mock.patch.dict(
+                sys.modules, {"pylint": fake_pylint, "pylint.lint": fake_lint}
+            ),
+        ):
+            pylint_main.main(["foo.py"])
+
+        self.assertEqual(captured["argv"], ["foo.py"])
+        self.assertNotEqual(captured["pylint_home"], "/preexisting/path")
+        self.assertTrue(
+            os.path.basename(captured["pylint_home"]).startswith("pylint_home_")
+        )
+        self.assertTrue(captured["exists_during_run"])
+        self.assertFalse(os.path.exists(captured["pylint_home"]))
+
+    def test_pylintrc_disables_persistent_cache(self):
+        import pylint_main
+
+        for rc_name in (
+            "pylintrc-2.6",
+            "pylintrc-2.7",
+            "pylintrc-2.17",
+            "pylintrc-3.2",
+        ):
+            rc_path = os.path.join(pylint_main.HERE, rc_name)
+            with open(rc_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("persistent=no", content, msg=rc_name)
+            self.assertNotIn("persistent=yes", content, msg=rc_name)
+
 
 class MockInputApiTest(unittest.TestCase):
     def test_affected_extensions(self):
