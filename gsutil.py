@@ -4,6 +4,8 @@
 # found in the LICENSE file.
 """Run a pinned gsutil."""
 
+from __future__ import annotations
+
 import argparse
 import base64
 import contextlib
@@ -189,9 +191,23 @@ def luci_login():
     return _luci_auth_cmd("login", interactive=True)
 
 
+def _resolve_depot_tools_exe(name: str) -> str:
+    """Resolves a depot_tools binary in .cipd_bin on Windows."""
+    if IS_WINDOWS:
+        exe = os.path.join(THIS_DIR, ".cipd_bin", f"{name}.exe")
+        if os.path.isfile(exe):
+            return exe
+    return name
+
+
 def _luci_auth_cmd(luci_cmd, wrapped_cmds=None, interactive=False):
     """Helper to call luci-auth command."""
-    cmd = ["luci-auth", luci_cmd, "-scopes", " ".join(LUCI_AUTH_SCOPES)]
+    cmd = [
+        _resolve_depot_tools_exe("luci-auth"),
+        luci_cmd,
+        "-scopes",
+        " ".join(LUCI_AUTH_SCOPES),
+    ]
     if wrapped_cmds:
         cmd += ["--"] + wrapped_cmds
 
@@ -216,7 +232,9 @@ def _run_subprocess(
     env: Optional[dict[str, str]] = None,
 ) -> subprocess.CompletedProcess:
     """Wrapper to run the given command within a subprocess."""
-    kwargs: dict[str, Any] = {"shell": IS_WINDOWS}
+    kwargs: dict[str, Any] = {
+        "shell": IS_WINDOWS and not cmd[0].lower().endswith(".exe")
+    }
     if not IS_WINDOWS:
         kwargs["start_new_session"] = True
 
@@ -293,7 +311,7 @@ def run_gsutil(target, args, clean=False):
 
     cmd = (
         [
-            "vpython3",
+            _resolve_depot_tools_exe("vpython3"),
             "-vpython-spec",
             os.path.join(THIS_DIR, "gsutil.vpython.toml"),
             "--",

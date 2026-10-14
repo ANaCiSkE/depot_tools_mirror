@@ -238,5 +238,212 @@ class GsutilUnitTests(unittest.TestCase):
         )
 
 
+def _mock_popen(returncode: int = 0) -> Any:
+    """Returns a patcher for subprocess.Popen that doesn't run anything."""
+    proc = mock.MagicMock()
+    proc.__enter__.return_value = proc
+    proc.communicate.return_value = (b"", b"")
+    proc.returncode = returncode
+    return mock.patch("subprocess.Popen", return_value=proc)
+
+
+class CipdExeTest(unittest.TestCase):
+    """Tests running depot_tools' CIPD tools without their .bat wrappers."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tempdir)
+        self.cipd_bin = os.path.join(self.tempdir, ".cipd_bin")
+        os.mkdir(self.cipd_bin)
+        for patcher in (
+            mock.patch("gsutil.THIS_DIR", self.tempdir),
+            # Avoid platform-specific gsutil options in run_gsutil().
+            mock.patch("sys.platform", "win32"),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _create_exe(self, name: str) -> str:
+        path = os.path.join(self.cipd_bin, name + ".exe")
+        with open(path, "wb"):
+            pass
+        return path
+
+    def _luci_auth_cmd(self, luci_auth: str, subcommand: str) -> list[str]:
+        """Returns the command gsutil.py should build to run luci-auth."""
+        scopes = " ".join(gsutil.LUCI_AUTH_SCOPES)
+        return [luci_auth, subcommand, "-scopes", scopes]
+
+    def _gsutil_cmd(self, vpython3: str, *args: str) -> list[str]:
+        """Returns the command run_gsutil() should build to run gsutil."""
+        return [
+            vpython3,
+            "-vpython-spec",
+            os.path.join(self.tempdir, "gsutil.vpython.toml"),
+            "--",
+            "gsutil_bin",
+            "-o",
+            "GSUtil:software_update_check_period=0",
+        ] + list(args)
+
+    def _run_gsutil(self, args: list[str], luci_context: bool = False) -> Any:
+        """Calls run_gsutil() without boto, returning the mocked Popen."""
+        with (
+            mock.patch("gsutil.ensure_gsutil", return_value="gsutil_bin"),
+            mock.patch("gsutil.get_boto_path", return_value=""),
+            mock.patch("gsutil._is_luci_context", return_value=luci_context),
+            mock.patch(
+                "gsutil._is_luci_auth_supported_platform", return_value=True
+            ),
+            _mock_popen() as mock_popen,
+        ):
+            self.assertEqual(gsutil.run_gsutil(self.tempdir, args), 0)
+        return mock_popen
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_resolve_depot_tools_exe_windows(self) -> None:
+        vpython3 = self._create_exe("vpython3")
+        luci_auth = self._create_exe("luci-auth")
+        self.assertEqual(gsutil._resolve_depot_tools_exe("vpython3"), vpython3)
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("luci-auth"), luci_auth
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_resolve_depot_tools_exe_windows_missing_exe(self) -> None:
+        # Only the requested tool is resolved.
+        self._create_exe("luci-auth")
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_resolve_depot_tools_exe_windows_missing_cipd_bin(self) -> None:
+        # e.g. a fresh checkout that hasn't run cipd_bin_setup.bat yet.
+        os.rmdir(self.cipd_bin)
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_resolve_depot_tools_exe_windows_ignores_directory(self) -> None:
+        os.mkdir(os.path.join(self.cipd_bin, "vpython3.exe"))
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", False)
+    def test_resolve_depot_tools_exe_non_windows(self) -> None:
+        self._create_exe("vpython3")
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test__run_subprocess_windows_exe_without_shell(self) -> None:
+        for exe in (
+            r"C:\depot_tools\.cipd_bin\vpython3.exe",
+            r"C:\depot tools\.cipd_bin\LUCI-AUTH.EXE",
+            "python.exe",
+        ):
+            with self.subTest(exe=exe), _mock_popen() as mock_popen:
+                p = gsutil._run_subprocess([exe, "arg"])
+                mock_popen.assert_called_once_with(
+                    [exe, "arg"],
+                    shell=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                self.assertEqual(p.returncode, 0)
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test__run_subprocess_windows_interactive_exe_without_shell(
+        self,
+    ) -> None:
+        exe = r"C:\depot_tools\.cipd_bin\luci-auth.exe"
+        with _mock_popen() as mock_popen:
+            gsutil._run_subprocess([exe, "login"], interactive=True)
+        mock_popen.assert_called_once_with([exe, "login"], shell=False)
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test__run_subprocess_windows_non_exe_uses_shell(self) -> None:
+        for cmd0 in (
+            "vpython3",
+            "luci-auth",
+            "vpython3.bat",
+            "luci-auth.cmd",
+            r"C:\depot_tools.exe\vpython3",
+            "vpython3.exe.bat",
+        ):
+            with self.subTest(cmd0=cmd0), _mock_popen() as mock_popen:
+                gsutil._run_subprocess([cmd0, "arg"])
+                mock_popen.assert_called_once_with(
+                    [cmd0, "arg"],
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+
+    @mock.patch("gsutil.IS_WINDOWS", False)
+    def test__run_subprocess_non_windows_never_uses_shell(self) -> None:
+        for cmd0 in ("vpython3", "/depot_tools/.cipd_bin/vpython3.exe"):
+            with self.subTest(cmd0=cmd0), _mock_popen() as mock_popen:
+                gsutil._run_subprocess([cmd0, "arg"])
+                mock_popen.assert_called_once_with(
+                    [cmd0, "arg"],
+                    shell=False,
+                    start_new_session=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_run_gsutil_windows_runs_cipd_exes_directly(self) -> None:
+        vpython3 = self._create_exe("vpython3")
+        luci_auth = self._create_exe("luci-auth")
+        mock_popen = self._run_gsutil(["ls", "gs://b"])
+        mock_popen.assert_called_once_with(
+            self._luci_auth_cmd(luci_auth, "context")
+            + ["--"]
+            + self._gsutil_cmd(vpython3, "ls", "gs://b"),
+            shell=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_run_gsutil_windows_in_luci_context_runs_vpython3_exe(
+        self,
+    ) -> None:
+        vpython3 = self._create_exe("vpython3")
+        mock_popen = self._run_gsutil(["ls"], luci_context=True)
+        mock_popen.assert_called_once_with(
+            self._gsutil_cmd(vpython3, "ls"), shell=False
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_run_gsutil_windows_falls_back_to_bat_wrappers(self) -> None:
+        # Without .cipd_bin, the .bat wrappers are run via the shell so they
+        # can bootstrap .cipd_bin.
+        os.rmdir(self.cipd_bin)
+        mock_popen = self._run_gsutil(["ls"])
+        mock_popen.assert_called_once_with(
+            self._luci_auth_cmd("luci-auth", "context")
+            + ["--"]
+            + self._gsutil_cmd("vpython3", "ls"),
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_run_gsutil_windows_config_runs_luci_auth_exe(self) -> None:
+        luci_auth = self._create_exe("luci-auth")
+        mock_popen = self._run_gsutil(["config"])
+        mock_popen.assert_called_once_with(
+            self._luci_auth_cmd(luci_auth, "login"), shell=False
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -123,19 +123,40 @@ class Gsutil(object):
 
         return env
 
+    def _get_python_cmd(self):
+        """Returns the command prefix used to run self.path."""
+        if (
+            self.VPYTHON3 == Gsutil.VPYTHON3
+            and self.VPYTHON3 in ("vpython3", "vpython3.bat")
+            and sys.platform != "cygwin"
+            and sys.executable
+            and os.path.normcase(os.path.abspath(self.path))
+            == os.path.normcase(os.path.abspath(GSUTIL_DEFAULT_PATH))
+        ):
+            return [sys.executable, self.path]
+        return [self.VPYTHON3, self.path]
+
     def call(self, *args):
-        cmd = [self.VPYTHON3, self.path]
+        cmd = self._get_python_cmd()
         cmd.extend(args)
-        return subprocess2.call(cmd, env=self.get_sub_env())
+        kwargs = {"env": self.get_sub_env()}
+        if sys.executable and cmd[0] == sys.executable:
+            kwargs["shell"] = False
+        return subprocess2.call(cmd, **kwargs)
 
     def check_call(self, *args):
-        cmd = [self.VPYTHON3, self.path]
+        cmd = self._get_python_cmd()
         cmd.extend(args)
+        kwargs = {
+            "stdout": subprocess2.PIPE,
+            "stderr": subprocess2.PIPE,
+            "env": self.get_sub_env(),
+        }
+        if sys.executable and cmd[0] == sys.executable:
+            kwargs["shell"] = False
         ((out, err), code) = subprocess2.communicate(
             cmd,
-            stdout=subprocess2.PIPE,
-            stderr=subprocess2.PIPE,
-            env=self.get_sub_env(),
+            **kwargs,
         )
 
         out = out.decode("utf-8", "replace")

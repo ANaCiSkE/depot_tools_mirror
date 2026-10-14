@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 """Unit tests for download_from_google_storage.py."""
 
+import ntpath
 import optparse
 import os
 import queue
@@ -14,6 +15,7 @@ import tarfile
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -207,6 +209,208 @@ class GstoolsUnitTests(unittest.TestCase):
         )
         os.remove(lorem_ipsum2_md5)  # Clean up.
         self.assertFalse(os.path.exists(lorem_ipsum2_md5))
+
+
+class GsutilCommandTests(unittest.TestCase):
+    """Tests how Gsutil launches gsutil (see Gsutil._get_python_cmd)."""
+
+    DEFAULT_PATH = download_from_google_storage.GSUTIL_DEFAULT_PATH
+    VPYTHON3 = download_from_google_storage.Gsutil.VPYTHON3
+    PIPE = download_from_google_storage.subprocess2.PIPE
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="gsutil_cmd_test")
+        self.addCleanup(shutil.rmtree, self.temp_dir)
+        self.custom_path = os.path.join(self.temp_dir, "gsutil.py")
+        with open(self.custom_path, "w"):
+            pass
+        self.python = os.path.join(self.temp_dir, "bin", "python3")
+
+        # Don't depend on the interpreter or platform running the tests.
+        self._patch(mock.patch.object(sys, "executable", self.python))
+        self._patch(mock.patch.object(sys, "platform", "linux"))
+        self.mock_call = self._patch(
+            mock.patch("subprocess2.call", return_value=0)
+        )
+        self.mock_communicate = self._patch(
+            mock.patch("subprocess2.communicate", return_value=((b"", b""), 0))
+        )
+
+    def _patch(self, patcher):
+        mocked = patcher.start()
+        self.addCleanup(patcher.stop)
+        return mocked
+
+    def _gsutil(self, path=None, boto_path=None):
+        return download_from_google_storage.Gsutil(
+            path or self.DEFAULT_PATH, boto_path
+        )
+
+    def assertUsesCurrentInterpreter(self, gsutil, path=None):
+        path = path or self.DEFAULT_PATH
+        self.mock_call.reset_mock()
+        self.mock_communicate.reset_mock()
+
+        self.assertEqual(gsutil.call("cp", "gs://b/o", "out"), 0)
+        self.mock_call.assert_called_once_with(
+            [self.python, path, "cp", "gs://b/o", "out"],
+            env=mock.ANY,
+            shell=False,
+        )
+        self.assertEqual(gsutil.check_call("ls", "gs://b"), (0, "", ""))
+        self.mock_communicate.assert_called_once_with(
+            [self.python, path, "ls", "gs://b"],
+            stdout=self.PIPE,
+            stderr=self.PIPE,
+            env=mock.ANY,
+            shell=False,
+        )
+
+    def assertUsesVpython3(self, gsutil, vpython3=None, path=None):
+        vpython3 = vpython3 or self.VPYTHON3
+        path = path or self.DEFAULT_PATH
+        self.mock_call.reset_mock()
+        self.mock_communicate.reset_mock()
+
+        # No shell= argument, so that subprocess2 keeps defaulting to
+        # shell=True on Windows, which is needed to run vpython3.bat.
+        self.assertEqual(gsutil.call("cp", "gs://b/o", "out"), 0)
+        self.mock_call.assert_called_once_with(
+            [vpython3, path, "cp", "gs://b/o", "out"], env=mock.ANY
+        )
+        self.assertEqual(gsutil.check_call("ls", "gs://b"), (0, "", ""))
+        self.mock_communicate.assert_called_once_with(
+            [vpython3, path, "ls", "gs://b"],
+            stdout=self.PIPE,
+            stderr=self.PIPE,
+            env=mock.ANY,
+        )
+
+    def test_default_path_uses_current_interpreter(self):
+        for platform in ("linux", "darwin", "win32"):
+            with (
+                self.subTest(platform=platform),
+                mock.patch.object(sys, "platform", platform),
+            ):
+                self.assertUsesCurrentInterpreter(self._gsutil())
+
+    def test_current_interpreter_gets_sub_env(self):
+        boto_path = os.path.join(self.temp_dir, ".boto")
+        self._gsutil(boto_path=boto_path).call("ls")
+        env = self.mock_call.call_args.kwargs["env"]
+        self.assertEqual(env["BOTO_CONFIG"], boto_path)
+        self.assertEqual(env["AWS_CREDENTIAL_FILE"], boto_path)
+
+    def test_check_call_parses_output_from_current_interpreter(self):
+        self.mock_communicate.return_value = (
+            (b"out", b"CommandException: No URLs matched: gs://b/o"),
+            1,
+        )
+        code, out, err = self._gsutil().check_call("ls", "gs://b/o")
+        self.assertEqual((code, out), (404, "out"))
+        self.assertIn("No URLs matched", err)
+        self.assertIs(self.mock_communicate.call_args.kwargs["shell"], False)
+
+    def test_equivalent_default_paths_use_current_interpreter(self):
+        # A non-normalized path still refers to depot_tools' gsutil.py. The
+        # path is passed through unchanged.
+        dotted = os.path.join(
+            os.path.dirname(self.DEFAULT_PATH), "tests", "..", "gsutil.py"
+        )
+        self.assertUsesCurrentInterpreter(self._gsutil(dotted), dotted)
+
+        old_cwd = os.getcwd()
+        os.chdir(os.path.dirname(self.DEFAULT_PATH))
+        self.addCleanup(os.chdir, old_cwd)
+        self.assertUsesCurrentInterpreter(
+            self._gsutil("gsutil.py"), "gsutil.py"
+        )
+
+    def test_default_path_comparison_uses_normcase(self):
+        # Simulate Windows' case-insensitive paths on any platform.
+        gsutil = self._gsutil()
+        gsutil.path = self.DEFAULT_PATH.upper()
+        with mock.patch("os.path.normcase", ntpath.normcase):
+            cmd = gsutil._get_python_cmd()
+        self.assertEqual(cmd, [self.python, gsutil.path])
+
+    def test_custom_path_uses_vpython3(self):
+        self.assertUsesVpython3(
+            self._gsutil(self.custom_path), path=self.custom_path
+        )
+
+    def test_cygwin_uses_vpython3(self):
+        with mock.patch.object(sys, "platform", "cygwin"):
+            self.assertUsesVpython3(self._gsutil())
+
+    def test_overridden_vpython3_on_instance_is_respected(self):
+        gsutil = self._gsutil()
+        gsutil.VPYTHON3 = "custom-vpython3"
+        self.assertUsesVpython3(gsutil, vpython3="custom-vpython3")
+
+    def test_overridden_vpython3_in_subclass_is_respected(self):
+        class CustomGsutil(download_from_google_storage.Gsutil):
+            VPYTHON3 = "custom-vpython3"
+
+        self.assertUsesVpython3(
+            CustomGsutil(self.DEFAULT_PATH), vpython3="custom-vpython3"
+        )
+
+    def test_overridden_vpython3_on_class_is_respected(self):
+        with mock.patch.object(
+            download_from_google_storage.Gsutil,
+            "VPYTHON3",
+            "class-vpython3",
+        ):
+            self.assertUsesVpython3(self._gsutil(), vpython3="class-vpython3")
+
+    def test_unknown_executable_uses_vpython3(self):
+        # sys.executable is "" or None if Python can't determine it.
+        for executable in ("", None):
+            with (
+                self.subTest(executable=executable),
+                mock.patch.object(sys, "executable", executable),
+            ):
+                self.assertUsesVpython3(self._gsutil())
+
+    def test_python_cmd_is_a_new_list_each_time(self):
+        gsutil = self._gsutil()
+        cmd = gsutil._get_python_cmd()
+        cmd.append("mutated")
+        self.assertEqual(
+            gsutil._get_python_cmd(), [self.python, self.DEFAULT_PATH]
+        )
+
+    def test_concurrent_calls_build_independent_commands(self):
+        # download_from_google_storage shares one Gsutil between threads.
+        gsutil = self._gsutil()
+        lock = threading.Lock()
+        commands = []
+
+        def fake_communicate(cmd, **_kwargs):
+            with lock:
+                commands.append(list(cmd))
+            return ((b"", b""), 0)
+
+        self.mock_communicate.side_effect = fake_communicate
+        threads = [
+            threading.Thread(
+                target=gsutil.check_call, args=("cp", "gs://b/%d" % i, str(i))
+            )
+            for i in range(16)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertCountEqual(
+            commands,
+            [
+                [self.python, self.DEFAULT_PATH, "cp", "gs://b/%d" % i, str(i)]
+                for i in range(16)
+            ],
+        )
 
 
 class DownloadTests(unittest.TestCase):
