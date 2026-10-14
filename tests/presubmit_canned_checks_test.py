@@ -631,6 +631,88 @@ class CheckLongLinesTest(unittest.TestCase):
         self.assertTrue(any("file4.py, line 2" in s for s in items_strs))
         self.assertFalse(any("file.py" in s for s in items_strs))
 
+    def testIfThisThenThat(self):
+        for filename, content in (
+            (
+                "some/file.cc",
+                [
+                    "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+            (
+                "some/file.html",
+                [
+                    "<!-- LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label) -->",
+                ],
+            ),
+            (
+                "some/file.java",
+                [
+                    "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+            (
+                "some/file.js",
+                [
+                    "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+            (
+                "some/file.ts",
+                [
+                    "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+            (
+                "some/file.mm",
+                [
+                    "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+            (
+                "some/file.py",
+                [
+                    "# LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+            (
+                "some/file.mojom",
+                [
+                    "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
+                ],
+            ),
+        ):
+            input_api = MockInputApi()
+            input_api.files = [
+                MockFile(os.path.normpath(filename), content),
+                # Add a sanity check where the first character of every line is
+                # replaced by '*', to make sure that the analyzer would produce
+                # an error on a line of this length.
+                MockFile(
+                    os.path.normpath("sanity_check/" + filename),
+                    ["*" + line[1:] for line in content],
+                ),
+            ]
+            errors = presubmit_canned_checks.CheckLongLines(
+                input_api, MockOutputApi(), maxlen=80
+            )
+
+            # The sanity_check file should produce an error, but not the
+            # original one.
+            self.assertEqual(
+                len(errors), 1, f"Test case {filename} should produce findings"
+            )
+            items = errors[0].items
+            self.assertEqual(
+                len(items), 1, f"Test case {filename} should produce 1 error"
+            )
+            self.assertIn(
+                "sanity_check",
+                items[0],
+                "A warning should be produced for lines as long as "
+                f"the ones in {filename}",
+            )
+
 
 class DescriptionChecksTest(unittest.TestCase):
     def testCheckDescriptionUsesColonInsteadOfEquals(self):
