@@ -76,7 +76,7 @@ class ClobberNeeded(Exception):
 
 
 class Mirror(object):
-    git_exe = "git.bat" if sys.platform.startswith("win") else "git"
+    git_exe = git_common.GIT_EXE
     gsutil_exe = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "gsutil.py"
     )
@@ -283,9 +283,13 @@ class Mirror(object):
         kwargs.setdefault("print_stdout", False)
         if print_stdout:
             kwargs.setdefault("filter_fn", self.print)
+        if not self.git_exe.lower().endswith((".bat", ".cmd")):
+            kwargs.setdefault("shell", False)
         env = kwargs.get("env") or kwargs.setdefault("env", os.environ.copy())
         env.setdefault("GIT_ASKPASS", "true")
         env.setdefault("SSH_ASKPASS", "true")
+        if sys.platform.startswith("win"):
+            env.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
         self.print('running "git %s" in "%s"' % (" ".join(cmd), cwd))
         return gclient_utils.CheckCallAndFilter([self.git_exe] + cmd, **kwargs)
 
@@ -447,7 +451,9 @@ class Mirror(object):
             if os.path.isfile(self._init_sentient_file):
                 return False
 
-        if sys.platform.startswith("win"):
+        if sys.platform.startswith("win") and self.git_exe.lower().endswith(
+            (".bat", ".cmd")
+        ):
             # Windows .bat scripts use ^ as escape sequence, which means we have
             # to escape it with itself for every .bat invocation.
             needle = "%s^^^^{commit}" % revision

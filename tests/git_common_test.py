@@ -1735,6 +1735,44 @@ class ExtractGitPathFromGitBatTest(GitCommonTestBase):
             with mock.patch.dict("os.environ", {"PATH": path_val}):
                 self.assertEqual(self.gc.win_find_git(), exe_file)
 
+    def test_resolve_git_exe(self):
+        with (
+            mock.patch.object(self.gc, "IS_WIN", False),
+            mock.patch.dict("os.environ", {}, clear=True),
+        ):
+            self.assertEqual(self.gc._resolve_git_exe(), "git")
+            self.assertNotIn("NoDefaultCurrentDirectoryInExePath", os.environ)
+
+        with (
+            mock.patch.object(self.gc, "IS_WIN", True),
+            mock.patch.object(
+                self.gc, "win_find_git", return_value=r"C:\git\git.exe"
+            ),
+            mock.patch.dict("os.environ", {}, clear=True),
+        ):
+            self.assertEqual(self.gc._resolve_git_exe(), r"C:\git\git.exe")
+            self.assertEqual(
+                os.environ.get("NoDefaultCurrentDirectoryInExePath"), "1"
+            )
+
+        with (
+            mock.patch.object(self.gc, "IS_WIN", True),
+            mock.patch.object(
+                self.gc,
+                "win_find_git",
+                side_effect=ValueError("Could not find Git on PATH."),
+            ),
+            mock.patch.dict(
+                "os.environ",
+                {"NoDefaultCurrentDirectoryInExePath": "0"},
+                clear=True,
+            ),
+        ):
+            self.assertEqual(self.gc._resolve_git_exe(), "git.bat")
+            self.assertEqual(
+                os.environ.get("NoDefaultCurrentDirectoryInExePath"), "0"
+            )
+
 
 class GitRepoFastImportTest(unittest.TestCase):
     def testComplexSchema(self):

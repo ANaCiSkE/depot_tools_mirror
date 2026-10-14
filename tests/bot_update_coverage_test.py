@@ -7,7 +7,9 @@ import codecs
 import copy
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(
     0,
@@ -161,6 +163,7 @@ class BotUpdateUnittests(unittest.TestCase):
     }
 
     def setUp(self):
+        self.old_platform = sys.platform
         sys.platform = "linux2"  # For consistency, ya know?
         self.filesystem = FakeFilesystem()
         self.call = MockedCall(self.filesystem)
@@ -169,6 +172,7 @@ class BotUpdateUnittests(unittest.TestCase):
             (sys.executable, "-u", bot_update.GCLIENT_PATH, "sync")
         ).returns(self.gclient)
         self.old_call = getattr(bot_update, "call")
+        self.old_git = getattr(bot_update, "git")
         self.params = copy.deepcopy(self.DEFAULT_PARAMS)
         setattr(bot_update, "call", self.call)
         setattr(bot_update, "git", fake_git)
@@ -181,7 +185,9 @@ class BotUpdateUnittests(unittest.TestCase):
         setattr(codecs, "open", self.filesystem.open)
 
     def tearDown(self):
+        sys.platform = self.old_platform
         setattr(bot_update, "call", self.old_call)
+        setattr(bot_update, "git", self.old_git)
         setattr(os, "getcwd", self.old_os_cwd)
         delattr(bot_update, "open")
         setattr(codecs, "open", self.old_codecs_open)
@@ -412,6 +418,105 @@ class CallUnitTest(unittest.TestCase):
     def testCall(self):
         ret = bot_update.call(sys.executable, "-c", "print(1)")
         self.assertEqual("1\n", ret)
+
+    def testCallOnWindowsSetsNoDefaultCurrentDirectoryInExePath(self):
+        with (
+            mock.patch.object(sys, "platform", "win32"),
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch("subprocess.Popen") as mock_popen,
+        ):
+            proc = mock_popen.return_value
+            proc.stdout.read.return_value = b""
+            proc.wait.return_value = 0
+
+            bot_update.call("git.exe", "status")
+            _, kwargs = mock_popen.call_args
+            self.assertEqual(
+                kwargs["env"].get("NoDefaultCurrentDirectoryInExePath"), "1"
+            )
+
+            mock_popen.reset_mock()
+            bot_update.call(
+                "git.exe",
+                "status",
+                env={"NoDefaultCurrentDirectoryInExePath": "0"},
+            )
+            _, kwargs = mock_popen.call_args
+            self.assertEqual(
+                kwargs["env"].get("NoDefaultCurrentDirectoryInExePath"), "0"
+            )
+
+    def testGitOnWindowsResolvesGitExe(self):
+        bot_update._win_git_executable.cache_clear()
+        self.addCleanup(bot_update._win_git_executable.cache_clear)
+        with (
+            tempfile.TemporaryDirectory() as td,
+            mock.patch.object(bot_update, "call", return_value="") as mock_call,
+            mock.patch.object(sys, "platform", "win32"),
+            mock.patch.object(
+                bot_update.git_common,
+                "win_find_git",
+                wraps=bot_update.git_common.win_find_git,
+            ) as mock_win_find_git,
+        ):
+            # 1. git.exe directly on PATH (and verify repeated calls hit cache).
+            exe_dir = os.path.join(td, "exe_dir")
+            os.makedirs(exe_dir)
+            exe_path = os.path.join(exe_dir, "git.exe")
+            with open(exe_path, "w") as f:
+                f.write("exe")
+            with mock.patch.dict(os.environ, {"PATH": exe_dir}):
+                bot_update.git("status")
+                bot_update.git("diff")
+                self.assertEqual(mock_win_find_git.call_count, 1)
+                self.assertEqual(
+                    mock_call.call_args_list,
+                    [
+                        mock.call(exe_path, "status"),
+                        mock.call(exe_path, "diff"),
+                    ],
+                )
+
+            # 2. git.bat on PATH wrapping git.exe via %~dp0.
+            mock_call.reset_mock()
+            bat_dir = os.path.join(td, "bat_dir")
+            os.makedirs(bat_dir)
+            bat_path = os.path.join(bat_dir, "git.bat")
+            bundled_exe = os.path.join(bat_dir, "bin", "git.exe")
+            with open(bat_path, "w") as f:
+                f.write(
+                    '@echo off\n"%%~dp0%s" %%*\n'
+                    % os.path.join("bin", "git.exe")
+                )
+            with mock.patch.dict(os.environ, {"PATH": bat_dir}):
+                bot_update.git("fetch", "origin")
+                mock_call.assert_called_once_with(
+                    bundled_exe, "fetch", "origin"
+                )
+
+            # 3. Fallback to git.bat when Git is not found on PATH.
+            mock_call.reset_mock()
+            with mock.patch.dict(os.environ, {"PATH": ""}):
+                bot_update.git("status")
+                mock_call.assert_called_once_with("git.bat", "status")
+
+    def testGitOnNonWindowsAndCacheCommand(self):
+        with (
+            mock.patch.object(bot_update, "call", return_value="") as mock_call,
+            mock.patch.object(sys, "platform", "linux2"),
+        ):
+            bot_update.git("status")
+            mock_call.assert_called_once_with("git", "status")
+
+            mock_call.reset_mock()
+            bot_update.git("cache", "populate", "https://example.com/repo")
+            mock_call.assert_called_once_with(
+                sys.executable,
+                "-u",
+                bot_update.GIT_CACHE_PATH,
+                "populate",
+                "https://example.com/repo",
+            )
 
 
 if __name__ == "__main__":

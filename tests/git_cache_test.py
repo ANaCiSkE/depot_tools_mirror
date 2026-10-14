@@ -2036,6 +2036,11 @@ class BootstrapBucketTest(unittest.TestCase):
 
 
 class MirrorTest(unittest.TestCase):
+    def setUp(self):
+        self.cache_dir = tempfile.mkdtemp(prefix="gc_mirror_test_")
+        self.addCleanup(shutil.rmtree, self.cache_dir, ignore_errors=True)
+        git_cache.Mirror.SetCachePath(self.cache_dir)
+
     def test_same_cache_for_authenticated_and_unauthenticated_urls(self):
         # GoB can fetch a repo via two different URLs; if the url contains '/a/'
         # it forces authenticated access instead of allowing anonymous access,
@@ -2061,6 +2066,63 @@ class MirrorTest(unittest.TestCase):
             ),
             ssh_url[:-4],
         )
+
+    def test_git_exe_uses_git_common_git_exe(self):
+        self.assertEqual(git_cache.Mirror.git_exe, git_common.GIT_EXE)
+
+    def test_run_git_sets_shell_false_for_git_exe(self):
+        mirror = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
+        with (
+            mock.patch("sys.platform", "win32"),
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch("gclient_utils.CheckCallAndFilter") as mock_ccaf,
+        ):
+            mirror.git_exe = r"C:\depot_tools\git.exe"
+            mirror.RunGit(["status"], print_stdout=False)
+            _, kwargs = mock_ccaf.call_args
+            self.assertIs(kwargs.get("shell"), False)
+            self.assertEqual(
+                kwargs["env"].get("NoDefaultCurrentDirectoryInExePath"), "1"
+            )
+
+            mock_ccaf.reset_mock()
+            mirror.git_exe = "git.bat"
+            mirror.RunGit(["status"], print_stdout=False)
+            _, kwargs = mock_ccaf.call_args
+            self.assertNotIn("shell", kwargs)
+            self.assertEqual(
+                kwargs["env"].get("NoDefaultCurrentDirectoryInExePath"), "1"
+            )
+
+    def test_contains_revision_on_windows_git_exe_vs_git_bat(self):
+        mirror = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
+        os.makedirs(mirror.mirror_path, exist_ok=True)
+        with open(os.path.join(mirror.mirror_path, "config"), "w") as f:
+            f.write("[core]\n\tbare = true\n")
+
+        with (
+            mock.patch("sys.platform", "win32"),
+            mock.patch.object(mirror, "RunGit") as mock_run_git,
+        ):
+            mirror.git_exe = r"C:\depot_tools\git.exe"
+            self.assertTrue(mirror.contains_revision("deadbeef", timeout=0))
+            mock_run_git.assert_called_once_with(
+                ["cat-file", "-e", "deadbeef^{commit}"]
+            )
+
+            mock_run_git.reset_mock()
+            mirror.git_exe = "git.bat"
+            self.assertTrue(mirror.contains_revision("deadbeef", timeout=0))
+            mock_run_git.assert_called_once_with(
+                ["cat-file", "-e", "deadbeef^^^^{commit}"]
+            )
+
+            mock_run_git.reset_mock()
+            mirror.git_exe = r"C:\depot_tools\GIT.CMD"
+            self.assertTrue(mirror.contains_revision("deadbeef", timeout=0))
+            mock_run_git.assert_called_once_with(
+                ["cat-file", "-e", "deadbeef^^^^{commit}"]
+            )
 
 
 class ObjectFormatBootstrapTest(unittest.TestCase):

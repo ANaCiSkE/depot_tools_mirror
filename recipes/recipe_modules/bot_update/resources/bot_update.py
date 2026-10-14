@@ -42,6 +42,10 @@ STALE_PROCESS_DURATION = 1200
 THIS_DIR = path.dirname(path.abspath(__file__))
 
 DEPOT_TOOLS_DIR = path.abspath(path.join(THIS_DIR, "..", "..", "..", ".."))
+if DEPOT_TOOLS_DIR not in sys.path:
+  sys.path.insert(0, DEPOT_TOOLS_DIR)
+
+import git_common  # noqa: E402
 
 CHROMIUM_GIT_HOST = "https://chromium.googlesource.com"
 CHROMIUM_SRC_URL = CHROMIUM_GIT_HOST + "/chromium/src.git"
@@ -171,6 +175,8 @@ def call(*args, **kwargs):  # pragma: no cover
   out = BytesIO()
   new_env = kwargs.get("env", {})
   env = os.environ.copy()
+  if sys.platform.startswith("win"):
+    env.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
   env.update(new_env)
   kwargs["env"] = env
   stale_process_duration = env.get(
@@ -258,6 +264,15 @@ def call(*args, **kwargs):  # pragma: no cover
   return outval
 
 
+@functools.lru_cache(maxsize=None)
+def _win_git_executable(path_env):
+  del path_env
+  try:
+    return git_common.win_find_git()
+  except (OSError, ValueError):
+    return "git.bat"
+
+
 def git(*args, **kwargs):  # pragma: no cover
   """Wrapper around call specifically for Git commands."""
   if args and args[0] == "cache":
@@ -266,9 +281,10 @@ def git(*args, **kwargs):  # pragma: no cover
   else:
     git_executable = "git"
     # On windows, subprocess doesn't fuzzy-match 'git' to 'git.bat', so we
-    # have to do it explicitly. This is better than passing shell=True.
+    # have to do it explicitly. Prefer git.exe over git.bat to avoid spawning
+    # cmd.exe on every git invocation.
     if sys.platform.startswith("win"):
-      git_executable += ".bat"
+      git_executable = _win_git_executable(os.environ.get("PATH", ""))
     cmd = (git_executable,) + args
   return call(*cmd, **kwargs)
 

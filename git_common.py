@@ -106,7 +106,19 @@ def _extract_git_path_from_git_bat(path: str) -> str:
     return path
 
 
-GIT_EXE = "git" if not IS_WIN else win_find_git()
+def _resolve_git_exe() -> str:
+    if not IS_WIN:
+        return "git"
+    # Ensure Go-based Git helpers (e.g. git-remote-sso) do not fail with
+    # exec.ErrDot when git.exe is invoked directly instead of via git.bat.
+    os.environ.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
+    try:
+        return win_find_git()
+    except (OSError, ValueError):
+        return "git.bat"
+
+
+GIT_EXE = _resolve_git_exe()
 
 # The recommended minimum version of Git, as (<major>, <minor>, <patch>).
 GIT_MIN_VERSION = (2, 46, 0)
