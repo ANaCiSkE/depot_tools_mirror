@@ -1013,6 +1013,8 @@ class CheckAyeAyeTest(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
 
         self.input_api = MockInputApi()
+        # CheckAyeAye skips changes with no affected files.
+        self.input_api.files = [MockFile("foo/bar.cc", ["int x;"])]
         self.output_api = MockOutputApi()
 
         self.mock_repo_root = mock.patch.object(
@@ -1066,11 +1068,36 @@ class CheckAyeAyeTest(unittest.TestCase):
 
         self.mock_popen.assert_called_once()
         called_args = self.mock_popen.call_args[0][0]
-        self.assertEqual(called_args[0], "vpython3")
+        self.assertEqual(called_args[0], sys.executable)
         self.assertTrue(called_args[1].endswith("run_alint.py"))
         self.assertEqual(called_args[2], "/google/bin/releases/alint/alint")
         self.assertEqual(called_args[3], "/fake/repo/root")
         self.assertEqual(called_args[4], "-t=30s")
+
+    def test_ayeaye_skipped_when_no_affected_files(self):
+        self.input_api.files = []
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(results, [])
+        self.mock_popen.assert_not_called()
+
+    def test_ayeaye_runs_for_deleted_files(self):
+        self.input_api.files = [MockFile("foo/bar.cc", [], action="D")]
+        self.mock_proc.communicate.return_value = (
+            json.dumps({"errors": [], "warnings": []}).encode("utf-8"),
+            b"",
+        )
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(results, [])
+        self.mock_popen.assert_called_once()
 
     def test_ayeaye_findings_only_warnings(self):
         # Simulate run_alint JSON output with only warnings

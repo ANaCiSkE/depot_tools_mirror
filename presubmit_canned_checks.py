@@ -4080,6 +4080,12 @@ def CheckAyeAye(input_api, output_api):
     if not _os.path.exists(alint_path):
         return []
 
+    # alint has ~2.5s of fixed start-up cost on chromium/src regardless of the
+    # change size; there is nothing for it to analyze when the change touches
+    # no files (e.g. description-only re-runs).
+    if not any(True for _ in input_api.AffectedFiles()):
+        return []
+
     def parse_output(returncode, output):
         if returncode != 0:
             return None
@@ -4106,8 +4112,11 @@ def CheckAyeAye(input_api, output_api):
             results.append(warning_factory(msg))
         return results
 
+    # run_alint.py only uses the standard library, so run it with the
+    # interpreter already executing presubmit rather than paying for another
+    # vpython3 wrapper start-up (~30ms).
     cmd = [
-        input_api.python3_executable,
+        _sys.executable,
         _os.path.join(_HERE, "run_alint.py"),
         alint_path,
         input_api.change.RepositoryRoot(),
