@@ -649,6 +649,309 @@ class GitCacheTest(unittest.TestCase):
         mirror = git_cache.Mirror(self.origin_dir)
         mirror.populate(reset_fetch_config=True)
 
+    def testPopulateWithCommitsAndMultipleRefsEndToEnd(self):
+        self._makeGitRepo()
+        git = "git.bat" if sys.platform == "win32" else "git"
+        head_sha = (
+            subprocess.check_output(
+                [git, "rev-parse", "HEAD"], cwd=self.origin_dir
+            )
+            .decode("utf-8")
+            .strip()
+        )
+        self.git(["update-ref", "refs/branch-heads/m1", head_sha])
+
+        mirror = git_cache.Mirror(
+            self.origin_dir,
+            refs=["refs/branch-heads/*"],
+            commits=[head_sha],
+        )
+        real_run_git = mirror.RunGit
+        fetch_calls = []
+
+        def record_run_git(cmd, *args, **kwargs):
+            if cmd[:1] == ["fetch"]:
+                fetch_calls.append(list(cmd))
+            return real_run_git(cmd, *args, **kwargs)
+
+        with mock.patch.object(mirror, "RunGit", side_effect=record_run_git):
+            mirror.populate()
+
+        # Both refspecs should be fetched in a single batched git fetch call,
+        # and the commit already present in the mirror should not be fetched
+        # a second time.
+        self.assertEqual(
+            fetch_calls,
+            [
+                [
+                    "fetch",
+                    "--prune",
+                    "origin",
+                    "+refs/heads/*:refs/heads/*",
+                    "+refs/branch-heads/*:refs/branch-heads/*",
+                ]
+            ],
+        )
+        self.assertTrue(mirror.contains_revision(head_sha, timeout=0))
+
+    def test_fetch_batches_multiple_refspecs(self):
+        mirror = git_cache.Mirror(
+            "https://chromium.googlesource.com/foo/bar",
+            refs=["refs/branch-heads/*"],
+            print_func=lambda *args: None,
+        )
+        specs = [
+            "+refs/heads/*:refs/heads/*",
+            "+refs/branch-heads/*:refs/branch-heads/*",
+        ]
+        with (
+            mock.patch.object(mirror, "config"),
+            mock.patch(
+                "subprocess.check_output",
+                return_value=("\n".join(specs) + "\n").encode("utf-8"),
+            ),
+            mock.patch.object(mirror, "RunGit") as mock_run_git,
+            mock.patch.object(mirror, "_git_value", return_value="deadbeef"),
+            mock.patch.object(
+                mirror, "_should_reverify_head", return_value=False
+            ),
+        ):
+            mirror._fetch(
+                verbose=False,
+                depth=None,
+                no_fetch_tags=False,
+                reset_fetch_config=False,
+            )
+
+        mock_run_git.assert_called_once_with(
+            ["fetch", "--prune", "origin"] + specs,
+        )
+
+    def test_fetch_falls_back_to_per_spec_on_batch_failure(self):
+        specs = [
+            "+refs/heads/*:refs/heads/*",
+            "+refs/branch-heads/*:refs/branch-heads/*",
+        ]
+        mirror = git_cache.Mirror(
+            "https://chromium.googlesource.com/foo/bar",
+            refs=["refs/branch-heads/*"],
+            print_func=lambda *args: None,
+        )
+
+        with self.subTest("optional spec failure warns without clobbering"):
+
+            def run_git_optional_fails(cmd, **_kwargs):
+                if "+refs/branch-heads/*:refs/branch-heads/*" in cmd:
+                    raise subprocess.CalledProcessError(128, cmd)
+
+            with (
+                mock.patch.object(mirror, "config"),
+                mock.patch(
+                    "subprocess.check_output",
+                    return_value=("\n".join(specs) + "\n").encode("utf-8"),
+                ),
+                mock.patch.object(
+                    mirror, "RunGit", side_effect=run_git_optional_fails
+                ) as mock_run_git,
+                mock.patch.object(
+                    mirror, "_git_value", return_value="deadbeef"
+                ),
+                mock.patch.object(
+                    mirror, "_should_reverify_head", return_value=False
+                ),
+                mock.patch("logging.warning") as mock_warn,
+            ):
+                mirror._fetch(
+                    verbose=False,
+                    depth=None,
+                    no_fetch_tags=False,
+                    reset_fetch_config=False,
+                )
+
+            self.assertEqual(
+                mock_run_git.call_args_list,
+                [
+                    mock.call(["fetch", "--prune", "origin"] + specs),
+                    mock.call(
+                        ["fetch", "--prune", "origin", specs[0]], retry=True
+                    ),
+                    mock.call(
+                        ["fetch", "--prune", "origin", specs[1]], retry=True
+                    ),
+                ],
+            )
+            self.assertEqual(
+                mock_warn.call_args_list,
+                [
+                    mock.call(
+                        "Batched fetch failed; fetching each refspec individually."
+                    ),
+                    mock.call(f"Fetch of {specs[1]} failed"),
+                ],
+            )
+
+        with self.subTest("heads spec failure raises ClobberNeeded"):
+            with (
+                mock.patch.object(mirror, "config"),
+                mock.patch(
+                    "subprocess.check_output",
+                    return_value=("\n".join(specs) + "\n").encode("utf-8"),
+                ),
+                mock.patch.object(
+                    mirror,
+                    "RunGit",
+                    side_effect=subprocess.CalledProcessError(128, "git fetch"),
+                ) as mock_run_git,
+            ):
+                with self.assertRaises(git_cache.ClobberNeeded):
+                    mirror._fetch(
+                        verbose=False,
+                        depth=None,
+                        no_fetch_tags=False,
+                        reset_fetch_config=False,
+                    )
+
+            self.assertEqual(
+                mock_run_git.call_args_list,
+                [
+                    mock.call(["fetch", "--prune", "origin"] + specs),
+                    mock.call(
+                        ["fetch", "--prune", "origin", specs[0]], retry=True
+                    ),
+                ],
+            )
+
+    def test_fetch_skips_commits_already_in_mirror(self):
+        present_commit = "a" * 40
+        missing_commit = "b" * 40
+        mirror = git_cache.Mirror(
+            "https://chromium.googlesource.com/foo/bar",
+            commits=[present_commit, missing_commit],
+            print_func=lambda *args: None,
+        )
+
+        with (
+            mock.patch.object(mirror, "config"),
+            mock.patch("subprocess.check_output", return_value=b""),
+            mock.patch.object(
+                mirror,
+                "_contains_revision_unlocked",
+                side_effect=lambda rev: rev == present_commit,
+            ) as mock_contains,
+            mock.patch.object(mirror, "RunGit") as mock_run_git,
+            mock.patch.object(mirror, "_git_value", return_value="deadbeef"),
+            mock.patch.object(
+                mirror, "_should_reverify_head", return_value=False
+            ),
+        ):
+            mirror._fetch(
+                verbose=False,
+                depth=None,
+                no_fetch_tags=False,
+                reset_fetch_config=False,
+            )
+
+        self.assertCountEqual(
+            [c.args[0] for c in mock_contains.call_args_list],
+            [present_commit, missing_commit],
+        )
+        mock_run_git.assert_called_once_with(
+            ["fetch", "origin", missing_commit], retry=True
+        )
+
+    def test_contains_revision_unlocked(self):
+        mirror = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
+        self.assertFalse(mirror._contains_revision_unlocked("deadbeef"))
+
+        os.makedirs(mirror.mirror_path, exist_ok=True)
+        with open(os.path.join(mirror.mirror_path, "config"), "w") as f:
+            f.write("[core]\n\tbare = true\n")
+
+        with (
+            mock.patch("sys.platform", "win32"),
+            mock.patch.object(mirror, "RunGit") as mock_run_git,
+        ):
+            mirror.git_exe = r"C:\depot_tools\git.exe"
+            self.assertTrue(mirror._contains_revision_unlocked("deadbeef"))
+            mock_run_git.assert_called_once_with(
+                ["cat-file", "-e", "deadbeef^{commit}"]
+            )
+
+            mock_run_git.reset_mock()
+            mirror.git_exe = "git.bat"
+            self.assertTrue(mirror._contains_revision_unlocked("deadbeef"))
+            mock_run_git.assert_called_once_with(
+                ["cat-file", "-e", "deadbeef^^^^{commit}"]
+            )
+
+            mock_run_git.reset_mock()
+            mock_run_git.side_effect = subprocess.CalledProcessError(
+                128, "git cat-file"
+            )
+            self.assertFalse(mirror._contains_revision_unlocked("deadbeef"))
+
+    def test_ensure_bootstrapped_avoids_symbolic_ref_and_mkdir_on_cold_cache(
+        self,
+    ):
+        mirror = git_cache.Mirror(
+            "https://chromium.googlesource.com/foo/bar",
+            print_func=lambda *args: None,
+        )
+        self.assertFalse(os.path.exists(mirror.mirror_path))
+
+        dir_existed_before_bootstrap = []
+
+        def fake_bootstrap(directory):
+            dir_existed_before_bootstrap.append(os.path.exists(directory))
+            os.makedirs(directory, exist_ok=True)
+            with open(os.path.join(directory, "config"), "w") as f:
+                f.write("[core]\n\tbare = true\n")
+            return True
+
+        with (
+            mock.patch("subprocess.check_output") as mock_check_output,
+            mock.patch.object(
+                mirror, "bootstrap_repo", side_effect=fake_bootstrap
+            ) as mock_bootstrap,
+            mock.patch("scm.GIT.GetRemoteObjectFormat", return_value="sha1"),
+            mock.patch.object(
+                mirror, "_get_object_format", return_value="sha1"
+            ),
+        ):
+            mirror._ensure_bootstrapped(
+                depth=None, bootstrap=True, reset_fetch_config=False
+            )
+
+        mock_check_output.assert_not_called()
+        mock_bootstrap.assert_called_once_with(mirror.mirror_path)
+        self.assertEqual(dir_existed_before_bootstrap, [False])
+
+        # Also verify cold cache when bootstrap=False creates mirror_path before
+        # git init without calling symbolic-ref on the non-existent mirror.
+        gclient_utils.rmtree(mirror.mirror_path)
+        self.assertFalse(os.path.exists(mirror.mirror_path))
+
+        init_dir_existed = []
+
+        def fake_run_git(cmd, **_kwargs):
+            if cmd[:1] == ["init"]:
+                init_dir_existed.append(os.path.isdir(mirror.mirror_path))
+                with open(os.path.join(mirror.mirror_path, "config"), "w") as f:
+                    f.write("[core]\n\tbare = true\n")
+
+        with (
+            mock.patch("subprocess.check_output") as mock_check_output,
+            mock.patch("scm.GIT.GetRemoteObjectFormat", return_value="sha1"),
+            mock.patch.object(mirror, "RunGit", side_effect=fake_run_git),
+            mock.patch.object(mirror, "_set_symbolic_ref"),
+        ):
+            mirror._ensure_bootstrapped(
+                depth=None, bootstrap=False, reset_fetch_config=False
+            )
+
+        mock_check_output.assert_not_called()
+        self.assertEqual(init_dir_existed, [True])
+
     def _assertSetsHead(self, remote_info, branch_refs, expected):
         """Drives _set_symbolic_ref over a given remote answer and ref list.
 

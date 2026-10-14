@@ -592,19 +592,21 @@ class Mirror(object):
         # master->main branch migration left the cache in some builders to have
         # its HEAD still pointing to refs/heads/master. This causes bot_update
         # to fail. If in this state, delete the cache and force bootstrap.
-        try:
-            head_ref = subprocess.check_output(
-                [
-                    self.git_exe,
-                    "--git-dir",
-                    os.path.abspath(self.mirror_path),
-                    "symbolic-ref",
-                    "HEAD",
-                ],
-                stderr=subprocess.DEVNULL,
-            ).decode("utf-8", "ignore")
-        except (subprocess.CalledProcessError, OSError):
-            head_ref = ""
+        head_ref = ""
+        if self.exists():
+            try:
+                head_ref = subprocess.check_output(
+                    [
+                        self.git_exe,
+                        "--git-dir",
+                        os.path.abspath(self.mirror_path),
+                        "symbolic-ref",
+                        "HEAD",
+                    ],
+                    stderr=subprocess.DEVNULL,
+                ).decode("utf-8", "ignore")
+            except (subprocess.CalledProcessError, OSError):
+                head_ref = ""
 
         # Check only when HEAD points at a master branch.
         if "master" in head_ref:
@@ -614,7 +616,7 @@ class Mirror(object):
             head_target = head_ref.strip()
             show_ref_cmd = subprocess.run(
                 [
-                    Mirror.git_exe,
+                    self.git_exe,
                     "--git-dir",
                     self.mirror_path,
                     "show-ref",
@@ -650,7 +652,6 @@ class Mirror(object):
                 # we're in an unexpected state. Nuke the previous mirror
                 # directory and start fresh.
                 gclient_utils.rmtree(self.mirror_path)
-            os.mkdir(self.mirror_path)
         elif not reset_fetch_config:
             # Re-bootstrapping an existing mirror; preserve existing fetch spec.
             self._preserve_fetchspec()
@@ -671,7 +672,6 @@ class Mirror(object):
                     remote_format,
                 )
                 gclient_utils.rmtree(self.mirror_path)
-                os.mkdir(self.mirror_path)
                 bootstrapped = False
 
         if not bootstrapped:
@@ -681,6 +681,7 @@ class Mirror(object):
                 # 2. Project doesn't have a bootstrap folder.
                 # 3. Bootstrap snapshot format mismatched remote.
                 # Start with a bare git dir.
+                os.makedirs(self.mirror_path, exist_ok=True)
                 gitargs = ["init", "--bare"]
                 gitargs += _ref_format_args(self._ref_format_for_init())
                 if not self.exists():
@@ -850,6 +851,21 @@ class Mirror(object):
             )
         self.RunGit(["symbolic-ref", "HEAD", chosen])
 
+    def _contains_revision_unlocked(self, revision):
+        if not self.exists():
+            return False
+        if sys.platform.startswith("win") and self.git_exe.lower().endswith(
+            (".bat", ".cmd")
+        ):
+            needle = f"{revision}^^^^{{commit}}"
+        else:
+            needle = f"{revision}^{{commit}}"
+        try:
+            self.RunGit(["cat-file", "-e", needle])
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
     def _fetch(
         self, verbose, depth, no_fetch_tags, reset_fetch_config, prune=True
     ):
@@ -882,6 +898,17 @@ class Mirror(object):
             .strip()
             .splitlines()
         )
+        if len(fetch_specs) > 1:
+            specs_str = " ".join(fetch_specs)
+            try:
+                self.print(f"Fetching {specs_str}")
+                with self.print_duration_of(f"fetch {specs_str}"):
+                    self.RunGit(fetch_cmd + fetch_specs)
+                fetch_specs = []
+            except subprocess.CalledProcessError:
+                logging.warning(
+                    "Batched fetch failed; fetching each refspec individually."
+                )
         for spec in fetch_specs:
             try:
                 self.print("Fetching %s" % spec)
@@ -892,6 +919,8 @@ class Mirror(object):
                     raise ClobberNeeded()  # Corrupted cache.
                 logging.warning("Fetch of %s failed" % spec)
         for commit in self.fetch_commits:
+            if self._contains_revision_unlocked(commit):
+                continue
             self.print("Fetching %s" % commit)
             try:
                 with self.print_duration_of("fetch %s" % commit):
