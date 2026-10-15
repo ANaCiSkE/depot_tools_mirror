@@ -156,6 +156,203 @@ class UploadTests(unittest.TestCase):
         os.remove(output_filename)
         self.assertEqual(code, 0)
 
+    def test_upload_single_file_remote_exists_json_api_hash_md5(self):
+        filenames = [self.lorem_ipsum]
+        output_filename = f"{self.lorem_ipsum}.sha1"
+        ls_output = (
+            "    Content-Length: 783\n"
+            "    Hash (crc32c):  4I262A==\n"
+            "    Hash (md5):     Y018HtNUU4ODdCjwMYQKHg==\n"
+            "    ETag:           CJLX1Y7ljIQDEAE=\n"
+        )
+        self.gsutil.add_expected(0, "", "")
+        self.gsutil.add_expected(0, ls_output, "")
+        code = upload_to_google_storage.upload_to_google_storage(
+            filenames, self.base_url, self.gsutil, False, False, 1, False, None
+        )
+        self.assertEqual(
+            self.gsutil.history,
+            [
+                (
+                    "check_call",
+                    ("ls", f"{self.base_url}/{self.lorem_ipsum_sha1}"),
+                ),
+                (
+                    "check_call",
+                    (
+                        "ls",
+                        "-L",
+                        f"{self.base_url}/{self.lorem_ipsum_sha1}",
+                    ),
+                ),
+            ],
+        )
+        os.remove(output_filename)
+        self.assertEqual(code, 0)
+
+    def test_upload_single_file_remote_exists_json_api_hash_md5_mismatch_refuses_overwrite(
+        self,
+    ):
+        filenames = [self.lorem_ipsum]
+        output_filename = f"{self.lorem_ipsum}.sha1"
+        ls_output = (
+            "    Content-Length: 783\n"
+            "    Hash (crc32c):  4I262A==\n"
+            "    Hash (md5):     AAAAAAAAAAAAAAAAAAAAAA==\n"
+            "    ETag:           CJLX1Y7ljIQDEAE=\n"
+        )
+        self.gsutil.add_expected(0, "", "")
+        self.gsutil.add_expected(0, ls_output, "")
+        code = upload_to_google_storage.upload_to_google_storage(
+            filenames, self.base_url, self.gsutil, False, False, 1, False, None
+        )
+        self.assertEqual(
+            self.gsutil.history,
+            [
+                (
+                    "check_call",
+                    ("ls", f"{self.base_url}/{self.lorem_ipsum_sha1}"),
+                ),
+                (
+                    "check_call",
+                    (
+                        "ls",
+                        "-L",
+                        f"{self.base_url}/{self.lorem_ipsum_sha1}",
+                    ),
+                ),
+            ],
+        )
+        os.remove(output_filename)
+        self.assertEqual(code, 1)
+
+    def test_upload_single_file_remote_exists_gzip_skips_upload(self):
+        filenames = [self.lorem_ipsum]
+        output_filename = f"{self.lorem_ipsum}.sha1"
+        ls_output = (
+            "    Content-Encoding:       gzip\n"
+            "    Hash (md5):             AAAAAAAAAAAAAAAAAAAAAA==\n"
+            "    ETag:                   CJLX1Y7ljIQDEAE=\n"
+        )
+        self.gsutil.add_expected(0, "", "")
+        self.gsutil.add_expected(0, ls_output, "")
+        code = upload_to_google_storage.upload_to_google_storage(
+            filenames, self.base_url, self.gsutil, False, False, 1, False, "txt"
+        )
+        self.assertEqual(
+            self.gsutil.history,
+            [
+                (
+                    "check_call",
+                    ("ls", f"{self.base_url}/{self.lorem_ipsum_sha1}"),
+                ),
+                (
+                    "check_call",
+                    (
+                        "ls",
+                        "-L",
+                        f"{self.base_url}/{self.lorem_ipsum_sha1}",
+                    ),
+                ),
+            ],
+        )
+        os.remove(output_filename)
+        self.assertEqual(code, 0)
+
+    def test_upload_single_file_remote_exists_unparseable_md5_refuses_overwrite(
+        self,
+    ):
+        filenames = [self.lorem_ipsum]
+        output_filename = f"{self.lorem_ipsum}.sha1"
+        ls_output = "    ETag:           CJLX1Y7ljIQDEAE=\n"
+        self.gsutil.add_expected(0, "", "")
+        self.gsutil.add_expected(0, ls_output, "")
+        code = upload_to_google_storage.upload_to_google_storage(
+            filenames, self.base_url, self.gsutil, False, False, 1, False, None
+        )
+        self.assertEqual(
+            self.gsutil.history,
+            [
+                (
+                    "check_call",
+                    ("ls", f"{self.base_url}/{self.lorem_ipsum_sha1}"),
+                ),
+                (
+                    "check_call",
+                    (
+                        "ls",
+                        "-L",
+                        f"{self.base_url}/{self.lorem_ipsum_sha1}",
+                    ),
+                ),
+            ],
+        )
+        os.remove(output_filename)
+        self.assertEqual(code, 1)
+
+    def test_upload_single_file_remote_exists_md5_mismatch_refuses_overwrite(
+        self,
+    ):
+        filenames = [self.lorem_ipsum]
+        output_filename = f"{self.lorem_ipsum}.sha1"
+        etag_string = b"ETag: 00000000000000000000000000000000"
+        self.gsutil.add_expected(0, b"", b"")
+        self.gsutil.add_expected(0, etag_string, b"")
+        code = upload_to_google_storage.upload_to_google_storage(
+            filenames, self.base_url, self.gsutil, False, False, 1, False, None
+        )
+        self.assertEqual(
+            self.gsutil.history,
+            [
+                (
+                    "check_call",
+                    ("ls", f"{self.base_url}/{self.lorem_ipsum_sha1}"),
+                ),
+                (
+                    "check_call",
+                    (
+                        "ls",
+                        "-L",
+                        f"{self.base_url}/{self.lorem_ipsum_sha1}",
+                    ),
+                ),
+            ],
+        )
+        os.remove(output_filename)
+        self.assertEqual(code, 1)
+
+    def test_upload_single_file_remote_exists_md5_mismatch_force_overwrites(
+        self,
+    ):
+        filenames = [self.lorem_ipsum]
+        output_filename = f"{self.lorem_ipsum}.sha1"
+        self.gsutil.add_expected(0, b"", b"")
+        self.gsutil.add_expected(0, b"", b"")
+        code = upload_to_google_storage.upload_to_google_storage(
+            filenames, self.base_url, self.gsutil, True, False, 1, False, None
+        )
+        self.assertEqual(
+            self.gsutil.history,
+            [
+                (
+                    "check_call",
+                    ("ls", f"{self.base_url}/{self.lorem_ipsum_sha1}"),
+                ),
+                (
+                    "check_call",
+                    (
+                        "-h",
+                        "Cache-Control:public, max-age=31536000",
+                        "cp",
+                        filenames[0],
+                        f"{self.base_url}/{self.lorem_ipsum_sha1}",
+                    ),
+                ),
+            ],
+        )
+        os.remove(output_filename)
+        self.assertEqual(code, 0)
+
     def test_upload_worker_errors(self):
         work_queue = queue.Queue()
         work_queue.put((self.lorem_ipsum, self.lorem_ipsum_sha1))
@@ -185,21 +382,18 @@ class UploadTests(unittest.TestCase):
 
     def test_skip_hashing(self):
         filenames = [self.lorem_ipsum]
-        output_filename = "%s.sha1" % self.lorem_ipsum
+        output_filename = f"{self.lorem_ipsum}.sha1"
         fake_hash = "6871c8e24da15bad8b0be2c36edc9dc77e37727f"
         with open(output_filename, "wb") as f:
             f.write(fake_hash.encode())  # Fake hash.
+        self.gsutil.add_expected(1, "", "")
         code = upload_to_google_storage.upload_to_google_storage(
             filenames, self.base_url, self.gsutil, False, False, 1, True, None
         )
         self.assertEqual(
             self.gsutil.history,
             [
-                ("check_call", ("ls", "%s/%s" % (self.base_url, fake_hash))),
-                (
-                    "check_call",
-                    ("ls", "-L", "%s/%s" % (self.base_url, fake_hash)),
-                ),
+                ("check_call", ("ls", f"{self.base_url}/{fake_hash}")),
                 (
                     "check_call",
                     (
@@ -207,7 +401,7 @@ class UploadTests(unittest.TestCase):
                         "Cache-Control:public, max-age=31536000",
                         "cp",
                         filenames[0],
-                        "%s/%s" % (self.base_url, fake_hash),
+                        f"{self.base_url}/{fake_hash}",
                     ),
                 ),
             ],

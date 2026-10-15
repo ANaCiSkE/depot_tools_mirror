@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 """Uploads files to Google Storage content addressed."""
 
+import base64
 import hashlib
 import optparse
 import os
@@ -66,6 +67,26 @@ def get_md5_cached(filename):
         return md5_hash
 
 
+def _extract_remote_md5(ls_output):
+    md5_match = re.search(r"Hash \(md5\):\s+(\S+)", ls_output)
+    if md5_match:
+        raw_md5 = md5_match.group(1)
+        if re.fullmatch(r"[a-fA-F0-9]{32}", raw_md5):
+            return raw_md5.lower()
+        try:
+            decoded = base64.b64decode(raw_md5, validate=True)
+            if len(decoded) == 16:
+                return decoded.hex()
+        except ValueError:
+            pass
+    etag_match = re.search(
+        r'ETag:\s+["\']?([a-fA-F0-9]{32})["\']?(?:\s|$)', ls_output
+    )
+    if etag_match:
+        return etag_match.group(1).lower()
+    return None
+
+
 def _upload_worker(
     thread_num,
     upload_queue,
@@ -82,31 +103,67 @@ def _upload_worker(
         filename, sha1_sum = upload_queue.get()
         if not filename:
             break
-        file_url = "%s/%s" % (base_url, sha1_sum)
+        file_url = f"{base_url}/{sha1_sum}"
         if gsutil.check_call("ls", file_url)[0] == 0 and not force:
             # File exists, check MD5 hash.
-            _, out, _ = gsutil.check_call_with_retries("ls", "-L", file_url)
-            etag_match = re.search(r"ETag:\s+\S+", out)
-            if etag_match:
-                stdout_queue.put(
-                    "%d> File with url %s already exists"
-                    % (thread_num, file_url)
-                )
-                remote_md5 = etag_match.group(0).split()[1]
-                # Calculate the MD5 checksum to match it to Google Storage's
-                # ETag.
-                with md5_lock:
-                    if use_md5:
-                        local_md5 = get_md5_cached(filename)
-                    else:
-                        local_md5 = get_md5(filename)
-                if local_md5 == remote_md5:
-                    stdout_queue.put(
-                        "%d> File %s already exists and MD5 matches, upload "
-                        "skipped" % (thread_num, filename)
+            code, out, err = gsutil.check_call_with_retries(
+                "ls", "-L", file_url
+            )
+            if isinstance(out, bytes):
+                out = out.decode("utf-8", errors="replace")
+            if code != 0:
+                ret_codes.put(
+                    (
+                        code,
+                        f"Failed to stat existing file at {file_url}\n{err}",
                     )
-                    continue
-        stdout_queue.put("%d> Uploading %s..." % (thread_num, filename))
+                )
+                continue
+            stdout_queue.put(
+                f"{thread_num}> File with url {file_url} already exists"
+            )
+            if re.search(r"Content-Encoding:\s+gzip\b", out):
+                stdout_queue.put(
+                    f"{thread_num}> File {filename} already exists with gzip "
+                    "encoding, upload skipped"
+                )
+                continue
+            remote_md5 = _extract_remote_md5(out)
+            if not remote_md5:
+                ret_codes.put(
+                    (
+                        1,
+                        f"File {filename} already exists at {file_url} but "
+                        "remote MD5 could not be determined; refusing to "
+                        "overwrite without --force",
+                    )
+                )
+                continue
+            # Calculate the MD5 checksum to match it to Google Storage's
+            # MD5 / ETag.
+            with md5_lock:
+                if use_md5:
+                    local_md5 = get_md5_cached(filename)
+                else:
+                    local_md5 = get_md5(filename)
+            if local_md5 == remote_md5:
+                stdout_queue.put(
+                    f"{thread_num}> File {filename} already exists and MD5 "
+                    "matches, upload skipped"
+                )
+                continue
+            ret_codes.put(
+                (
+                    1,
+                    f"File {filename} already exists at {file_url} with "
+                    f"different MD5 ({local_md5} != {remote_md5}); "
+                    "if using --skip_hashing (-s) or --use_md5 (-m), local "
+                    "hash files may be stale. Refusing to overwrite without "
+                    "--force",
+                )
+            )
+            continue
+        stdout_queue.put(f"{thread_num}> Uploading {filename}...")
         gsutil_args = ["-h", "Cache-Control:public, max-age=31536000"]
 
         # Mark executable files with the header "x-goog-meta-executable: 1"
