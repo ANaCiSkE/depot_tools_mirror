@@ -32,7 +32,8 @@ git-map-branches \- Helper script to display all local git branches with \(oqups
 .SH "SYNOPSIS"
 .sp
 .nf
-\fIgit map\-branches\fR
+\fIgit map\-branches\fR [\-v\&...] [\-\-no\-color] [\-j <maxjobs> | \-\-maxjobs <maxjobs>]
+                 [\-\-show\-subject] [\-\-hide\-dormant]
 .fi
 .sp
 .SH "DESCRIPTION"
@@ -148,7 +149,22 @@ Turn off colors\&.
 .PP
 \-v
 .RS 4
-Be more verbose\&. Pass once to show tracking info, twice for hash and review URL, thrice for review status\&.
+Be more verbose\&. Pass once to show tracking info, twice for hash and review URL, thrice for review status, four times to mark dormant branches\&.
+.RE
+.PP
+\-j <maxjobs>, \-\-maxjobs <maxjobs>
+.RS 4
+The number of jobs to use when retrieving review status\&.
+.RE
+.PP
+\-\-show\-subject
+.RS 4
+Show the commit subject\&.
+.RE
+.PP
+\-\-hide\-dormant
+.RS 4
+Hides dormant branches\&.
 .RE
 .SH "EXAMPLE"
 .sp

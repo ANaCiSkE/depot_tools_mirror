@@ -756,7 +756,8 @@ git-map-branches(1) Manual Page
 <h2 id="_synopsis">SYNOPSIS</h2>
 <div class="sectionbody">
 <div class="verseblock">
-<pre class="content"><em>git map-branches</em></pre>
+<pre class="content"><em>git map-branches</em> [-v&#8230;] [--no-color] [-j &lt;maxjobs&gt; | --maxjobs &lt;maxjobs&gt;]
+                 [--show-subject] [--hide-dormant]</pre>
 <div class="attribution">
 </div></div>
 </div>
@@ -837,7 +838,34 @@ Branches which have this as their parent are usually misconfigured, and
 <dd>
 <p>
   Be more verbose. Pass once to show tracking info, twice for hash and review
-  URL, thrice for review status.
+  URL, thrice for review status, four times to mark dormant branches.
+</p>
+</dd>
+<dt class="hdlist1">
+-j &lt;maxjobs&gt;
+</dt>
+<dt class="hdlist1">
+--maxjobs &lt;maxjobs&gt;
+</dt>
+<dd>
+<p>
+  The number of jobs to use when retrieving review status.
+</p>
+</dd>
+<dt class="hdlist1">
+--show-subject
+</dt>
+<dd>
+<p>
+  Show the commit subject.
+</p>
+</dd>
+<dt class="hdlist1">
+--hide-dormant
+</dt>
+<dd>
+<p>
+  Hides dormant branches.
 </p>
 </dd>
 </dl></div>

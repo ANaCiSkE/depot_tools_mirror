@@ -9,7 +9,9 @@ include::_git-rebase-update_desc.helper.txt[]
 SYNOPSIS
 --------
 [verse]
-'git rebase-update' [-v | --verbose] [-n | --no-fetch] [-k | --keep-going] [--no-squash]
+'git rebase-update' [-v | --verbose] [-n | --no-fetch] [-k | --keep-going]
+                  [-e | --keep-empty] [--no-squash] [--current] [--tree]
+                  [--skip-worktrees] [<branches>...]
 
 DESCRIPTION
 -----------
@@ -84,6 +86,10 @@ OPTIONS
 --no-fetch::
   Skip the `git fetch` phase of rebase-update.
 
+-e::
+--keep-empty::
+  Do not automatically delete empty branches.
+
 --no-squash::
   Do not check whether a branch's commits already landed upstream in squashed
   form.
@@ -98,6 +104,12 @@ OPTIONS
 --tree::
   Also rebase any branches downstream from the selected branches. Use with
   named branches or `--current` to selectively rebase a branch tree.
+
+--skip-worktrees::
+  Skip branches checked out in a different worktree.
+
+<branches>...::
+  Branches to be rebased. All branches are assumed if none specified.
 
 
 CONFIGURATION VARIABLES

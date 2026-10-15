@@ -32,7 +32,9 @@ git-rebase-update \- Updates all branches to have the latest changes from their 
 .SH "SYNOPSIS"
 .sp
 .nf
-\fIgit rebase\-update\fR [\-v | \-\-verbose] [\-n | \-\-no\-fetch] [\-k | \-\-keep\-going] [\-\-no\-squash]
+\fIgit rebase\-update\fR [\-v | \-\-verbose] [\-n | \-\-no\-fetch] [\-k | \-\-keep\-going]
+                  [\-e | \-\-keep\-empty] [\-\-no\-squash] [\-\-current] [\-\-tree]
+                  [\-\-skip\-worktrees] [<branches>\&...]
 .fi
 .sp
 .SH "DESCRIPTION"
@@ -131,6 +133,11 @@ Skip the
 phase of rebase\-update\&.
 .RE
 .PP
+\-e, \-\-keep\-empty
+.RS 4
+Do not automatically delete empty branches\&.
+.RE
+.PP
 \-\-no\-squash
 .RS 4
 Do not check whether a branch\(cqs commits already landed upstream in squashed form\&.
@@ -151,6 +158,16 @@ Only rebase the current branch\&.
 Also rebase any branches downstream from the selected branches\&. Use with named branches or
 \fB\-\-current\fR
 to selectively rebase a branch tree\&.
+.RE
+.PP
+\-\-skip\-worktrees
+.RS 4
+Skip branches checked out in a different worktree\&.
+.RE
+.PP
+<branches>\&...
+.RS 4
+Branches to be rebased\&. All branches are assumed if none specified\&.
 .RE
 .SH "CONFIGURATION VARIABLES"
 .SS "depot\-tools\&.rebase\-update\&.starting\-branch"

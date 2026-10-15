@@ -756,7 +756,9 @@ git-rebase-update(1) Manual Page
 <h2 id="_synopsis">SYNOPSIS</h2>
 <div class="sectionbody">
 <div class="verseblock">
-<pre class="content"><em>git rebase-update</em> [-v | --verbose] [-n | --no-fetch] [-k | --keep-going] [--no-squash]</pre>
+<pre class="content"><em>git rebase-update</em> [-v | --verbose] [-n | --no-fetch] [-k | --keep-going]
+                  [-e | --keep-empty] [--no-squash] [--current] [--tree]
+                  [--skip-worktrees] [&lt;branches&gt;&#8230;]</pre>
 <div class="attribution">
 </div></div>
 </div>
@@ -874,6 +876,17 @@ Restoration
 </p>
 </dd>
 <dt class="hdlist1">
+-e
+</dt>
+<dt class="hdlist1">
+--keep-empty
+</dt>
+<dd>
+<p>
+  Do not automatically delete empty branches.
+</p>
+</dd>
+<dt class="hdlist1">
 --no-squash
 </dt>
 <dd>
@@ -908,6 +921,22 @@ Restoration
 <p>
   Also rebase any branches downstream from the selected branches. Use with
   named branches or <code>--current</code> to selectively rebase a branch tree.
+</p>
+</dd>
+<dt class="hdlist1">
+--skip-worktrees
+</dt>
+<dd>
+<p>
+  Skip branches checked out in a different worktree.
+</p>
+</dd>
+<dt class="hdlist1">
+&lt;branches&gt;&#8230;
+</dt>
+<dd>
+<p>
+  Branches to be rebased. All branches are assumed if none specified.
 </p>
 </dd>
 </dl></div>
