@@ -782,13 +782,6 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
 
     def no_long_lines(file_extension, line):
         """Returns True if the line length is okay."""
-        # Check for language specific exceptions.
-        if any(
-            file_extension in exts and line.lstrip().startswith(exceptions)
-            for exts, exceptions in LANGUAGE_EXCEPTIONS
-        ):
-            return True
-
         file_maxlen = maxlens.get(file_extension, maxlens[""])
         # Stupidly long symbols that needs to be worked around if takes 66% of
         # line.
@@ -798,6 +791,13 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
 
         line_len = len(line)
         if line_len <= file_maxlen:
+            return True
+
+        # Check for language specific exceptions.
+        if any(
+            file_extension in exts and line.lstrip().startswith(exceptions)
+            for exts, exceptions in LANGUAGE_EXCEPTIONS
+        ):
             return True
 
         # Allow long URLs of any length.
