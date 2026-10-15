@@ -703,6 +703,8 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
 
     # To avoid triggering on the magic string, break it up.
     LINT_THEN_CHANGE_EXCEPTION = "LI" + "NT.ThenChange("
+    # Long file name in a multi-line LINT.ThenChange directive.
+    LINT_THEN_CHANGE_MULTILINE_EXCEPTION = r"\s*[A-Za-z0-9/.:_-]+(?:[,|])?$"
 
     # Language specific exceptions to max line length.
     # '.h' is considered an obj-c file extension, since OBJC_EXCEPTIONS are a
@@ -716,6 +718,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         "#pragma",
         "// " + LINT_THEN_CHANGE_EXCEPTION,
     )
+    CPP_REGEX_EXCEPTIONS = (r"^\s*// " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     HTML_FILE_EXTS = ("html",)
     HTML_EXCEPTIONS = (
         "<g ",
@@ -723,18 +726,21 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         "<path ",
         "<!-- " + LINT_THEN_CHANGE_EXCEPTION,
     )
+    HTML_REGEX_EXCEPTIONS = (LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     JAVA_FILE_EXTS = ("java",)
     JAVA_EXCEPTIONS = (
         "import ",
         "package ",
         "// " + LINT_THEN_CHANGE_EXCEPTION,
     )
+    JAVA_REGEX_EXCEPTIONS = (r"^\s*// " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     JS_FILE_EXTS = ("js",)
     JS_EXCEPTIONS = (
         "GEN('#include",
         "import ",
         "// " + LINT_THEN_CHANGE_EXCEPTION,
     )
+    JS_REGEX_EXCEPTIONS = (r"^\s*// " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     TS_FILE_EXTS = ("ts",)
     TS_EXCEPTIONS = (
         "import ",
@@ -742,6 +748,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         "export type {",
         "// " + LINT_THEN_CHANGE_EXCEPTION,
     )
+    TS_REGEX_EXCEPTIONS = (r"^\s*// " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     OBJC_FILE_EXTS = ("h", "m", "mm")
     OBJC_EXCEPTIONS = (
         "#define",
@@ -752,32 +759,39 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         "#pragma",
         "// " + LINT_THEN_CHANGE_EXCEPTION,
     )
+    OBJC_REGEX_EXCEPTIONS = (r"^\s*// " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     PY_FILE_EXTS = ("py",)
     PY_EXCEPTIONS = ("import", "from", "# " + LINT_THEN_CHANGE_EXCEPTION)
+    PY_REGEX_EXCEPTIONS = (r"^\s*# " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,)
     # Rust line lengths are handled by rustfmt, so we except *all* Rust lines
     # from this check.
     RUST_FILE_EXTS = ("rs",)
     RUST_EXCEPTIONS = ""
+    RUST_REGEX_EXCEPTIONS = ()
 
     # Uncap star files. For more info, see:
     # https://bazel.build/build/style-guide#differences-python-style-guide
     STAR_FILE_EXTS = ("star",)
     STAR_EXCEPTIONS = ("",)
+    STAR_REGEX_EXCEPTIONS = ()
 
     MOJOM_FILE_EXTS = ("mojom",)
-    MOJOM_EXCEPTIONS = ("// " + LINT_THEN_CHANGE_EXCEPTION,)
+    MOJOM_EXCEPTIONS = "// " + LINT_THEN_CHANGE_EXCEPTION
+    MOJOM_REGEX_EXCEPTIONS = (
+        r"^\s*// " + LINT_THEN_CHANGE_MULTILINE_EXCEPTION,
+    )
 
     LANGUAGE_EXCEPTIONS = [
-        (CPP_FILE_EXTS, CPP_EXCEPTIONS),
-        (HTML_FILE_EXTS, HTML_EXCEPTIONS),
-        (JAVA_FILE_EXTS, JAVA_EXCEPTIONS),
-        (JS_FILE_EXTS, JS_EXCEPTIONS),
-        (TS_FILE_EXTS, TS_EXCEPTIONS),
-        (OBJC_FILE_EXTS, OBJC_EXCEPTIONS),
-        (PY_FILE_EXTS, PY_EXCEPTIONS),
-        (STAR_FILE_EXTS, STAR_EXCEPTIONS),
-        (RUST_FILE_EXTS, RUST_EXCEPTIONS),
-        (MOJOM_FILE_EXTS, MOJOM_EXCEPTIONS),
+        (CPP_FILE_EXTS, CPP_EXCEPTIONS, CPP_REGEX_EXCEPTIONS),
+        (HTML_FILE_EXTS, HTML_EXCEPTIONS, HTML_REGEX_EXCEPTIONS),
+        (JAVA_FILE_EXTS, JAVA_EXCEPTIONS, JAVA_REGEX_EXCEPTIONS),
+        (JS_FILE_EXTS, JS_EXCEPTIONS, JS_REGEX_EXCEPTIONS),
+        (TS_FILE_EXTS, TS_EXCEPTIONS, TS_REGEX_EXCEPTIONS),
+        (OBJC_FILE_EXTS, OBJC_EXCEPTIONS, OBJC_REGEX_EXCEPTIONS),
+        (PY_FILE_EXTS, PY_EXCEPTIONS, PY_REGEX_EXCEPTIONS),
+        (STAR_FILE_EXTS, STAR_EXCEPTIONS, STAR_REGEX_EXCEPTIONS),
+        (RUST_FILE_EXTS, RUST_EXCEPTIONS, RUST_REGEX_EXCEPTIONS),
+        (MOJOM_FILE_EXTS, MOJOM_EXCEPTIONS, MOJOM_REGEX_EXCEPTIONS),
     ]
 
     def no_long_lines(file_extension, line):
@@ -795,8 +809,12 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
 
         # Check for language specific exceptions.
         if any(
-            file_extension in exts and line.lstrip().startswith(exceptions)
-            for exts, exceptions in LANGUAGE_EXCEPTIONS
+            file_extension in exts
+            and (
+                line.lstrip().startswith(exceptions)
+                or any(input_api.re.match(regex, line) for regex in regexes)
+            )
+            for exts, exceptions, regexes in LANGUAGE_EXCEPTIONS
         ):
             return True
 

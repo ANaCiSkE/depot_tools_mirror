@@ -681,6 +681,88 @@ class CheckLongLinesTest(unittest.TestCase):
                     "// LINT.ThenChange(//very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label)",
                 ],
             ),
+            (
+                "some/multi_line_file.cc",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/multi_line_file.html",
+                [
+                    "<!-- LINT.ThenChange(",
+                    "    //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    ") -->",
+                ],
+            ),
+            (
+                "some/multi_line_file.java",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/multi_line_file.js",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/multi_line_file.ts",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/multi_line_file.mm",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/multi_line_file.py",
+                [
+                    "# LINT.ThenChange(",
+                    "#     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "# )",
+                ],
+            ),
+            (
+                "some/multi_line_file.mojom",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/conjunction.cc",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label,",
+                    "//     //another/file:label",
+                    "// )",
+                ],
+            ),
+            (
+                "some/disjunction.cc",
+                [
+                    "// LINT.ThenChange(",
+                    "//     //very/very/long/file/name/that/does/not/fit/within/the/line/length/limit/file-name.ext:very_long_label|",
+                    "//     //another/file:label",
+                    "// )",
+                ],
+            ),
         ):
             input_api = MockInputApi()
             input_api.files = [
