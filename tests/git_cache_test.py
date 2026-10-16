@@ -2174,13 +2174,26 @@ class GitCacheDirTest(unittest.TestCase):
 
 
 class BootstrapConcurrencyTest(unittest.TestCase):
-    def test_default_tracks_sync_parallelism(self):
+    def test_default_tracks_sync_parallelism_up_to_cap(self):
         with mock.patch.dict("os.environ", clear=False):
             os.environ.pop("GIT_CACHE_BOOTSTRAP_CONCURRENCY", None)
-            self.assertEqual(
-                git_cache._bootstrap_concurrency(),
-                max(8, gclient_utils.NumLocalCpus()),
-            )
+            with mock.patch("gclient_utils.NumLocalCpus", return_value=4):
+                self.assertEqual(
+                    git_cache._bootstrap_concurrency(),
+                    git_cache.DEFAULT_MIN_BOOTSTRAP_CONCURRENCY,
+                )
+            with mock.patch("gclient_utils.NumLocalCpus", return_value=24):
+                self.assertEqual(git_cache._bootstrap_concurrency(), 24)
+            with mock.patch("gclient_utils.NumLocalCpus", return_value=128):
+                self.assertEqual(
+                    git_cache._bootstrap_concurrency(),
+                    git_cache.DEFAULT_MAX_BOOTSTRAP_CONCURRENCY,
+                )
+            with mock.patch("gclient_utils.NumLocalCpus", return_value=384):
+                self.assertEqual(
+                    git_cache._bootstrap_concurrency(),
+                    git_cache.DEFAULT_MAX_BOOTSTRAP_CONCURRENCY,
+                )
 
     def test_override(self):
         with mock.patch.dict(
@@ -2200,7 +2213,13 @@ class BootstrapConcurrencyTest(unittest.TestCase):
         ):
             self.assertEqual(
                 git_cache._bootstrap_concurrency(),
-                max(8, gclient_utils.NumLocalCpus()),
+                max(
+                    git_cache.DEFAULT_MIN_BOOTSTRAP_CONCURRENCY,
+                    min(
+                        gclient_utils.NumLocalCpus(),
+                        git_cache.DEFAULT_MAX_BOOTSTRAP_CONCURRENCY,
+                    ),
+                ),
             )
 
 

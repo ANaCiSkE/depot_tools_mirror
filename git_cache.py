@@ -41,16 +41,22 @@ def _ref_format_args(ref_format="files"):
     return [f"--ref-format={ref_format}"]
 
 
+DEFAULT_MIN_BOOTSTRAP_CONCURRENCY = 8
+DEFAULT_MAX_BOOTSTRAP_CONCURRENCY = 32
+
+
 def _bootstrap_concurrency():
     """Max concurrent gsutil snapshot downloads.
 
     Every dependency snapshot but the root repo's is small, so the per-call
     gsutil spawn + network round-trip dominates and concurrent downloads are
-    cheap on bandwidth. The cap therefore tracks the sync's own parallelism
-    (gclient's default job count) instead of throttling below it; a lower cap
-    just leaves most snapshots queued behind the latency of a few. Override with
-    $GIT_CACHE_BOOTSTRAP_CONCURRENCY (gsutil spawns many threads, so a lower
-    value can ease resource pressure on very large fetches).
+    cheap on bandwidth. Scale with local CPU count up to
+    DEFAULT_MAX_BOOTSTRAP_CONCURRENCY (32): each `gsutil -m cp` spawns up to 32
+    worker processes (plus a SyncManager and per-worker threads), so unbounded
+    scaling above 32 regresses download throughput while exploding process,
+    thread, and memory usage (e.g. >4,500 processes / >23,000 threads / >200 GiB
+    RSS on 128 cores, and >50,000 OS tasks hitting systemd TasksMax on 384
+    cores). Override with $GIT_CACHE_BOOTSTRAP_CONCURRENCY.
     """
     env = os.environ.get("GIT_CACHE_BOOTSTRAP_CONCURRENCY")
     if env:
@@ -58,7 +64,11 @@ def _bootstrap_concurrency():
             return max(1, int(env))
         except ValueError:
             pass
-    return max(8, gclient_utils.NumLocalCpus())
+    num_cpus = gclient_utils.NumLocalCpus()
+    return max(
+        DEFAULT_MIN_BOOTSTRAP_CONCURRENCY,
+        min(num_cpus, DEFAULT_MAX_BOOTSTRAP_CONCURRENCY),
+    )
 
 
 GSUTIL_CP_SEMAPHORE = threading.Semaphore(_bootstrap_concurrency())
