@@ -1981,6 +1981,94 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
         gclient_utils.rmtree(self.mirror)
         git_wrapper._Capture(["fsck", "--no-progress"])
 
+    def testBootstrapModeKeepsSeedPacksAcrossRepack(self):
+        self.setUpBootstrapMode()
+
+        # Like a multi-pack GCS bootstrap snapshot, give the mirror packs that
+        # don't form a 2x geometric progression by object count (5 and 4
+        # objects), so that a geometric repack (git maintenance's default since
+        # Git 2.54) would merge them.
+        mirror = git_cache.Mirror(self.url)
+        with mock.patch.object(
+            git_cache.Mirror, "supported_project", return_value=True
+        ):
+            mirror.populate()
+        mirror_git = ["git", "--git-dir", mirror.mirror_path]
+        mirror_pack_dir = os.path.join(mirror.mirror_path, "objects", "pack")
+        for rev in (self.githash("repo_1", 2), self.githash("repo_1", 4)):
+            subprocess2.check_output(
+                mirror_git
+                + [
+                    "pack-objects",
+                    "-q",
+                    "--revs",
+                    "--unpacked",
+                    os.path.join(mirror_pack_dir, "pack"),
+                ],
+                stdin=(rev + "\n").encode("utf-8"),
+            )
+        subprocess2.check_call(mirror_git + ["prune-packed"])
+        seed_packs = sorted(
+            f for f in os.listdir(mirror_pack_dir) if f.endswith(".pack")
+        )
+        self.assertEqual(len(seed_packs), 2)
+
+        # Clone from the mirror, then run what auto maintenance would.
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
+        git_wrapper.update(self.options, None, [])
+        git_wrapper._Capture(["repack", "-d", "-q", "--geometric=2"])
+
+        # The seed packs must survive, each with a .keep file.
+        pack_dir = os.path.join(self.root_dir, ".git", "objects", "pack")
+        packs = [f for f in os.listdir(pack_dir) if f.endswith(".pack")]
+        self.assertTrue(
+            set(seed_packs).issubset(packs),
+            "seed packs %s were repacked into %s" % (seed_packs, packs),
+        )
+        for pack in seed_packs:
+            keep = os.path.join(pack_dir, os.path.splitext(pack)[0] + ".keep")
+            with open(keep) as f:
+                self.assertIn("git cache bootstrap", f.read())
+
+    def testKeepBootstrapPacksOnlyWarnsOnError(self):
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
+        with mock.patch("os.listdir", side_effect=OSError("boom")):
+            git_wrapper._KeepBootstrapPacks()
+        self.assertIn(
+            "WARNING: failed to mark bootstrap packs", sys.stdout.getvalue()
+        )
+
+    def testIsCacheMirrorPath(self):
+        self.setUpMirror()
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
+        mirror = git_cache.Mirror(self.url)
+        self.assertTrue(git_wrapper._IsCacheMirrorPath(mirror.mirror_path))
+        self.assertFalse(git_wrapper._IsCacheMirrorPath(self.url))
+        self.assertFalse(
+            git_wrapper._IsCacheMirrorPath("https://example.com/repo.git")
+        )
+
+    def testIsCacheMirrorPathResolvesSymlinks(self):
+        self.setUpMirror()
+        link_dir = tempfile.mkdtemp()
+        self.addCleanup(gclient_utils.rmtree, link_dir)
+        link = os.path.join(link_dir, "cache")
+        try:
+            os.symlink(self.mirror, link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not supported")
+        git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir, ".")
+        basedir = os.path.basename(git_cache.Mirror(self.url).mirror_path)
+        # Mirror path through the symlink, real cache dir.
+        self.assertTrue(
+            git_wrapper._IsCacheMirrorPath(os.path.join(link, basedir))
+        )
+        # Cache dir through the symlink, real mirror path.
+        git_cache.Mirror.SetCachePath(link)
+        self.assertTrue(
+            git_wrapper._IsCacheMirrorPath(os.path.join(self.mirror, basedir))
+        )
+
     def testBootstrapModeExistingCheckoutIgnoresMirror(self):
         self.setUpBootstrapMode()
 

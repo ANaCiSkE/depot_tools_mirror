@@ -1807,6 +1807,11 @@ class GitWrapper(SCMWrapper):
                         os.path.join(tmp_dir, ".git"),
                         os.path.join(self.checkout_path, ".git"),
                     )
+                    if (
+                        self.cache_mode == CacheMode.BOOTSTRAP
+                        and self._IsCacheMirrorPath(url)
+                    ):
+                        self._KeepBootstrapPacks()
                 except:
                     traceback.print_exc(file=self.out_fh)
                     raise
@@ -1837,6 +1842,49 @@ class GitWrapper(SCMWrapper):
                     % (revision, self.remote)
                 )
             return revision
+
+    def _IsCacheMirrorPath(self, url):
+        """Returns whether url is a git_cache mirror in the cache directory."""
+        if not self.cache_dir:
+            return False
+        # Resolve symlinks in the parent only; the mirror itself could be one.
+        parent = os.path.realpath(os.path.dirname(os.path.abspath(url)))
+        return os.path.normcase(parent) == os.path.normcase(
+            os.path.realpath(self.cache_dir)
+        )
+
+    def _KeepBootstrapPacks(self):
+        """Marks the packs of a checkout seeded from a bootstrap mirror .keep.
+
+        Bootstrap snapshots consist of several large packs that do not form a
+        geometric progression by object count, so git maintenance (geometric
+        strategy, default since Git 2.54) would rewrite all of them into one
+        pack on the first fetch. For chromium/src that takes minutes, needs
+        tens of GiB of memory and breaks the hardlinks to the cache. git
+        repack never touches packs with a .keep file, see
+        https://git-scm.com/docs/git-repack#Documentation/git-repack.txt---keep-packpack-name
+
+        Trade-off: kept packs are never repacked or pruned, even after the
+        cache is deleted. Delete .git/objects/pack/*.keep to let git maintain
+        them again. Packs fetched later are maintained normally.
+
+        This is an optimization, so failures only print a warning.
+        """
+        pack_dir = os.path.join(self.checkout_path, ".git", "objects", "pack")
+        try:
+            for entry in os.listdir(pack_dir):
+                base, ext = os.path.splitext(entry)
+                if ext != ".pack":
+                    continue
+                keep_path = os.path.join(pack_dir, base + ".keep")
+                if not os.path.exists(keep_path):
+                    with open(keep_path, "w") as f:
+                        f.write("gclient: seeded from git cache bootstrap\n")
+        except OSError as e:
+            self.Print(
+                "WARNING: failed to mark bootstrap packs in %s as .keep; git "
+                "may repack them: %s" % (pack_dir, e)
+            )
 
     def _AskForData(self, prompt, options):
         if options.jobs > 1:
