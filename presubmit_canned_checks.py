@@ -4118,6 +4118,10 @@ def CheckAyeAye(input_api, output_api):
         )
         results = [output_api.PresubmitError(x) for x in json_dict["errors"]]
         results += [warning_factory(x) for x in json_dict["warnings"]]
+        results += [
+            output_api.PresubmitNotifyResult(x)
+            for x in json_dict.get("notices", [])
+        ]
         if "execution_error" in json_dict:
             err = json_dict["execution_error"]
             msg = f"AyeAye execution failed (exit code {err['exit_code']})"

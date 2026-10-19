@@ -12,6 +12,19 @@ import sys
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
+# alint (--verbose) prints this after all findings, before its telemetry flush.
+# It's an unstable debug log (colored text-format proto); if it's missing we
+# wait for alint to exit.
+# TODO(b/534712288): Use a stable completion signal from alint instead.
+_END_EVENT_PREFIX = "INFO: endEvent:"
+_END_EVENT_EXIT_CODE_RE = re.compile(
+    r"invocation_stopped:\s*\{\s*exit_code:\s*(\d+)"
+)
+_NO_END_EVENT_NOTICE = (
+    "[AyeAye] alint did not report completion (no endEvent line with an exit "
+    "code), so presubmit waited for it to exit."
+)
+
 
 def _strip_ansi_codes(text):
     return _ANSI_ESCAPE_RE.sub("", text)
@@ -41,6 +54,54 @@ def _parse_alint_output(clean_output):
     return {"errors": errors, "warnings": warnings}
 
 
+def _strip_info_lines(clean_output):
+    """Drops alint's --verbose INFO lines from an execution error report."""
+    return "\n".join(
+        line
+        for line in clean_output.splitlines()
+        if not line.strip().startswith("INFO:")
+    ).strip()
+
+
+def _run_alint(cmd, env):
+    """Runs alint and returns (exit_code, output, saw_end_event).
+
+    Returns at the endEvent line instead of waiting for the telemetry flush.
+    Output goes through `tee -p`, which keeps draining alint after we stop;
+    Go programs die on SIGPIPE writing to a closed stdout even if it's ignored.
+    """
+    alint = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
+        start_new_session=True,
+    )
+    tee = subprocess.Popen(
+        ["tee", "-p", os.devnull],
+        stdin=alint.stdout,
+        stdout=subprocess.PIPE,
+        start_new_session=True,
+    )
+    alint.stdout.close()
+    output = []
+    with tee.stdout:
+        for raw in tee.stdout:
+            output.append(raw)
+            line = _strip_ansi_codes(raw.decode("utf-8", "ignore")).strip()
+            if not line.startswith(_END_EVENT_PREFIX):
+                continue
+            # Without an exit code, keep reading and use alint's real one.
+            match = _END_EVENT_EXIT_CODE_RE.search(line)
+            if match:
+                # Join the raw lines; drop any bytes that aren't valid UTF-8.
+                output_str = b"".join(output).decode("utf-8", "ignore")
+                return int(match.group(1)), output_str, True
+    tee.wait()
+    output_str = b"".join(output).decode("utf-8", "ignore")
+    return alint.wait(), output_str, False
+
+
 def main():
     if len(sys.argv) < 3:
         print("Usage: run_alint.py <alint_path> <repo_root> [alint_args...]")
@@ -56,7 +117,8 @@ def main():
 
     # git cl requires a clean tree, so lint HEAD directly instead of letting
     # alint scan the worktree to choose between HEAD and uncommitted changes.
-    cmd = [alint_path, "--"] + sys.argv[3:] + ["--commit=HEAD"]
+    # --verbose makes alint print the endEvent line _run_alint() waits for.
+    cmd = [alint_path, "--verbose", "--"] + sys.argv[3:] + ["--commit=HEAD"]
     try:
         env = os.environ.copy()
         git_params = env.get("GIT_CONFIG_PARAMETERS", "").strip()
@@ -76,18 +138,16 @@ def main():
             else:
                 env["GIT_CONFIG_PARAMETERS"] = new_params
 
-        p = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
-        )
-        stdout, _ = p.communicate()
-        output_str = stdout.decode("utf-8", "ignore")
+        returncode, output_str, saw_end_event = _run_alint(cmd, env)
         clean = _strip_ansi_codes(output_str).strip()
         parsed = _parse_alint_output(clean)
-        if p.returncode and not parsed["errors"] and not parsed["warnings"]:
+        if returncode and not parsed["errors"] and not parsed["warnings"]:
             parsed["execution_error"] = {
-                "exit_code": p.returncode,
-                "output": clean,
+                "exit_code": returncode,
+                "output": _strip_info_lines(clean),
             }
+        if not saw_end_event:
+            parsed["notices"] = [_NO_END_EVENT_NOTICE]
         print(json.dumps(parsed))
         return 0
     except Exception as e:

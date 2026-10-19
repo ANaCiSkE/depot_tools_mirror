@@ -9,7 +9,9 @@ import os.path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import warnings
 from unittest import mock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1263,6 +1265,23 @@ class CheckAyeAyeTest(unittest.TestCase):
         self.assertEqual(results, [])
         self.mock_popen.assert_called_once()
 
+    def test_ayeaye_notices_are_notify_results(self):
+        self.mock_proc.communicate.return_value = (
+            json.dumps(
+                {"errors": [], "warnings": [], "notices": ["Some notice."]}
+            ).encode("utf-8"),
+            b"",
+        )
+        self.mock_proc.returncode = 0
+
+        results = presubmit_canned_checks.CheckAyeAye(
+            self.input_api, self.output_api
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].type, "notify")
+        self.assertEqual(results[0].message, "Some notice.")
+
     def test_ayeaye_findings_only_warnings(self):
         # Simulate run_alint JSON output with only warnings
         json_output = json.dumps(
@@ -1484,14 +1503,163 @@ class RunAlintTest(unittest.TestCase):
             ],
         )
 
+    def _run_fake_alint(self, script):
+        return run_alint._run_alint(
+            [sys.executable, "-u", "-c", script], os.environ.copy()
+        )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "tee -p is GNU-only")
+    def test_run_alint_returns_at_end_event_without_waiting_for_exit(self):
+        script = (
+            "import sys, time\n"
+            "print('INFO: startEvent: invocation_id:abc')\n"
+            "print('WARNING: [Foo/bar] a.cc:1: WARN: w')\n"
+            "print('INFO: endEvent: invocation_stopped:{exit_code:4}')\n"
+            "time.sleep(5)\n"
+            "print('INFO: Flushing client logs to Clearcut.')\n"
+            "sys.exit(4)\n"
+        )
+        start = time.monotonic()
+        # The fake alint is intentionally still running when _run_alint()
+        # returns; silence the Popen ResourceWarning that produces.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            exit_code, output, saw_end_event = self._run_fake_alint(script)
+        self.assertLess(time.monotonic() - start, 4)
+        self.assertEqual(exit_code, 4)
+        self.assertTrue(saw_end_event)
+        self.assertEqual(
+            output,
+            "INFO: startEvent: invocation_id:abc\n"
+            "WARNING: [Foo/bar] a.cc:1: WARN: w\n"
+            "INFO: endEvent: invocation_stopped:{exit_code:4}\n",
+        )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "tee -p is GNU-only")
+    def test_run_alint_detects_colored_end_event(self):
+        # alint colors "INFO:" even when stdout is not a terminal.
+        script = (
+            "import sys, time\n"
+            "print('\\x1b[0m\\x1b[1;36;49mINFO:\\x1b[0;39;49m endEvent: '\n"
+            "      'invocation_stopped:{exit_code:5  exit_logs:\\\"\\\"}')\n"
+            "time.sleep(5)\n"
+            "sys.exit(5)\n"
+        )
+        start = time.monotonic()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            exit_code, _, saw_end_event = self._run_fake_alint(script)
+        self.assertLess(time.monotonic() - start, 4)
+        self.assertEqual(exit_code, 5)
+        self.assertTrue(saw_end_event)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "tee -p is GNU-only")
+    def test_run_alint_waits_for_complete_end_event_line(self):
+        script = (
+            "import sys, time\n"
+            "sys.stdout.write('INFO: endEvent: invocation_stopped:{exit_')\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(0.3)\n"
+            "sys.stdout.write('code:3}\\n')\n"
+            "sys.exit(3)\n"
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            exit_code, output, saw_end_event = self._run_fake_alint(script)
+        self.assertEqual(exit_code, 3)
+        self.assertTrue(saw_end_event)
+        self.assertEqual(
+            output, "INFO: endEvent: invocation_stopped:{exit_code:3}\n"
+        )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "tee -p is GNU-only")
+    def test_run_alint_falls_back_to_process_exit_without_end_event(self):
+        script = "import sys\nprint('fatal: bad object HEAD')\nsys.exit(128)\n"
+        exit_code, output, saw_end_event = self._run_fake_alint(script)
+        self.assertEqual(exit_code, 128)
+        self.assertEqual(output, "fatal: bad object HEAD\n")
+        self.assertFalse(saw_end_event)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "tee -p is GNU-only")
+    def test_run_alint_ignores_end_event_without_exit_code(self):
+        script = (
+            "import sys\n"
+            "print('INFO: endEvent: invocation_id:abc')\n"
+            "print('INFO: Flushing client logs to Clearcut.')\n"
+            "sys.exit(7)\n"
+        )
+        exit_code, output, saw_end_event = self._run_fake_alint(script)
+        self.assertEqual(exit_code, 7)
+        self.assertFalse(saw_end_event)
+        self.assertEqual(
+            output,
+            "INFO: endEvent: invocation_id:abc\n"
+            "INFO: Flushing client logs to Clearcut.\n",
+        )
+
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
-    def test_main_execution_error(self, mock_popen, mock_chdir):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (b"fatal: bad object HEAD", b"")
-        mock_proc.returncode = 128
-        mock_popen.return_value = mock_proc
+    @mock.patch("run_alint._run_alint")
+    def test_main_notice_when_no_end_event(self, mock_run_alint, mock_chdir):
+        mock_run_alint.return_value = (0, "", False)
+
+        with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
+            self.assertEqual(run_alint.main(), 0)
+            result = json.loads(mock_stdout.getvalue())
+            self.assertEqual(result["errors"], [])
+            self.assertEqual(result["warnings"], [])
+            self.assertEqual(
+                result["notices"], [run_alint._NO_END_EVENT_NOTICE]
+            )
+
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo"])
+    @mock.patch("os.chdir")
+    @mock.patch("run_alint._run_alint")
+    def test_main_no_notice_with_end_event(self, mock_run_alint, mock_chdir):
+        mock_run_alint.return_value = (0, "", True)
+
+        with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
+            self.assertEqual(run_alint.main(), 0)
+            self.assertNotIn("notices", json.loads(mock_stdout.getvalue()))
+
+    def test_end_event_exit_code_tolerates_whitespace(self):
+        # Text-format protos may vary whitespace between builds.
+        for line, code in (
+            (
+                'INFO: endEvent: x:1 invocation_stopped:{exit_code:3  exit_logs:""}',
+                3,
+            ),
+            ("INFO: endEvent: x:1  invocation_stopped: {exit_code: 4}", 4),
+            ("INFO: endEvent: x:1 invocation_stopped:{ exit_code:5 }", 5),
+        ):
+            match = run_alint._END_EVENT_EXIT_CODE_RE.search(line)
+            self.assertIsNotNone(match, line)
+            self.assertEqual(int(match.group(1)), code)
+        self.assertIsNone(
+            run_alint._END_EVENT_EXIT_CODE_RE.search(
+                "INFO: endEvent: invocation_id:abc"
+            )
+        )
+
+    def test_strip_info_lines(self):
+        self.assertEqual(
+            run_alint._strip_info_lines(
+                "INFO: startEvent: x\nfatal: bad object HEAD\n  INFO: y\n"
+            ),
+            "fatal: bad object HEAD",
+        )
+
+    @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo"])
+    @mock.patch("os.chdir")
+    @mock.patch("run_alint._run_alint")
+    def test_main_execution_error(self, mock_run_alint, mock_chdir):
+        mock_run_alint.return_value = (
+            128,
+            "INFO: startEvent: invocation_id:abc\n"
+            "fatal: bad object HEAD\n"
+            "INFO: endEvent: invocation_stopped:{exit_code:128}\n",
+            True,
+        )
 
         with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
             exit_code = run_alint.main()
@@ -1510,35 +1678,32 @@ class RunAlintTest(unittest.TestCase):
 
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
-    def test_main_success_findings(self, mock_popen, mock_chdir):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (
-            b"WARNING: [CheckContents/trailing_whitespace] /COMMIT_MSG:18: WARN: trailing space\n",
-            b"",
+    @mock.patch("run_alint._run_alint")
+    def test_main_success_findings(self, mock_run_alint, mock_chdir):
+        mock_run_alint.return_value = (
+            0,
+            "WARNING: [CheckContents/trailing_whitespace] /COMMIT_MSG:18: WARN: trailing space\n",
+            True,
         )
-        mock_proc.returncode = 0
-        mock_popen.return_value = mock_proc
 
         with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
             mock_chdir.assert_called_once_with("/repo")
-            mock_popen.assert_called_once()
-            called_args, called_kwargs = mock_popen.call_args
+            mock_run_alint.assert_called_once()
+            called_cmd, called_env = mock_run_alint.call_args[0]
             self.assertEqual(
-                called_args[0], ["/bin/alint", "--", "-t=30s", "--commit=HEAD"]
+                called_cmd,
+                ["/bin/alint", "--verbose", "--", "-t=30s", "--commit=HEAD"],
             )
-            self.assertEqual(called_kwargs["stdout"], subprocess.PIPE)
-            self.assertEqual(called_kwargs["stderr"], subprocess.STDOUT)
-            self.assertIn("GIT_CONFIG_PARAMETERS", called_kwargs["env"])
+            self.assertIn("GIT_CONFIG_PARAMETERS", called_env)
             self.assertIn(
                 "'status.showUntrackedFiles=no'",
-                called_kwargs["env"]["GIT_CONFIG_PARAMETERS"],
+                called_env["GIT_CONFIG_PARAMETERS"],
             )
             self.assertIn(
                 "'diff.ignoreSubmodules=all'",
-                called_kwargs["env"]["GIT_CONFIG_PARAMETERS"],
+                called_env["GIT_CONFIG_PARAMETERS"],
             )
             result = json.loads(mock_stdout.getvalue())
             self.assertEqual(result["errors"], [])
@@ -1552,9 +1717,9 @@ class RunAlintTest(unittest.TestCase):
 
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
-    def test_main_exception(self, mock_popen, mock_chdir):
-        mock_popen.side_effect = OSError("Executable not found")
+    @mock.patch("run_alint._run_alint")
+    def test_main_exception(self, mock_run_alint, mock_chdir):
+        mock_run_alint.side_effect = OSError("Executable not found")
 
         with mock.patch("sys.stdout", new=io.StringIO()) as mock_stdout:
             exit_code = run_alint.main()
@@ -1571,20 +1736,17 @@ class RunAlintTest(unittest.TestCase):
     @mock.patch.dict(os.environ, {"GIT_CONFIG_PARAMETERS": "'custom.key=val'"})
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
+    @mock.patch("run_alint._run_alint")
     def test_main_preserves_existing_git_config_parameters(
-        self, mock_popen, mock_chdir
+        self, mock_run_alint, mock_chdir
     ):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-        mock_popen.return_value = mock_proc
+        mock_run_alint.return_value = (0, "", True)
 
         with mock.patch("sys.stdout", new=io.StringIO()):
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
-            mock_popen.assert_called_once()
-            called_env = mock_popen.call_args[1]["env"]
+            mock_run_alint.assert_called_once()
+            called_env = mock_run_alint.call_args[0][1]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
                 "'custom.key=val' 'status.showUntrackedFiles=no' 'diff.ignoreSubmodules=all'",
@@ -1593,20 +1755,17 @@ class RunAlintTest(unittest.TestCase):
     @mock.patch.dict(os.environ, {"GIT_CONFIG_PARAMETERS": "   "})
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
+    @mock.patch("run_alint._run_alint")
     def test_main_strips_whitespace_git_config_parameters(
-        self, mock_popen, mock_chdir
+        self, mock_run_alint, mock_chdir
     ):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-        mock_popen.return_value = mock_proc
+        mock_run_alint.return_value = (0, "", True)
 
         with mock.patch("sys.stdout", new=io.StringIO()):
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
-            mock_popen.assert_called_once()
-            called_env = mock_popen.call_args[1]["env"]
+            mock_run_alint.assert_called_once()
+            called_env = mock_run_alint.call_args[0][1]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
                 "'status.showUntrackedFiles=no' 'diff.ignoreSubmodules=all'",
@@ -1618,20 +1777,17 @@ class RunAlintTest(unittest.TestCase):
     )
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
+    @mock.patch("run_alint._run_alint")
     def test_main_does_not_duplicate_status_show_untracked_files(
-        self, mock_popen, mock_chdir
+        self, mock_run_alint, mock_chdir
     ):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-        mock_popen.return_value = mock_proc
+        mock_run_alint.return_value = (0, "", True)
 
         with mock.patch("sys.stdout", new=io.StringIO()):
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
-            mock_popen.assert_called_once()
-            called_env = mock_popen.call_args[1]["env"]
+            mock_run_alint.assert_called_once()
+            called_env = mock_run_alint.call_args[0][1]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
                 "'status.showuntrackedfiles=no' 'diff.ignoreSubmodules=all'",
@@ -1643,20 +1799,17 @@ class RunAlintTest(unittest.TestCase):
     )
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
+    @mock.patch("run_alint._run_alint")
     def test_main_enforces_status_show_untracked_files_no_over_normal(
-        self, mock_popen, mock_chdir
+        self, mock_run_alint, mock_chdir
     ):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-        mock_popen.return_value = mock_proc
+        mock_run_alint.return_value = (0, "", True)
 
         with mock.patch("sys.stdout", new=io.StringIO()):
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
-            mock_popen.assert_called_once()
-            called_env = mock_popen.call_args[1]["env"]
+            mock_run_alint.assert_called_once()
+            called_env = mock_run_alint.call_args[0][1]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
                 "'status.showuntrackedfiles=normal' 'status.showUntrackedFiles=no' 'diff.ignoreSubmodules=all'",
@@ -1668,20 +1821,17 @@ class RunAlintTest(unittest.TestCase):
     )
     @mock.patch("sys.argv", ["run_alint.py", "/bin/alint", "/repo", "-t=30s"])
     @mock.patch("os.chdir")
-    @mock.patch("subprocess.Popen")
+    @mock.patch("run_alint._run_alint")
     def test_main_does_not_duplicate_diff_ignore_submodules(
-        self, mock_popen, mock_chdir
+        self, mock_run_alint, mock_chdir
     ):
-        mock_proc = mock.Mock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-        mock_popen.return_value = mock_proc
+        mock_run_alint.return_value = (0, "", True)
 
         with mock.patch("sys.stdout", new=io.StringIO()):
             exit_code = run_alint.main()
             self.assertEqual(exit_code, 0)
-            mock_popen.assert_called_once()
-            called_env = mock_popen.call_args[1]["env"]
+            mock_run_alint.assert_called_once()
+            called_env = mock_run_alint.call_args[0][1]
             self.assertEqual(
                 called_env["GIT_CONFIG_PARAMETERS"],
                 "'diff.ignoresubmodules=all' 'status.showUntrackedFiles=no'",
