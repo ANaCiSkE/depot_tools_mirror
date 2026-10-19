@@ -255,6 +255,7 @@ class CipdExeTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tempdir)
         self.cipd_bin = os.path.join(self.tempdir, ".cipd_bin")
         os.mkdir(self.cipd_bin)
+        self._write_cipd_manifests()
         for patcher in (
             mock.patch("gsutil.THIS_DIR", self.tempdir),
             # Avoid platform-specific gsutil options in run_gsutil().
@@ -262,6 +263,20 @@ class CipdExeTest(unittest.TestCase):
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
+
+    def _write_cipd_manifests(self, version_suffix: str = "v1") -> None:
+        cache_dir = os.path.join(self.cipd_bin, ".cipd", "tmp")
+        os.makedirs(cache_dir, exist_ok=True)
+        for filename in (
+            "cipd_manifest.txt",
+            "cipd_manifest.versions",
+            "cipd_client_version",
+        ):
+            content = f"{filename}:{version_suffix}\n".encode("utf-8")
+            with open(os.path.join(self.tempdir, filename), "wb") as f:
+                f.write(content)
+            with open(os.path.join(cache_dir, f".{filename}"), "wb") as f:
+                f.write(content)
 
     def _create_exe(self, name: str) -> str:
         path = os.path.join(self.cipd_bin, name + ".exe")
@@ -320,7 +335,28 @@ class CipdExeTest(unittest.TestCase):
     @mock.patch("gsutil.IS_WINDOWS", True)
     def test_resolve_depot_tools_exe_windows_missing_cipd_bin(self) -> None:
         # e.g. a fresh checkout that hasn't run cipd_bin_setup.bat yet.
-        os.rmdir(self.cipd_bin)
+        shutil.rmtree(self.cipd_bin)
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_resolve_depot_tools_exe_windows_stale_manifest_cache(self) -> None:
+        self._create_exe("vpython3")
+        with open(
+            os.path.join(self.tempdir, "cipd_manifest.versions"), "wb"
+        ) as f:
+            f.write(b"updated\n")
+        self.assertEqual(
+            gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
+        )
+
+    @mock.patch("gsutil.IS_WINDOWS", True)
+    def test_resolve_depot_tools_exe_windows_missing_manifest_cache(
+        self,
+    ) -> None:
+        self._create_exe("vpython3")
+        shutil.rmtree(os.path.join(self.cipd_bin, ".cipd"))
         self.assertEqual(
             gsutil._resolve_depot_tools_exe("vpython3"), "vpython3"
         )
@@ -425,7 +461,7 @@ class CipdExeTest(unittest.TestCase):
     def test_run_gsutil_windows_falls_back_to_bat_wrappers(self) -> None:
         # Without .cipd_bin, the .bat wrappers are run via the shell so they
         # can bootstrap .cipd_bin.
-        os.rmdir(self.cipd_bin)
+        shutil.rmtree(self.cipd_bin)
         mock_popen = self._run_gsutil(["ls"])
         mock_popen.assert_called_once_with(
             self._luci_auth_cmd("luci-auth", "context")

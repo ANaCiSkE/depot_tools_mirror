@@ -7,6 +7,8 @@ setlocal
 
 set "ROOT=%~dp0\.cipd_bin"
 set "ENSURE=%~dp0\cipd_manifest.txt"
+:: Keep this cache directory and the cached filenames below in sync with
+:: _is_cipd_bin_up_to_date() in gsutil.py.
 set "CACHE_DIR=%ROOT%\.cipd\tmp"
 set "CACHED_ENSURE=%CACHE_DIR%\.cipd_manifest.txt"
 set "CACHED_VERSIONS=%CACHE_DIR%\.cipd_manifest.versions"

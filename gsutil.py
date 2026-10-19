@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import filecmp
 import hashlib
 import json
 import os
@@ -191,11 +192,33 @@ def luci_login():
     return _luci_auth_cmd("login", interactive=True)
 
 
+def _is_cipd_bin_up_to_date() -> bool:
+    """Returns True if .cipd_bin matches the current CIPD manifest files.
+
+    The cache directory and filenames checked here must stay in sync with
+    cipd_bin_setup.bat.
+    """
+    cache_dir = os.path.join(THIS_DIR, ".cipd_bin", ".cipd", "tmp")
+    for filename in (
+        "cipd_manifest.txt",
+        "cipd_manifest.versions",
+        "cipd_client_version",
+    ):
+        src = os.path.join(THIS_DIR, filename)
+        cached = os.path.join(cache_dir, f".{filename}")
+        try:
+            if not filecmp.cmp(src, cached, shallow=False):
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def _resolve_depot_tools_exe(name: str) -> str:
     """Resolves a depot_tools binary in .cipd_bin on Windows."""
     if IS_WINDOWS:
         exe = os.path.join(THIS_DIR, ".cipd_bin", f"{name}.exe")
-        if os.path.isfile(exe):
+        if os.path.isfile(exe) and _is_cipd_bin_up_to_date():
             return exe
     return name
 
