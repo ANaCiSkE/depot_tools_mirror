@@ -2258,6 +2258,99 @@ class TestStdinFilenameFormatting(unittest.TestCase):
             )
 
 
+class TestCogAndNonGitFormatting(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.test_dir = self.enterContext(tempfile.TemporaryDirectory())
+        previous_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self.addCleanup(os.chdir, previous_cwd)
+
+    def test_get_format_js_in_cog_reads_codereview_settings(self):
+        with (
+            mock.patch("gclient_utils.IsEnvCog", return_value=True),
+            mock.patch(
+                "scm.GIT.GetCheckoutRoot",
+                side_effect=AssertionError("git should not be called in CoG"),
+            ),
+        ):
+            s = git_cl.settings.__class__()
+            self.assertFalse(s.GetFormatJs())
+
+            with open(
+                os.path.join(self.test_dir, "codereview.settings"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write("FORMAT_JS: True\n")
+
+            s2 = git_cl.settings.__class__()
+            self.assertTrue(s2.GetFormatJs())
+
+    def test_get_format_js_outside_git_repo_returns_false(self):
+        err = cl_format.subprocess2.CalledProcessError(
+            128,
+            ["git", "rev-parse", "--show-cdup"],
+            self.test_dir,
+            b"",
+            b"fatal: not a git repository (or any of the parent directories): .git\n",
+        )
+        with (
+            mock.patch("gclient_utils.IsEnvCog", return_value=False),
+            mock.patch("scm.GIT.GetCheckoutRoot", side_effect=err),
+        ):
+            s = git_cl.settings.__class__()
+            self.assertFalse(s.GetFormatJs())
+
+    @mock.patch("cl_format._RunMarkdownFormat", return_value=0)
+    def test_cmd_format_input_diff_file_in_cog_without_git(
+        self, mock_md_format
+    ):
+        diff_path = os.path.join(self.test_dir, "input.diff")
+        with open(diff_path, "w", encoding="utf-8") as f:
+            f.write(
+                "diff --git a/agents/SKILL.md b/agents/SKILL.md\n"
+                "--- a/agents/SKILL.md\n"
+                "+++ b/agents/SKILL.md\n"
+                "@@ -1 +1 @@\n"
+                "-# Old\n"
+                "+# New\n"
+            )
+        err = cl_format.subprocess2.CalledProcessError(
+            128,
+            ["git", "rev-parse", "--show-cdup"],
+            self.test_dir,
+            b"",
+            b"fatal: not a git repository (or any of the parent directories): .git\n",
+        )
+        with (
+            mock.patch("gclient_utils.IsEnvCog", return_value=True),
+            mock.patch("scm.GIT.GetCheckoutRoot", side_effect=err),
+        ):
+            for extra_args in ([], ["--presubmit"]):
+                with self.subTest(extra_args=extra_args):
+                    mock_md_format.reset_mock()
+                    with mock.patch(
+                        "cl_format.settings", git_cl.settings.__class__()
+                    ):
+                        ret = git_cl.main(
+                            [
+                                "format",
+                                "--dry-run",
+                                "--input_diff_file",
+                                diff_path,
+                            ]
+                            + extra_args
+                        )
+                    self.assertEqual(0, ret)
+                    mock_md_format.assert_called_once_with(
+                        mock.ANY,
+                        ["agents/SKILL.md"],
+                        self.test_dir,
+                        mock.ANY,
+                    )
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG if "-v" in sys.argv else logging.ERROR

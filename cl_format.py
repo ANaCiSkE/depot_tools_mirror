@@ -1364,7 +1364,11 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     # Normalize files against the current path, so paths relative to the
     # current directory are still resolved as expected.
     cwd = os.getcwd()
-    top_dir = cwd if opts.presubmit else settings.GetRoot()
+    top_dir = (
+        cwd
+        if (opts.presubmit or gclient_utils.IsEnvCog())
+        else settings.GetRoot()
+    )
     files = [os.path.join(cwd, file) for file in files]
     diff_files, diffs = _FindFilesToFormat(opts, files, upstream_commit)
 

@@ -9,6 +9,7 @@ import os
 import sys
 from typing import NoReturn
 
+import gclient_paths
 import gclient_utils
 import scm
 import subprocess2
@@ -166,7 +167,10 @@ def FindCodereviewSettingsFile(filename="codereview.settings", root=None):
     inherit_ok_file = "inherit-review-settings-ok"
     cwd = os.getcwd()
     if root is None:
-        root = settings.GetRoot()
+        if gclient_utils.IsEnvCog():
+            root = gclient_paths.FindGclientRoot(cwd) or cwd
+        else:
+            root = settings.GetRoot()
     if os.path.isfile(os.path.join(root, inherit_ok_file)):
         root = None
     while True:
@@ -399,7 +403,23 @@ class Settings:
 
     def GetFormatJs(self):
         if self.format_js is None:
-            self.format_js = self._GetConfig("cl.format-js").lower() == "true"
+            self.format_js = False
+            if gclient_utils.IsEnvCog():
+                if cr_settings_file := FindCodereviewSettingsFile():
+                    with cr_settings_file:
+                        keyvals = gclient_utils.ParseCodereviewSettingsContent(
+                            cr_settings_file.read()
+                        )
+                    self.format_js = (
+                        keyvals.get("FORMAT_JS", "").lower() == "true"
+                    )
+            else:
+                try:
+                    self.format_js = (
+                        self._GetConfig("cl.format-js").lower() == "true"
+                    )
+                except subprocess2.CalledProcessError:
+                    pass
         return self.format_js
 
     def GetUploadConversationId(self) -> bool:
