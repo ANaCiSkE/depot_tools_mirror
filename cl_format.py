@@ -103,6 +103,34 @@ def _ComputeFormatDiffLineRanges(files, diffs, expand=0):
     return line_diffs
 
 
+def _ParseLineRange(line_range: str) -> tuple[int, int]:
+    """Parses a --lines value "FIRST:LAST" into (first, last), 1-based and
+    inclusive."""
+    match = re.fullmatch(r"(\d+):(\d+)", line_range)
+    if match:
+        first, last = int(match.group(1)), int(match.group(2))
+        if 1 <= first <= last:
+            return first, last
+    raise optparse.OptionValueError(
+        f"Invalid --lines value {line_range!r}: expected FIRST:LAST with "
+        "1 <= FIRST <= LAST."
+    )
+
+
+class _LineRangeOption(optparse.Option):
+    """optparse.Option with a "line_range" type that parses FIRST:LAST.
+
+    optparse's `type=` only accepts registered type names, so parsing --lines
+    values at parse time needs a custom type registered on an Option subclass.
+    """
+
+    TYPES = optparse.Option.TYPES + ("line_range",)
+    TYPE_CHECKER = dict(
+        optparse.Option.TYPE_CHECKER,
+        line_range=lambda _option, _opt, value: _ParseLineRange(value),
+    )
+
+
 def _FindMarkdownConfigFile(
     fpath: str,
     markdown_config_cache: dict[str, Optional[str]],
@@ -163,7 +191,7 @@ def _RunClangFormatDiff(opts, paths, top_dir, diffs):
             cmd = [
                 clang_format_tool,
                 f"--assume-filename={opts.stdin_filename}",
-            ]
+            ] + [f"--lines={first}:{last}" for first, last in opts.lines]
             with open(paths[0], "rb") as myfile:
                 input_bytes = myfile.read()
             stdout = RunCommand(cmd, stdin=input_bytes, cwd=top_dir)
@@ -323,6 +351,9 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, diffs):
         # Format two lines around each changed line so that the correct amount
         # of blank lines will be added between symbols.
         line_diffs = _ComputeFormatDiffLineRanges(paths, diffs, expand=2)
+    elif opts.stdin_filename:
+        # Ranges passed via --lines (e.g. by `jj fix`) are used as is.
+        base_cmd += [f"--lines={first}:{last}" for first, last in opts.lines]
 
     def RunFormat(cmd, path, **kwds):
         stdout = RunCommand(cmd + [path], **kwds)
@@ -405,6 +436,8 @@ def _RunKtfmt(opts, paths, top_dir, diffs):
     cmd = [tool]
     if opts.dry_run:
         cmd += ["--set-exit-if-changed", "--dry-run"]
+    if opts.stdin_filename:
+        cmd += [f"--lines={first}:{last}" for first, last in opts.lines]
 
     for paths_batch in _SplitArgsByCmdLineLimit(paths):
         ktfmt_exitcode = subprocess2.call(cmd + paths_batch, shell=False)
@@ -542,8 +575,11 @@ def _RunPythonFormat(
             "format",
             f"--root={top_dir}",
             f"--stdin-filename={opts.stdin_filename}",
-            "-",
         ]
+        # Ruff's --range end is exclusive, so it ends at the start of the line
+        # after LAST. ruff_chromium chains multiple ranges.
+        cmd += [f"--range={first}:1-{last + 1}:1" for first, last in opts.lines]
+        cmd.append("-")
 
         with open(paths[0], "rb") as myfile:
             input_bytes = myfile.read()
@@ -1114,6 +1150,18 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
         help="Format the single file content provided on stdin with the given path.",
     )
     parser.add_option(
+        _LineRangeOption(
+            "--lines",
+            type="line_range",
+            action="append",
+            default=[],
+            metavar="FIRST:LAST",
+            help="With --stdin-filename, only reformat this 1-based line "
+            "range. Can be repeated. Not all formatters honor it; the others "
+            "format the whole file.",
+        )
+    )
+    parser.add_option(
         "--full",
         action="store_true",
         help="Reformat the full content of all touched files",
@@ -1231,6 +1279,9 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
     top_dir: Optional[str] = None
     temp_file: Optional[str] = None
 
+    if opts.lines and not opts.stdin_filename:
+        DieWithError("--lines can only be used with --stdin-filename.")
+
     if opts.stdin_filename:
         # On the stdin path stdout carries the formatted file content, so it
         # cannot double as a diff channel, and the caller (e.g. `jj fix`)
@@ -1242,10 +1293,11 @@ def CMDformat(parser: optparse.OptionParser, args: list[str]):
                 "--diff, --dry-run and --input_diff_file cannot be used with "
                 "--stdin-filename."
             )
-        # There is no upstream to diff against, so always format the whole
-        # file. `jj fix` already limits itself to files changed in the
-        # revisions being fixed. Its `line-range-args` could narrow this
-        # further, but most of the formatters here don't support line ranges.
+        # There is no upstream to diff against, so format the whole file.
+        # `jj fix` already limits itself to files changed in the revisions
+        # being fixed, and can pass the changed lines via `--lines` (its
+        # `line-range-args`). clang-format, google-java-format, ktfmt and the
+        # Python formatter narrow themselves to those.
         opts.full = True
         stdin_bytes = sys.stdin.buffer.read()
         if not stdin_bytes:

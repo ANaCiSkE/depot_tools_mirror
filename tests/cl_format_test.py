@@ -1934,6 +1934,35 @@ class TestGoogleJavaFormat(unittest.TestCase):
             cwd="dummy_top_dir",
         )
 
+    @mock.patch("cl_format.RunCommand", return_value="")
+    @mock.patch("google_java_format.FindGoogleJavaFormat", return_value="gjf")
+    @mock.patch("os.path.exists", return_value=True)
+    def testStdinForwardsLines(self, _mock_exists, _mock_find, mock_run_cmd):
+        """--lines ranges (e.g. from `jj fix`) are passed through unexpanded."""
+        mock_opts = mock.Mock(
+            dry_run=False,
+            diff=False,
+            stdin_filename="foo/Foo.java",
+            lines=[(1, 1), (3, 5)],
+        )
+
+        cl_format._RunGoogleJavaFormat(
+            mock_opts, ["temp_Foo.java"], "dummy_top_dir", None
+        )
+
+        mock_run_cmd.assert_called_once_with(
+            [
+                "gjf",
+                "--aosp",
+                "--replace",
+                "--lines=1:1",
+                "--lines=3:5",
+                "temp_Foo.java",
+            ],
+            error_ok=True,
+            cwd="dummy_top_dir",
+        )
+
 
 class TestStdinFilenameFormatting(unittest.TestCase):
     RUSTFMT_TOML = b'ignore = ["third_party/**"]\n'
@@ -2068,35 +2097,141 @@ class TestStdinFilenameFormatting(unittest.TestCase):
     def test_python_stdin_filename_invokes_ruff_directly(
         self, mock_ruff_path, mock_communicate
     ):
-        temp_file = self._write("temp.py", b"x=1+2\n")
+        # Ruff's --range end is exclusive, so --lines=3:5 ends at 6:1.
+        for lines, expected_args in (
+            ([], []),
+            ([(1, 1), (3, 5)], ["--range=1:1-2:1", "--range=3:1-6:1"]),
+        ):
+            with self.subTest(lines=lines):
+                mock_communicate.reset_mock()
+                temp_file = self._write("temp.py", b"x=1+2\n")
 
-        mock_communicate.return_value = (b"x = 1 + 2\n", b""), 0
+                mock_communicate.return_value = (b"x = 1 + 2\n", b""), 0
+                opts = mock.Mock(
+                    stdin_filename="foo/bar.py",
+                    diff=False,
+                    dry_run=False,
+                    full=True,
+                    lines=lines,
+                )
+                ret = cl_format._RunPythonFormat(
+                    opts, [temp_file], self.test_dir, None
+                )
+                self.assertEqual(0, ret)
+                # --root bounds ruff_chromium's upward config search; without
+                # it a stray config above the checkout would be picked up.
+                mock_communicate.assert_called_once_with(
+                    [
+                        "vpython3",
+                        "/fake/ruff_chromium",
+                        "format",
+                        f"--root={self.test_dir}",
+                        "--stdin-filename=foo/bar.py",
+                    ]
+                    + expected_args
+                    + ["-"],
+                    stdin=b"x=1+2\n",
+                    stdout=cl_format.subprocess2.PIPE,
+                    stderr=cl_format.subprocess2.PIPE,
+                    cwd=self.test_dir,
+                    shell=sys.platform == "win32",
+                )
+                self.assertEqual(b"x = 1 + 2\n", self._read(temp_file))
+
+    @mock.patch(
+        "clang_format.FindClangFormatToolInChromiumTree",
+        return_value="/fake/clang-format",
+    )
+    @mock.patch("cl_format.RunCommand", return_value="int x;\n")
+    def test_clang_format_stdin_forwards_lines(self, mock_run, mock_find_tool):
+        """Each --lines range (e.g. from `jj fix`) goes to clang-format."""
+        for lines, expected_args in (
+            ([], []),
+            ([(1, 1), (3, 5)], ["--lines=1:1", "--lines=3:5"]),
+        ):
+            with self.subTest(lines=lines):
+                mock_run.reset_mock()
+                temp_file = self._write("temp.cc", b"int  x;\n")
+                opts = mock.Mock(stdin_filename="foo/bar.cc", lines=lines)
+                ret = cl_format._RunClangFormatDiff(
+                    opts, [temp_file], self.test_dir, None
+                )
+                self.assertEqual(0, ret)
+                mock_run.assert_called_once_with(
+                    ["/fake/clang-format", "--assume-filename=foo/bar.cc"]
+                    + expected_args,
+                    stdin=b"int  x;\n",
+                    cwd=self.test_dir,
+                )
+                self.assertEqual(b"int x;\n", self._read(temp_file))
+
+    def test_lines_requires_stdin_filename(self):
+        stderr = io.StringIO()
+        # CMDformat consults settings while registering options, which would
+        # otherwise require a real checkout.
+        with (
+            mock.patch("cl_format.settings") as mock_settings,
+            mock.patch("sys.stderr", stderr),
+            self.assertRaises(SystemExit) as cm,
+        ):
+            mock_settings.GetFormatJs.return_value = False
+            mock_settings.GetFormatFullByDefault.return_value = False
+            cl_format.CMDformat(optparse.OptionParser(), ["--lines=1:2"])
+        self.assertEqual(1, cm.exception.code)
+        self.assertIn(
+            "--lines can only be used with --stdin-filename", stderr.getvalue()
+        )
+
+    @mock.patch("cl_format.subprocess2.call", return_value=0)
+    @mock.patch("ktfmt.FindKtfmt", return_value="/fake/ktfmt")
+    def test_ktfmt_stdin_forwards_lines(self, mock_find_tool, mock_call):
+        """Each --lines range (e.g. from `jj fix`) goes to ktfmt."""
         opts = mock.Mock(
-            stdin_filename="foo/bar.py",
+            stdin_filename="foo/Bar.kt",
             diff=False,
             dry_run=False,
-            full=True,
+            lines=[(1, 1), (3, 5)],
         )
-        ret = cl_format._RunPythonFormat(opts, [temp_file], self.test_dir, None)
+        ret = cl_format._RunKtfmt(opts, ["temp_Bar.kt"], self.test_dir, None)
         self.assertEqual(0, ret)
-        # --root bounds ruff_chromium's upward config search; without it a
-        # stray config above the checkout would be picked up.
-        mock_communicate.assert_called_once_with(
-            [
-                "vpython3",
-                "/fake/ruff_chromium",
-                "format",
-                f"--root={self.test_dir}",
-                "--stdin-filename=foo/bar.py",
-                "-",
-            ],
-            stdin=b"x=1+2\n",
-            stdout=cl_format.subprocess2.PIPE,
-            stderr=cl_format.subprocess2.PIPE,
-            cwd=self.test_dir,
-            shell=sys.platform == "win32",
+        mock_call.assert_called_once_with(
+            ["/fake/ktfmt", "--lines=1:1", "--lines=3:5", "temp_Bar.kt"],
+            shell=False,
         )
-        self.assertEqual(b"x = 1 + 2\n", self._read(temp_file))
+
+    def test_parse_line_range(self):
+        self.assertEqual((1, 1), cl_format._ParseLineRange("1:1"))
+        self.assertEqual((3, 15), cl_format._ParseLineRange("3:15"))
+        for bad in ("", "3", "3-5", "0:2", "5:3", "a:b", " 1:2"):
+            with self.subTest(line_range=bad):
+                with self.assertRaisesRegex(
+                    optparse.OptionValueError, "Invalid --lines value"
+                ):
+                    cl_format._ParseLineRange(bad)
+
+    def test_lines_parsed_while_parsing_args(self):
+        """--lines values become (first, last) tuples in option order, and a
+        malformed one fails during option parsing."""
+        parser = optparse.OptionParser()
+        parser.add_option(
+            cl_format._LineRangeOption(
+                "--lines", type="line_range", action="append", default=[]
+            )
+        )
+        opts, _ = parser.parse_args(["--lines=3:5", "--lines", "1:1"])
+        self.assertEqual([(3, 5), (1, 1)], opts.lines)
+        # git_cl's OptionParser parses into a Values object without defaults.
+        opts, _ = parser.parse_args(["--lines=2:4"], optparse.Values())
+        self.assertEqual([(2, 4)], opts.lines)
+
+        stderr = io.StringIO()
+        with (
+            mock.patch("sys.stderr", stderr),
+            self.assertRaises(SystemExit) as cm,
+        ):
+            parser.parse_args(["--lines=4-4"])
+        self.assertEqual(2, cm.exception.code)
+        self.assertIn("Invalid --lines value '4-4'", stderr.getvalue())
 
     def test_stdin_filename_rejects_incompatible_flags(self):
         # On the stdin path stdout is the formatted-content channel, so a diff
