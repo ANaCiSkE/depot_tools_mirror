@@ -450,6 +450,9 @@ class GClientUtilsTest(trial_dir.TestCase):
         with mock.patch.dict(os.environ, {"GEMINI_CLI": "1"}, clear=True):
             self.assertTrue(gclient_utils.IsEnvAi())
             self.assertEqual(gclient_utils.GetAiAgentEnvVars(), ["GEMINI_CLI"])
+        with mock.patch.dict(os.environ, {"COPILOT_CLI": "1"}, clear=True):
+            self.assertTrue(gclient_utils.IsEnvAi())
+            self.assertEqual(gclient_utils.GetAiAgentEnvVars(), ["COPILOT_CLI"])
         with mock.patch.dict(os.environ, {"AI_AGENT": "true"}, clear=True):
             self.assertTrue(gclient_utils.IsEnvAi())
             self.assertEqual(gclient_utils.GetAiAgentEnvVars(), ["AI_AGENT"])

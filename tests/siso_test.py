@@ -1790,6 +1790,7 @@ def test_main_complex_args_e2e(
         "CLAUDECODE",
         "CODEX_SANDBOX",
         "CURSOR_AGENT",
+        "COPILOT_CLI",
         "AI_AGENT",
         None,
     ],
