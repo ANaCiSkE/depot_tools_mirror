@@ -6393,7 +6393,7 @@ def CMDlint(parser, args):
                 )
 
         if ruff_files:
-            tool = os.path.join(DEPOT_TOOLS, "ruff_chromium")
+            tool = os.path.join(DEPOT_TOOLS, "ruff_chromium.py")
             if not os.path.exists(tool):
                 print(
                     f"Error: ruff_chromium wrapper not found at {tool}. Please"

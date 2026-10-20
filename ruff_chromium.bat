@@ -9,4 +9,4 @@ setlocal
 set PATH=%PATH%;%~dp0
 
 :: Defer control.
-vpython3 "%~dp0\ruff_chromium" %*
+vpython3 "%~dp0\ruff_chromium.py" %*

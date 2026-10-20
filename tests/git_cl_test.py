@@ -10150,7 +10150,7 @@ class CMDLintTestCase(CMDTestCaseBase):
     @mock.patch("git_cl.subprocess2.call", return_value=0)
     def testLintPythonRuff(self, mock_call, _mock_linter):
         self.assertEqual(0, git_cl.main(["lint", "test.py"]))
-        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium.py")
         mock_call.assert_called_once_with(
             ["vpython3", expected_tool, "check", "test.py"],
             cwd=mock.ANY,
@@ -10163,7 +10163,7 @@ class CMDLintTestCase(CMDTestCaseBase):
     @mock.patch("git_cl.subprocess2.call", return_value=0)
     def testLintPythonRuffFix(self, mock_call, _mock_linter):
         self.assertEqual(0, git_cl.main(["lint", "--fix", "test.py"]))
-        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium.py")
         mock_call.assert_called_once_with(
             ["vpython3", expected_tool, "check", "--fix", "test.py"],
             cwd=mock.ANY,
@@ -10192,7 +10192,7 @@ class CMDLintTestCase(CMDTestCaseBase):
             "test.h:3:  (cpplint) Do not indent within a namespace",
             git_cl.sys.stderr.getvalue(),
         )
-        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium.py")
         mock_call.assert_called_once_with(
             ["vpython3", expected_tool, "check", "test.py"],
             cwd=mock.ANY,
@@ -10252,7 +10252,7 @@ class CMDLintTestCase(CMDTestCaseBase):
         files = [f"file_{i}.py" for i in range(150)]
         self.assertEqual(0, git_cl.main(["lint"] + files))
         self.assertEqual(mock_call.call_count, 3)
-        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium")
+        expected_tool = os.path.join(git_cl.DEPOT_TOOLS, "ruff_chromium.py")
         # Each chunk has 50 files
         self.assertEqual(
             mock_call.call_args_list[0][0][0],

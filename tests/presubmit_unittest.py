@@ -4543,7 +4543,7 @@ the current line as well!
         self.assertEqual(len(commands), 1)
         cmd = commands[0]
         self.assertEqual(cmd.name, "Ruff (1 file)")
-        expected_tool = os.path.join(_ROOT, "ruff_chromium")
+        expected_tool = os.path.join(_ROOT, "ruff_chromium.py")
         self.assertEqual(
             cmd.cmd,
             [

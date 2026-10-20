@@ -12,7 +12,6 @@ extend-include = [
     "pylint-2.7",
     "pylint-3.2",
     "repo",
-    "ruff_chromium",
     "yapf",
 ]
 

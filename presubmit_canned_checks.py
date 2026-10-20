@@ -2183,7 +2183,7 @@ def GetRuff(
     if not affected_files:
         return []
 
-    tool = input_api.os_path.join(_HERE, "ruff_chromium")
+    tool = input_api.os_path.join(_HERE, "ruff_chromium.py")
     if not input_api.os_path.exists(tool):
         return [
             output_api.PresubmitPromptWarning(

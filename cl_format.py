@@ -552,7 +552,7 @@ def _RunSwiftFormat(opts, paths, top_dir, diffs):
 
 def _GetRuffChromiumPath() -> str:
     """Returns the absolute path to the ruff_chromium wrapper script."""
-    return os.path.join(DEPOT_TOOLS, "ruff_chromium")
+    return os.path.join(DEPOT_TOOLS, "ruff_chromium.py")
 
 
 def _RunPythonFormat(

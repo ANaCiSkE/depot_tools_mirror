@@ -27,10 +27,10 @@ from unittest.mock import Mock, patch
 import tempfile
 import shutil
 
-# Load depot_tools/ruff_chromium directly by file path to avoid naming collision with ruff package in site-packages
+# Load depot_tools/ruff_chromium.py directly by file path to avoid naming collision with ruff package in site-packages
 test_dir = os.path.dirname(os.path.abspath(__file__))
 depot_tools_dir = os.path.dirname(test_dir)
-ruff_path = os.path.join(depot_tools_dir, "ruff_chromium")
+ruff_path = os.path.join(depot_tools_dir, "ruff_chromium.py")
 loader = SourceFileLoader("depot_tools_ruff_chromium", ruff_path)
 spec = importlib.util.spec_from_loader(
     "depot_tools_ruff_chromium", loader, origin=ruff_path
