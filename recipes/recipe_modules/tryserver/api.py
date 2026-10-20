@@ -273,7 +273,11 @@ class TryserverApi(recipe_api.RecipeApi):
     self.m.step.empty("not a tryjob", status=status, step_text=step_text)
 
   def get_files_affected_by_patch(
-    self, patch_root, report_files_via_property=None, **kwargs
+    self,
+    patch_root,
+    report_files_via_property=None,
+    ignore_stacked_changes=False,
+    **kwargs,
   ):
     """Returns list of paths to files affected by the patch.
 
@@ -282,16 +286,22 @@ class TryserverApi(recipe_api.RecipeApi):
         api.gclient.get_gerrit_patch_root().
       * report_files_via_property: name of the output property to report the
         list of the files. If None (default), do not report.
+      * ignore_stacked_changes: if True, only report files modified in
+        FETCH_HEAD~..FETCH_HEAD rather than all staged changes from the patch
+        stack.
 
     Returned paths will be relative to to api.path['root'].
     """
     cwd = self.m.context.cwd or self.m.path.start_dir / patch_root
+    diff_args = (
+      ["FETCH_HEAD~", "FETCH_HEAD"] if ignore_stacked_changes else ["--cached"]
+    )
     with self.m.context(cwd=cwd):
       step_result = self.m.git(
         "-c",
         "core.quotePath=false",
         "diff",
-        "--cached",
+        *diff_args,
         "--name-only",
         name="git diff to analyze patch",
         stdout=self.m.raw_io.output(),

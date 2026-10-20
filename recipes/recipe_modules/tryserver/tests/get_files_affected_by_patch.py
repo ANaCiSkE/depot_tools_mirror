@@ -18,6 +18,7 @@ def RunSteps(api):
   files = api.tryserver.get_files_affected_by_patch(
     api.properties["patch_root"],
     report_files_via_property=api.properties.get("report_files_via_property"),
+    ignore_stacked_changes=api.properties.get("ignore_stacked_changes", False),
   )
   api.assertions.assertCountEqual(files, api.properties["expected_files"])
 
@@ -98,6 +99,22 @@ def GenTests(api):
     api.properties(
       patch_root="",
       expected_files=["file with spaces.txt"],
+    ),
+    api.post_check(post_process.StatusSuccess),
+    api.post_process(post_process.DropExpectation),
+  )
+
+  yield api.test(
+    "ignore-stacked-changes",
+    api.properties(
+      patch_root="",
+      ignore_stacked_changes=True,
+      expected_files=["foo.cc"],
+    ),
+    api.post_process(
+      post_process.StepCommandContains,
+      "git diff to analyze patch",
+      ["FETCH_HEAD~", "FETCH_HEAD"],
     ),
     api.post_check(post_process.StatusSuccess),
     api.post_process(post_process.DropExpectation),
