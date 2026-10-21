@@ -593,15 +593,18 @@ class SSOAuthenticator(_Authenticator):
             if not info:
                 info = cls._launch_sso_helper()
                 # HACK: `git-remote-sso` doesn't always properly warm up the
-                # cookies - in this case, run a canned git operation against
-                # a public repo to cause `git-remote-sso` to warm the cookies
-                # up, and then try pulling config again.
+                # cookies - in this case, invoke `git-remote-sso` directly
+                # against a public repo with two URL arguments so neither git
+                # nor git-remote-http rewrites the URL via url.*.insteadOf,
+                # and then try pulling config again.
                 #
                 # BUG: b/342644760
                 if not any(c.domain == ".google.com" for c in info.cookies):
                     LOGGER.debug("SSO: Refreshing .google.com cookies.")
-                    scm.GIT.Capture(
-                        ["ls-remote", "sso://chromium/All-Projects"]
+                    url = "sso://chromium/All-Projects"
+                    subprocess2.check_output(
+                        [ssoHelper.find_cmd(), url, url],
+                        stdin=b"list\n\n",
                     )
                     info = cls._launch_sso_helper()
                     if not any(c.domain == ".google.com" for c in info.cookies):

@@ -1631,6 +1631,44 @@ class SSOAuthenticatorTest(unittest.TestCase):
             cookies_by_domain[(".example.com", "session")], "renewed"
         )
 
+    @mock.patch(
+        "gerrit_util.ssoHelper.find_cmd", return_value="/fake/git-remote-sso"
+    )
+    @mock.patch("subprocess2.check_output")
+    def testGetSsoInfoRefreshesCookies(
+        self, mock_check_output: mock.MagicMock, _: mock.MagicMock
+    ) -> None:
+        empty_jar = http.cookiejar.CookieJar()
+        populated_jar = http.cookiejar.CookieJar()
+        populated_jar.set_cookie(self._make_cookie("sid", "val", ".google.com"))
+        info_empty = gerrit_util.SSOAuthenticator.SSOInfo(
+            proxy_host="localhost",
+            proxy_port=1234,
+            headers={"Authorization": "Basic token"},
+            cookies=empty_jar,
+        )
+        info_populated = gerrit_util.SSOAuthenticator.SSOInfo(
+            proxy_host="localhost",
+            proxy_port=1234,
+            headers={"Authorization": "Basic token"},
+            cookies=populated_jar,
+        )
+        with mock.patch.object(
+            gerrit_util.SSOAuthenticator,
+            "_launch_sso_helper",
+            side_effect=[info_empty, info_populated],
+        ):
+            info = self.sso._get_sso_info()
+        self.assertIs(info, info_populated)
+        mock_check_output.assert_called_once_with(
+            [
+                "/fake/git-remote-sso",
+                "sso://chromium/All-Projects",
+                "sso://chromium/All-Projects",
+            ],
+            stdin=b"list\n\n",
+        )
+
 
 class SSOHelperTest(unittest.TestCase):
     def setUp(self) -> None:
