@@ -176,9 +176,7 @@ def CheckOwnersFormat(input_api, output_api):
 
 
 def CheckOwnersOnUpload(input_api, output_api):
-    return input_api.canned_checks.CheckOwners(
-        input_api, output_api, allow_tbr=False
-    )
+    return input_api.canned_checks.CheckOwners(input_api, output_api)
 
 
 def CheckDoNotSubmitOnCommit(input_api, output_api):

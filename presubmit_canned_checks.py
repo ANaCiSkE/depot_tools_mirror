@@ -2394,7 +2394,7 @@ def CheckOwnersFormat(input_api, output_api):
     ]
 
 
-def CheckOwners(input_api, output_api, source_file_filter=None, allow_tbr=True):
+def CheckOwners(input_api, output_api, source_file_filter=None):
     if (
         not input_api.gerrit  # Running locally.
         or input_api.gerrit.IsCodeOwnersEnabledOnRepo()  # Let Gerrit do this check rather than presubmits.
