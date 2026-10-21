@@ -4888,19 +4888,23 @@ class TestGitCl(unittest.TestCase):
         }
 
         cl = git_cl.Changelist(issue=1234)
+        original_reviewers = reviewers.copy()
+        options = mock.Mock(
+            bug=bug,
+            fixed=fixed,
+            reviewers=reviewers,
+            add_owners_to=add_owners_to,
+            message=initial_description,
+            commit_description=commit_description,
+        )
         actual = cl._GetDescriptionForUpload(
-            options=mock.Mock(
-                bug=bug,
-                fixed=fixed,
-                reviewers=reviewers,
-                add_owners_to=add_owners_to,
-                message=initial_description,
-                commit_description=commit_description,
-            ),
+            options=options,
             git_diff_args=None,
             files=list(owners_by_path),
         )
         self.assertEqual(expected_description, actual.description)
+        # options.reviewers must not change: stacked uploads share options.
+        self.assertEqual(original_reviewers, options.reviewers)
 
     def testGetDescriptionForUpload(self):
         self.getDescriptionForUploadTest()

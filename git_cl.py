@@ -2163,7 +2163,11 @@ class Changelist(object):
 
         change_description = ChangeDescription(description, bug, fixed)
 
-        # Fill gaps in OWNERS coverage to reviewers if requested.
+        # Fill gaps in OWNERS coverage to reviewers if requested. Don't extend
+        # options.reviewers: stacked uploads share one options object, so the
+        # owners suggested for one CL would leak into the next.
+        assert isinstance(options.reviewers, list), options.reviewers
+        reviewers = options.reviewers.copy()
         if options.add_owners_to:
             assert options.add_owners_to in ("R"), options.add_owners_to
             status = self.owners_client.GetFilesApprovalStatus(
@@ -2174,15 +2178,15 @@ class Changelist(object):
                 for f in files
                 if status[f] == self._owners_client.INSUFFICIENT_REVIEWERS
             ]
-            owners = self.owners_client.SuggestOwners(
-                missing_files, exclude=[self.GetAuthor()]
+            reviewers.extend(
+                self.owners_client.SuggestOwners(
+                    missing_files, exclude=[self.GetAuthor()]
+                )
             )
-            assert isinstance(options.reviewers, list), options.reviewers
-            options.reviewers.extend(owners)
 
         # Set the reviewer list now so that presubmit checks can access it.
-        if options.reviewers:
-            change_description.update_reviewers(options.reviewers)
+        if reviewers:
+            change_description.update_reviewers(reviewers)
 
         return change_description
 
