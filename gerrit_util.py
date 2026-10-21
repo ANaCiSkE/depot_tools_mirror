@@ -2754,16 +2754,34 @@ def ComputeScheduleTime(
     return f"{target_hour:02d}:{target_min:02d}"
 
 
+def IsFlowsEnabled(host: str, issue: Union[int, str]) -> bool:
+    """Checks if Gerrit Flows are enabled for the current user on the change."""
+    resp = CallGerritApi(
+        host,
+        f"changes/{issue}/is-flows-enabled",
+        reqtype="GET",
+        accept_statuses=(200,),
+    )
+    return bool(isinstance(resp, dict) and resp.get("enabled"))
+
+
 def CreateScheduledSubmitFlow(
     host: str,
     issue: Union[int, str],
     custom_time: Optional[str] = None,
     tz: str = "America/Los_Angeles",
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """Creates a Gerrit Flow to trigger CQ+2 at scheduled time once
     submittable.
     """
     target_time = ComputeScheduleTime(issue, custom_time)
+    if not IsFlowsEnabled(host, issue):
+        print(
+            "Scheduled submits are not currently supported for external "
+            "Chromium contributors."
+        )
+        return None
+
     cl_url = f"https://{host}/c/{issue}"
     condition = (
         f"{cl_url} is is:submittable, wait until today at {target_time} in {tz}"
@@ -2780,7 +2798,7 @@ def CreateScheduledSubmitFlow(
         ]
     }
     try:
-        res = CallGerritApi(
+        resp = CallGerritApi(
             host,
             f"changes/{issue}/flows",
             reqtype="POST",
@@ -2791,7 +2809,7 @@ def CreateScheduledSubmitFlow(
             f"Created submit flow for CL {issue} "
             f"(scheduled for today at {target_time} in {tz})."
         )
-        return res
+        return resp
     except Exception as e:
         print(f"WARNING: Failed to create submit flow for CL {issue}: {e}")
         raise

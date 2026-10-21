@@ -2384,8 +2384,11 @@ class GerritFlowsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gerrit_util.ComputeScheduleTime(123456, custom_time=t)
 
+    @mock.patch("gerrit_util.IsFlowsEnabled", return_value=True)
     @mock.patch("gerrit_util.CallGerritApi")
-    def testCreateScheduledSubmitFlow_DefaultJitter(self, mockCallGerritApi):
+    def testCreateScheduledSubmitFlow_DefaultJitter(
+        self, mockCallGerritApi, _mockIsFlowsEnabled
+    ):
         mockCallGerritApi.return_value = {"uuid": "test-uuid"}
         result = gerrit_util.CreateScheduledSubmitFlow("example.com", 123456)
         self.assertEqual(result, {"uuid": "test-uuid"})
@@ -2410,8 +2413,11 @@ class GerritFlowsTest(unittest.TestCase):
             accept_statuses=(200, 201),
         )
 
+    @mock.patch("gerrit_util.IsFlowsEnabled", return_value=True)
     @mock.patch("gerrit_util.CallGerritApi")
-    def testCreateScheduledSubmitFlow_CustomTime(self, mockCallGerritApi):
+    def testCreateScheduledSubmitFlow_CustomTime(
+        self, mockCallGerritApi, _mockIsFlowsEnabled
+    ):
         mockCallGerritApi.return_value = {"uuid": "test-uuid"}
         result = gerrit_util.CreateScheduledSubmitFlow(
             "example.com", 123456, custom_time="20:30"
@@ -2438,8 +2444,29 @@ class GerritFlowsTest(unittest.TestCase):
             accept_statuses=(200, 201),
         )
 
+    @mock.patch("builtins.print")
+    @mock.patch("gerrit_util.CallGerritApi", return_value={"enabled": False})
+    def testCreateScheduledSubmitFlow_FlowsDisabledForNonGoogler(
+        self, mockCallGerritApi, mockPrint
+    ):
+        result = gerrit_util.CreateScheduledSubmitFlow("example.com", 123456)
+        self.assertIsNone(result)
+        mockCallGerritApi.assert_called_once_with(
+            "example.com",
+            "changes/123456/is-flows-enabled",
+            reqtype="GET",
+            accept_statuses=(200,),
+        )
+        mockPrint.assert_called_once_with(
+            "Scheduled submits are not currently supported for external "
+            "Chromium contributors."
+        )
+
+    @mock.patch("gerrit_util.IsFlowsEnabled", return_value=True)
     @mock.patch("gerrit_util.CallGerritApi")
-    def testCreateScheduledSubmitFlow_ApiFailure(self, mockCallGerritApi):
+    def testCreateScheduledSubmitFlow_ApiFailure(
+        self, mockCallGerritApi, _mockIsFlowsEnabled
+    ):
         mockCallGerritApi.side_effect = gerrit_util.GerritError(
             500, "Internal Server Error"
         )
