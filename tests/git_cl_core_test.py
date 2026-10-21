@@ -37,6 +37,22 @@ class GitClCoreTest(unittest.TestCase):
         self.assertTrue(len(chunks) >= 1)
         self.assertEqual(sum(len(c) for c in chunks), 500)
 
+    def testSplitArgsByCmdLineLimitCustomLimit(self):
+        args = ["a" * 99 for _ in range(10)]
+        chunks = list(
+            git_cl_core._SplitArgsByCmdLineLimit(args, command_line_limit=300)
+        )
+        self.assertEqual([3, 3, 3, 1], [len(c) for c in chunks])
+        self.assertEqual(args, [a for c in chunks for a in c])
+
+    def testSplitArgsByCmdLineLimitOversizedArgGetsOwnBatch(self):
+        chunks = list(
+            git_cl_core._SplitArgsByCmdLineLimit(
+                ["a", "b" * 50, "c"], command_line_limit=10
+            )
+        )
+        self.assertEqual([["a"], ["b" * 50], ["c"]], chunks)
+
     # GetConfig must be mocked too: _SafeSetConfig reads the current value
     # before writing, which would otherwise shell out to git against the
     # fake root below. None means "unset", so every write still happens.

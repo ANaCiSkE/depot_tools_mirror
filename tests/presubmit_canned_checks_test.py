@@ -3728,5 +3728,82 @@ class MockInputApiTest(unittest.TestCase):
         )
 
 
+class CheckSkillFilesTest(unittest.TestCase):
+    def setUp(self):
+        self.input_api = MockInputApi()
+        self.input_api.subprocess = mock.Mock()
+        self.input_api.subprocess.Popen.return_value.communicate.return_value = (
+            b"",
+            b"",
+        )
+        self.input_api.subprocess.Popen.return_value.returncode = 0
+        self.output_api = MockOutputApi()
+
+    def _Popen(self):
+        return self.input_api.subprocess.Popen
+
+    def testNoSkillFiles(self):
+        self.input_api.files = [MockAffectedFile("foo.py", "")]
+        results = presubmit_canned_checks.CheckSkillFiles(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+        self._Popen().assert_not_called()
+
+    def testFewSkillFilesSingleInvocation(self):
+        self.input_api.files = [
+            MockAffectedFile(f"agents/skills/s{i}/SKILL.md", "")
+            for i in range(3)
+        ]
+        results = presubmit_canned_checks.CheckSkillFiles(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+        self.assertEqual(1, self._Popen().call_count)
+        cmd = self._Popen().call_args[0][0]
+        self.assertEqual(5, len(cmd))
+
+    def testManySkillFilesBatchedUnderCmdLimit(self):
+        # Long absolute paths like the win-presubmit bot's: 200 * ~100 chars is
+        # far over cmd.exe's 8191-character limit in one command.
+        files = [
+            MockAffectedFile(
+                "C:\\b\\s\\w\\ir\\cache\\builder\\src\\agents\\skills\\"
+                f"skill_{i:03}_" + "x" * 40 + "\\SKILL.md",
+                "",
+            )
+            for i in range(200)
+        ]
+        self.input_api.files = files
+        results = presubmit_canned_checks.CheckSkillFiles(
+            self.input_api, self.output_api
+        )
+        self.assertEqual([], results)
+        self.assertGreater(self._Popen().call_count, 1)
+        passed = []
+        for call in self._Popen().call_args_list:
+            cmd = call[0][0]
+            self.assertLessEqual(
+                len(" ".join(cmd)),
+                presubmit_canned_checks._MAX_SKILL_VALIDATOR_CMD_LEN,
+            )
+            passed.extend(cmd[2:])
+        self.assertEqual([f.AbsoluteLocalPath() for f in files], passed)
+
+    def testErrorsFromEveryBatchReported(self):
+        self.input_api.files = [
+            MockAffectedFile("a" * 100 + f"{i:03}/SKILL.md", "")
+            for i in range(100)
+        ]
+        self.input_api.subprocess.Popen.return_value.returncode = 1
+        results = presubmit_canned_checks.CheckSkillFiles(
+            self.input_api, self.output_api
+        )
+        self.assertGreater(len(results), 1)
+        self.assertEqual(self._Popen().call_count, len(results))
+        for result in results:
+            self.assertIsInstance(result, self.output_api.PresubmitError)
+
+
 if __name__ == "__main__":
     unittest.main()

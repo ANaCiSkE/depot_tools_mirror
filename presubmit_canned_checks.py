@@ -78,6 +78,9 @@ _GIT_MODE_SUBMODULE = b"160000"
 # under operating system command-line length limits (e.g. 32k on Windows).
 _MAX_BATCH_FILES = 500
 _MAX_COMMAND_LENGTH = 25000
+# Well under the 8191-character cmd.exe limit that applies when the skill
+# validator runs through vpython3.bat on Windows.
+_MAX_SKILL_VALIDATOR_CMD_LEN = 4000
 
 
 ### Description checks
@@ -4179,31 +4182,49 @@ def CheckSkillFiles(input_api, output_api):
         "skill_validator.py",
     )
 
-    cmd = ["vpython3", validator_path] + skill_files
-    try:
-        p = input_api.subprocess.Popen(
-            cmd,
-            stdout=input_api.subprocess.PIPE,
-            stderr=input_api.subprocess.PIPE,
+    # Batch the files: on Windows "vpython3" resolves to vpython3.bat, so the
+    # command goes through cmd.exe, which rejects lines over 8191 characters
+    # ("The command line is too long."). A --all presubmit passes every
+    # SKILL.md in the repository.
+    import git_cl_core
+
+    base_cmd = ["vpython3", validator_path]
+    batches = list(
+        git_cl_core._SplitArgsByCmdLineLimit(
+            skill_files,
+            _MAX_SKILL_VALIDATOR_CMD_LEN - len(" ".join(base_cmd)),
         )
-        stdout, stderr = p.communicate()
-    except OSError as e:
-        return [
-            output_api.PresubmitError(
-                f"Failed to run skill validator: {e}.\n"
-                "Is vpython3 in your PATH?"
+    )
+
+    results = []
+    for i, batch in enumerate(batches, 1):
+        try:
+            p = input_api.subprocess.Popen(
+                base_cmd + batch,
+                stdout=input_api.subprocess.PIPE,
+                stderr=input_api.subprocess.PIPE,
             )
-        ]
+            stdout, stderr = p.communicate()
+        except OSError as e:
+            results.append(
+                output_api.PresubmitError(
+                    f"Failed to run skill validator: {e}.\n"
+                    "Is vpython3 in your PATH?"
+                )
+            )
+            break
 
-    if p.returncode != 0:
-        message = (
-            f"Skill validator ({validator_path}) failed with exit "
-            f"code {p.returncode}."
-        )
-        long_text = (
-            f"STDOUT:\n{stdout.decode('utf-8', 'replace')}\n"
-            f"STDERR:\n{stderr.decode('utf-8', 'replace')}\n"
-        )
-        return [output_api.PresubmitError(message, long_text=long_text)]
+        if p.returncode != 0:
+            message = (
+                f"Skill validator ({validator_path}) failed with exit "
+                f"code {p.returncode} (batch {i} of {len(batches)})."
+            )
+            long_text = (
+                f"STDOUT:\n{stdout.decode('utf-8', 'replace')}\n"
+                f"STDERR:\n{stderr.decode('utf-8', 'replace')}\n"
+            )
+            results.append(
+                output_api.PresubmitError(message, long_text=long_text)
+            )
 
-    return []
+    return results

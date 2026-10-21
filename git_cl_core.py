@@ -95,12 +95,23 @@ def RunGitSilent(args, cwd=None):
     return RunGitWithCode(args, suppress_stderr=True, cwd=cwd)[1]
 
 
-def _SplitArgsByCmdLineLimit(args):
+def _SplitArgsByCmdLineLimit(args, command_line_limit=None):
     """Splits a list of arguments into shorter lists that fit within the command
-    line limit."""
+    line limit.
+
+    Args:
+        args: The arguments to split.
+        command_line_limit: Maximum total length of each batch, counting one
+            separator per argument. Defaults to a platform-specific limit.
+            Pass a lower value when the command runs through cmd.exe (e.g. a
+            .bat wrapper), which has a limit of 8191 characters.
+    """
     # The maximum command line length is 32768 characters on Windows and 2097152
     # characters on other platforms. Use a lower limit to be safe.
-    command_line_limit = 30000 if sys.platform.startswith("win32") else 2000000
+    if command_line_limit is None:
+        command_line_limit = (
+            30000 if sys.platform.startswith("win32") else 2000000
+        )
 
     batch_args = []
     batch_length = 0
