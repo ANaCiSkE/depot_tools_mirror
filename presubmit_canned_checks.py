@@ -2676,8 +2676,8 @@ def CheckPatchFormatted(
             display_args.append("--no-python")
 
     cmd = [
-        "git",
-        "cl",
+        _sys.executable,
+        input_api.os_path.join(_HERE, "git_cl.py"),
         "format",
         "--dry-run",
         "--presubmit",

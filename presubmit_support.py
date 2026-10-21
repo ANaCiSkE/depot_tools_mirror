@@ -79,6 +79,8 @@ _ASKED_FOR_FEEDBACK = False
 # This is the default branch name.
 _NO_BRANCH_NAME = "no name"
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
 
 class PresubmitFailure(Exception):
     pass
@@ -1988,7 +1990,13 @@ def DoPresubmitChecks(
     Returns:
         1 if presubmit checks failed or 0 otherwise.
     """
-    with setup_environ({"PYTHONDONTWRITEBYTECODE": "1"}):
+    env_updates = {"PYTHONDONTWRITEBYTECODE": "1"}
+    env_path = os.environ.get("PATH", "")
+    if _HERE not in env_path.split(os.pathsep):
+        env_updates["PATH"] = (
+            f"{env_path}{os.pathsep}{_HERE}" if env_path else _HERE
+        )
+    with setup_environ(env_updates):
         running_msg = "Running presubmit "
         running_msg += "commit " if committing else "upload "
         running_msg += "checks "

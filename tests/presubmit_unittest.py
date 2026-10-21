@@ -910,6 +910,33 @@ class PresubmitUnittest(PresubmitTestsBase):
         self.assertEqual(sys.stdout.getvalue().count("??"), 0)
         self.assertEqual(sys.stdout.getvalue().count(RUNNING_PY_CHECKS_TEXT), 1)
 
+    def testDoPresubmitChecksEnsuresDepotToolsOnPath(self):
+        root_path = os.path.join(self.fake_root_dir, "PRESUBMIT.py")
+        os.path.isfile.side_effect = lambda f: f == root_path
+        os.listdir.return_value = ["PRESUBMIT.py"]
+        gclient_utils.FileRead.return_value = """
+def CheckChangeOnUpload(input_api, output_api):
+  if %r not in input_api.environ.get('PATH', '').split(input_api.os_path.pathsep):
+    return [output_api.PresubmitError('depot_tools missing from PATH')]
+  return []
+""" % (presubmit._HERE,)
+
+        change = self.ExampleChange(extra_lines=["STORY=http://tracker/123"])
+        with presubmit.setup_environ({"PATH": "/usr/bin"}):
+            self.assertEqual(
+                0,
+                presubmit.DoPresubmitChecks(
+                    change=change,
+                    committing=False,
+                    verbose=False,
+                    default_presubmit=None,
+                    may_prompt=False,
+                    gerrit_obj=None,
+                    json_output=None,
+                ),
+            )
+            self.assertEqual("/usr/bin", os.environ["PATH"])
+
     @mock.patch("scm.GIT.GetBranch", return_value="fallback-branch")
     def testDoPresubmitChecksUsesProvidedBranchName(self, mock_get_branch):
         """Verifies that DoPresubmitChecks uses the branch name provided."""

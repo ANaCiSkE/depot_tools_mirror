@@ -2473,6 +2473,18 @@ class CheckPatchFormattedTest(unittest.TestCase):
             # Verify that both files are in the diff stream
             self.assertIn("file1.cc", stdin_content)
             self.assertIn("file2.py", stdin_content)
+            self.assertEqual(
+                [
+                    sys.executable,
+                    os.path.join(presubmit_canned_checks._HERE, "git_cl.py"),
+                    "format",
+                    "--dry-run",
+                    "--presubmit",
+                    "--input_diff_file",
+                    "-",
+                ],
+                cmd_obj.cmd,
+            )
 
     def testCheckPatchFormatted_OutputParser(self):
         file1 = MockAffectedFile("file1.cc", ["int main() {}"])
