@@ -3,7 +3,7 @@
 # /// script
 # requires-python = '>=3.11,<3.12'
 # dependencies = [
-#   'ruff==0.15.17',
+#   'ruff==0.16.9',
 #   'yapf==0.40.2',
 #   'platformdirs==4.1.0',
 #   'importlib-metadata==7.0.0',
