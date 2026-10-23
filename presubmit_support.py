@@ -1428,7 +1428,7 @@ class Change(object):
 
     def _repo_submodules(self):
         """Returns submodule paths for current change's repo."""
-        if not self._submodules:
+        if self._submodules is None:
             self._submodules = scm.GIT.ListSubmodules(self.RepositoryRoot())
         return self._submodules
 
