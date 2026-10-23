@@ -358,12 +358,13 @@ class ThreadPool:
         except Exception:
             return error_results("exec failure", traceback.format_exc())
 
+        handled = False
         if test.output_parser:
             try:
                 handled, results = InvokeOutputParser(
                     test.output_parser, returncode, stdout, stderr
                 )
-                if handled:
+                if handled and (results or not test.info):
                     return results
             except Exception:
                 output_for_error = CombineOutput(stdout, stderr)
@@ -372,7 +373,7 @@ class ThreadPool:
                     traceback.format_exc(),
                 )
 
-        if returncode != 0:
+        if not handled and returncode != 0:
             output_for_error = CombineOutput(stdout, stderr)
             return error_results(f"exit code {returncode}", output_for_error)
 

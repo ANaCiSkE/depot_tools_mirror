@@ -126,6 +126,25 @@ class ThreadPoolTest(unittest.TestCase):
         self.assertIn("error 2", message_strs)
         self.assertIn("warning 1", message_strs)
 
+    def testOutputParserEmptyListWithInfo(self):
+        subprocess2.Popen.side_effect = lambda cmd, **kwargs: mock.Mock(
+            returncode=0
+        )
+
+        cmd_data = presubmit_thread_pool.CommandData(
+            name="AyeAye",
+            cmd=["alint"],
+            kwargs={},
+            output_parser=lambda returncode, output: [],
+        )
+        cmd_data.info = presubmit_results._PresubmitNotifyResult
+
+        t = presubmit_thread_pool.ThreadPool(1)
+        t.AddTests([cmd_data])
+        messages = t.RunAsync()
+        self.assertEqual(1, len(messages))
+        self.assertEqual("AyeAye\nalint (0.00s)", messages[0]._message)
+
     @mock.patch("threading.Thread")
     def testWorkerThreadsSpawnedAsDaemon(self, mock_thread):
         mock_thread_instance = mock.Mock()
