@@ -1166,7 +1166,15 @@ class Change(object):
     scm = ""
 
     def __init__(
-        self, name, description, local_root, files, issue, patchset, author
+        self,
+        name,
+        description,
+        local_root,
+        files,
+        issue,
+        patchset,
+        author,
+        reviewers=(),
     ):
         if files is None:
             files = []
@@ -1176,6 +1184,7 @@ class Change(object):
         self.issue = issue
         self.patchset = patchset
         self.author_email = author
+        self._reviewers = list(reviewers)
 
         self._full_description = ""
         self.tags = {}
@@ -1291,22 +1300,14 @@ class Change(object):
             footers += [b.strip() for b in unsplit_footer.split(",")]
         return sorted(set(tags + footers))
 
-    def ReviewersFromDescription(self):
-        """Returns all reviewers listed in the commit description."""
-        # We don't support a 'R:' git-footer for reviewers; that is in metadata.
-        tags = [
-            r.strip() for r in self.tags.get("R", "").split(",") if r.strip()
-        ]
-        return sorted(set(tags))
+    def Reviewers(self):
+        """Returns the proposed reviewer list for the change."""
+        return sorted(set(self._reviewers))
 
     # TODO(crbug.com/753425): Delete these once we're sure they're unused.
     @property
     def BUG(self):
         return ",".join(self.BugsFromDescription())
-
-    @property
-    def R(self):
-        return ",".join(self.ReviewersFromDescription())
 
     def UpstreamBranch(self):
         """Returns the upstream branch for the change.
@@ -1440,7 +1441,7 @@ class GitChange(Change):
     def __init__(self, *args, upstream, end_commit, **kwargs):
         self._upstream = upstream
         self._end_commit = end_commit
-        super(GitChange, self).__init__(*args)
+        super(GitChange, self).__init__(*args, **kwargs)
 
     def _diff_cache(self):
         return self._AFFECTED_FILES.DIFF_CACHE(self._upstream, self._end_commit)
@@ -1488,7 +1489,7 @@ class ProvidedDiffChange(Change):
 
     def __init__(self, *args, diff, **kwargs):
         self._diff = diff
-        super(ProvidedDiffChange, self).__init__(*args)
+        super(ProvidedDiffChange, self).__init__(*args, **kwargs)
 
     def _diff_cache(self):
         return self._AFFECTED_FILES.DIFF_CACHE(self._diff)
@@ -2264,15 +2265,23 @@ def _parse_change(parser, options):
         options.author,
     ]
 
+    reviewers = [
+        r.strip()
+        for value in options.reviewers
+        for r in value.split(",")
+        if r.strip()
+    ]
+
     if diff is not None:
-        return ProvidedDiffChange(*change_args, diff=diff)
+        return ProvidedDiffChange(*change_args, diff=diff, reviewers=reviewers)
     if change_scm == "git":
         return GitChange(
             *change_args,
             upstream=options.upstream,
             end_commit=options.end_commit,
+            reviewers=reviewers,
         )
-    return Change(*change_args)
+    return Change(*change_args, reviewers=reviewers)
 
 
 def _parse_gerrit_options(parser, options):
@@ -2591,6 +2600,13 @@ def main(argv=None):
         "--no_diffs",
         action="store_true",
         help='Assume that all "modified" files have no diffs.',
+    )
+    parser.add_argument(
+        "--reviewers",
+        action="append",
+        default=[],
+        help="Reviewer email(s) for the change being uploaded; can be "
+        "repeated or comma-separated.",
     )
     options = parser.parse_args(argv)
 

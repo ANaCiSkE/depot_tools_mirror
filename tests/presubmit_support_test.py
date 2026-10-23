@@ -76,6 +76,7 @@ class ProvidedDiffChangeTest(fake_repos.FakeReposTestBase):
                 description="description",
                 files=None,
                 diff_file=tmp,
+                reviewers=[],
             )
             change = presubmit_support._parse_change(None, options)
             assert isinstance(change, presubmit_support.ProvidedDiffChange)
@@ -280,6 +281,7 @@ class TestGenerateDiff(fake_repos.FakeReposTestBase):
             files=None,
             source_controlled_only=False,
             diff_file=None,
+            reviewers=[],
         )
         changes = presubmit_support._parse_change(self.parser, options)
         self.assertEqual(
@@ -303,6 +305,7 @@ class TestGenerateDiff(fake_repos.FakeReposTestBase):
             files=["added"],
             source_controlled_only=False,
             diff_file=None,
+            reviewers=[],
         )
         change = presubmit_support._parse_change(self.parser, options)
         affected_files = change.AffectedFiles()

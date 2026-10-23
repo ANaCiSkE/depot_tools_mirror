@@ -222,15 +222,13 @@ def calculate_roll(full_dir, dependency, roll_to):
     return head, roll_to
 
 
-def gen_commit_msg(logs, cmdline, reviewers, bug):
+def gen_commit_msg(logs, cmdline, bug):
     """Returns the final commit message."""
     commit_msg = ""
     if len(logs) > 1:
         commit_msg = f"Rolling {len(logs)} dependencies\n\n"
     commit_msg += "\n\n".join(logs)
     commit_msg += f"Created with:\n  {cmdline}\n"
-    if reviewers:
-        commit_msg += f"R={','.join(reviewers)}\n"
     if bug:
         commit_msg += f"\nBug: {bug}\n"
     return commit_msg
@@ -492,7 +490,7 @@ def main():
         # DEPS is updated even if the repository uses submodules.
         gclient(["setdep"] + setdep_args)
 
-        commit_msg = gen_commit_msg(logs, cmdline, reviewers, args.bug)
+        commit_msg = gen_commit_msg(logs, cmdline, args.bug)
         finalize(args, commit_msg, current_dir, rolls)
     except Error as e:
         sys.stderr.write(f"error: {e}\n")
@@ -501,15 +499,18 @@ def main():
         return 1
 
     print("")
-    if not reviewers:
+    upload_cmd = "git cl upload --send-mail"
+    if reviewers:
+        upload_cmd += " -r " + ",".join(reviewers)
+    else:
         print(
-            "You forgot to pass -r, make sure to insert a R=foo@example.com "
-            "line"
+            "You forgot to pass -r, make sure to add reviewers with "
+            "-r foo@example.com"
         )
-        print("to the commit description before emailing.")
+        print("when uploading.")
         print("")
     print("Run:")
-    print("  git cl upload --send-mail")
+    print(f"  {upload_cmd}")
     return 0
 
 

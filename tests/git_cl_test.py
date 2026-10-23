@@ -393,7 +393,7 @@ class TestGitClBasic(unittest.TestCase):
         options.target_branch = "refs/heads/bar"
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(
-                options, [], "foo", git_cl.ChangeDescription("bar")
+                options, [], "foo", git_cl.ChangeDescription("bar"), []
             )
 
         # ensure upload is called once
@@ -423,7 +423,7 @@ class TestGitClBasic(unittest.TestCase):
         options.target_branch = "refs/meta/config"
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(
-                options, [], "foo", git_cl.ChangeDescription("bar")
+                options, [], "foo", git_cl.ChangeDescription("bar"), []
             )
 
         # ensure upload is called once
@@ -454,7 +454,7 @@ class TestGitClBasic(unittest.TestCase):
         options.target_branch = "refs/heads/main"
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(
-                options, [], "foo", git_cl.ChangeDescription("bar")
+                options, [], "foo", git_cl.ChangeDescription("bar"), []
             )
 
         # ensure upload is called once
@@ -498,14 +498,14 @@ class TestGitClBasic(unittest.TestCase):
 
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(
-                options, [], "foo", git_cl.ChangeDescription("bar")
+                options, [], "foo", git_cl.ChangeDescription("bar"), []
             )
         self.assertEqual(len(m.mock_calls), 0)
 
         options.message_file = None
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(
-                options, [], "foo", git_cl.ChangeDescription("bar")
+                options, [], "foo", git_cl.ChangeDescription("bar"), []
             )
         self.assertEqual(len(m.mock_calls), 1)
 
@@ -4865,8 +4865,9 @@ class TestGitCl(unittest.TestCase):
         fixed=None,
         branch="branch",
         reviewers=None,
-        add_owners_to=None,
+        r_owners=False,
         expected_description="desc",
+        expected_reviewers=None,
     ):
         reviewers = reviewers or []
         owners_by_path = {
@@ -4893,16 +4894,21 @@ class TestGitCl(unittest.TestCase):
             bug=bug,
             fixed=fixed,
             reviewers=reviewers,
-            add_owners_to=add_owners_to,
+            r_owners=r_owners,
             message=initial_description,
             commit_description=commit_description,
         )
         actual = cl._GetDescriptionForUpload(
             options=options,
             git_diff_args=None,
-            files=list(owners_by_path),
         )
         self.assertEqual(expected_description, actual.description)
+        actual_reviewers = cl._GetReviewersForUpload(
+            options, list(owners_by_path)
+        )
+        if expected_reviewers is not None:
+            self.assertEqual(expected_reviewers, actual_reviewers)
+
         # options.reviewers must not change: stacked uploads share options.
         self.assertEqual(original_reviewers, options.reviewers)
 
@@ -4970,38 +4976,20 @@ class TestGitCl(unittest.TestCase):
     def testGetDescriptionForUpload_AddOwnersToR(self):
         self.getDescriptionForUploadTest(
             reviewers=["a@example.com"],
-            add_owners_to="R",
-            expected_description="\n".join(
-                [
-                    "desc",
-                    "",
-                    "R=a@example.com, b@example.com, c@example.com",
-                ]
-            ),
-        )
-
-    def testGetDescriptionForUpload_AddOwnersToNoOwnersNeeded(self):
-        self.getDescriptionForUploadTest(
-            reviewers=["a@example.com", "c@example.com"],
-            expected_description="\n".join(
-                [
-                    "desc",
-                    "",
-                    "R=a@example.com, c@example.com",
-                ]
-            ),
+            r_owners=True,
+            expected_description="desc",
+            expected_reviewers=[
+                "a@example.com",
+                "b@example.com",
+                "c@example.com",
+            ],
         )
 
     def testGetDescriptionForUpload_Reviewers(self):
         self.getDescriptionForUploadTest(
             reviewers=["a@example.com", "b@example.com"],
-            expected_description="\n".join(
-                [
-                    "desc",
-                    "",
-                    "R=a@example.com, b@example.com",
-                ]
-            ),
+            expected_description="desc",
+            expected_reviewers=["a@example.com", "b@example.com"],
         )
 
     def testGetDescriptionForUpload_NewDesc(self):
@@ -5047,38 +5035,6 @@ class TestGitCl(unittest.TestCase):
             desc = git_cl.ChangeDescription(init_desc)
             desc.append_footer(footer_line)
             self.assertEqual(desc.description, expected_desc)
-
-    def test_get_reviewers(self):
-        desc = git_cl.ChangeDescription("foo\nR=a@c, b@c\nR=d@c")
-        self.assertEqual(desc.get_reviewers(), ["a@c", "b@c", "d@c"])
-
-    def test_update_reviewers(self):
-        data = [
-            ("foo", [], "foo"),
-            ("foo\nR=xx", [], "foo\nR=xx"),
-            ("foo", ["a@c"], "foo\n\nR=a@c"),
-            ("foo\nR=xx", ["a@c"], "foo\n\nR=a@c, xx"),
-            ("foo\nBUG=", ["a@c"], "foo\nBUG=\nR=a@c"),
-            ("foo\nR=xx\nR=bar", ["a@c"], "foo\n\nR=a@c, bar, xx"),
-            ("foo", ["a@c", "b@c"], "foo\n\nR=a@c, b@c"),
-            ("foo\nBar\n\nR=\nBUG=", ["c@c"], "foo\nBar\n\nR=c@c\nBUG="),
-            ("foo\nBar\n\nR=\nBUG=\nR=", ["c@c"], "foo\nBar\n\nR=c@c\nBUG="),
-            # Same as the line before, but full of whitespaces.
-            (
-                "foo\nBar\n\n R = \n BUG = \n R = ",
-                ["c@c"],
-                "foo\nBar\n\nR=c@c\n BUG =",
-            ),
-            # Whitespaces aren't interpreted as new lines.
-            ("foo BUG=allo R=joe ", ["c@c"], "foo BUG=allo R=joe\n\nR=c@c"),
-        ]
-        expected = [i[-1] for i in data]
-        actual = []
-        for orig, reviewers, _expected in data:
-            obj = git_cl.ChangeDescription(orig)
-            obj.update_reviewers(reviewers)
-            actual.append(obj.description)
-        self.assertEqual(expected, actual)
 
     def test_get_hash_tags(self):
         cases = [
@@ -8570,6 +8526,8 @@ class ChangelistTest(unittest.TestCase):
         options.message_file = None
         options.commit_description = None
         options.cc = ["chicken@bok.farm"]
+        options.reviewers = ["pig@oink.farm"]
+        options.r_owners = False
         parent = "420parent"
         latest_tree = "420latest_tree"
 
@@ -8583,7 +8541,7 @@ class ChangelistTest(unittest.TestCase):
         reviewers, ccs, change_desc = cl._PrepareChange(
             options, parent, latest_tree
         )
-        self.assertEqual(reviewers, ["horse@apple.farm"])
+        self.assertEqual(reviewers, ["pig@oink.farm"])
         self.assertEqual(
             ccs, ["cow@moo.farm", "chicken@bok.farm", "cow2@moo.farm"]
         )
@@ -8608,6 +8566,7 @@ class ChangelistTest(unittest.TestCase):
             description=desc,
             all_files=False,
             end_commit="420latest_tree",
+            reviewers=["pig@oink.farm"],
         )
 
     @mock.patch("git_cl.watchlists.Watchlists")
@@ -8641,6 +8600,8 @@ class ChangelistTest(unittest.TestCase):
         options.message_file = None
         options.commit_description = None
         options.cc = []
+        options.reviewers = []
+        options.r_owners = False
         mockGetDescriptionForupload.return_value = git_cl.ChangeDescription(
             "title\n\nChange-Id: 1a2b3c"
         )
@@ -8676,6 +8637,8 @@ class ChangelistTest(unittest.TestCase):
         options.private = False
         options.no_autocc = False
         options.cc = ["chicken@bok.farm"]
+        options.reviewers = ["pig@oink.farm"]
+        options.r_owners = False
         parent = "420parent"
         latest_tree = "420latest_tree"
 
@@ -8694,7 +8657,7 @@ class ChangelistTest(unittest.TestCase):
         reviewers, ccs, change_desc = cl._PrepareChange(
             options, parent, latest_tree
         )
-        self.assertEqual(reviewers, ["horse@apple.farm"])
+        self.assertEqual(reviewers, ["pig@oink.farm"])
         self.assertEqual(ccs, ["chicken@bok.farm", "cow2@moo.farm"])
         self.assertEqual(
             change_desc._description_lines,
@@ -8715,6 +8678,7 @@ class ChangelistTest(unittest.TestCase):
             description=desc,
             all_files=False,
             end_commit=latest_tree,
+            reviewers=["pig@oink.farm"],
         )
         mockEnsureCanUploadPatchset.assert_called_once()
 

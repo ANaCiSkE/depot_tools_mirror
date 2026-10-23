@@ -1038,7 +1038,6 @@ _NewUpload = collections.namedtuple(
 class ChangeDescription(object):
     """Contains a parsed form of the change description."""
 
-    R_LINE = r"^[ \t]*(R)[ \t]*=[ \t]*(.*?)[ \t]*$"
     CC_LINE = r"^[ \t]*(CC)[ \t]*=[ \t]*(.*?)[ \t]*$"
     BUG_LINE = r"^[ \t]*(?:(BUG)[ \t]*=|Bug:)[ \t]*(.*?)[ \t]*$"
     FIXED_LINE = r"^[ \t]*Fixed[ \t]*:[ \t]*(.*?)[ \t]*$"
@@ -1105,44 +1104,6 @@ class ChangeDescription(object):
                 description, change_id
             )
             self.set_description(description)
-
-    def update_reviewers(self, reviewers):
-        """Rewrites the R= line(s) as a single line each.
-
-        Args:
-            reviewers (list(str)) - list of additional emails to use for reviewers.
-        """
-        if not reviewers:
-            return
-
-        reviewers = set(reviewers)
-
-        # Get the set of R= lines and remove them from the description.
-        regexp = re.compile(self.R_LINE)
-        matches = [regexp.match(line) for line in self._description_lines]
-        new_desc = [
-            line
-            for i, line in enumerate(self._description_lines)
-            if not matches[i]
-        ]
-        self.set_description(new_desc)
-
-        # Construct new unified R= lines.
-
-        # First, update reviewers with names from the R= lines (if any).
-        for match in matches:
-            if not match:
-                continue
-            reviewers.update(cleanup_list([match.group(2).strip()]))
-
-        new_r_line = "R=" + ", ".join(sorted(reviewers))
-
-        # Put the new lines in the description where the old first R= line was.
-        line_loc = next((i for i, match in enumerate(matches) if match), -1)
-        if 0 <= line_loc < len(self._description_lines):
-            self._description_lines.insert(line_loc, new_r_line)
-        else:
-            self.append_footer(new_r_line)
 
     def set_preserve_tryjobs(self):
         """Ensures description footer contains 'Cq-Do-Not-Cancel-Tryjobs: true'."""
@@ -1237,14 +1198,6 @@ class ChangeDescription(object):
             top_lines.append("")
         top_lines.append(line)
         self._description_lines = top_lines + separator + gerrit_footers
-
-    def get_reviewers(self):
-        """Retrieves the list of reviewers."""
-        matches = [
-            re.match(self.R_LINE, line) for line in self._description_lines
-        ]
-        reviewers = [match.group(2).strip() for match in matches if match]
-        return cleanup_list(reviewers)
 
     def get_cced(self):
         """Retrieves the list of reviewers."""
@@ -1966,6 +1919,7 @@ class Changelist(object):
         resultdb: Optional[bool] = None,
         realm: Optional[str] = None,
         end_commit: Optional[str] = None,
+        reviewers: Optional[Sequence[str]] = None,
     ) -> Mapping[str, Any]:
         """Calls sys.exit() if the hook fails; returns a HookResults otherwise."""
         args = self._GetCommonPresubmitArgs(verbose, upstream)
@@ -1985,6 +1939,8 @@ class Changelist(object):
             args.append("--source_controlled_only")
         if files or all_files:
             args.append("--no_diffs")
+        for reviewer in reviewers or []:
+            args.extend(["--reviewers", reviewer])
 
         if resultdb and not realm:
             # TODO (crbug.com/1113463): store realm somewhere and look it up so
@@ -2123,7 +2079,6 @@ class Changelist(object):
         self,
         options: optparse.Values,
         git_diff_args: Sequence[str],
-        files: Sequence[str],
     ) -> ChangeDescription:
         """Get description message for upload."""
         if options.commit_description:
@@ -2161,15 +2116,14 @@ class Changelist(object):
                     else:
                         fixed = match.group("bugnum")
 
-        change_description = ChangeDescription(description, bug, fixed)
+        return ChangeDescription(description, bug, fixed)
 
-        # Fill gaps in OWNERS coverage to reviewers if requested. Don't extend
-        # options.reviewers: stacked uploads share one options object, so the
-        # owners suggested for one CL would leak into the next.
-        assert isinstance(options.reviewers, list), options.reviewers
-        reviewers = options.reviewers.copy()
-        if options.add_owners_to:
-            assert options.add_owners_to in ("R"), options.add_owners_to
+    def _GetReviewersForUpload(
+        self, options: optparse.Values, files: Sequence[str]
+    ) -> List[str]:
+        """Returns --reviewers plus any owners suggested by --r-owners."""
+        reviewers = set(options.reviewers)
+        if options.r_owners:
             status = self.owners_client.GetFilesApprovalStatus(
                 files, [], options.reviewers
             )
@@ -2178,17 +2132,12 @@ class Changelist(object):
                 for f in files
                 if status[f] == self._owners_client.INSUFFICIENT_REVIEWERS
             ]
-            reviewers.extend(
+            reviewers.update(
                 self.owners_client.SuggestOwners(
                     missing_files, exclude=[self.GetAuthor()]
                 )
             )
-
-        # Set the reviewer list now so that presubmit checks can access it.
-        if reviewers:
-            change_description.update_reviewers(reviewers)
-
-        return change_description
+        return sorted(reviewers)
 
     def _GetTitleForUpload(self, options, multi_change_upload=False):
         # type: (optparse.Values, Optional[bool]) -> str
@@ -2401,8 +2350,9 @@ class Changelist(object):
 
         files = self.GetAffectedFiles(parent, end_commit=end_commit)
         change_desc = self._GetDescriptionForUpload(
-            options, [parent, end_commit], files
+            options, [parent, end_commit]
         )
+        reviewers = self._GetReviewersForUpload(options, files)
 
         if not getattr(options, "bypass_watchlists", False):
             watchlist = watchlists.Watchlists(settings.GetRoot())
@@ -2417,6 +2367,7 @@ class Changelist(object):
                 description=change_desc.description,
                 all_files=False,
                 end_commit=end_commit,
+                reviewers=reviewers,
             )
             self.ExtendCC(hook_results["more_cc"])
 
@@ -2468,7 +2419,7 @@ class Changelist(object):
         if change_desc.get_cced():
             ccs.extend(change_desc.get_cced())
 
-        return change_desc.get_reviewers(), ccs, change_desc
+        return reviewers, ccs, change_desc
 
     def PostUploadUpdates(
         self,
@@ -2543,9 +2494,8 @@ class Changelist(object):
             watchlist = watchlists.Watchlists(settings.GetRoot())
             self.ExtendCC(watchlist.GetWatchersForPaths(files))
 
-        change_desc = self._GetDescriptionForUpload(
-            options, git_diff_args, files
-        )
+        change_desc = self._GetDescriptionForUpload(options, git_diff_args)
+        reviewers = self._GetReviewersForUpload(options, files)
 
         # For options.squash, RunHook is called once for each branch in
         # PrepareChange().
@@ -2558,12 +2508,17 @@ class Changelist(object):
                 upstream=base_branch,
                 description=change_desc.description,
                 all_files=False,
+                reviewers=reviewers,
             )
             self.ExtendCC(hook_results["more_cc"])
 
         print_stats(git_diff_args)
         ret = self.CMDUploadChange(
-            options, git_diff_args, custom_cl_base, change_desc
+            options,
+            git_diff_args,
+            custom_cl_base,
+            change_desc,
+            reviewers,
         )
         if not ret:
             if self.GetBranch() is not None:
@@ -3800,7 +3755,12 @@ class Changelist(object):
         return push_stdout
 
     def CMDUploadChange(
-        self, options, git_diff_args, custom_cl_base, change_desc
+        self,
+        options,
+        git_diff_args,
+        custom_cl_base,
+        change_desc,
+        reviewers,
     ):
         """Upload the current branch to Gerrit, retry if new remote HEAD is
         found. options and change_desc may be mutated."""
@@ -3809,7 +3769,12 @@ class Changelist(object):
 
         try:
             return self._CMDUploadChange(
-                options, git_diff_args, custom_cl_base, change_desc, branch
+                options,
+                git_diff_args,
+                custom_cl_base,
+                change_desc,
+                branch,
+                reviewers,
             )
         except GitPushError as e:
             # Repository might be in the middle of transition to main branch as
@@ -3833,13 +3798,24 @@ class Changelist(object):
         options.force = True
         try:
             self._CMDUploadChange(
-                options, git_diff_args, custom_cl_base, change_desc, branch
+                options,
+                git_diff_args,
+                custom_cl_base,
+                change_desc,
+                branch,
+                reviewers,
             )
         except GitPushError as e:
             DieWithError(str(e), change_desc)
 
     def _CMDUploadChange(
-        self, options, git_diff_args, custom_cl_base, change_desc, branch
+        self,
+        options,
+        git_diff_args,
+        custom_cl_base,
+        change_desc,
+        branch,
+        reviewers,
     ):
         """Upload the current branch to Gerrit."""
         if options.squash:
@@ -3936,7 +3912,6 @@ class Changelist(object):
             )
             confirm_or_exit(action="upload")
 
-        reviewers = sorted(change_desc.get_reviewers())
         cc = []
         # Add default, watchlist, presubmit ccs if this is the initial upload
         # and CL is not private and auto-ccing has not been disabled.
@@ -3969,11 +3944,12 @@ class Changelist(object):
         # https://gerrit-review.googlesource.com/Documentation/user-upload.html
         refspec_opts = self._GetRefSpecOptions(options, change_desc)
 
+        remaining_reviewers = []
         for r in sorted(reviewers):
             if r in valid_accounts:
                 refspec_opts.append("r=%s" % r)
-                reviewers.remove(r)
             else:
+                remaining_reviewers.append(r)
                 # TODO(tandrii): this should probably be a hard failure.
                 print(
                     "WARNING: reviewer %s doesn't have a Gerrit account, skipping"
@@ -4040,14 +4016,14 @@ class Changelist(object):
                 GERRIT_SQUASH_HASH_CONFIG_KEY, ref_to_push
             )
 
-        if self.GetIssue() and (reviewers or cc):
+        if self.GetIssue() and (remaining_reviewers or cc):
             # GetIssue() is not set in case of non-squash uploads according to
             # tests. TODO(crbug.com/751901): non-squash uploads in git cl should
             # be removed.
             gerrit_util.AddReviewers(
                 self.GetGerritHost(),
                 self._GerritChangeIdentifier(),
-                reviewers,
+                remaining_reviewers,
                 cc,
                 notify=bool(options.send_mail),
             )
@@ -6826,10 +6802,8 @@ def CMDupload(parser, args):
     )
     parser.add_option(
         "--r-owners",
-        dest="add_owners_to",
-        action="store_const",
-        const="R",
-        help="add a set of OWNERS to R",
+        action="store_true",
+        help="add a set of OWNERS as reviewers",
     )
     parser.add_option(
         "-c",

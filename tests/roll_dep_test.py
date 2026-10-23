@@ -286,7 +286,10 @@ class RollDepTest(fake_repos.FakeReposTestBase):
         self.assertEqual(stderr, "")
         self.assertEqual(returncode, 0)
 
-        expected_message = "R=foo@example.com,bar@example.com,baz@example.com"
+        expected_message = (
+            "git cl upload --send-mail "
+            "-r foo@example.com,bar@example.com,baz@example.com"
+        )
 
         self.assertIn(expected_message, stdout)
 
