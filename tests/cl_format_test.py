@@ -1964,6 +1964,87 @@ class TestGoogleJavaFormat(unittest.TestCase):
         )
 
 
+class TestKtfmt(unittest.TestCase):
+    @mock.patch("cl_format.subprocess2.call", return_value=0)
+    @mock.patch("ktfmt.FindKtfmt", return_value="ktfmt")
+    def testFormatsOnlyChangedLinesPerFile(self, _mock_find, mock_call):
+        """Like google-java-format, ranges are widened by two lines, and
+        files whose diff has no hunks are skipped."""
+        mock_opts = mock.Mock(dry_run=False, diff=False, stdin_filename=None)
+        diffs = {
+            "Foo.kt": "@@ -10,1 +10,1 @@\n@@ -30,0 +29,0 @@",
+            "Bar.kt": "@@ -20,2 +20,3 @@",
+            "ModeOnly.kt": "",
+        }
+
+        ret = cl_format._RunKtfmt(
+            mock_opts, ["Foo.kt", "Bar.kt", "ModeOnly.kt"], "top", diffs
+        )
+
+        self.assertEqual(0, ret)
+        self.assertEqual(
+            [
+                mock.call(
+                    ["ktfmt", "--lines=8:12", "--lines=27:30", "Foo.kt"],
+                    shell=False,
+                ),
+                mock.call(["ktfmt", "--lines=18:24", "Bar.kt"], shell=False),
+            ],
+            mock_call.call_args_list,
+        )
+
+    @mock.patch("cl_format.subprocess2.call", return_value=1)
+    @mock.patch("ktfmt.FindKtfmt", return_value="ktfmt")
+    def testDryRunWithChangedLines(self, _mock_find, mock_call):
+        mock_opts = mock.Mock(dry_run=True, diff=False, stdin_filename=None)
+        diffs = {"Foo.kt": "@@ -10,1 +10,1 @@"}
+
+        ret = cl_format._RunKtfmt(mock_opts, ["Foo.kt"], "top", diffs)
+
+        self.assertEqual(2, ret)
+        mock_call.assert_called_once_with(
+            [
+                "ktfmt",
+                "--set-exit-if-changed",
+                "--dry-run",
+                "--lines=8:12",
+                "Foo.kt",
+            ],
+            shell=False,
+        )
+
+    @mock.patch("cl_format.subprocess2.call", return_value=0)
+    @mock.patch("ktfmt.FindKtfmt", return_value="ktfmt")
+    def testFullFormatsWholeFilesInOneBatch(self, _mock_find, mock_call):
+        mock_opts = mock.Mock(dry_run=False, diff=False, stdin_filename=None)
+
+        cl_format._RunKtfmt(mock_opts, ["Foo.kt", "Bar.kt"], "top", None)
+
+        mock_call.assert_called_once_with(
+            ["ktfmt", "Foo.kt", "Bar.kt"], shell=False
+        )
+
+    @mock.patch("cl_format.RunGitDiffCmd", return_value="")
+    @mock.patch("cl_format.RunCommand", return_value="formatted")
+    @mock.patch("ktfmt.FindKtfmt", return_value="ktfmt")
+    def testDiffModeUsesChangedLines(self, _mock_find, mock_run, _mock_diff):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        with open(os.path.join(tmp.name, "Foo.kt"), "wb") as f:
+            f.write(b"content")
+        mock_opts = mock.Mock(dry_run=False, diff=True, stdin_filename=None)
+        diffs = {"Foo.kt": "@@ -10,1 +10,1 @@"}
+
+        cl_format._RunKtfmt(mock_opts, ["Foo.kt"], tmp.name, diffs)
+
+        mock_run.assert_called_once_with(
+            ["ktfmt", "--lines=8:12", "-"],
+            stdin=b"content",
+            error_ok=True,
+            cwd=tmp.name,
+        )
+
+
 class TestStdinFilenameFormatting(unittest.TestCase):
     RUSTFMT_TOML = b'ignore = ["third_party/**"]\n'
 
