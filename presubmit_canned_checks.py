@@ -2250,8 +2250,8 @@ def GetRuff(
 
 
 def RunRuff(input_api, *args, **kwargs):
-    """Legacy presubmit function for running Ruff."""
-    return input_api.RunTests(GetRuff(input_api, *args, **kwargs), False)
+    """Presubmit function for running Ruff."""
+    return input_api.RunTests(GetRuff(input_api, *args, **kwargs))
 
 
 def CheckDirMetadataFormat(input_api, output_api, dirmd_bin=None):

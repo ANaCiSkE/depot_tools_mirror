@@ -4618,6 +4618,11 @@ the current line as well!
             ],
         )
 
+        input_api.RunTests = mock.Mock(return_value=[])
+        presubmit_canned_checks.RunRuff(input_api, presubmit.OutputApi)
+        input_api.RunTests.assert_called_once()
+        self.assertEqual(len(input_api.RunTests.call_args[0]), 1)
+
     def testCannedRunRuffWindowsChunking(self):
         # On Windows, GetRuff chunks by 50 files (matching ruff_chromium formatting)
         # to avoid exceeding the 8,191 character limit.
