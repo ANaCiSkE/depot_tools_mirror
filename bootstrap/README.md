@@ -34,15 +34,21 @@ checking whether the current global Git config matches recommended settings.
 
 ### Manifest
 
-The Python version is specified in [manifest.txt](./manifest.txt).
+The Python version is specified in [manifest.txt](./manifest.txt) and pinned in
+[manifest.versions](./manifest.versions).
 
 There is an associated file,
-[manifest_bleeding_edge.txt](./manifest_bleeding_edge.txt), that can be used
+[manifest_bleeding_edge.txt](./manifest_bleeding_edge.txt) (with pins in
+[manifest_bleeding_edge.versions](./manifest_bleeding_edge.versions)), that can be used
 to canary a new version on select bots. Any bots with a `.bleeding_edge` file
 in their `depot_tools` root will automatically use the bleeding edge manifest.
 This allows opt-in systems to test against new versions of Python. Once
 the version has been verified correct, `manifest.txt` can be updated to the
 same specification, which will cause the remainder of systems to update.
+
+After modifying either manifest file, run
+`cipd ensure-file-resolve -ensure-file <manifest>` to regenerate the
+corresponding `.versions` file.
 
 ### Bundles
 

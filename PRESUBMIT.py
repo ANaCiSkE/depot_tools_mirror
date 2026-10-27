@@ -137,15 +137,24 @@ def CheckCIPDManifest(input_api, output_api):
             ("cipd_client_version",),
         )
     )
-    affected_manifests = input_api.AffectedFiles(
-        include_deletes=False,
-        file_filter=lambda x: (
-            input_api.os_path.normpath(x.AbsoluteLocalPath()) in cipd_manifests
-        ),
-    )
+
+    def _to_manifest(path):
+        norm = input_api.os_path.normpath(path)
+        if norm.endswith(".versions"):
+            return f"{norm.removesuffix('.versions')}.txt"
+        return norm
+
+    affected_manifests = {
+        _to_manifest(x.AbsoluteLocalPath())
+        for x in input_api.AffectedFiles(
+            include_deletes=False,
+            file_filter=lambda x: (
+                _to_manifest(x.AbsoluteLocalPath()) in cipd_manifests
+            ),
+        )
+    }
     tests = []
-    for path in affected_manifests:
-        path = path.AbsoluteLocalPath()
+    for path in sorted(affected_manifests):
         if path.endswith(".txt"):
             tests.append(
                 input_api.canned_checks.CheckCIPDManifest(
