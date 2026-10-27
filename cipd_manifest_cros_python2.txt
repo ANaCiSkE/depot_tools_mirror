@@ -24,4 +24,4 @@ $ResolvedVersions cipd_manifest_cros_python2.versions
 $VerifiedPlatform linux-amd64
 
 # vpython2.7
-infra/tools/luci/vpython2.7/${platform} git_revision:cc21a500756c924a48f46f4755d3857133d8caa0
+infra/tools/luci/vpython2.7/${platform} git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
