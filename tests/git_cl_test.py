@@ -801,6 +801,25 @@ class TestParseIssueURL(unittest.TestCase):
             None,
             "chromium-review.googlesource.com",
         )
+        self._test(
+            "https://crrev.com/i/2151934",
+            2151934,
+            None,
+            "chrome-internal-review.googlesource.com",
+        )
+        # Look-alike hosts are not rewritten to the Chromium Gerrit host.
+        self._test(
+            "https://crrev.com.evil.com/c/12345",
+            12345,
+            None,
+            "crrev.com.evil.com",
+        )
+        self._test("https://crrev.com/c.evil.com/12345", fail=True)
+        self._test("https://crrev.com/i.evil.com/12345", fail=True)
+        self._test(
+            "https://crrev.com/c.evil.com/c/chromium/src/+/12345", fail=True
+        )
+        self._test("https://crrev.com/cmunity/12345", fail=True)
 
     def test_missing_scheme(self):
         self._test(
@@ -8767,6 +8786,14 @@ class ChangelistTest(unittest.TestCase):
             ),
             (
                 "https://chromium.googlesource.com/chromium/src",
+                "https://chromium.git.corp.google.com/chromium/src",
+            ),
+            (
+                "https://chromium.googlesource.com/chromium/src",
+                "sso://chromium.git.corp.google.com/chromium/src",
+            ),
+            (
+                "https://chromium.googlesource.com/chromium/src",
                 "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
             ),
         ]
@@ -8782,6 +8809,18 @@ class ChangelistTest(unittest.TestCase):
                 "https://chromium.googlesource.com/v8/v8",
                 "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
             ),
+            (
+                "https://chromium.googlesource.com/chromium/src",
+                "https://chromium.evil.com/chromium/src",
+            ),
+            (
+                "https://chromium.googlesource.com/chromium/src",
+                "https://chromium.googlesource.com.evil.com/chromium/src",
+            ),
+            (
+                "https://chromium.googlesource.com/chromium/src",
+                "https://chromium/chromium/src",
+            ),
         ]
         for a, b in cases:
             with self.subTest(c=(a, b)):
@@ -8791,15 +8830,23 @@ class ChangelistTest(unittest.TestCase):
         cases = [
             (
                 "https://chromium.googlesource.com/chromium/tools/depot_tools",
-                ("chromium", "/chromium/tools/depot_tools"),
+                ("chromium.googlesource.com", "/chromium/tools/depot_tools"),
+            ),
+            (
+                "https://chromium.git.corp.google.com/chromium/tools/depot_tools",
+                ("chromium.googlesource.com", "/chromium/tools/depot_tools"),
             ),
             (
                 "sso://chromium/chromium/tools/depot_tools",
-                ("chromium", "/chromium/tools/depot_tools"),
+                ("chromium.googlesource.com", "/chromium/tools/depot_tools"),
             ),
             (
                 "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
-                ("chromium", "/chromium/src"),
+                ("chromium.googlesource.com", "/chromium/src"),
+            ),
+            (
+                "https://chromium.evil.com/chromium/src",
+                ("chromium.evil.com", "/chromium/src"),
             ),
         ]
         for x, want in cases:

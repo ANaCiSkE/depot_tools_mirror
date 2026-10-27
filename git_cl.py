@@ -925,8 +925,8 @@ def ParseIssueNumberArgument(arg):
     if not url.startswith("http"):
         return fail_result
     for gerrit_url, short_url in _KNOWN_GERRIT_TO_SHORT_URLS.items():
-        if url.startswith(short_url):
-            url = gerrit_url + url[len(short_url) :]
+        if url.startswith(f"{short_url}/"):
+            url = f"{gerrit_url}{url[len(short_url) :]}"
             break
 
     try:
@@ -3451,24 +3451,36 @@ class Changelist(object):
     def _GerritURLRepoIdentity(x: str) -> tuple[str, str]:
         """Return (host, repo) for a Gerrit URL.
 
-        This is used solely for comparing different Gerrit URL formats,
-        so don't use this for anything else (e.g., extracting info from
-        the URL).
+        This is used solely for comparing different Gerrit URL formats
+        (canonicalizing known Google Git hosts while requiring unknown hosts
+        to match exactly), so don't use this for anything else (e.g.,
+        extracting info from the URL).
         """
         parts = urllib.parse.urlparse(x)
-        host = parts.netloc.split(".")[0]
-        if host.endswith("-review"):
-            host = host[: -len("-review")]
+        netloc = parts.netloc
+        short = None
+        for suffix in (f".{_GOOGLESOURCE}", ".git.corp.google.com"):
+            if netloc.endswith(suffix):
+                short = netloc[: -len(suffix)]
+                break
+        else:
+            if parts.scheme == "sso":
+                short = netloc
+
+        if short and "." not in short:
+            host = f"{short.removesuffix('-review')}.{_GOOGLESOURCE}"
+        else:
+            host = netloc
         repo = parts.path
         if repo.endswith(".git"):
             repo = repo[: -len(".git")]
         repo = repo.rstrip("/")
         # Normalize internal experimental forks (e.g. chrome/experimental/chromium/src
         # on chrome-internal corresponds to chromium/src on chromium).
-        if host == "chrome-internal" and repo.startswith(
+        if host == f"chrome-internal.{_GOOGLESOURCE}" and repo.startswith(
             "/chrome/experimental/"
         ):
-            host = "chromium"
+            host = f"chromium.{_GOOGLESOURCE}"
             repo = repo[len("/chrome/experimental") :]
         elif repo.startswith("/experimental/"):
             repo = repo[len("/experimental") :]
