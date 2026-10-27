@@ -136,6 +136,8 @@ SAFE_EMAIL_RE = re.compile(
     r"^(?!.*\.\.)[a-zA-Z0-9_.\+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)+$"
 )
 
+_VALID_FETCH_REF_RE = re.compile(r"refs/changes/[0-9]{2}/[0-9]+/[0-9]+")
+
 MAX_ATTEMPTS = 3
 
 # The maximum number of traces we will keep. Multiplied by 3 since we store
@@ -3336,18 +3338,10 @@ class Changelist(object):
                     % (parsed_issue_arg.patchset, self.GetIssue())
                 )
 
-        remote_url = self.GetRemoteUrl()
-
-        fetch_info = revision_info["fetch"]["http"]
-        fetch_info["url"] = fetch_info["url"].rstrip("/")
-
-        if not self._GerritURLsEqual(remote_url, fetch_info["url"]):
-            DieWithError(
-                "Trying to patch a change from %s but this repo appears "
-                "to be %s." % (fetch_info["url"], remote_url)
-            )
-
-        RunGit(["fetch", fetch_info["url"], fetch_info["ref"]])
+        fetch_url, fetch_ref = self._ValidateGerritFetchInfo(
+            revision_info["fetch"]["http"], "patch"
+        )
+        RunGit(["fetch", "--", fetch_url, fetch_ref])
 
         # Set issue immediately in case the cherry-pick fails, which happens
         # when resolving conflicts.
@@ -3439,6 +3433,37 @@ class Changelist(object):
 
         return 0
 
+    def _ValidateGerritFetchInfo(
+        self, fetch_info: dict[str, Any], action: str
+    ) -> tuple[str, str]:
+        raw_url = fetch_info.get("url")
+        if not isinstance(raw_url, str):
+            DieWithError(f"Invalid Gerrit fetch URL: {raw_url}")
+        fetch_url = raw_url.rstrip("/")
+        parsed_url = urllib.parse.urlparse(fetch_url)
+        if (
+            parsed_url.scheme not in ("https", "http")
+            or not parsed_url.netloc
+            or parsed_url.params
+            or parsed_url.query
+            or parsed_url.fragment
+        ):
+            DieWithError(f"Invalid Gerrit fetch URL: {fetch_url}")
+
+        remote_url = self.GetRemoteUrl()
+        if not remote_url or not self._GerritURLsEqual(remote_url, fetch_url):
+            DieWithError(
+                f"Trying to {action} a change from {fetch_url} but this "
+                f"repo appears to be {remote_url}."
+            )
+
+        fetch_ref = fetch_info.get("ref")
+        if not isinstance(fetch_ref, str) or not _VALID_FETCH_REF_RE.fullmatch(
+            fetch_ref
+        ):
+            DieWithError(f"Invalid Gerrit fetch ref: {fetch_ref}")
+        return fetch_url, fetch_ref
+
     @classmethod
     def _GerritURLsEqual(cls, a: str, b: str) -> bool:
         """Return True if both Gerrit URLs point to the same repo.
@@ -3471,10 +3496,11 @@ class Changelist(object):
             host = f"{short.removesuffix('-review')}.{_GOOGLESOURCE}"
         else:
             host = netloc
-        repo = parts.path
+        repo = parts.path.rstrip("/")
         if repo.endswith(".git"):
-            repo = repo[: -len(".git")]
-        repo = repo.rstrip("/")
+            repo = repo[: -len(".git")].rstrip("/")
+        if repo.startswith("/a/"):
+            repo = repo[len("/a") :]
         # Normalize internal experimental forks (e.g. chrome/experimental/chromium/src
         # on chrome-internal corresponds to chromium/src on chromium).
         if host == f"chrome-internal.{_GOOGLESOURCE}" and repo.startswith(
@@ -8560,8 +8586,10 @@ def CMDdiff(parser, raw_args):
     if not base:
         detail = cl._GetChangeDetail(["CURRENT_REVISION", "CURRENT_COMMIT"])
         revision_info = detail["revisions"][detail["current_revision"]]
-        fetch_info = revision_info["fetch"]["http"]
-        RunGit(["fetch", fetch_info["url"], fetch_info["ref"]])
+        fetch_url, fetch_ref = cl._ValidateGerritFetchInfo(
+            revision_info["fetch"]["http"], "diff"
+        )
+        RunGit(["fetch", "--", fetch_url, fetch_ref])
         base = "FETCH_HEAD"
 
     cmd = ["git", "diff"]
