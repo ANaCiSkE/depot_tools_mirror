@@ -8542,9 +8542,7 @@ class ChangelistTest(unittest.TestCase):
             options, parent, latest_tree
         )
         self.assertEqual(reviewers, ["pig@oink.farm"])
-        self.assertEqual(
-            ccs, ["cow@moo.farm", "chicken@bok.farm", "cow2@moo.farm"]
-        )
+        self.assertEqual(ccs, ["cow@moo.farm", "chicken@bok.farm"])
         self.assertEqual(
             change_desc._description_lines,
             [
@@ -8658,7 +8656,7 @@ class ChangelistTest(unittest.TestCase):
             options, parent, latest_tree
         )
         self.assertEqual(reviewers, ["pig@oink.farm"])
-        self.assertEqual(ccs, ["chicken@bok.farm", "cow2@moo.farm"])
+        self.assertEqual(ccs, ["chicken@bok.farm"])
         self.assertEqual(
             change_desc._description_lines,
             [
@@ -8693,7 +8691,7 @@ class ChangelistTest(unittest.TestCase):
         reviewers, ccs, change_desc = cl._PrepareChange(
             options, parent, latest_tree
         )
-        self.assertEqual(ccs, ["chicken@bok.farm", "cow2@moo.farm"])
+        self.assertEqual(ccs, ["chicken@bok.farm"])
         mockPrompt.assert_called_once()
         self.assertEqual(
             change_desc._description_lines,

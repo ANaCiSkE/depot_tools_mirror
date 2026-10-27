@@ -1038,7 +1038,6 @@ _NewUpload = collections.namedtuple(
 class ChangeDescription(object):
     """Contains a parsed form of the change description."""
 
-    CC_LINE = r"^[ \t]*(CC)[ \t]*=[ \t]*(.*?)[ \t]*$"
     BUG_LINE = r"^[ \t]*(?:(BUG)[ \t]*=|Bug:)[ \t]*(.*?)[ \t]*$"
     FIXED_LINE = r"^[ \t]*Fixed[ \t]*:[ \t]*(.*?)[ \t]*$"
     CHERRY_PICK_LINE = (
@@ -1198,14 +1197,6 @@ class ChangeDescription(object):
             top_lines.append("")
         top_lines.append(line)
         self._description_lines = top_lines + separator + gerrit_footers
-
-    def get_cced(self):
-        """Retrieves the list of reviewers."""
-        matches = [
-            re.match(self.CC_LINE, line) for line in self._description_lines
-        ]
-        cced = [match.group(2).strip() for match in matches if match]
-        return cleanup_list(cced)
 
     def get_hash_tags(self):
         """Extracts and sanitizes a list of Gerrit hashtags."""
@@ -2416,8 +2407,6 @@ class Changelist(object):
             ccs.extend(options.cc)
 
         ccs = [email.strip() for email in ccs if email.strip()]
-        if change_desc.get_cced():
-            ccs.extend(change_desc.get_cced())
 
         return reviewers, ccs, change_desc
 
@@ -3925,8 +3914,6 @@ class Changelist(object):
         if options.cc:
             cc.extend(options.cc)
         cc = [email.strip() for email in cc if email.strip()]
-        if change_desc.get_cced():
-            cc.extend(change_desc.get_cced())
         if self.GetGerritHost() == "chromium-review.googlesource.com":
             valid_accounts = set(reviewers + cc)
             # TODO(crbug/877717): relax this for all hosts.
