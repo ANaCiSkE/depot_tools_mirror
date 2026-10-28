@@ -129,6 +129,26 @@ class GitClCoreTest(unittest.TestCase):
             "http://src.chromium.org/git",
         )
 
+    @mock.patch("scm.GIT.GetConfig", return_value=None)
+    @mock.patch("scm.GIT.SetConfig")
+    def testLoadCodereviewSettingsFromFileRejectsInvalidPushUrlConfig(
+        self, mock_set_config, mock_get_config
+    ):
+        for bad_key in (
+            "core.fsmonitor",
+            "protocol.ext.allow",
+            "url..pushinsteadof",
+            "url.https://example.com.insteadof",
+        ):
+            mock_set_config.reset_mock()
+            content = f"PUSH_URL_CONFIG: {bad_key}\nORIGIN_URL_CONFIG: True\n"
+            file_obj = io.StringIO(content)
+            git_cl_core.LoadCodereviewSettingsFromFile(
+                file_obj, root="/custom/root"
+            )
+            for call in mock_set_config.call_args_list:
+                self.assertNotEqual(call.args[1], bad_key)
+
     @mock.patch("scm.GIT.GetConfig", return_value="false")
     @mock.patch("git_cl_core.FindCodereviewSettingsFile")
     def testLazyUpdateAutoupdateDisabled(self, mock_find, mock_get_config):

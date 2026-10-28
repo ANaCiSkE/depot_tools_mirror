@@ -256,10 +256,35 @@ def LoadCodereviewSettingsFromFile(fileobj, root=None):
         # should be of the form
         # PUSH_URL_CONFIG: url.ssh://gitrw.chromium.org.pushinsteadof
         # ORIGIN_URL_CONFIG: http://src.chromium.org/git
-        _SafeSetConfig(
-            keyvals["PUSH_URL_CONFIG"],
-            keyvals["ORIGIN_URL_CONFIG"],
-        )
+        push_url_key = keyvals["PUSH_URL_CONFIG"]
+        if _IsAllowedPushUrlConfigKey(push_url_key):
+            _SafeSetConfig(
+                push_url_key,
+                keyvals["ORIGIN_URL_CONFIG"],
+            )
+        else:
+            logging.warning(
+                "Ignoring invalid PUSH_URL_CONFIG key: %s", push_url_key
+            )
+
+
+def _IsAllowedPushUrlConfigKey(key: str) -> bool:
+    """Returns True if `key` is a valid url.<base>.pushInsteadOf config key."""
+    try:
+        canonical = scm.canonicalize_git_config_key(key)
+    except ValueError:
+        return False
+    parts = canonical.split(".")
+    if len(parts) < 3:
+        return False
+    section = parts[0]
+    subsection = ".".join(parts[1:-1])
+    varname = parts[-1]
+    return (
+        section == "url"
+        and bool(subsection.strip("."))
+        and varname == "pushinsteadof"
+    )
 
 
 class Settings:
