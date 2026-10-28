@@ -15,9 +15,11 @@ import ntpath
 import os
 import queue
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
+from typing import Optional
 import unittest
 from unittest import mock
 
@@ -2742,6 +2744,312 @@ class GcsDependencyTest(trial_dir.TestCase):
         # Output dir itself must not be deleted.
         self.assertTrue(os.path.isdir(self.dep.output_dir))
         self.assertFalse(os.path.exists(content_file))
+
+
+class TrailingSlashSolutionNameTest(trial_dir.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.previous_dir: str = os.getcwd()
+        os.chdir(self.root_dir)
+
+    def tearDown(self) -> None:
+        os.chdir(self.previous_dir)
+        super().tearDown()
+
+    def testParseGitSubmodulesStripsTrailingSlash(self) -> None:
+        solutions = [
+            {
+                "name": "src/",
+                "url": "https://example.com/src",
+                "deps_file": "DEPS",
+            }
+        ]
+        write(".gclient", f"solutions = {solutions!r}")
+        ls_files = (
+            "160000 be8c5114d606692dc783b60cf256690b62fbad17 0\tthird_party/foo"
+        )
+        git_config = (
+            "submodule.third_party/foo.path=third_party/foo\n"
+            "submodule.third_party/foo.url=https://example.com/foo"
+        )
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient.LoadCurrentConfig(options)
+        sol = client.dependencies[0]
+
+        with (
+            mock.patch("os.path.isfile", return_value=True),
+            mock.patch(
+                "subprocess2.check_output",
+                side_effect=[git_config.encode(), ls_files.encode()],
+            ),
+        ):
+            self.assertEqual(
+                sol.ParseGitSubmodules(),
+                {
+                    "src/third_party/foo": {
+                        "dep_type": "git",
+                        "url": (
+                            "https://example.com/foo@"
+                            "be8c5114d606692dc783b60cf256690b62fbad17"
+                        ),
+                    }
+                },
+            )
+
+    def testDependencyRunPopulatesCurrentRevisionWithTrailingSlashParent(
+        self,
+    ) -> None:
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(self.root_dir, options)
+        parent = gclient.GitDependency(
+            parent=client,
+            name="src/",
+            url="https://example.com/src.git",
+            managed=True,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        parent._dependency_index_state = {
+            "v8": "1111111111111111111111111111111111111111",
+            "internal": "9999999999999999999999999999999999999999",
+        }
+        parent._known_dependency_diff = {
+            "third_party/foo": (
+                "2222222222222222222222222222222222222222",
+                "3333333333333333333333333333333333333333",
+            ),
+        }
+
+        def run_child(child_name: str) -> Optional[str]:
+            dep = gclient.GitDependency(
+                parent=parent,
+                name=child_name,
+                url=f"https://example.com/{child_name}.git@aaaa",
+                managed=True,
+                custom_deps=None,
+                custom_vars=None,
+                custom_hooks=None,
+                deps_file="DEPS",
+                should_process=True,
+                should_recurse=False,
+                relative=False,
+                condition=None,
+                protocol="https",
+            )
+            fake_scm = mock.MagicMock()
+            fake_scm.current_revision = None
+            fake_scm.RunCommand.return_value = "aaaa"
+            work_queue = mock.MagicMock()
+            work_queue.out_cb = None
+            # Dependency.run() records synced commits in os.environ.
+            with (
+                mock.patch.object(dep, "CreateSCM", return_value=fake_scm),
+                mock.patch.dict(os.environ),
+            ):
+                dep.run({}, "update", [], work_queue, options, {}, {}, {})
+            return fake_scm.current_revision
+
+        self.assertEqual(
+            run_child("src/v8"),
+            "1111111111111111111111111111111111111111",
+        )
+        self.assertEqual(
+            run_child("src/third_party/foo"),
+            "3333333333333333333333333333333333333333",
+        )
+        self.assertIsNone(run_child("src-internal"))
+
+    def testRemoveUnversionedGitDirsWithTrailingSlashSolutionName(self) -> None:
+        src_dir = os.path.join(self.root_dir, "src")
+        libsync_file = os.path.join(
+            src_dir, "third_party", "libsync", "src", "libsync.c"
+        )
+        active_dir = os.path.join(src_dir, "third_party", "active")
+        write(libsync_file, "/* versioned in parent repo */\n")
+        os.makedirs(active_dir, exist_ok=True)
+
+        subprocess.run(
+            ["git", "init", src_dir], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", src_dir, "add", "third_party/libsync/src/libsync.c"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                src_dir,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "init",
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        options, _ = gclient.OptionParser().parse_args([])
+        # Use a relative root_dir like `gclient sync --spec` does.
+        client = gclient.GClient(".", options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src/",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        active_dep = gclient.GitDependency(
+            parent=sol,
+            name="src/third_party/active",
+            url="https://example.com/active.git@aaaa",
+            managed=True,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=False,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+        sol.add_dependencies_and_close([active_dep], [])
+
+        # Known submodule diff on 'src/' should not synthesize a 'src//...'
+        # entry, and stale 'src//...' entries now covered by the 'src/' checkout
+        # should be skipped instead of diffing a missing submodule object in src.
+        sol._known_dependency_diff = {
+            "third_party/active": ("aaaa", "bbbb"),
+        }
+        stale_entries = {
+            "src/": "https://example.com/src.git",
+            "src/third_party/active": "https://example.com/active.git@bbbb",
+            "src//third_party/libsync/src": (
+                "https://unknown@deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+            ),
+        }
+        write(".gclient_entries", f"entries = {stale_entries!r}\n")
+
+        client._RemoveUnversionedGitDirs()
+
+        self.assertEqual(
+            client._ReadEntries(),
+            {
+                "src/": "https://example.com/src.git",
+                "src/third_party/active": "https://example.com/active.git@aaaa",
+            },
+        )
+
+
+class RemoveUnversionedGitDirsTest(trial_dir.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.previous_dir: str = os.getcwd()
+        os.chdir(self.root_dir)
+
+    def tearDown(self) -> None:
+        os.chdir(self.previous_dir)
+        super().tearDown()
+
+    def _init_repo(self, path: str, tracked_file: str) -> None:
+        write(os.path.join(path, tracked_file), "\n")
+        for args in (
+            ["init"],
+            ["add", tracked_file],
+            [
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "init",
+            ],
+        ):
+            subprocess.run(
+                ["git", "-C", path] + args, check=True, capture_output=True
+            )
+
+    def testSkipsStaleEntryInsideDepCheckoutWithRelativeRoot(self) -> None:
+        # 'src/kde/src' was a DEPS entry on the previously synced branch and is
+        # now a versioned directory of the 'src/kde' dep checkout. It must be
+        # skipped instead of diffed against a revision 'src/kde' doesn't have.
+        self._init_repo("src", "DEPS")
+        self._init_repo(os.path.join("src", "kde"), "src/protocol.xml")
+
+        options, _ = gclient.OptionParser().parse_args([])
+        # Use a relative root_dir like `gclient sync --spec` does.
+        client = gclient.GClient(".", options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        kde_dep = gclient.GitDependency(
+            parent=sol,
+            name="src/kde",
+            url="https://example.com/kde.git@aaaa",
+            managed=True,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=False,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+        sol.add_dependencies_and_close([kde_dep], [])
+
+        current_entries = {
+            "src": "https://example.com/src.git",
+            "src/kde": "https://example.com/kde.git@aaaa",
+        }
+        stale_entries = {
+            **current_entries,
+            "src/kde/src": (
+                "https://example.com/kde.git@"
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            ),
+        }
+        write(".gclient_entries", f"entries = {stale_entries!r}\n")
+
+        client._RemoveUnversionedGitDirs()
+
+        self.assertEqual(client._ReadEntries(), current_entries)
 
 
 if __name__ == "__main__":

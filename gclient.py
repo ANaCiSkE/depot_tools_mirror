@@ -1257,7 +1257,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             if self._use_relative_paths:
                 path = module["path"]
             else:
-                path = f"{self.name}/{module['path']}"
+                path = f"{self.name.rstrip('/')}/{module['path']}"
             # TODO(crbug.com/1471685): Temporary hack. In case of applied
             # patches where the changes are staged but not committed, any
             # gitlinks from the patch are not returned by `git ls-tree`. The
@@ -1409,16 +1409,25 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                         if self._use_relative_paths:
                             path = self.name
                         else:
-                            path = self.name[len(self.parent.name) + 1 :]
+                            parent_prefix = self.parent.name.rstrip("/") + "/"
+                            path = (
+                                self.name[len(parent_prefix) :]
+                                if self.name.startswith(parent_prefix)
+                                else None
+                            )
                         current_revision = None
-                        if path in self.parent.dependency_index_state:
-                            current_revision = (
-                                self.parent.dependency_index_state[path]
-                            )
-                        if path in self.parent.known_dependency_diff:
-                            current_revision = (
-                                self.parent.known_dependency_diff[path][1]
-                            )
+                        if path is not None:
+                            if (
+                                self.parent.dependency_index_state
+                                and path in self.parent.dependency_index_state
+                            ):
+                                current_revision = (
+                                    self.parent.dependency_index_state[path]
+                                )
+                            if path in self.parent.known_dependency_diff:
+                                current_revision = (
+                                    self.parent.known_dependency_diff[path][1]
+                                )
                         self._used_scm.current_revision = current_revision
 
                     self._got_revision = self._used_scm.RunCommand(
@@ -2567,8 +2576,12 @@ it or fix the checkout.
         entries = []
         if entry_names_and_sync:
             entries, _ = zip(*entry_names_and_sync)
+        # Absolute so entries compare equal to GIT.GetCheckoutRoot(); root_dir
+        # is "." when gclient runs with --spec.
         full_entries = [
-            os.path.join(self.root_dir, e.replace("/", os.path.sep))
+            os.path.abspath(
+                os.path.join(self.root_dir, e.replace("/", os.path.sep))
+            )
             for e in entries
         ]
         no_sync_entries = [
@@ -2588,7 +2601,7 @@ it or fix the checkout.
                 continue
 
             for k, v in dep._known_dependency_diff.items():
-                path = f"{dep.name}/{k}"
+                path = f"{dep.name.rstrip('/')}/{k}"
                 if path in read_entries:
                     continue
                 read_entries[path] = f"https://unknown@{v[1]}"
@@ -2622,7 +2635,12 @@ it or fix the checkout.
             # Use entry and not entry_fixed there.
             if (
                 entry not in entries
-                and (not any(path.startswith(entry + "/") for path in entries))
+                and (
+                    not any(
+                        path.startswith(entry.rstrip("/") + "/")
+                        for path in entries
+                    )
+                )
                 and os.path.exists(e_dir)
             ):
                 # The entry has been removed from DEPS.
