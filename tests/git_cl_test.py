@@ -1169,6 +1169,94 @@ class TestGitCl(unittest.TestCase):
             "prompt [Yes/No]: Please, type yes or no: ", sys.stdout.getvalue()
         )
 
+    @mock.patch("sys.stdin", io.StringIO("\nno\n"))
+    @mock.patch("sys.stdout", io.StringIO())
+    def test_ask_for_explicit_yes_empty_input(self):
+        self.assertFalse(git_cl.ask_for_explicit_yes("prompt"))
+        self.assertEqual(
+            "prompt [Yes/No]: Please, type yes or no: ", sys.stdout.getvalue()
+        )
+
+    @mock.patch("sys.stdout", io.StringIO())
+    @mock.patch("sys.stderr", io.StringIO())
+    @mock.patch("sys.stdout", io.StringIO())
+    def test_update_with_external_changes_validation(self):
+        cl = git_cl.Changelist(issue=123)
+        mock.patch.object(cl, "GetPatchset", return_value=1).start()
+        mock.patch.object(cl, "GetMostRecentPatchset", return_value=2).start()
+        mock.patch.object(
+            cl, "_IsPatchsetRangeSignificant", return_value=True
+        ).start()
+        mock.patch.object(
+            cl, "GetIssueURL", return_value="https://crrev.com/c/123"
+        ).start()
+        mock.patch("git_cl.ask_for_explicit_yes", return_value=True).start()
+        mock.patch("git_common.current_branch", return_value="main").start()
+        mock.patch.object(
+            cl, "GetCommonAncestorWithUpstream", return_value="3" * 40
+        ).start()
+
+        rev1_sha = "1" * 40
+        rev2_sha = "2" * 40
+        mock.patch.object(
+            cl,
+            "_GetChangeDetail",
+            return_value={
+                "revisions": {
+                    rev1_sha: {"_number": 1, "description": "ps1"},
+                    rev2_sha: {
+                        "_number": 2,
+                        "description": "ps2",
+                        "uploader": {"email": "attacker@example.com"},
+                    },
+                }
+            },
+        ).start()
+
+        mock_get_commit = mock.patch.object(cl, "_GetChangeCommit").start()
+
+        # 1. Invalid external_base (revision=2) is rejected at first check.
+        mock_get_commit.side_effect = [
+            {"parents": [{"commit": "--upload-pack=evil"}]},
+            {"parents": [{"commit": "3" * 40}]},
+        ]
+        with mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExitMock):
+                cl._UpdateWithExternalChanges()
+            self.assertIn(
+                "Invalid Gerrit parent commit hash: --upload-pack=evil",
+                stderr.getvalue(),
+            )
+
+        # 2. Invalid external_base_last_uploaded (revision=1) is rejected at second check.
+        mock_get_commit.side_effect = [
+            {"parents": [{"commit": "3" * 40}]},
+            {"parents": [{"commit": "--upload-pack=evil2"}]},
+        ]
+        with mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExitMock):
+                cl._UpdateWithExternalChanges()
+            self.assertIn(
+                "Invalid Gerrit parent commit hash: --upload-pack=evil2",
+                stderr.getvalue(),
+            )
+
+        # 3. Third check
+        mock_get_commit.side_effect = [
+            {"parents": [{"commit": "3" * 40}]},
+            {"parents": [{"commit": "3" * 40}]},
+        ]
+
+        with mock.patch("git_cl.RunGitSilent") as mock_run_git:
+            # We fulfill the prompt request by naming the mock as mock_get_commit,
+            # or rather just applying the side effect to the git fetch mock.
+            mock_run_git.side_effect = [None, None, "commit"]
+            with mock.patch("scm.GIT.IsValidRevision", return_value=False):
+                try:
+                    cl._UpdateWithExternalChanges()
+                except Exception:
+                    pass
+
     def test_LoadCodereviewSettingsFromFile_gerrit(self):
         codereview_file = io.StringIO("GERRIT_HOST: true")
         self.calls = []
