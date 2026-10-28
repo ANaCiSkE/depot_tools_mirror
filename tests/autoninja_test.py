@@ -5,7 +5,6 @@
 
 import contextlib
 import io
-import multiprocessing
 import os
 import os.path
 import sys
@@ -128,44 +127,6 @@ class AutoninjaTest(trial_dir.TestCase):
         self.assertEqual(args[args.index("-C") + 1], out_dir)
         self.assertIn("base", args)
 
-    def test_autoninja_reclient(self):
-        """
-        Test that when specifying use_remoteexec=true use_reclient=true,
-        autoninja delegates to reclient_helper.
-        """
-        with mock.patch(
-            "reclient_helper.run_ninja", return_value=0
-        ) as run_ninja:
-            out_dir = os.path.join("out", "dir")
-            write(
-                os.path.join(out_dir, "args.gn"),
-                """
-                  use_remoteexec=true
-                  use_reclient=true
-                  """,
-            )
-            write(
-                os.path.join("buildtools", "reclient_cfgs", "reproxy.cfg"),
-                "RBE_v=2",
-            )
-            write(os.path.join("buildtools", "reclient", "version.txt"), "0.0")
-            write(
-                os.path.join("buildtools", "reclient_cfgs", "reproxy.cfg"),
-                "instance=projects/rbe-chromium-untrusted-test/"
-                "instances/default_instance",
-            )
-            autoninja.main(["autoninja.py", "-C", out_dir])
-            run_ninja.assert_called_once()
-            args = run_ninja.call_args.args[0]
-        self.assertIn("-C", args)
-        self.assertEqual(args[args.index("-C") + 1], out_dir)
-        # Check that autoninja correctly calculated the number of jobs to use
-        # as required for remote execution, instead of using the value for
-        # local execution.
-        self.assertIn("-j", args)
-        parallel_j = int(args[args.index("-j") + 1])
-        self.assertGreater(parallel_j, multiprocessing.cpu_count() * 2)
-
     def test_autoninja_siso(self):
         """
         Test that when specifying use_siso=true, autoninja delegates to siso.
@@ -182,65 +143,6 @@ class AutoninjaTest(trial_dir.TestCase):
             args = siso_main.call_args.args[0]
         self.assertIn("-C", args)
         self.assertEqual(args[args.index("-C") + 1], out_dir)
-
-    def test_autoninja_siso_reclient(self):
-        """
-        Test that when specifying use_siso=true and use_remoteexec=true,
-        autoninja starts reproxy using reclient_helper and calls 'siso ninja'.
-        """
-        reclient_helper_calls = []
-
-        @contextlib.contextmanager
-        def reclient_helper_mock(argv, tool, _should_collect_logs):
-            reclient_helper_calls.append([argv, tool])
-            yield 0
-
-        with mock.patch("reclient_helper.build_context", reclient_helper_mock):
-            with mock.patch("siso.main", return_value=0) as siso_main:
-                out_dir = os.path.join("out", "dir")
-                write(
-                    os.path.join(out_dir, "args.gn"),
-                    """
-                      use_remoteexec=true
-                      use_siso=true
-                      use_reclient=true
-                      """,
-                )
-                write(
-                    os.path.join("buildtools", "reclient_cfgs", "reproxy.cfg"),
-                    "instance=projects/rbe-chromium-untrusted-test/"
-                    "instances/default_instance\n"
-                    "RBE_v=2",
-                )
-                write(
-                    os.path.join("buildtools", "reclient", "version.txt"), "0.0"
-                )
-                autoninja.main(["autoninja.py", "-C", out_dir])
-                siso_main.assert_called_once_with(
-                    [
-                        "siso",
-                        "ninja",
-                        "-project=",
-                        "-reapi_instance=",
-                        "-reapi_address=",
-                        "-C",
-                        out_dir,
-                    ]
-                )
-        self.assertEqual(len(reclient_helper_calls), 1)
-        self.assertEqual(
-            reclient_helper_calls[0][0],
-            [
-                "siso",
-                "ninja",
-                "-project=",
-                "-reapi_instance=",
-                "-reapi_address=",
-                "-C",
-                out_dir,
-            ],
-        )
-        self.assertEqual(reclient_helper_calls[0][1], "autosiso")
 
     @mock.patch("sys.platform", "win32")
     def test_print_cmd_windows(self):

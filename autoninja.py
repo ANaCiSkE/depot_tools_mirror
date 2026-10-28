@@ -35,7 +35,6 @@ import gclient_utils
 import gn_helper
 import metrics_utils
 import ninja
-import reclient_helper
 import siso
 
 _SISO_SUGGESTION = """You're still using Ninja.
@@ -96,24 +95,6 @@ def _has_internal_checkout(output_dir):
     return os.path.exists(os.path.join(root_dir, "internal", ".git"))
 
 
-def _reclient_rbe_project():
-    """Returns RBE project used by reclient."""
-    instance = os.environ.get("RBE_instance")
-    if instance:
-        m = re.match(instance, r"projects/([^/]*)/instances/.*")
-        if m:
-            return m[1]
-    reproxy_cfg_path = reclient_helper.find_reclient_cfg()
-    if not reproxy_cfg_path:
-        return ""
-    with open(reproxy_cfg_path) as f:
-        for line in f:
-            m = re.match(r"instance\s*=\s*projects/([^/]*)/instances/.*", line)
-            if m:
-                return m[1]
-    return ""
-
-
 def _siso_rbe_project(output_dir):
     """Returns RBE project used by siso."""
     siso_project = os.environ.get("SISO_PROJECT")
@@ -155,8 +136,7 @@ def _print_cmd(cmd):
 
 
 # `use_siso` value is used to determine whether siso or ninja is used,
-# and used to determine default value of `use_reclient`, so
-# this logic should match with //build/toolchain/siso.gni
+# so this logic should match with //build/toolchain/siso.gni
 def _get_use_siso_default(output_dir):
     """Returns use_siso default value."""
     root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
@@ -330,7 +310,6 @@ def _main_inner(
 
     is_android = False
     use_remoteexec = False
-    use_reclient = None
     use_siso = None
     use_android_build_server = None
 
@@ -358,12 +337,6 @@ def _main_inner(
             if k == "use_siso" and v == "false":
                 use_siso = False
                 continue
-            if k == "use_reclient" and v == "true":
-                use_reclient = True
-                continue
-            if k == "use_reclient" and v == "false":
-                use_reclient = False
-                continue
             if k == "target_os" and v == '"android"':
                 is_android = True
                 continue
@@ -386,21 +359,13 @@ def _main_inner(
                 )
                 use_siso = False
 
-        if use_reclient is None and use_remoteexec:
-            if use_siso:
-                use_reclient = False
-            else:
-                use_reclient = True
-
     # Use the server for target_os="android" (where it is relevant), unless it
     # is disabled via GN arg.
     if use_android_build_server is None and is_android:
         use_android_build_server = True
 
     if use_remoteexec:
-        if use_reclient:
-            project = _reclient_rbe_project()
-        elif use_siso and project is None:
+        if use_siso and project is None:
             # siso runs locally if empty project is given
             # even if use_remoteexec=true is set.
             project = _siso_rbe_project(output_dir)
@@ -435,25 +400,14 @@ def _main_inner(
                 )
                 return 1
 
-    # If --offline is set, then reclient will use the local compiler
-    # instead of doing a remote compile. This is convenient if you want
-    # to briefly disable remote compile. It avoids having to rebuild the
-    # world when transitioning between RBE/non-RBE builds. However, it is
-    # not as fast as doing a "normal" non-RBE build because an extra
-    # process is created for each compile step.
-    if offline and use_reclient:
-        # Tell reclient to do local compiles.
-        os.environ["RBE_remote_disabled"] = "1"
-
     if gclient_utils.IsEnvCog():
-        if not use_remoteexec or use_reclient or not use_siso:
+        if not use_remoteexec or not use_siso:
             print(
                 "WARNING: You're not using Siso's built-in remote "
                 "execution. The build will be slow.\n"
                 "You should set the following in args.gn to get better "
                 "performance:\n"
                 "  use_remoteexec=true\n"
-                "  use_reclient=false\n"
                 "  use_siso=true\n",
                 file=sys.stderr,
             )
@@ -531,20 +485,6 @@ def _main_inner(
                 return siso.main(args, telemetry_cfg)
 
             if use_remoteexec:
-                if use_reclient and not t_specified:
-                    # TODO: crbug.com/379584977 - Remove siso/reclient
-                    # integration.
-                    return reclient_helper.run_siso(
-                        [
-                            "siso",
-                            "ninja",
-                            # Do not authenticate when using Reproxy.
-                            "-project=",
-                            "-reapi_instance=",
-                            "-reapi_address=",
-                        ]
-                        + input_args[1:]
-                    )
                 return run_siso(["siso", "ninja"] + input_args[1:])
             return run_siso(["siso", "ninja", "--offline"] + input_args[1:])
 
@@ -615,8 +555,6 @@ def _main_inner(
     with android_build_server_helper.build_server_context(
         build_id, output_dir, use_android_build_server=use_android_build_server
     ):
-        if use_reclient and not t_specified:
-            return reclient_helper.run_ninja(ninja_args)
         return ninja.main(ninja_args)
 
 

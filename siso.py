@@ -278,7 +278,7 @@ def check_outdir(out_dir: str) -> None:
     if os.path.exists(ninja_marker):
         print(
             "depot_tools/siso.py: %s contains Ninja state file.\n"
-            "Use `autoninja` to use reclient,\n"
+            "Use `autoninja` to use ninja,\n"
             "or run `gn clean %s` to switch from ninja to siso\n"
             % (out_dir, out_dir),
             file=sys.stderr,
