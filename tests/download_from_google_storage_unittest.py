@@ -4,18 +4,22 @@
 # found in the LICENSE file.
 """Unit tests for download_from_google_storage.py."""
 
+import io
 import ntpath
 import optparse
 import os
 import queue
 
 import shutil
+import stat
 import sys
 import tarfile
 import tempfile
 import threading
+from typing import Optional
 import unittest
 from unittest import mock
+import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -806,6 +810,403 @@ class DownloadTests(unittest.TestCase):
             )
         self.assertEqual(self.gsutil.history, expected_calls)
         self.assertEqual(code, 0)
+
+
+SYM, LNK, REG, DIR = (
+    tarfile.SYMTYPE,
+    tarfile.LNKTYPE,
+    tarfile.REGTYPE,
+    tarfile.DIRTYPE,
+)
+
+# (name, type, linkname for links or content for regular files, mode)
+MemberSpec = tuple[str, bytes, Optional[str], int]
+
+
+def _member(
+    name: str, kind: bytes = REG, arg: Optional[str] = "x", mode: int = 0o644
+) -> MemberSpec:
+    return (name, kind, arg, mode)
+
+
+def _write_tar(path: str, members: list[MemberSpec]) -> None:
+    """Writes a tar.gz with the given members."""
+    with tarfile.open(path, "w:gz") as tar:
+        for name, kind, arg, mode in members:
+            info = tarfile.TarInfo(name)
+            info.type = kind
+            info.mode = mode
+            data = None
+            if kind in (SYM, LNK):
+                info.linkname = arg
+            elif kind == REG:
+                content = arg.encode()
+                data = io.BytesIO(content)
+                info.size = len(content)
+            tar.addfile(info, data)
+
+
+class ExtractTests(unittest.TestCase):
+    """Tests that --extract cannot write outside the extract dir."""
+
+    # Levels between the extract dir and temp_dir.
+    DEPTH = 5
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.mkdtemp(prefix="dfgs_extract_test")
+        self.addCleanup(shutil.rmtree, self.temp_dir)
+        # Nest the work dir so that escapes stay inside temp_dir.
+        self.work_dir = os.path.join(self.temp_dir, "a", "b", "c", "work")
+        os.makedirs(self.work_dir)
+        self.tar_path = os.path.join(self.work_dir, "node.tar.gz")
+        self.extract_dir = os.path.join(self.work_dir, "node")
+        self.secret = os.path.join(self.temp_dir, "secret")
+        with open(self.secret, "w") as f:
+            f.write("secret")
+        with open(f"{self.tar_path}.sha1", "w") as f:
+            f.write("pin")
+
+    def _validate(
+        self, members: list[MemberSpec], prefix: str = "node"
+    ) -> bool:
+        _write_tar(self.tar_path, members)
+        with tarfile.open(self.tar_path, "r:gz") as tar:
+            return download_from_google_storage._validate_tar_file(tar, prefix)
+
+    def _run_worker(
+        self, members: Optional[list[MemberSpec]]
+    ) -> list[tuple[int, str]]:
+        """Downloads and extracts an archive; returns the reported errors.
+
+        If members is None, the archive at tar_path is used as is.
+        """
+        if members is not None:
+            _write_tar(self.tar_path, members)
+        work_queue = queue.Queue()
+        work_queue.put(
+            (
+                download_from_google_storage.get_sha1(self.tar_path),
+                self.tar_path,
+            )
+        )
+        work_queue.put((None, None))
+        ret_codes = queue.Queue()
+        download_from_google_storage._downloader_worker_thread(
+            0,
+            work_queue,
+            True,
+            "gs://bucket",
+            GsutilMock(GSUTIL_DEFAULT_PATH, None),
+            queue.Queue(),
+            ret_codes,
+            False,
+            True,
+            delete=False,
+        )
+        return [r for r in ret_codes.queue if r[0]]
+
+    def _outside_files(self) -> list[str]:
+        """Returns all paths under temp_dir except the extract dir."""
+        paths = []
+        for root, dirs, files in os.walk(self.temp_dir):
+            if root == self.work_dir and "node" in dirs:
+                dirs.remove("node")
+            for name in dirs + files:
+                paths.append(
+                    os.path.relpath(os.path.join(root, name), self.temp_dir)
+                )
+        return sorted(paths)
+
+    def _data_exists(self) -> bool:
+        return download_from_google_storage._data_exists(
+            download_from_google_storage.get_sha1(self.tar_path),
+            self.tar_path,
+            True,
+        )
+
+    def assertFailsSafely(
+        self, members: Optional[list[MemberSpec]], error: str
+    ) -> None:
+        """Asserts that extracting members fails without escaping."""
+        if members is not None:
+            _write_tar(self.tar_path, members)
+        tmp_flag = f"{self.extract_dir}.tmp"
+        if os.path.exists(tmp_flag):
+            os.remove(tmp_flag)
+        outside = self._outside_files()
+        errors = self._run_worker(None)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn(error, errors[0][1])
+        # Nothing was written outside the extract dir, apart from the flag
+        # file marking the extraction as incomplete so that it is retried.
+        self.assertEqual(
+            self._outside_files(),
+            sorted(outside + [os.path.relpath(tmp_flag, self.temp_dir)]),
+        )
+        with open(self.secret) as f:
+            self.assertEqual(f.read(), "secret")
+        self.assertEqual(os.stat(self.secret).st_nlink, 1)
+        with open(f"{self.tar_path}.sha1") as f:
+            self.assertEqual(f.read(), "pin")
+        # No partial tree is left behind, and the next run retries.
+        self.assertFalse(os.path.lexists(self.extract_dir))
+        self.assertFalse(self._data_exists())
+
+    def test_validate_tar_file_rejects(self) -> None:
+        depth = self.DEPTH
+        chain = f"node/{'x/' * depth}evil"
+        cases: dict[str, list[MemberSpec]] = {
+            "prefix without separator": [_member("node.tar.gz.sha1")],
+            "sibling dir sharing prefix": [_member("nodeevil/x")],
+            "parent component": [_member("node/../node/x")],
+            "backslash": [_member("node\\x")],
+            "absolute": [_member("/node/x")],
+            "drive": [_member("C:/node/x")],
+            "colon": [_member("node/x:stream")],
+            "dot component in file name": [_member("node/y/.")],
+            "dotdot with trailing space": [_member("node/.. /x")],
+            "unc": [_member("//server/share/node/x")],
+            "empty name": [_member("")],
+            "archive root": [_member(".", DIR, None)],
+            "file as extract dir": [_member("node")],
+            "fifo": [_member("node/f", tarfile.FIFOTYPE, None)],
+            "duplicate": [_member("node/x"), _member("node/x")],
+            "absolute symlink": [_member("node/s", SYM, "/etc/passwd")],
+            "drive symlink": [_member("node/s", SYM, "C:/x")],
+            "dot prefixed drive symlink": [_member("node/s", SYM, "./C:/x")],
+            "symlink dotdot with trailing space": [
+                _member("node/a/s", SYM, ".. /.. /x")
+            ],
+            "backslash symlink": [_member("node/s", SYM, "a\\..\\..\\x")],
+            "symlink to sibling": [_member("node/s", SYM, "../nodeevil")],
+            "symlink to parent": [_member("node/s", SYM, "..")],
+            "symlink with inner dotdot": [_member("node/s", SYM, "a/../x")],
+            # Earlier symlinks redirect later members out of the extract dir.
+            "chained symlink depth": [
+                _member("node/x", SYM, "."),
+                _member(chain, SYM, f"{'../' * depth}secret"),
+                _member(chain),
+            ],
+            "write through symlink": [
+                _member("node/s", SYM, "x"),
+                _member("node/s"),
+            ],
+            "member under symlink": [
+                _member("node/s", SYM, "."),
+                _member("node/s/x"),
+            ],
+            "member under later symlink": [
+                _member("node/s/x"),
+                _member("node/s", SYM, "."),
+            ],
+            "member under symlink differing in case": [
+                _member("node/S", SYM, "."),
+                _member("node/s/x"),
+            ],
+            "member under symlink with trailing dot": [
+                _member("node/s.", SYM, "."),
+                _member("node/s/x"),
+            ],
+            "symlink replacing dir": [
+                _member("node/d", DIR, None),
+                _member("node/d", SYM, "x"),
+            ],
+            "symlink as extract dir": [_member("node", SYM, "node/x")],
+            # tarfile resolves hardlinks relative to the archive root, not to
+            # the hardlink's directory.
+            "hardlink relative to member": [
+                _member("node/a"),
+                _member("node/b/h", LNK, "../a"),
+            ],
+            "hardlink outside": [_member("node/a/b/h", LNK, "../../../secret")],
+            "hardlink with dotdot": [
+                _member("node/a"),
+                _member("node/b/h", LNK, "node/x/../a"),
+            ],
+            "hardlink to sibling": [_member("node/h", LNK, "node.tar.gz.sha1")],
+            "hardlink to later file": [
+                _member("node/h", LNK, "node/a"),
+                _member("node/a"),
+            ],
+            "hardlink to symlink": [
+                _member("node/s", SYM, "a"),
+                _member("node/h", LNK, "node/s"),
+            ],
+            "hardlink with dot": [
+                _member("node/a"),
+                _member("node/h", LNK, "node/a/."),
+            ],
+            "hardlink to dir": [
+                _member("node/d", DIR, None),
+                _member("node/h", LNK, "node/d"),
+            ],
+        }
+        for desc, members in cases.items():
+            with self.subTest(desc):
+                self.assertFalse(self._validate(members))
+
+    def test_validate_tar_file_rejects_degenerate_prefix(self) -> None:
+        for prefix in ("", ".", "..", "node/sub", "/node", "C:node", "a\\b"):
+            with self.subTest(prefix=prefix):
+                self.assertFalse(self._validate([], prefix=prefix))
+
+    def test_validate_tar_file_accepts(self) -> None:
+        cases: dict[str, list[MemberSpec]] = {
+            "extract dir": [_member("node", DIR, None)],
+            "extract dir with slash": [_member("node/", DIR, None)],
+            "file": [_member("node/x")],
+            "dot prefixed": [_member("./node/x")],
+            "dotdot in file name": [_member("node/..hidden")],
+            "names differing in case": [_member("node/x"), _member("node/X")],
+            "duplicate dir": [
+                _member("node/d", DIR, None),
+                _member("node/d", DIR, None),
+            ],
+            "relative symlink": [
+                _member(
+                    "node/bin/npm",
+                    SYM,
+                    "../lib/node_modules/npm/bin/npm-cli.js",
+                )
+            ],
+            "symlink to symlink": [
+                _member("node/lib/libfoo.so.1", SYM, "libfoo.so.1.2"),
+                _member("node/lib/libfoo.so", SYM, "libfoo.so.1"),
+            ],
+            "symlink to extract dir": [_member("node/bin/self", SYM, "..")],
+            "symlink to own dir": [_member("node/self", SYM, ".")],
+            "hardlink": [_member("node/a"), _member("node/b", LNK, "node/a")],
+            "hardlink chain": [
+                _member("node/a"),
+                _member("node/b", LNK, "node/a"),
+                _member("node/c", LNK, "node/b"),
+            ],
+        }
+        for desc, members in cases.items():
+            with self.subTest(desc):
+                self.assertTrue(self._validate(members))
+
+    def test_extract_rejects_invalid_archive(self) -> None:
+        for desc, members in {
+            "sibling file": [_member("node/x"), _member("node.tar.gz.sha1")],
+            "chained symlink depth": [
+                _member("node/x", SYM, "."),
+                _member("node/x/x/evil", SYM, "../../x"),
+                _member("node/x/x/evil"),
+            ],
+        }.items():
+            with self.subTest(desc):
+                self.assertFailsSafely(members, "contains invalid entries")
+
+    def test_extract_rejects_corrupt_archive(self) -> None:
+        _write_tar(
+            self.tar_path,
+            [_member("node/x", REG, os.urandom(1 << 16).hex())],
+        )
+        with open(self.tar_path, "rb") as f:
+            data = f.read()
+        cases = {
+            "truncated header": data[:30],
+            "truncated stream": data[: len(data) // 2],
+        }
+        for desc, corrupt in cases.items():
+            with self.subTest(desc):
+                with open(self.tar_path, "wb") as f:
+                    f.write(corrupt)
+                self.assertFailsSafely(None, "Failed to extract")
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    @unittest.skipUnless(
+        download_from_google_storage._HAS_DATA_FILTER,
+        "requires PEP 706 tarfile filters",
+    )
+    def test_extract_data_filter_is_defense_in_depth(self) -> None:
+        # Even if the lexical check were bypassed, the data filter refuses
+        # members that resolve outside the work dir on disk.
+        depth = self.DEPTH
+        chain = f"node/{'x/' * depth}evil"
+        cases: dict[str, list[MemberSpec]] = {
+            "chained symlink depth": [
+                _member("node/x", SYM, "."),
+                _member(chain, SYM, f"{'../' * depth}secret"),
+                _member(chain, REG, "evil"),
+            ],
+            "hardlink outside": [
+                _member("node/a/b/h", LNK, f"{'../' * (depth - 1)}secret")
+            ],
+        }
+        with mock.patch.object(
+            download_from_google_storage,
+            "_validate_tar_file",
+            return_value=True,
+        ):
+            for desc, members in cases.items():
+                with self.subTest(desc):
+                    self.assertFailsSafely(members, "Failed to extract")
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_extract_legitimate_archive(self) -> None:
+        npm_cli = "node/lib/node_modules/npm/bin/npm-cli.js"
+        members = [
+            _member("node", DIR, None, 0o755),
+            _member("node/bin", DIR, None, 0o755),
+            _member("node/bin/node", REG, "node", 0o755),
+            _member(npm_cli, REG, "npm", 0o755),
+            _member(
+                "node/bin/npm", SYM, "../lib/node_modules/npm/bin/npm-cli.js"
+            ),
+            _member("node/bin/self", SYM, ".."),
+            _member("node/a", REG, "a"),
+            _member("node/b", LNK, "node/a"),
+        ]
+        for data_filter in (
+            (True, False)
+            if download_from_google_storage._HAS_DATA_FILTER
+            else (False,)
+        ):
+            with self.subTest(data_filter=data_filter):
+                with (
+                    mock.patch.object(
+                        download_from_google_storage,
+                        "_HAS_DATA_FILTER",
+                        data_filter,
+                    ),
+                    warnings.catch_warnings(),
+                ):
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    self.assertEqual(self._run_worker(members), [])
+                self.assertFalse(os.path.exists(f"{self.extract_dir}.tmp"))
+                npm = os.path.join(self.extract_dir, "bin", "npm")
+                self.assertEqual(
+                    os.readlink(npm), "../lib/node_modules/npm/bin/npm-cli.js"
+                )
+                with open(npm) as f:
+                    self.assertEqual(f.read(), "npm")
+                self.assertTrue(
+                    os.path.samefile(
+                        os.path.join(self.extract_dir, "a"),
+                        os.path.join(self.extract_dir, "b"),
+                    )
+                )
+                for exe in ("node/bin/node", npm_cli):
+                    mode = os.stat(os.path.join(self.work_dir, exe)).st_mode
+                    self.assertTrue(mode & stat.S_IXUSR, exe)
+                mode = os.stat(os.path.join(self.extract_dir, "a")).st_mode
+                self.assertFalse(mode & stat.S_IXUSR)
+                self.assertTrue(self._data_exists())
+
+    def test_failed_update_is_retried(self) -> None:
+        # An existing extract dir from a previous version...
+        os.mkdir(self.extract_dir)
+        # ...followed by an update to an archive that is rejected.
+        self.assertEqual(len(self._run_worker([_member("nodeevil/x")])), 1)
+        self.assertTrue(os.path.isdir(self.extract_dir))
+        self.assertTrue(os.path.exists(f"{self.extract_dir}.tmp"))
+        self.assertFalse(self._data_exists())
 
 
 if __name__ == "__main__":

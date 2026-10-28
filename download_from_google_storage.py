@@ -4,6 +4,9 @@
 # found in the LICENSE file.
 """Download files from Google Storage based on SHA1 sums."""
 
+from __future__ import annotations
+
+import collections
 import hashlib
 import optparse
 import os
@@ -16,6 +19,8 @@ import sys
 import tarfile
 import threading
 import time
+from typing import Optional
+import unicodedata
 
 import subprocess2
 
@@ -300,28 +305,145 @@ def enumerate_input(
                     )
 
 
-def _validate_tar_file(tar, prefix):
-    def _validate(tarinfo):
-        """Returns false if the tarinfo is something we explicitly forbid."""
-        if tarinfo.issym() or tarinfo.islnk():
-            # For links, check if the destination is valid.
-            if os.path.isabs(tarinfo.linkname):
-                return False
-            link_target = os.path.normpath(
-                os.path.join(os.path.dirname(tarinfo.name), tarinfo.linkname)
-            )
-            if not link_target.startswith(prefix):
-                return False
+def _split_tar_path(path: str) -> Optional[list[str]]:
+    """Returns the components of a relative tar path, or None if unsafe.
 
-        if (
-            "../" in tarinfo.name
-            or "..\\" in tarinfo.name
-            or not tarinfo.name.startswith(prefix)
+    Tar archives always use "/" as the separator. Backslashes and colons are
+    rejected since Windows treats them as separators, drives or alternate data
+    streams, so the same name would be interpreted differently on different
+    platforms.
+    """
+    if (
+        not path
+        or "\\" in path
+        or ":" in path
+        or "\0" in path
+        or path.startswith("/")
+    ):
+        return None
+    parts = [part for part in path.split("/") if part not in ("", ".")]
+    # Windows strips trailing dots and spaces, so e.g. ".. " would become "..".
+    if any(part != ".." and not part.rstrip(". ") for part in parts):
+        return None
+    return parts
+
+
+def _fold(parts: list[str]) -> str:
+    """Returns a key matching paths that may alias on disk.
+
+    Case-insensitive and normalization-insensitive filesystems (e.g. on macOS
+    and Windows) treat such names as the same file, and Windows also ignores
+    trailing dots and spaces.
+    """
+    path = "/".join(part.rstrip(". ") for part in parts)
+    return unicodedata.normalize(
+        "NFD", unicodedata.normalize("NFD", path).casefold()
+    )
+
+
+def _validate_tar_file(tar: tarfile.TarFile, prefix: str) -> bool:
+    """Returns True if extracting tar cannot write outside of prefix.
+
+    The checks are purely lexical, so they also restrict the archive's shape
+    such that the lexical paths are what actually ends up on disk:
+      * Member names are unique (except for directories) and never go through
+        a symlink member, so no symlink can redirect where a member is
+        written.
+      * Symlink targets only use ".." as leading components, which are
+        resolved from the symlink's real parent directory, so other symlinks
+        cannot change where they point.
+      * Hardlinks only point to regular files that precede them.
+    This relies on the extract dir being removed before extraction.
+    """
+    if prefix == ".." or _split_tar_path(prefix) != [prefix]:
+        return False
+
+    members = []
+    all_names = collections.Counter()
+    symlinks = set()
+    for member in tar.getmembers():
+        name = member.name
+        while name.startswith("./"):
+            name = name[2:]
+        parts = _split_tar_path(name)
+        # Apart from a leading "./", "." components could make tarfile write
+        # somewhere other than what is validated here (e.g. "a/." for a file).
+        if parts is None or "." in name.split("/"):
+            return False
+        members.append((member, parts))
+        all_names[_fold(parts)] += 1
+        if member.issym():
+            symlinks.add(_fold(parts))
+    # A symlink must not alias any other member, not even one whose name only
+    # differs in case.
+    if any(all_names[symlink] > 1 for symlink in symlinks):
+        return False
+
+    dirs = set()
+    names = set()
+    regular_files = set()
+    for member, parts in members:
+        if not (
+            member.isreg() or member.isdir() or member.issym() or member.islnk()
         ):
             return False
-        return True
+        name = "/".join(parts)
+        if (
+            not parts
+            or parts[0] != prefix
+            or ".." in parts
+            or (len(parts) == 1 and not member.isdir())
+            or (name in names and not (member.isdir() and name in dirs))
+            or (
+                symlinks
+                and any(
+                    _fold(parts[:i]) in symlinks for i in range(1, len(parts))
+                )
+            )
+        ):
+            return False
+        names.add(name)
 
-    return all(map(_validate, tar.getmembers()))
+        if member.isdir():
+            dirs.add(name)
+        elif member.issym():
+            target = _split_tar_path(member.linkname)
+            if target is None:
+                return False
+            ups = 0
+            while ups < len(target) and target[ups] == "..":
+                ups += 1
+            # The target must stay inside prefix, counting from the symlink's
+            # directory (parts[:-1]).
+            if ".." in target[ups:] or ups > len(parts) - 2:
+                return False
+        elif member.islnk():
+            # tarfile resolves hardlink targets relative to the archive root.
+            target = _split_tar_path(member.linkname)
+            if (
+                not target
+                or "." in member.linkname.split("/")
+                or "/".join(target) not in regular_files
+            ):
+                return False
+            regular_files.add(name)
+        else:
+            regular_files.add(name)
+    return True
+
+
+# Whether tarfile supports PEP 706 extraction filters.
+_HAS_DATA_FILTER = hasattr(tarfile, "data_filter")
+
+
+def _extract_tar(tar: tarfile.TarFile, path: str) -> None:
+    """Extracts a tar that passed _validate_tar_file() into path."""
+    if _HAS_DATA_FILTER:
+        # Defense in depth: the data filter also refuses members that resolve
+        # outside of path on disk, and drops unsafe mode bits.
+        tar.extractall(path=path, filter="data")
+    else:
+        tar.extractall(path=path)
 
 
 def _downloader_worker_thread(
@@ -372,10 +494,10 @@ def _downloader_worker_thread(
                         % (thread_num, extract_dir)
                     )
                     skip = False
-                # .tmp file is created just before extraction and removed just
-                # after extraction. If such file exists, it means the process
-                # was terminated mid-extraction and therefore needs to be
-                # extracted again.
+                # .tmp file is created before validation and extraction and
+                # removed only after a successful extraction. If such file
+                # exists, the extraction was rejected, failed or interrupted
+                # and therefore needs to be redone.
                 elif os.path.exists(extract_dir + ".tmp"):
                     out_q.put(
                         "%d> Detected tmp flag file for %s, "
@@ -464,56 +586,87 @@ def _downloader_worker_thread(
             continue
 
         if extract:
-            if not tarfile.is_tarfile(output_filename):
-                out_q.put(
-                    "%d> Error: %s is not a tar.gz archive."
-                    % (thread_num, output_filename)
-                )
-                ret_codes.put(
-                    (1, "%s is not a tar.gz archive." % (output_filename))
-                )
-                continue
-            with tarfile.open(output_filename, "r:gz") as tar:
-                dirname = os.path.dirname(os.path.abspath(output_filename))
-                # If there are long paths inside the tarball we can get
-                # extraction errors on windows due to the 260 path length limit
-                # (this includes pwd). Use the extended path syntax.
-                if sys.platform == "win32":
-                    dirname = "\\\\?\\%s" % dirname
-                if not _validate_tar_file(tar, os.path.basename(extract_dir)):
+            extracting = False
+            try:
+                # The .tmp flag file marks extract_dir as incomplete until
+                # extraction succeeds, so that a rejected or failed update of
+                # an existing extract_dir is retried on the next run.
+                with open(f"{extract_dir}.tmp", "a"):
+                    pass
+                if not tarfile.is_tarfile(output_filename):
                     out_q.put(
-                        "%d> Error: %s contains files outside %s."
-                        % (thread_num, output_filename, extract_dir)
+                        "%d> Error: %s is not a tar.gz archive."
+                        % (thread_num, output_filename)
                     )
                     ret_codes.put(
-                        (1, "%s contains invalid entries." % (output_filename))
+                        (1, "%s is not a tar.gz archive." % (output_filename))
                     )
                     continue
-                if os.path.exists(extract_dir):
-                    try:
-                        shutil.rmtree(extract_dir)
+                with tarfile.open(output_filename, "r:gz") as tar:
+                    dirname = os.path.dirname(os.path.abspath(output_filename))
+                    # If there are long paths inside the tarball we can get
+                    # extraction errors on windows due to the 260 path length
+                    # limit (this includes pwd). Use the extended path syntax.
+                    if sys.platform == "win32":
+                        dirname = "\\\\?\\%s" % dirname
+                    if not _validate_tar_file(
+                        tar, os.path.basename(extract_dir)
+                    ):
                         out_q.put(
-                            "%d> Removed %s..." % (thread_num, extract_dir)
+                            "%d> Error: %s contains files outside %s."
+                            % (thread_num, output_filename, extract_dir)
                         )
-                    except OSError:
-                        out_q.put(
-                            "%d> Warning: Can't delete: %s"
-                            % (thread_num, extract_dir)
+                        ret_codes.put(
+                            (
+                                1,
+                                "%s contains invalid entries."
+                                % (output_filename),
+                            )
                         )
-                        ret_codes.put((1, "Can't delete %s." % (extract_dir)))
                         continue
-                out_q.put(
-                    "%d> Extracting %d entries from %s to %s"
-                    % (
-                        thread_num,
-                        len(tar.getmembers()),
-                        output_filename,
-                        extract_dir,
+                    if os.path.exists(extract_dir):
+                        try:
+                            shutil.rmtree(extract_dir)
+                            out_q.put(
+                                "%d> Removed %s..." % (thread_num, extract_dir)
+                            )
+                        except OSError:
+                            out_q.put(
+                                "%d> Warning: Can't delete: %s"
+                                % (thread_num, extract_dir)
+                            )
+                            ret_codes.put(
+                                (1, "Can't delete %s." % (extract_dir))
+                            )
+                            continue
+                    out_q.put(
+                        "%d> Extracting %d entries from %s to %s"
+                        % (
+                            thread_num,
+                            len(tar.getmembers()),
+                            output_filename,
+                            extract_dir,
+                        )
                     )
+                    extracting = True
+                    _extract_tar(tar, dirname)
+                    extracting = False
+                os.remove(f"{extract_dir}.tmp")
+            # Corrupt archives can raise more than tarfile.TarError (e.g.
+            # EOFError or zlib.error). Report them instead of letting them kill
+            # the worker thread, which would make the download look successful.
+            except Exception as e:  # pylint: disable=broad-except
+                # Only remove extract_dir once extraction has started. Before
+                # that, it holds the previous extraction (or, for degenerate
+                # file names, may not be an extract dir at all).
+                if extracting:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                out_q.put(
+                    f"{thread_num}> Error: Failed to extract "
+                    f"{output_filename}: {e}"
                 )
-                with open(extract_dir + ".tmp", "a"):
-                    tar.extractall(path=dirname)
-                os.remove(extract_dir + ".tmp")
+                ret_codes.put((1, f"Failed to extract {output_filename}: {e}"))
+                continue
         if os.path.exists(migration_file_name):
             os.remove(migration_file_name)
         code, err = set_executable_bit(output_filename, file_url, gsutil)
@@ -550,8 +703,9 @@ def _data_exists(input_sha1_sum, output_filename, extract):
         extract: Whether or not a downloaded file should be extracted. If the
             file is not extracted, this just compares the sha1 of the file. If
             the file is to be extracted, this only compares the sha1 of the
-            target archive if the target directory already exists. The content
-            of the target directory is not checked.
+            target archive if the target directory already exists and no .tmp
+            flag file marks its extraction as incomplete. The content of the
+            target directory is not checked.
     """
     extract_dir = None
     if extract:
@@ -560,6 +714,8 @@ def _data_exists(input_sha1_sum, output_filename, extract):
             # bail out too early.
             return False
         extract_dir = output_filename[: -len(".tar.gz")]
+        if os.path.exists(f"{extract_dir}.tmp"):
+            return False
     if os.path.exists(output_filename):
         if not extract or os.path.exists(extract_dir):
             if get_sha1(output_filename) == input_sha1_sum:
