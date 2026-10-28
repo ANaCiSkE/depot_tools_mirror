@@ -6504,6 +6504,12 @@ def CMDlint(parser, args):
                 chunk_size = 50 if sys.platform == "win32" else len(ruff_files)
                 for i in range(0, len(ruff_files), chunk_size):
                     chunk = ruff_files[i : i + chunk_size]
+                    try:
+                        subprocess2.check_safe_for_cmd_exe(chunk)
+                    except ValueError as e:
+                        print(f"Error: {e}")
+                        py_errors += 1
+                        continue
                     cmd = ["vpython3", tool, "check"]
                     if options.fix:
                         cmd.append("--fix")
@@ -6531,6 +6537,12 @@ def CMDlint(parser, args):
             stdin_data = "\n".join(flist).encode("utf-8")
             cmd = ["vpython3", tool, "--args-on-stdin"]
             if pylintrc:
+                try:
+                    subprocess2.check_safe_for_cmd_exe([pylintrc])
+                except ValueError as e:
+                    print(f"Error: {e}")
+                    py_errors += 1
+                    continue
                 cmd.append(f"--rcfile={pylintrc}")
             # Add --score=no after --rcfile so that it clobbers rcfile values.
             cmd.append("--score=no")

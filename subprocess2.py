@@ -13,11 +13,23 @@ import os
 import subprocess
 import sys
 import threading
+from collections.abc import Iterable
 
 # Constants forwarded from subprocess.
 PIPE = subprocess.PIPE
 STDOUT = subprocess.STDOUT
 DEVNULL = subprocess.DEVNULL
+
+# Characters that cmd.exe gives a special meaning when it parses a command
+# line. On Windows, Popen() defaults to shell=True and the `.bat` shims (e.g.
+# vpython3.bat) forward their arguments with `%*`, so cmd.exe re-parses every
+# argument after subprocess has quoted it. Quoting is not a defense: `%` is
+# expanded and `"` toggles cmd.exe's quoting state even inside quotes, and a
+# line break ends the command. `(`, `)` and `!` are deliberately not listed:
+# parentheses are only special at the start of a command and `!` only with
+# delayed expansion, neither of which applies to a plain `"...\vpython3.exe" %*`
+# line, and rejecting them would break paths like `C:\Program Files (x86)\...`.
+CMD_EXE_METACHARACTERS = frozenset('&|<>^%"\r\n')
 
 
 class CalledProcessError(subprocess.CalledProcessError):
@@ -88,6 +100,28 @@ def get_english_env(env):
     fix_lang("LANG")
     fix_lang("LANGUAGE")
     return env
+
+
+def check_safe_for_cmd_exe(args: Iterable[str]) -> None:
+    """Raises ValueError on Windows if cmd.exe would interpret any argument.
+
+    Call it on the untrusted parts of a command line (e.g. file names from a
+    checkout) before running the command through a `.bat` shim or with
+    shell=True, where such arguments cannot be escaped reliably. The error
+    names the offending arguments. No-op on other platforms.
+    """
+    if sys.platform != "win32":
+        return
+    unsafe = [arg for arg in args if not CMD_EXE_METACHARACTERS.isdisjoint(arg)]
+    if unsafe:
+        chars = " ".join(
+            sorted(c for c in CMD_EXE_METACHARACTERS if c.isprintable())
+        )
+        raise ValueError(
+            "Refusing to pass arguments that cmd.exe would interpret "
+            f"(containing one of {chars} or a line break): "
+            + ", ".join(repr(arg) for arg in unsafe)
+        )
 
 
 class Popen(subprocess.Popen):

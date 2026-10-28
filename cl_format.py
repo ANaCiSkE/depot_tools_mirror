@@ -592,6 +592,11 @@ def _RunPythonFormat(
         # stream stdin directly to ruff_chromium. Upstream Ruff evaluates
         # exclusions and configs against --stdin-filename accurately when
         # reading from stdin.
+        try:
+            subprocess2.check_safe_for_cmd_exe([top_dir, opts.stdin_filename])
+        except ValueError as e:
+            sys.stderr.write(f"Failed to run ruff_chromium: {e}\n")
+            return 1
         cmd = [
             "vpython3",
             ruff_chromium,
@@ -712,6 +717,14 @@ def _RunMarkdownFormat(
     ]
     if not paths:
         return 0
+
+    try:
+        subprocess2.check_safe_for_cmd_exe(
+            [*paths, target_path] if target_path else paths
+        )
+    except ValueError as e:
+        sys.stderr.write(f"Failed to run markdown_format: {e}\n")
+        return 1
 
     return_value = 0
     cmd = ["vpython3", markdown_tool]

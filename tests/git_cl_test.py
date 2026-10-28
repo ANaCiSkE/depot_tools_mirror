@@ -10507,6 +10507,36 @@ class CMDLintTestCase(CMDTestCaseBase):
         self.assertEqual(0, git_cl.main(["lint", "test.py"]))
         mock_call.assert_not_called()
 
+    @mock.patch("git_cl.subprocess2.Popen")
+    @mock.patch("git_cl.subprocess2.call", return_value=0)
+    def testLintPythonRefusesCmdExeMetacharacters(self, mock_call, mock_popen):
+        """On Windows, paths that cmd.exe would interpret are refused before
+        anything runs through vpython3.bat."""
+        for linter, path, bad_arg in (
+            (git_cl.PythonLinterConfig("ruff"), "a&b.py", "a&b.py"),
+            (
+                git_cl.PythonLinterConfig("pylint", "3.2", "a&b.rc"),
+                "test.py",
+                "a&b.rc",
+            ),
+        ):
+            with (
+                self.subTest(engine=linter.engine),
+                mock.patch(
+                    "git_cl._GetPythonLinterForFile", return_value=linter
+                ),
+                mock.patch("sys.platform", "win32"),
+            ):
+                self.assertEqual(1, git_cl.main(["lint", path]))
+                self.assertIn(
+                    "Error: Refusing to pass arguments that cmd.exe would "
+                    "interpret",
+                    git_cl.sys.stdout.getvalue(),
+                )
+                self.assertIn(repr(bad_arg), git_cl.sys.stdout.getvalue())
+        mock_call.assert_not_called()
+        mock_popen.assert_not_called()
+
     @mock.patch(
         "git_cl.Changelist.GetAffectedFiles",
         return_value=["deleted.py"],

@@ -120,6 +120,49 @@ class DefaultsTest(unittest.TestCase):
             )
 
 
+class CheckSafeForCmdExeTest(unittest.TestCase):
+    # Spaces, parentheses and `!` are not special on a plain cmd.exe command
+    # line, so common paths with them must keep working.
+    SAFE_ARGS = [
+        "",
+        "foo.py",
+        "--assume-filename=docs/some file.md",
+        r"C:\Program Files (x86)\src\foo.py",
+        "relative/path/to/wow!.py",
+    ]
+
+    def test_rejects_each_metacharacter_on_win32(self):
+        for char in '&|<>^%"\r\n':
+            with self.subTest(char=char), mock.patch("sys.platform", "win32"):
+                with self.assertRaises(ValueError) as cm:
+                    subprocess2.check_safe_for_cmd_exe(
+                        ["ok.py", f"a{char}b.py"]
+                    )
+                message = str(cm.exception)
+                self.assertIn("cmd.exe", message)
+                self.assertIn(repr(f"a{char}b.py"), message)
+                self.assertNotIn(repr("ok.py"), message)
+
+    def test_names_every_offending_argument(self):
+        with (
+            mock.patch("sys.platform", "win32"),
+            self.assertRaises(ValueError) as cm,
+        ):
+            subprocess2.check_safe_for_cmd_exe(["a&b", "ok", "c|d"])
+        self.assertIn("'a&b', 'c|d'", str(cm.exception))
+
+    def test_accepts_safe_args_on_win32(self):
+        with mock.patch("sys.platform", "win32"):
+            subprocess2.check_safe_for_cmd_exe(self.SAFE_ARGS)
+            subprocess2.check_safe_for_cmd_exe([])
+
+    def test_noop_off_win32(self):
+        for platform in ("linux", "darwin", "cygwin"):
+            with self.subTest(platform=platform):
+                with mock.patch("sys.platform", platform):
+                    subprocess2.check_safe_for_cmd_exe(["a&b.py", "c%d.py"])
+
+
 def _run_test(with_subprocess=True):
     """Runs a tests in 12 combinations:
     - With universal_newlines=True and False.

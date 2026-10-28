@@ -27,6 +27,8 @@ import tomllib
 import tempfile
 from typing import NamedTuple
 
+import subprocess2
+
 if "RUFF_CACHE_DIR" not in os.environ:
     os.environ["RUFF_CACHE_DIR"] = os.path.join(
         tempfile.gettempdir(), ".ruff_cache"
@@ -1005,6 +1007,11 @@ def main() -> int:
         if sys.platform == "win32":
             vpython_bin = "vpython3.bat"
 
+        try:
+            subprocess2.check_safe_for_cmd_exe(yapf_args)
+        except ValueError as e:
+            sys.stderr.write(f"{e}\n")
+            return 1
         cmd = [vpython_bin, yapf_script] + yapf_args
         return subprocess.call(cmd)
 

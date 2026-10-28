@@ -2219,6 +2219,41 @@ class TestStdinFilenameFormatting(unittest.TestCase):
                 )
                 self.assertEqual(b"x = 1 + 2\n", self._read(temp_file))
 
+    @mock.patch("cl_format.subprocess2.call")
+    @mock.patch("cl_format.subprocess2.communicate")
+    def test_vpython3_formatters_refuse_cmd_exe_metacharacters(
+        self, mock_communicate, mock_call
+    ):
+        """On Windows, names that cmd.exe would interpret are refused before
+        anything runs through vpython3.bat, for both --stdin-filename and
+        the changed files."""
+        self._write(".style.mdformat", b"")
+        bad_md = os.path.join(self.test_dir, "docs", "a&b.md")
+        for formatter, stdin_filename, path in (
+            (cl_format._RunPythonFormat, "foo/a&b.py", "temp.py"),
+            (cl_format._RunMarkdownFormat, bad_md, "temp.md"),
+            (cl_format._RunMarkdownFormat, None, "docs/a&b.md"),
+        ):
+            with self.subTest(formatter=formatter.__name__, path=path):
+                temp_file = self._write(path, b"x\n")
+                opts = mock.Mock(
+                    stdin_filename=stdin_filename,
+                    diff=False,
+                    dry_run=False,
+                    full=True,
+                    lines=[],
+                )
+                stderr = io.StringIO()
+                with (
+                    mock.patch("sys.platform", "win32"),
+                    mock.patch("sys.stderr", stderr),
+                ):
+                    ret = formatter(opts, [temp_file], self.test_dir, None)
+                self.assertEqual(1, ret)
+                self.assertIn("a&b", stderr.getvalue())
+        mock_communicate.assert_not_called()
+        mock_call.assert_not_called()
+
     @mock.patch(
         "clang_format.FindClangFormatToolInChromiumTree",
         return_value="/fake/clang-format",

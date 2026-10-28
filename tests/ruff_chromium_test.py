@@ -30,6 +30,8 @@ import shutil
 # Load depot_tools/ruff_chromium.py directly by file path to avoid naming collision with ruff package in site-packages
 test_dir = os.path.dirname(os.path.abspath(__file__))
 depot_tools_dir = os.path.dirname(test_dir)
+# ruff_chromium.py imports depot_tools modules (subprocess2).
+sys.path.insert(0, depot_tools_dir)
 ruff_path = os.path.join(depot_tools_dir, "ruff_chromium.py")
 loader = SourceFileLoader("depot_tools_ruff_chromium", ruff_path)
 spec = importlib.util.spec_from_loader(
@@ -1240,6 +1242,25 @@ class TestYapfFallback(unittest.TestCase):
         cmd = mock_call.call_args[0][0]
         # Verify yapf was invoked without '-'
         self.assertNotIn("-", cmd)
+
+    @patch("subprocess.call")
+    def test_yapf_fallback_refuses_cmd_exe_metacharacters_on_win32(
+        self, mock_call
+    ):
+        self.write_file("sub/.style.yapf", "[style]\nbased_on_style = pep8\n")
+        test_file = self.write_file("sub/a&b.py", "x=1\n")
+        stderr = io.StringIO()
+
+        with (
+            patch("sys.argv", ["ruff_chromium", "format", test_file]),
+            patch("sys.platform", "win32"),
+            patch("sys.stderr", stderr),
+        ):
+            ret = depot_tools_ruff.main()
+
+        self.assertEqual(ret, 1)
+        self.assertIn("a&b.py", stderr.getvalue())
+        mock_call.assert_not_called()
 
 
 class TestMainTargetDetection(unittest.TestCase):
