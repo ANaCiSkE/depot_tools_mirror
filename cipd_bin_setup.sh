@@ -3,15 +3,15 @@
 # found in the LICENSE file.
 
 function cipd_bin_setup {
-    local MYPATH="${DEPOT_TOOLS_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
+    local MYPATH="${DEPOT_TOOLS_DIR:-$(dirname "${BASH_SOURCE[0]//\\//}")}"
     local ENSURE="$MYPATH/cipd_manifest.txt"
     local ROOT="$MYPATH/.cipd_bin"
 
     UNAME="${DEPOT_TOOLS_UNAME_S:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
     case $UNAME in
       cygwin*)
-        ENSURE="$(cygpath -w $ENSURE)"
-        ROOT="$(cygpath -w $ROOT)"
+        ENSURE="$(cygpath -w "$ENSURE")"
+        ROOT="$(cygpath -w "$ROOT")"
         ;;
     esac
 
@@ -41,12 +41,14 @@ function cipd_bin_setup {
         rm -rf "$CACHE_DIR"
         rm -f "$ROOT/.cipd_manifest.txt" "$ROOT/.cipd_manifest.versions" "$ROOT/.cipd_client_version"
 
+        # Callers capture this function's stdout as the CIPD root, so keep
+        # any `cipd` output (e.g. its command echo on Cygwin) on stderr.
         (
         source "$MYPATH/cipd" ensure \
             -log-level warning \
             -ensure-file "$ENSURE" \
             -root "$ROOT"
-        )
+        ) >&2
         if [ $? -eq 0 ]; then
             mkdir -p "$CACHE_DIR" && \
             cp "$ENSURE" "$CACHED_ENSURE" && \
@@ -55,5 +57,5 @@ function cipd_bin_setup {
         fi
     fi
 
-    echo $ROOT
+    echo "$ROOT"
 }

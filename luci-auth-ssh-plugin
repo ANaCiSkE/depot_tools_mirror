@@ -6,13 +6,7 @@
 
 # See revert instructions in cipd_manifest.txt
 
-# In git bash on Windows, invoke the batch file.
-if [ "$(expr "$(uname -s)" : "^MINGW64_NT")" == "10" ]; then
-    luci-auth-ssh-plugin.bat "$@"
-    exit
-fi
-
-MYPATH=$(dirname "${BASH_SOURCE[0]}")
+MYPATH=$(dirname "${BASH_SOURCE[0]//\\//}")
 
 source "$MYPATH/cipd_bin_setup.sh"
 CIPD_ROOT=$(cipd_bin_setup) &> /dev/null

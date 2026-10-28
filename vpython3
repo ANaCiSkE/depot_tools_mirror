@@ -34,7 +34,7 @@ then
 fi
 
 # Export for other depot_tools scripts to re-use.
-export DEPOT_TOOLS_DIR="${DEPOT_TOOLS_DIR:-$(dirname "$0")}"
+export DEPOT_TOOLS_DIR="${DEPOT_TOOLS_DIR:-$(dirname "${0//\\//}")}"
 export DEPOT_TOOLS_UNAME_S="${DEPOT_TOOLS_UNAME_S:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
 
 # Don't write pyc files if running from a Cog workspace.
@@ -47,13 +47,10 @@ CIPD_ROOT=$(cipd_bin_setup) &> /dev/null
 
 # Don't pass this to the Python script as it might turn around and run commands
 # in other depot_tools dirs.
-base_dir="${DEPOT_TOOLS_DIR}"
 unset DEPOT_TOOLS_DIR
-case "${DEPOT_TOOLS_UNAME_S}" in
-mingw*|cygwin*)
-  cmd.exe //c $0.bat "$@"
-  ;;
-*)
-  exec "$CIPD_ROOT/vpython3" "$@"
-  ;;
-esac
+
+# Exec the CIPD binary directly rather than routing "$@" through
+# cmd.exe/vpython3.bat, which would re-parse the flattened command line with
+# cmd.exe shell grammar (e.g. `a&b` runs `b`). MSYS/Cygwin resolve vpython3 to
+# vpython3.exe automatically.
+exec "$CIPD_ROOT/vpython3" "$@"
