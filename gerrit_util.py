@@ -2064,6 +2064,7 @@ def AddReviewers(
     reviewers=None,
     ccs=None,
     notify=True,
+    revision="current",
     accept_statuses: Container[int] = frozenset([200, 400, 422]),
 ):
     """Add reviewers to a change."""
@@ -2073,7 +2074,7 @@ def AddReviewers(
         return None
     reviewers = frozenset(reviewers or [])
     ccs = frozenset(ccs or [])
-    path = "changes/%s/revisions/current/review" % change
+    path = "changes/%s/revisions/%s/review" % (change, revision)
 
     body = {
         "drafts": "KEEP",
@@ -2111,6 +2112,7 @@ def AddReviewers(
             reviewers=(reviewers - errored),
             ccs=(ccs - errored),
             notify=notify,
+            revision=revision,
             accept_statuses=[200],
         )
 
