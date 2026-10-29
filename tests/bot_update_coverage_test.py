@@ -4,10 +4,17 @@
 # found in the LICENSE file.
 
 import codecs
+import contextlib
 import copy
+import datetime
+import io
+import json
+import optparse
 import os
 import sys
 import tempfile
+import time
+from typing import Any
 import unittest
 from unittest import mock
 
@@ -115,8 +122,10 @@ class FakeFile:
             buf = buf.decode("utf-8")
         self.contents += buf
 
-    def read(self):
-        return self.contents
+    def read(self, size: int = -1) -> str:
+        if size is None or size < 0:
+            return self.contents
+        return self.contents[:size]
 
     def __enter__(self):
         return self
@@ -386,6 +395,385 @@ class BotUpdateUnittests(unittest.TestCase):
         self.assertEqual(
             removed, [("/fake/git/cache/dir", "/fake/cleanup/dir")]
         )
+
+    def _getCacheEpochOnRealFs(
+        self, git_cache_dir: str
+    ) -> tuple[int, datetime.datetime, str]:
+        """Calls `_get_or_create_cache_epoch()` against the real filesystem.
+
+        Bypasses the fake `open()` installed by `setUp()` so that the symlink,
+        directory and removal handling is exercised for real. Returns the
+        `(epoch, epoch_dt)` result followed by whatever was printed.
+        """
+        with (
+            mock.patch.object(bot_update, "open", open),
+            contextlib.redirect_stdout(io.StringIO()) as stdout,
+        ):
+            epoch, epoch_dt = bot_update._get_or_create_cache_epoch(
+                git_cache_dir
+            )
+        return epoch, epoch_dt, stdout.getvalue()
+
+    def testGetOrCreateCacheEpochColdCache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # On a cold bot the git cache directory does not exist yet either.
+            git_cache_dir = os.path.join(tmp, "git_cache")
+            marker = os.path.join(git_cache_dir, ".cache_epoch")
+            before = int(time.time())
+            epoch, epoch_dt, stdout = self._getCacheEpochOnRealFs(git_cache_dir)
+            after = int(time.time())
+            self.assertIsInstance(epoch, int)
+            self.assertTrue(before <= epoch <= after)
+            self.assertEqual(epoch_dt, datetime.datetime.fromtimestamp(epoch))
+            self.assertNotIn("resetting cache epoch", stdout)
+            with open(marker) as f:
+                self.assertEqual(f.read(), str(epoch))
+            # A second (warm) call reads the freshly written marker back.
+            self.assertEqual(
+                self._getCacheEpochOnRealFs(git_cache_dir),
+                (epoch, epoch_dt, ""),
+            )
+
+    def testGetOrCreateCacheEpochPreservesValidMarker(self) -> None:
+        now = int(time.time())
+        valid_contents = {
+            # Older bot_update versions wrote the marker with a trailing
+            # newline, which must keep being accepted.
+            "legacy format": "1700000000\n",
+            "current format": "1700000000",
+            # Allow for some clock skew between tasks.
+            "slightly in the future": str(now + 3600),
+        }
+        for name, contents in valid_contents.items():
+            with (
+                self.subTest(name),
+                tempfile.TemporaryDirectory() as git_cache_dir,
+            ):
+                marker = os.path.join(git_cache_dir, ".cache_epoch")
+                with open(marker, "w") as f:
+                    f.write(contents)
+                epoch, epoch_dt, stdout = self._getCacheEpochOnRealFs(
+                    git_cache_dir
+                )
+                self.assertIsInstance(epoch, int)
+                self.assertEqual(epoch, int(contents))
+                self.assertEqual(
+                    epoch_dt, datetime.datetime.fromtimestamp(epoch)
+                )
+                self.assertEqual(stdout, "")
+                with open(marker) as f:
+                    self.assertEqual(f.read(), contents)
+
+    def testGetOrCreateCacheEpochResetsInvalidMarkerContents(self) -> None:
+        now = int(time.time())
+        invalid_contents = {
+            "non-numeric": "junk",
+            "empty": "",
+            "blank first line": "\n1700000000\n",
+            "trailing garbage": "1700000000\njunk\n",
+            "integer overflow": "9" * 30,
+            "negative": "-100",
+            "before 2020": "100",
+            "far future": str(now + 7 * 86400),
+            # Must be rejected by the bounded read, not slurped and parsed.
+            "oversized": "1" * 100000,
+        }
+        for name, contents in invalid_contents.items():
+            with (
+                self.subTest(name),
+                tempfile.TemporaryDirectory() as git_cache_dir,
+            ):
+                marker = os.path.join(git_cache_dir, ".cache_epoch")
+                with open(marker, "w") as f:
+                    f.write(contents)
+                before = int(time.time())
+                epoch, epoch_dt, stdout = self._getCacheEpochOnRealFs(
+                    git_cache_dir
+                )
+                after = int(time.time())
+                self.assertIsInstance(epoch, int)
+                self.assertTrue(before <= epoch <= after)
+                self.assertEqual(
+                    epoch_dt, datetime.datetime.fromtimestamp(epoch)
+                )
+                self.assertIn(
+                    f"Warning: invalid or unreadable {marker}; "
+                    "resetting cache epoch.",
+                    stdout,
+                )
+                with open(marker) as f:
+                    self.assertEqual(f.read(), str(epoch))
+
+        with (
+            self.subTest("unremovable marker"),
+            tempfile.TemporaryDirectory() as git_cache_dir,
+        ):
+            marker = os.path.join(git_cache_dir, ".cache_epoch")
+            with open(marker, "w") as f:
+                f.write("junk")
+            with (
+                mock.patch.object(
+                    os, "remove", side_effect=PermissionError("denied")
+                ),
+                mock.patch.object(
+                    os, "rmdir", side_effect=PermissionError("denied")
+                ),
+                mock.patch.object(
+                    bot_update.shutil,
+                    "rmtree",
+                    side_effect=PermissionError("denied"),
+                ),
+            ):
+                before = int(time.time())
+                epoch, epoch_dt, stdout = self._getCacheEpochOnRealFs(
+                    git_cache_dir
+                )
+                after = int(time.time())
+            self.assertIsInstance(epoch, int)
+            self.assertTrue(before <= epoch <= after)
+            self.assertEqual(epoch_dt, datetime.datetime.fromtimestamp(epoch))
+            self.assertIn(f"Warning: failed to reset {marker}:", stdout)
+
+    def testGetOrCreateCacheEpochReplacesSymlinkWithoutFollowingIt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            victim_file = os.path.join(tmp, "victim_file")
+            with open(victim_file, "w") as f:
+                f.write("1700000000")
+            victim_dir = os.path.join(tmp, "victim_dir")
+            os.makedirs(victim_dir)
+            targets = {
+                "file": victim_file,
+                "directory": victim_dir,
+                "dangling": os.path.join(tmp, "does_not_exist"),
+            }
+            for name, target in targets.items():
+                with (
+                    self.subTest(name),
+                    tempfile.TemporaryDirectory(dir=tmp) as git_cache_dir,
+                ):
+                    marker = os.path.join(git_cache_dir, ".cache_epoch")
+                    try:
+                        os.symlink(target, marker)
+                    except (OSError, NotImplementedError):
+                        self.skipTest("symlinks not supported")
+                    epoch, _, stdout = self._getCacheEpochOnRealFs(
+                        git_cache_dir
+                    )
+                    self.assertIn("resetting cache epoch", stdout)
+                    # The symlink itself got replaced by a regular file; the
+                    # timestamp it pointed at was never trusted.
+                    self.assertNotEqual(epoch, 1700000000)
+                    self.assertFalse(os.path.islink(marker))
+                    self.assertTrue(os.path.isfile(marker))
+                    with open(marker) as f:
+                        self.assertEqual(f.read(), str(epoch))
+            # Nothing was written or removed through the symlinks.
+            with open(victim_file) as f:
+                self.assertEqual(f.read(), "1700000000")
+            self.assertTrue(os.path.isdir(victim_dir))
+
+    def testGetOrCreateCacheEpochReplacesDirectory(self) -> None:
+        with tempfile.TemporaryDirectory() as git_cache_dir:
+            marker = os.path.join(git_cache_dir, ".cache_epoch")
+            # Non-empty, so that a plain os.remove()/os.rmdir() would fail.
+            os.makedirs(os.path.join(marker, "nested"))
+            with open(os.path.join(marker, "nested", "file"), "w") as f:
+                f.write("1700000000")
+            epoch, _, stdout = self._getCacheEpochOnRealFs(git_cache_dir)
+            self.assertIn("resetting cache epoch", stdout)
+            self.assertIsInstance(epoch, int)
+            self.assertTrue(os.path.isfile(marker))
+            with open(marker) as f:
+                self.assertEqual(f.read(), str(epoch))
+
+    def _runCheckout(
+        self,
+        git_cache_dir: str = "/fake/git/cache/dir",
+        use_real_cache_fs: bool = False,
+    ) -> tuple[dict[str, Any], str]:
+        """Runs `bot_update.checkout()`.
+
+        Returns the `properties` emitted to `output_json` followed by whatever
+        was printed. When `use_real_cache_fs` is True, opens under
+        `git_cache_dir` go to the real filesystem while other paths remain on
+        the fake filesystem.
+        """
+        options = optparse.Values(
+            {
+                "git_cache_dir": git_cache_dir,
+                "cleanup_dir": "/fake/cleanup/dir",
+                "experiments": "",
+                "patch_root": None,
+                "patch_refs": [],
+                "gerrit_no_rebase_patch_ref": False,
+                "download_topics": False,
+                "no_fetch_tags": False,
+                "no_history": False,
+                "shallow": False,
+                "enforce_fetch": False,
+                "refs": [],
+                "clean_ignored": False,
+                "gerrit_no_reset": False,
+                "output_json": "/fake/output.json",
+                "revision_mapping": {},
+                "clobber": False,
+            }
+        )
+        fake_open = self.filesystem.open
+
+        def dispatch_open(
+            target: str, mode: str = "r", encoding: str | None = None
+        ) -> Any:
+            if use_real_cache_fs and target.startswith(git_cache_dir + os.sep):
+                return open(target, mode, encoding=encoding)
+            return fake_open(target, mode, encoding=encoding)
+
+        with (
+            contextlib.nullcontext()
+            if use_real_cache_fs
+            else mock.patch.object(os, "makedirs"),
+            mock.patch.object(bot_update, "open", dispatch_open),
+            mock.patch.object(bot_update, "create_manifest", return_value={}),
+            mock.patch.object(
+                bot_update, "disk_usage", return_value=(10, 100, 10)
+            ),
+            contextlib.redirect_stdout(io.StringIO()) as stdout,
+        ):
+            bot_update.checkout(
+                options,
+                self.params["solutions"],
+                {},
+                {"somename": "HEAD"},
+                "some step text",
+            )
+        output = json.loads(self.filesystem.files["/fake/output.json"].read())
+        return output["properties"], stdout.getvalue()
+
+    def testCheckoutCreatesCacheEpochOnColdCache(self) -> None:
+        marker = os.path.join("/fake/git/cache/dir", ".cache_epoch")
+        before = int(time.time())
+        properties, stdout = self._runCheckout()
+        after = int(time.time())
+        epoch = properties["git_cache_epoch"]
+        self.assertIsInstance(epoch, int)
+        self.assertTrue(before <= epoch <= after)
+        self.assertEqual(self.filesystem.files[marker].read(), str(epoch))
+        self.assertNotIn("resetting cache epoch", stdout)
+        self.assertIn("Using git cache directory /fake/git/cache/dir", stdout)
+
+    def testCheckoutPreservesValidCacheEpoch(self) -> None:
+        marker = os.path.join("/fake/git/cache/dir", ".cache_epoch")
+        self.filesystem.files[marker] = FakeFile()
+        self.filesystem.files[marker].write("1700000000\n")
+        real_isfile = os.path.isfile
+        with mock.patch.object(
+            os.path, "isfile", lambda p: p == marker or real_isfile(p)
+        ):
+            properties, stdout = self._runCheckout()
+        # Warm caches used to report a str here while cold caches reported an
+        # int; the property must be an int either way.
+        self.assertIsInstance(properties["git_cache_epoch"], int)
+        self.assertEqual(properties["git_cache_epoch"], 1700000000)
+        self.assertEqual(self.filesystem.files[marker].read(), "1700000000\n")
+        self.assertNotIn("resetting cache epoch", stdout)
+        created_at = datetime.datetime.fromtimestamp(1700000000)
+        self.assertIn(
+            "Using git cache directory /fake/git/cache/dir "
+            f"(created at {created_at.strftime('%Y-%m-%d %H:%M:%S')}, ",
+            stdout,
+        )
+
+    def testCheckoutSelfHealsCorruptCacheEpoch(self) -> None:
+        now = int(time.time())
+        invalid_contents = {
+            "non-numeric": "junk",
+            "empty": "",
+            "integer overflow": "9" * 30,
+            "negative": "-100",
+            "far future": str(now + 7 * 86400),
+        }
+        for name, contents in invalid_contents.items():
+            with (
+                self.subTest(name),
+                tempfile.TemporaryDirectory() as git_cache_dir,
+            ):
+                marker = os.path.join(git_cache_dir, ".cache_epoch")
+                with open(marker, "w") as f:
+                    f.write(contents)
+                before = int(time.time())
+                properties, stdout = self._runCheckout(
+                    git_cache_dir, use_real_cache_fs=True
+                )
+                after = int(time.time())
+                epoch = properties["git_cache_epoch"]
+                self.assertIsInstance(epoch, int)
+                self.assertTrue(before <= epoch <= after)
+                self.assertIn(
+                    f"Warning: invalid or unreadable {marker}; "
+                    "resetting cache epoch.",
+                    stdout,
+                )
+                with open(marker) as f:
+                    self.assertEqual(f.read(), str(epoch))
+
+        with (
+            self.subTest("directory"),
+            tempfile.TemporaryDirectory() as git_cache_dir,
+        ):
+            marker = os.path.join(git_cache_dir, ".cache_epoch")
+            os.makedirs(os.path.join(marker, "nested"))
+            before = int(time.time())
+            properties, stdout = self._runCheckout(
+                git_cache_dir, use_real_cache_fs=True
+            )
+            after = int(time.time())
+            epoch = properties["git_cache_epoch"]
+            self.assertIsInstance(epoch, int)
+            self.assertTrue(before <= epoch <= after)
+            self.assertTrue(os.path.isfile(marker))
+            self.assertIn(
+                f"Warning: invalid or unreadable {marker}; "
+                "resetting cache epoch.",
+                stdout,
+            )
+            with open(marker) as f:
+                self.assertEqual(f.read(), str(epoch))
+
+        with (
+            self.subTest("symlink"),
+            tempfile.TemporaryDirectory() as tmp,
+        ):
+            git_cache_dir = os.path.join(tmp, "cache")
+            os.makedirs(git_cache_dir)
+            target = os.path.join(tmp, "target")
+            with open(target, "w") as f:
+                f.write("1700000000")
+            marker = os.path.join(git_cache_dir, ".cache_epoch")
+            try:
+                os.symlink(target, marker)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks not supported")
+            before = int(time.time())
+            properties, stdout = self._runCheckout(
+                git_cache_dir, use_real_cache_fs=True
+            )
+            after = int(time.time())
+            epoch = properties["git_cache_epoch"]
+            self.assertIsInstance(epoch, int)
+            self.assertTrue(before <= epoch <= after)
+            self.assertFalse(os.path.islink(marker))
+            self.assertTrue(os.path.isfile(marker))
+            self.assertIn(
+                f"Warning: invalid or unreadable {marker}; "
+                "resetting cache epoch.",
+                stdout,
+            )
+            with open(marker) as f:
+                self.assertEqual(f.read(), str(epoch))
+            with open(target) as f:
+                self.assertEqual(f.read(), "1700000000")
 
     def testParsesRevisions(self):
 

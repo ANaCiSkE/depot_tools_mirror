@@ -5,6 +5,8 @@
 
 # TODO(hinoka): Use logging.
 
+from __future__ import annotations
+
 import codecs
 from contextlib import contextmanager
 import copy
@@ -1255,6 +1257,75 @@ def prepare(options, git_slns, active):
   return revisions, step_text
 
 
+def _get_or_create_cache_epoch(git_cache_dir: str) -> tuple[int, datetime]:
+  """Returns the creation time of the git cache as `(epoch, epoch_dt)`.
+
+  The epoch is persisted in the `.cache_epoch` marker file inside
+  `git_cache_dir`. The git cache is shared across tasks on a bot, so the marker
+  is treated as untrusted input: it must be a regular file (not a symlink or a
+  directory) holding a plausible integer UNIX timestamp. Anything else is
+  logged, removed and replaced by a fresh marker holding the current time, so
+  that a single bad marker cannot fail every later task on the bot
+  (b/557838418). The marker is also created if it does not exist yet.
+
+  Args:
+    git_cache_dir: Path of the git cache directory, created if needed.
+
+  Returns:
+    The epoch as an `int` UNIX timestamp and the same value as a `datetime`.
+  """
+  cache_epoch_file = os.path.join(git_cache_dir, ".cache_epoch")
+  try:
+    if not os.path.islink(cache_epoch_file) and os.path.isfile(
+      cache_epoch_file
+    ):
+      with open(cache_epoch_file, "r") as f:
+        # A valid marker is a single-line decimal number; never slurp a huge
+        # file.
+        raw = f.read(64).splitlines()
+      if len(raw) == 1:
+        epoch = int(raw[0].strip())
+        # Reject timestamps before 2020-01-01 and more than a day in the future.
+        if 1577836800 <= epoch <= int(time.time()) + 86400:
+          epoch_dt = datetime.fromtimestamp(epoch)
+          return epoch, epoch_dt
+  except (ValueError, OverflowError, OSError):
+    pass
+
+  epoch = int(time.time())
+  epoch_dt = datetime.fromtimestamp(epoch)
+  try:
+    if os.path.lexists(cache_epoch_file):
+      print(
+        f"Warning: invalid or unreadable {cache_epoch_file}; "
+        "resetting cache epoch."
+      )
+      if not os.path.islink(cache_epoch_file) and os.path.isdir(
+        cache_epoch_file
+      ):
+        try:
+          os.rmdir(cache_epoch_file)
+        except OSError:
+          shutil.rmtree(cache_epoch_file)
+      else:
+        try:
+          os.remove(cache_epoch_file)
+        except OSError:
+          if os.path.islink(cache_epoch_file):
+            os.rmdir(cache_epoch_file)
+          else:
+            raise
+
+    # This ensures the cache path exists. This is a noop if the path already
+    # exists. See crbug.com/1448769#c8.
+    os.makedirs(git_cache_dir, exist_ok=True)
+    with open(cache_epoch_file, "w") as f:
+      f.write(str(epoch))
+  except OSError as e:
+    print(f"Warning: failed to reset {cache_epoch_file}: {e}")
+  return epoch, epoch_dt
+
+
 def checkout(options, git_slns, specs, revisions, step_text):
   print("Using Python version: %s" % (sys.version,))
   print("Checking git version...")
@@ -1262,20 +1333,15 @@ def checkout(options, git_slns, specs, revisions, step_text):
   print("Using %s" % ver)
 
   # Get the epoch of the git cache from a cache epoch marker file. If this file
-  # does not exist, create one with the current timestamp.
-  cache_epoch_marker_path = os.path.join(options.git_cache_dir, ".cache_epoch")
-  if os.path.isfile(cache_epoch_marker_path):
-    with open(cache_epoch_marker_path) as f:
-      cache_epoch = f.readline().strip()
-  else:
-    # This ensures the cache path exists. This is a noop if the path already
-    # exists. See crbug.com/1448769#c8.
-    os.makedirs(options.git_cache_dir, exist_ok=True)
-    with open(cache_epoch_marker_path, "w") as f:
-      cache_epoch = int(time.time())
-      print(cache_epoch, file=f)
-
-  print("git_cache epoch: {}".format(datetime.fromtimestamp(int(cache_epoch))))
+  # does not exist or is invalid, (re)create one with the current timestamp.
+  cache_epoch, cache_epoch_dt = _get_or_create_cache_epoch(
+    options.git_cache_dir
+  )
+  print(
+    f"Using git cache directory {options.git_cache_dir} "
+    f"(created at {cache_epoch_dt.strftime('%Y-%m-%d %H:%M:%S')}, "
+    f"{datetime.now() - cache_epoch_dt} ago)"
+  )
 
   try:
     protocol = git("config", "--get", "protocol.version")
@@ -1371,7 +1437,7 @@ def checkout(options, git_slns, specs, revisions, step_text):
     raise
   finally:
     if should_create_dirty_file:
-      with open(dirty_path, "w") as f:
+      with open(dirty_path, "w"):
         # create file, no content
         pass
 
