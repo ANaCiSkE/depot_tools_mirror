@@ -12,6 +12,7 @@ from io import BytesIO
 import logging
 import multiprocessing.pool
 from multiprocessing.pool import IMapIterator
+import ntpath
 import os
 import random
 import re
@@ -58,11 +59,24 @@ IS_WIN = sys.platform == "win32"
 TEST_MODE = False
 
 
+def _is_abs_path(entry: str) -> bool:
+    return (bool(ntpath.splitdrive(entry)[0]) and ntpath.isabs(entry)) or (
+        os.path is not ntpath and os.path.isabs(entry)
+    )
+
+
 def win_find_git() -> str:
+    # Only search absolute `PATH` entries. Relative entries (e.g. `.`, `bin`,
+    # `.\sub`, or drive-relative `\bin`) are resolved against the current
+    # working directory or its drive, which would allow a planted
+    # `git.exe`/`git.bat` to be picked up. `ntpath` is checked alongside
+    # `os.path` so that Windows-style entries (`C:\...`, `\\server\share`) are
+    # also recognized as absolute when this code runs on a POSIX host (e.g. in
+    # tests).
     path_entries = [
-        elem.strip()
+        entry
         for elem in os.environ.get("PATH", "").split(os.pathsep)
-        if elem.strip() and os.path.normpath(elem.strip()) != "."
+        if (entry := elem.strip()) and _is_abs_path(entry)
     ]
     for candidate in ("git.exe", "git.bat"):
         for elem in path_entries:
@@ -115,7 +129,10 @@ def _resolve_git_exe() -> str:
     try:
         return win_find_git()
     except (OSError, ValueError):
-        return "git.bat"
+        # Fall back to the absolute path of depot_tools' `git.bat`. A bare
+        # `git.bat` would make `CreateProcess` search the current working
+        # directory before `PATH`.
+        return os.path.join(ROOT, "git.bat")
 
 
 GIT_EXE = _resolve_git_exe()

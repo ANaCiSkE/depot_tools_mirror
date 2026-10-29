@@ -272,7 +272,10 @@ def _win_git_executable(path_env):
   try:
     return git_common.win_find_git()
   except (OSError, ValueError):
-    return "git.bat"
+    # Fall back to the absolute path of depot_tools' `git.bat`. A bare `git.bat`
+    # would make `CreateProcess` search the current working directory before
+    # `PATH`.
+    return os.path.join(DEPOT_TOOLS_DIR, "git.bat")
 
 
 def git(*args, **kwargs):  # pragma: no cover

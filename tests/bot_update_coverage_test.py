@@ -895,11 +895,29 @@ class CallUnitTest(unittest.TestCase):
                     bundled_exe, "fetch", "origin"
                 )
 
-            # 3. Fallback to git.bat when Git is not found on PATH.
+            # 3. Fallback to the absolute path of depot_tools' git.bat when Git
+            #    is not found on PATH.
             mock_call.reset_mock()
+            fallback_bat = os.path.join(bot_update.DEPOT_TOOLS_DIR, "git.bat")
             with mock.patch.dict(os.environ, {"PATH": ""}):
                 bot_update.git("status")
-                mock_call.assert_called_once_with("git.bat", "status")
+                mock_call.assert_called_once_with(fallback_bat, "status")
+
+            # 4. Relative PATH entries are never resolved against the CWD, even
+            #    when a git.exe has been planted where they would point.
+            mock_call.reset_mock()
+            planted_dir = os.path.join(td, "planted")
+            os.makedirs(planted_dir)
+            with open(os.path.join(planted_dir, "git.exe"), "w") as f:
+                f.write("exe")
+            original_cwd = os.getcwd()
+            os.chdir(td)
+            try:
+                with mock.patch.dict(os.environ, {"PATH": "planted"}):
+                    bot_update.git("status")
+            finally:
+                os.chdir(original_cwd)
+            mock_call.assert_called_once_with(fallback_bat, "status")
 
     def testGitOnNonWindowsAndCacheCommand(self):
         with (

@@ -1731,7 +1731,9 @@ class ExtractGitPathFromGitBatTest(GitCommonTestBase):
             with open(exe_file, "w") as f:
                 f.write("exe")
 
-            path_val = os.pathsep.join(["", ".", dir_bat, dir_exe])
+            path_val = os.pathsep.join(
+                ["", ".", "bin", "./sub", dir_bat, dir_exe]
+            )
             with mock.patch.dict("os.environ", {"PATH": path_val}):
                 self.assertEqual(self.gc.win_find_git(), exe_file)
 
@@ -1755,23 +1757,89 @@ class ExtractGitPathFromGitBatTest(GitCommonTestBase):
                 os.environ.get("NoDefaultCurrentDirectoryInExePath"), "1"
             )
 
-        with (
-            mock.patch.object(self.gc, "IS_WIN", True),
-            mock.patch.object(
-                self.gc,
-                "win_find_git",
-                side_effect=ValueError("Could not find Git on PATH."),
-            ),
-            mock.patch.dict(
-                "os.environ",
-                {"NoDefaultCurrentDirectoryInExePath": "0"},
-                clear=True,
-            ),
+        for error in (
+            OSError("Permission denied"),
+            ValueError("Could not find Git on PATH."),
         ):
-            self.assertEqual(self.gc._resolve_git_exe(), "git.bat")
-            self.assertEqual(
-                os.environ.get("NoDefaultCurrentDirectoryInExePath"), "0"
-            )
+            with (
+                self.subTest(error=error),
+                mock.patch.object(self.gc, "IS_WIN", True),
+                mock.patch.object(self.gc, "win_find_git", side_effect=error),
+                mock.patch.dict(
+                    "os.environ",
+                    {"NoDefaultCurrentDirectoryInExePath": "0"},
+                    clear=True,
+                ),
+            ):
+                self.assertEqual(
+                    self.gc._resolve_git_exe(),
+                    os.path.join(self.gc.ROOT, "git.bat"),
+                )
+                self.assertEqual(
+                    os.environ.get("NoDefaultCurrentDirectoryInExePath"), "0"
+                )
+
+
+class WinFindGitTest(GitCommonTestBase):
+    def _plant_git_exe(self, directory: str) -> str:
+        os.makedirs(directory, exist_ok=True)
+        git_exe = os.path.join(directory, "git.exe")
+        with open(git_exe, "w") as f:
+            f.write("exe")
+        return git_exe
+
+    def test_skips_relative_path_entries(self) -> None:
+        relative_entries = ["bin", "./sub", "sub/dir"]
+        with tempfile.TemporaryDirectory() as td:
+            # Plant a git.exe where each relative entry would resolve to if it
+            # were searched against the current working directory.
+            for entry in relative_entries:
+                self._plant_git_exe(os.path.join(td, entry))
+            abs_dir = os.path.join(td, "abs_dir")
+            abs_exe = self._plant_git_exe(abs_dir)
+
+            original_cwd = os.getcwd()
+            os.chdir(td)
+            try:
+                # Only relative entries: nothing may be found, even though
+                # every planted git.exe exists relative to the CWD.
+                path_val = os.pathsep.join(relative_entries)
+                with mock.patch.dict(os.environ, {"PATH": path_val}):
+                    with self.assertRaises(ValueError):
+                        self.gc.win_find_git()
+
+                # Relative entries ahead of an absolute one: the absolute
+                # entry wins because the relative ones are never searched.
+                path_val = os.pathsep.join(relative_entries + [abs_dir])
+                with mock.patch.dict(os.environ, {"PATH": path_val}):
+                    self.assertEqual(self.gc.win_find_git(), abs_exe)
+            finally:
+                os.chdir(original_cwd)
+
+    def test_recognizes_windows_absolute_entries(self) -> None:
+        # Windows-style absolute entries must be searched even on POSIX hosts,
+        # where os.path.isabs() does not recognize them, while relative entries
+        # listed ahead of them are still skipped.
+        for abs_dir in (r"C:\Git\cmd", r"\\server\share\git"):
+            with self.subTest(abs_dir=abs_dir):
+                expected = os.path.join(abs_dir, "git.exe")
+                with (
+                    # Use the Windows PATH separator so that the drive colon
+                    # in "C:\" is not treated as a separator on POSIX hosts.
+                    mock.patch.object(os, "pathsep", ";"),
+                    mock.patch.dict(
+                        os.environ,
+                        {
+                            "PATH": ";".join(
+                                ["bin", ".", r"\bin", "C:bin", abs_dir]
+                            )
+                        },
+                    ),
+                    # Pretend every candidate exists: a searched relative
+                    # entry would therefore be returned ahead of abs_dir.
+                    mock.patch.object(os.path, "isfile", return_value=True),
+                ):
+                    self.assertEqual(self.gc.win_find_git(), expected)
 
 
 class GitRepoFastImportTest(unittest.TestCase):
