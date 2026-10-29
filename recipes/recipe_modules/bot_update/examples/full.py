@@ -466,3 +466,48 @@ def GenTests(api):
     api.expect_status("FAILURE"),
     api.post_process(post_process.DropExpectation),
   )
+
+  # bot_update.py used to split each '--revision name@value' on ',', so a ','
+  # anywhere in the name or value could smuggle in an extra 'dep@rev' pair that
+  # overrides a DEPS pin. Reject it on the recipe side as well.
+  yield api.test(
+    "invalid_revision_with_comma",
+    ci_build(),
+    api.properties(patch=False, revisions={"src": "deadbeef,src/v8@badbeef"}),
+    api.expect_status("FAILURE"),
+    api.post_process(
+      post_process.SummaryMarkdownRE,
+      "Invalid revision for src: deadbeef,src/v8@badbeef",
+    ),
+    api.post_process(post_process.DoesNotRunRE, "bot_update"),
+    api.post_process(post_process.DropExpectation),
+  )
+
+  yield api.test(
+    "invalid_revision_name_with_comma",
+    ci_build(),
+    api.properties(patch=False, revisions={"src/v8@badbeef,src": "HEAD"}),
+    api.expect_status("FAILURE"),
+    api.post_process(
+      post_process.SummaryMarkdownRE,
+      "Invalid revision name: src/v8@badbeef,src",
+    ),
+    api.post_process(post_process.DoesNotRunRE, "bot_update"),
+    api.post_process(post_process.DropExpectation),
+  )
+
+  # The Gerrit CL target branch becomes the root solution revision when
+  # patching HEAD, so it must be validated after the destination ref is
+  # resolved.
+  yield api.test(
+    "invalid_destination_ref_with_comma",
+    try_build(),
+    api.tryserver.gerrit_change_target_ref("refs/heads/foo,src/v8@badbeef"),
+    api.expect_status("FAILURE"),
+    api.post_process(
+      post_process.SummaryMarkdownRE,
+      "Invalid revision for src: refs/heads/foo,src/v8@badbeef",
+    ),
+    api.post_process(post_process.DoesNotRunRE, "bot_update"),
+    api.post_process(post_process.DropExpectation),
+  )

@@ -1022,20 +1022,27 @@ def ensure_checkout(
 def parse_revisions(revisions, root):
   """Turn a list of revision specs into a nice dictionary.
 
-  We will always return a dict with {root: something}.  By default if root
-  is unspecified, or if revisions is [], then revision will be assigned 'HEAD'
+  Each spec is either a bare `revision` for `root` or `alt_root@revision`. A
+  spec is never split on `,` (specs containing `,` are rejected): every spec
+  maps to at most one entry.
+
+  We will always return a dict with `{root: something}`. By default if `root`
+  is unspecified, or if `revisions` is `[]`, then revision will be assigned
+  `'HEAD'`.
   """
-  if root.startswith("-"):
+  if root.startswith("-") or "," in root:
     raise ValueError(
-      "Invalid revision root '%s': root cannot start with '-'" % root
+      f"Invalid revision root {root!r}: root cannot start with '-' or contain ','"
     )
   results = {root.strip("/"): "HEAD"}
-  expanded_revisions = []
   for revision in revisions:
-    # Allow rev1,rev2,rev3 format.
-    # TODO(hinoka): Delete this when webkit switches to recipes.
-    expanded_revisions.extend(revision.split(","))
-  for revision in expanded_revisions:
+    # A ',' used to act as a separator between multiple specs, so one
+    # attacker-controlled spec could smuggle in an extra 'dep@rev' pair and
+    # override a DEPS pin. Reject it outright.
+    if "," in revision:
+      raise ValueError(
+        f"Invalid revision spec {revision!r}: ',' is not allowed in a revision"
+      )
     split_revision = revision.split("@", 1)
     if len(split_revision) == 1:
       # This is just a plain revision, set it as the revision for root.

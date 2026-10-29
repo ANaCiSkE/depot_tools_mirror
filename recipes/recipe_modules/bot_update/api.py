@@ -622,20 +622,20 @@ class BotUpdateApi(recipe_api.RecipeApi):
     # every command line parameter "--revision name@value".
     fixed_revisions = {}
     for name, revision in sorted(revisions.items()):
-      if name.startswith("-"):
-        raise self.m.step.StepFailure(
-          "Invalid revision dependency name '%s': cannot start with '-'" % name
-        )
+      # bot_update.py must never see a ',' in '--revision name@value': it used
+      # to split on it, letting one value smuggle in a second 'dep@rev' pair.
+      if name.startswith("-") or "," in name:
+        raise self.m.step.StepFailure(f"Invalid revision name: {name}")
       fixed_revision = self.m.gclient.resolve_revision(revision)
       if fixed_revision:
-        if fixed_revision.startswith("-"):
-          raise self.m.step.StepFailure(
-            "Invalid revision '%s': revisions cannot start with '-'"
-            % fixed_revision
-          )
         if fixed_revision.upper() == "HEAD" and patch:
           # Sync to correct destination ref
           fixed_revision = self._destination_ref(cfg, name)
+        # Check after _destination_ref: a CL target branch is user-controlled.
+        if fixed_revision.startswith("-") or "," in fixed_revision:
+          raise self.m.step.StepFailure(
+            f"Invalid revision for {name}: {fixed_revision}"
+          )
         fixed_revisions[name] = fixed_revision
         # If we're syncing to a ref, we want to make sure it exists before
         # trying to check it out.

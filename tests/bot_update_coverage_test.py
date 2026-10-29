@@ -413,6 +413,19 @@ class BotUpdateUnittests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bot_update.parse_revisions([], "-bad_root")
 
+        # A ',' must never act as a revision separator. parse_revisions used
+        # to split each spec on ',', so a single attacker-controlled value
+        # could smuggle in an extra 'dep@rev' pair and override a DEPS pin.
+        for bad_revs, bad_root in (
+            (["src@deadbeef,src/dep@badbeef"], "root"),
+            (["deadbeef,src/dep@badbeef"], "root"),
+            (["src@deadbeef", "src/dep@badbeef,src/other@cafe"], "root"),
+            ([], "root,other"),
+        ):
+            with self.subTest(revisions=bad_revs, root=bad_root):
+                with self.assertRaisesRegex(ValueError, "','"):
+                    bot_update.parse_revisions(bad_revs, bad_root)
+
 
 class CallUnitTest(unittest.TestCase):
     def testCall(self):
