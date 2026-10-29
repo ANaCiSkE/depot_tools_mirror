@@ -245,6 +245,55 @@ class CookiesAuthenticatorTest(unittest.TestCase):
         )
         self.assertIsNone(cookieAuth.get_auth_email("some-review.example.com"))
 
+    def testGetAuthForHostDomainBoundaryMatching(self):
+        cookieAuth = gerrit_util.CookiesAuthenticator()
+        cookieAuth._gitcookies = {
+            ".googlesource.com": ("git-user.chromium.org", "wildcard-secret"),
+            "chromium-review.googlesource.com": (
+                "git-user.chromium.org",
+                "exact-secret",
+            ),
+        }
+        self.assertEqual(
+            cookieAuth._get_auth_for_host("chromium.googlesource.com"),
+            ("git-user.chromium.org", "wildcard-secret"),
+        )
+        self.assertEqual(
+            cookieAuth._get_auth_for_host("googlesource.com"),
+            ("git-user.chromium.org", "wildcard-secret"),
+        )
+        cookieAuth._gitcookies = {
+            "chromium-review.googlesource.com": (
+                "git-user.chromium.org",
+                "exact-secret",
+            ),
+        }
+        self.assertEqual(
+            cookieAuth._get_auth_for_host(
+                "CHROMIUM-REVIEW.GOOGLESOURCE.COM:443"
+            ),
+            ("git-user.chromium.org", "exact-secret"),
+        )
+        cookieAuth._gitcookies = {
+            ".googlesource.com": ("git-user.chromium.org", "wildcard-secret"),
+            "chromium-review.googlesource.com": (
+                "git-user.chromium.org",
+                "exact-secret",
+            ),
+        }
+        self.assertIsNone(
+            cookieAuth._get_auth_for_host("googlesource.com.evil.com")
+        )
+        self.assertIsNone(
+            cookieAuth._get_auth_for_host("chromium.googlesource.com.evil.com")
+        )
+        self.assertIsNone(
+            cookieAuth._get_auth_for_host(
+                "chromium-review.googlesource.com.evil.com"
+            )
+        )
+        self.assertIsNone(cookieAuth._get_auth_for_host("fakegooglesource.com"))
+
 
 class GceAuthenticatorTest(unittest.TestCase):
     def setUp(self):

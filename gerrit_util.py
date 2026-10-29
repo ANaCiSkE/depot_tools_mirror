@@ -735,8 +735,19 @@ class CookiesAuthenticator(_Authenticator):
         return gitcookies
 
     def _get_auth_for_host(self, host):
+        # Don't use http.cookiejar.domain_match: it uses an unanchored
+        # substring search, so ".googlesource.com" would match
+        # "chromium.googlesource.com.evil.com" and leak credentials.
+        bare_host = host.split(":", 1)[0].lower()
         for domain, creds in self.gitcookies.items():
-            if http.cookiejar.domain_match(host, domain):
+            domain_low = domain.lower()
+            if bare_host == domain_low or (
+                domain_low.startswith(".")
+                and (
+                    bare_host == domain_low[1:]
+                    or bare_host.endswith(domain_low)
+                )
+            ):
                 return (creds[0], creds[1])
         return None
 
