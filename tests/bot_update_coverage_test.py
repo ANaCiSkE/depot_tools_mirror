@@ -816,6 +816,19 @@ class BotUpdateUnittests(unittest.TestCase):
 
 
 class CallUnitTest(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        # Start each test without a cached isolated git config, and remove
+        # the file created during the test (atexit would otherwise do it).
+        self._resetIsolatedGitConfig()
+        self.addCleanup(self._resetIsolatedGitConfig)
+
+    def _resetIsolatedGitConfig(self) -> None:
+        _, cfg_path = bot_update._ISOLATED_GIT_CONFIG
+        if cfg_path and os.path.exists(cfg_path):
+            os.remove(cfg_path)
+        bot_update._ISOLATED_GIT_CONFIG = (None, None)
+
     def testCall(self):
         ret = bot_update.call(sys.executable, "-c", "print(1)")
         self.assertEqual("1\n", ret)
@@ -936,6 +949,98 @@ class CallUnitTest(unittest.TestCase):
                 "populate",
                 "https://example.com/repo",
             )
+
+    def testCallIsolatesGlobalGitConfig(self) -> None:
+        ambient = os.path.join("ambient", ".gitconfig")
+        with (
+            mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": ambient}),
+            mock.patch("subprocess.Popen") as mock_popen,
+        ):
+            os.environ.pop("INFRA_GIT_WRAPPER_HOME", None)
+            proc = mock_popen.return_value
+            proc.stdout.read.return_value = b""
+            proc.wait.return_value = 0
+
+            bot_update.call("git", "status")
+            _, kwargs = mock_popen.call_args
+            cfg_path = kwargs["env"]["GIT_CONFIG_GLOBAL"]
+            # The ambient GIT_CONFIG_GLOBAL is replaced by the per-process
+            # isolated file, which is empty without INFRA_GIT_WRAPPER_HOME.
+            self.assertNotEqual(cfg_path, ambient)
+            self.assertEqual(
+                cfg_path, bot_update._get_isolated_git_config_path()
+            )
+            self.assertTrue(os.path.isfile(cfg_path))
+            self.assertEqual(os.path.getsize(cfg_path), 0)
+            # Only the subprocess environment is changed, not os.environ.
+            self.assertEqual(os.environ["GIT_CONFIG_GLOBAL"], ambient)
+
+    def testIsolatedGitConfigSeededFromInfraGitWrapperHome(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wrapper_home = os.path.join(td, "wrapper_home")
+            os.makedirs(wrapper_home)
+            wrapper_gitconfig = os.path.join(wrapper_home, ".gitconfig")
+            seed = "[credential]\n\thelper = luci\n"
+            with open(wrapper_gitconfig, "w") as f:
+                f.write(seed)
+
+            with mock.patch.dict(
+                os.environ, {"INFRA_GIT_WRAPPER_HOME": wrapper_home}
+            ):
+                cfg_path = bot_update._get_isolated_git_config_path()
+                # A private copy is used, never the wrapper file itself.
+                self.assertNotEqual(cfg_path, wrapper_gitconfig)
+                with open(cfg_path) as f:
+                    self.assertEqual(f.read(), seed)
+                # Repeated calls reuse the same per-process file...
+                self.assertEqual(
+                    cfg_path, bot_update._get_isolated_git_config_path()
+                )
+                # ...unless it has disappeared, in which case it is recreated.
+                os.remove(cfg_path)
+                cfg_path = bot_update._get_isolated_git_config_path()
+                with open(cfg_path) as f:
+                    self.assertEqual(f.read(), seed)
+
+            # A different wrapper home gets a freshly seeded file; without a
+            # .gitconfig to seed from, the file is empty.
+            empty_home = os.path.join(td, "empty_home")
+            os.makedirs(empty_home)
+            with mock.patch.dict(
+                os.environ, {"INFRA_GIT_WRAPPER_HOME": empty_home}
+            ):
+                empty_cfg_path = bot_update._get_isolated_git_config_path()
+            self.assertNotEqual(empty_cfg_path, cfg_path)
+            self.assertEqual(os.path.getsize(empty_cfg_path), 0)
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def testIsolatedGitConfigIgnoresSymlinkedWrapperGitConfig(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "target.gitconfig")
+            with open(target, "w") as f:
+                f.write("[core]\n\thooksPath = /evil/hooks\n")
+            wrapper_home = os.path.join(td, "wrapper_home")
+            os.makedirs(wrapper_home)
+            os.symlink(target, os.path.join(wrapper_home, ".gitconfig"))
+
+            with mock.patch.dict(
+                os.environ, {"INFRA_GIT_WRAPPER_HOME": wrapper_home}
+            ):
+                cfg_path = bot_update._get_isolated_git_config_path()
+            self.assertEqual(os.path.getsize(cfg_path), 0)
+
+    def testCallExplicitEnvOverridesIsolatedGitConfig(self) -> None:
+        custom = os.path.join("custom", "path")
+        with mock.patch("subprocess.Popen") as mock_popen:
+            proc = mock_popen.return_value
+            proc.stdout.read.return_value = b""
+            proc.wait.return_value = 0
+
+            bot_update.call("git", "status", env={"GIT_CONFIG_GLOBAL": custom})
+            _, kwargs = mock_popen.call_args
+            self.assertEqual(kwargs["env"]["GIT_CONFIG_GLOBAL"], custom)
 
 
 if __name__ == "__main__":

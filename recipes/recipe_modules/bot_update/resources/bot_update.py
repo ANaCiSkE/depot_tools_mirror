@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import atexit
 import codecs
 from contextlib import contextmanager
 import copy
@@ -24,6 +25,7 @@ import sys
 import tempfile
 import threading
 import time
+from typing import Optional
 import uuid
 
 import os.path as path
@@ -165,6 +167,59 @@ def _kill_process(proc):
   proc.kill()
 
 
+# (INFRA_GIT_WRAPPER_HOME, path) of the per-process global git config file
+# created by _get_isolated_git_config_path(), or (None, None) if none yet.
+_ISOLATED_GIT_CONFIG: tuple[Optional[str], Optional[str]] = (None, None)
+
+
+def _get_isolated_git_config_path() -> str:
+  """Returns the path of a per-process file to use as the global git config.
+
+  Git subprocesses spawned by call() (including `git config --global` from
+  git_config_if_not_set()) would otherwise read and write the ambient
+  `$HOME/.gitconfig`, which on shared builders persists across tasks and can
+  be poisoned (e.g. `core.hooksPath`, `credential.helper`, `url.*.insteadOf`).
+
+  A fresh temporary file is used instead. It is seeded from the per-task
+  `$INFRA_GIT_WRAPPER_HOME/.gitconfig` written by LUCI (`credential.helper =
+  luci` and Gerrit `url.*.insteadOf` rules; see
+  https://source.chromium.org/chromium/infra/infra_superproject/+/main:infra/go/src/infra/tools/git/main.go;l=53-56;drc=3fa9dd034d44e2174a285805e3c42332d7d59c91)
+  so authenticated fetches keep working, and it is deleted when this process
+  exits.
+  """
+  global _ISOLATED_GIT_CONFIG
+  wrapper_home = os.environ.get("INFRA_GIT_WRAPPER_HOME")
+  cached_home, cached_path = _ISOLATED_GIT_CONFIG
+  if cached_path:
+    if cached_home == wrapper_home and os.path.exists(cached_path):
+      return cached_path
+    try:
+      os.remove(cached_path)
+    except OSError:
+      pass
+
+  # mkstemp (not open()) so this works under the fake filesystem in tests.
+  fd, cfg_path = tempfile.mkstemp(prefix="bot_update_gitconfig_")
+  os.close(fd)
+
+  def _remove_isolated_git_config() -> None:
+    try:
+      os.remove(cfg_path)
+    except OSError:
+      pass
+
+  atexit.register(_remove_isolated_git_config)
+  if wrapper_home:
+    wrapper_gitconfig = os.path.join(wrapper_home, ".gitconfig")
+    if not os.path.islink(wrapper_gitconfig) and os.path.isfile(
+      wrapper_gitconfig
+    ):
+      shutil.copyfile(wrapper_gitconfig, cfg_path)
+
+  _ISOLATED_GIT_CONFIG = (wrapper_home, cfg_path)
+  return cfg_path
+
+
 def call(*args, **kwargs):  # pragma: no cover
   """Interactive subprocess call."""
   kwargs["stdout"] = subprocess.PIPE
@@ -179,7 +234,12 @@ def call(*args, **kwargs):  # pragma: no cover
   env = os.environ.copy()
   if sys.platform.startswith("win"):
     env.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
+  # Isolate git from the ambient global config (see
+  # _get_isolated_git_config_path) unless explicitly overridden via the env
+  # kwarg.
   env.update(new_env)
+  if "GIT_CONFIG_GLOBAL" not in new_env:
+    env["GIT_CONFIG_GLOBAL"] = _get_isolated_git_config_path()
   kwargs["env"] = env
   stale_process_duration = env.get(
     "STALE_PROCESS_DURATION", STALE_PROCESS_DURATION
