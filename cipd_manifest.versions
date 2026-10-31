@@ -622,68 +622,68 @@ infra/tools/luci/lucicfg/windows-arm64
 	apnYGxJLgkQv5kr0Az3zsetKmRd0KODExs4JbWXJ0E8C
 
 infra/tools/luci/vpython3/linux-386
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	AzEHRet6HedsNnH3pfshBrL5_wPzRmqQNYz4-3m3r7sC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	-DnAP1CJ54fj6nZw1X3vCAw_QPqK6d_wHuNHg9riTQsC
 
 infra/tools/luci/vpython3/linux-amd64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	Ou_lAPX3TBVP2ea1k-6Qvse89TjZWpsfaaMakia7ChgC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	oHcKeyLq36tUmCz2U_b1vx1BmW6vvUTwrH07DRHXJGgC
 
 infra/tools/luci/vpython3/linux-arm64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	cDlp7of7IYVNZQaPMZ65AA5AQfVFa1i_Y8OHa7evGpYC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	c7Fcx6u79-_liiGad3ZddDKkhCKFHQ7vjfIhzp9cBPwC
 
 infra/tools/luci/vpython3/linux-armv6l
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	93O8Eypzw-X6cPYyp5rcjV38_3vyokvLpmXUeBa4W3sC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	Tq72FygIJJzzh4KT1H2d5Upx4JzqqixhLhJ37kcE5cUC
 
 infra/tools/luci/vpython3/linux-loong64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	BiO1-jnzEsrV9Y9it0kUBZKA0nQ4XYE1hvhMnH6P4zAC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	4UW4NXLjn7vsnCAS8I1A0gYWCj4s4BhVlbcNPZbXBXIC
 
 infra/tools/luci/vpython3/linux-mips64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	tfvWcNzM0eIk0xTGjZTvugogCwzBEdLirZ-VimZgAWYC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	5JTrxfw9pBXCkTt82orziJV_VEelSJ7MiEl6N_VVor0C
 
 infra/tools/luci/vpython3/linux-mips64le
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	T8vlKxzTLj7BEbgA4VX9WX00YHZ9_nFbHMZpsVILU4UC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	MWxB4VQQzX5sIIuzhs2Enpcr9wYr8fGPSvmzHIp4DAIC
 
 infra/tools/luci/vpython3/linux-mipsle
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	gGtOy2qVHP_JIh0o9csFAcs1T_6eKgSy2X2sSWHCl2MC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	r7iBN3G_4hGDVGORPTSFm_q00Bcq0klnql7L9-AU0pkC
 
 infra/tools/luci/vpython3/linux-ppc64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	WMQXkPE2pIiALeeNVfNAViDk0R5fMmkwzBmWyjq-0eMC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	hpo7xZ26AgX5tNYBVLlPwt9mhQBO8PPia3DdzrieYZ8C
 
 infra/tools/luci/vpython3/linux-ppc64le
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	qSrhc_DdgRq1wlMzsHvRnKwR75S5l76oLIjqBIkejooC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	X7QssbVWLTmeREzU13uhsfqbf-2ovGqeR5xlA1qqY2kC
 
 infra/tools/luci/vpython3/linux-riscv64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	c0cOkXOVKjl7dnilXxa8wM8avwS0hGAkHmBIAwdtVMAC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	-6EtF6IQmb6dy_VWV4Ti4hp7FE2-ptOmbjYzlOLuEWEC
 
 infra/tools/luci/vpython3/linux-s390x
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	vQ734qHkvnbXAo6kYvpD9LesEgLFtQbzT79QOGQUhXgC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	rD8rHrzwvG3Ko5T4Rfvc012DtYwRnRzoYDHqGVF2x4MC
 
 infra/tools/luci/vpython3/mac-amd64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	hroUV9f-KZKjWLNEnS1uNEAVclbqQTtFxCstDQo7M0oC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	AbJKyouTNKQb4c65YWJsrMHiy7DYsZ44ir_wZrfkupUC
 
 infra/tools/luci/vpython3/mac-arm64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	vy8I0PT24xDG4j5-t71VkoC9h6IpJnq-gAbicAfe5UEC
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	ODobNX0ilfDBCta0dPfnNO_q_yjWYzGOqgzy-uG4HXwC
 
 infra/tools/luci/vpython3/windows-amd64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	fH48XwiNdWT51krwdqIATFDVewlzF_7zztUAKI2DuK0C
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	ITVBw2JGp3FW7KGVQQOTDlj0Qrw1A_ONbrulMzLZw7MC
 
 infra/tools/luci/vpython3/windows-arm64
-	git_revision:b2c6da3628552e85863ce868bb073130eb928144
-	W-RktTekPe7ZTQ6NJHJrcbqoKUh0lRDxPPVpfItOAU0C
+	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+	StshjTGeD-FOgDtg7850Li79wmud8sCSrxYRsOermp8C
 
 infra/tools/mac_toolchain/mac-amd64
 	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4

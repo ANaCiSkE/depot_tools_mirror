@@ -45,15 +45,9 @@ fi
 source "${DEPOT_TOOLS_DIR}/cipd_bin_setup.sh"
 CIPD_ROOT=$(cipd_bin_setup) &> /dev/null
 
-# Ensure that "depot_tools" is somewhere in PATH so standalone invocations can
-# find "cipd" for on-demand Python exports, but allow other PATH manipulations
-# to take priority.
-base_dir_abs=$(CDPATH= cd -- "$DEPOT_TOOLS_DIR" 2>/dev/null && pwd -P || printf '%s' "$DEPOT_TOOLS_DIR")
-export PATH="${PATH:+$PATH:}$base_dir_abs"
-
-# Don't pass these to the Python script as it might turn around and run commands
+# Don't pass this to the Python script as it might turn around and run commands
 # in other depot_tools dirs.
-unset DEPOT_TOOLS_DIR base_dir_abs
+unset DEPOT_TOOLS_DIR
 
 # Exec the CIPD binary directly rather than routing "$@" through
 # cmd.exe/vpython3.bat, which would re-parse the flattened command line with
