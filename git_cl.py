@@ -2887,19 +2887,22 @@ class Changelist(object):
                 return True
         return False
 
-    def GetMostRecentDryRunPatchset(self):
+    def GetMostRecentCqPatchset(self):
         """Get patchsets equivalent to the most recent patchset and return
-        the patchset with the latest dry run. If none have been dry run, return
-        the latest patchset."""
+        the patchset with the latest CQ run. If none have had a CQ run,
+        return the latest patchset."""
         if not self.GetIssue():
             return None
 
         data = self._GetChangeDetail(["ALL_REVISIONS", "MESSAGES"])
         patchset = data["revisions"][data["current_revision"]]["_number"]
-        dry_run = {
+        cq_run = {
             int(m["_revision_number"])
             for m in data.get("messages", [])
-            if "_revision_number" in m and m.get("tag", "").endswith("dry-run")
+            if "_revision_number" in m
+            and m.get("tag", "").endswith(
+                ("dry-run", "full-run", "new-patchset-run")
+            )
         }
 
         for revision_info in sorted(
@@ -2907,7 +2910,7 @@ class Changelist(object):
             key=lambda c: c["_number"],
             reverse=True,
         ):
-            if revision_info["_number"] in dry_run:
+            if revision_info["_number"] in cq_run:
                 patchset = revision_info["_number"]
                 break
             if revision_info.get("kind", "") not in (
@@ -8461,7 +8464,7 @@ def CMDtry_results(parser, args):
 
     patchset = options.patchset
     if not patchset:
-        patchset = cl.GetMostRecentDryRunPatchset()
+        patchset = cl.GetMostRecentCqPatchset()
         if not patchset:
             parser.error(
                 "Code review host doesn't know about issue %s. "
