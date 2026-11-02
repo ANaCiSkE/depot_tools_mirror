@@ -141,7 +141,28 @@ class Gsutil(object):
             return [sys.executable, self.path]
         return [self.VPYTHON3, self.path]
 
+    @staticmethod
+    def _unsafe_args_error(args: tuple[str, ...]) -> Optional[str]:
+        """Returns why args must not be passed to gsutil on Windows, or None.
+
+        The arguments may come from a checkout (DEPS `gcs` entries, `.sha1`
+        file names, git URLs). They reach cmd.exe when gsutil.py is run via
+        vpython3.bat, and also when it is run by sys.executable with
+        shell=False but falls back to vpython3.bat itself because .cipd_bin
+        is missing or stale. cmd.exe cannot pass them through faithfully, so
+        refuse them before starting any process.
+        """
+        try:
+            subprocess2.check_safe_for_cmd_exe(args)
+        except ValueError as e:
+            return str(e)
+        return None
+
     def call(self, *args):
+        error = self._unsafe_args_error(args)
+        if error:
+            sys.stderr.write(f"{error}\n")
+            return 1
         cmd = self._get_python_cmd()
         cmd.extend(args)
         kwargs = {"env": self.get_sub_env()}
@@ -150,6 +171,9 @@ class Gsutil(object):
         return subprocess2.call(cmd, **kwargs)
 
     def check_call(self, *args):
+        error = self._unsafe_args_error(args)
+        if error:
+            return (1, "", error)
         cmd = self._get_python_cmd()
         cmd.extend(args)
         kwargs = {
@@ -188,6 +212,10 @@ class Gsutil(object):
         return (code, out, err)
 
     def check_call_with_retries(self, *args):
+        # Refused arguments fail the same way on every attempt: don't retry.
+        error = self._unsafe_args_error(args)
+        if error:
+            return (1, "", error)
         delay = self.RETRY_BASE_DELAY
         for i in range(self.MAX_TRIES):
             code, out, err = self.check_call(*args)

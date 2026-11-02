@@ -416,6 +416,103 @@ class GsutilCommandTests(unittest.TestCase):
             ],
         )
 
+    def test_refuses_cmd_exe_metacharacters_on_win32(self) -> None:
+        # Refused however gsutil.py is launched: the arguments still reach
+        # cmd.exe if gsutil.py falls back to the vpython3.bat wrapper.
+        launchers = {
+            "current_interpreter": self._gsutil(),
+            "vpython3": self._gsutil(self.custom_path),
+        }
+        chars = download_from_google_storage.subprocess2.CMD_EXE_METACHARACTERS
+        with mock.patch("time.sleep") as mock_sleep:
+            for launcher, gsutil in launchers.items():
+                for char in sorted(chars):
+                    arg = f"gs://b/a{char}b"
+                    with (
+                        self.subTest(launcher=launcher, char=char),
+                        mock.patch.object(sys, "platform", "win32"),
+                        mock.patch.object(
+                            sys, "stderr", io.StringIO()
+                        ) as stderr,
+                    ):
+                        code, out, err = gsutil.check_call("cp", arg, "out")
+                        self.assertEqual((code, out), (1, ""))
+                        self.assertIn("cmd.exe", err)
+                        self.assertIn(repr(arg), err)
+                        self.assertNotIn(repr("out"), err)
+                        self.assertEqual(
+                            gsutil.check_call_with_retries("cp", arg, "out"),
+                            (code, out, err),
+                        )
+
+                        self.assertEqual(gsutil.call("cp", arg, "out"), 1)
+                        self.assertEqual(stderr.getvalue(), f"{err}\n")
+        self.mock_call.assert_not_called()
+        self.mock_communicate.assert_not_called()
+        mock_sleep.assert_not_called()
+
+    def test_accepts_safe_args_on_win32(self) -> None:
+        # Spaces, parentheses and `!` are common in Windows paths and are not
+        # special on a plain cmd.exe command line. Also verify that Gsutil.path
+        # itself is not subject to the caller-argument check: depot_tools may
+        # live in a directory with `&`, since its gsutil.py is run directly.
+        dest = r"C:\Program Files (x86)\out dir\file!.tar.gz"
+        path_with_amp = os.path.join(self.temp_dir, "dir&name", "gsutil.py")
+        os.makedirs(os.path.dirname(path_with_amp))
+        with open(path_with_amp, "w"):
+            pass
+        with mock.patch.object(sys, "platform", "win32"):
+            self.assertEqual(
+                self._gsutil().check_call("cp", "gs://b/o", dest), (0, "", "")
+            )
+            self.mock_communicate.assert_called_once_with(
+                [self.python, self.DEFAULT_PATH, "cp", "gs://b/o", dest],
+                stdout=self.PIPE,
+                stderr=self.PIPE,
+                env=mock.ANY,
+                shell=False,
+            )
+            self.assertEqual(
+                self._gsutil().check_call_with_retries("cp", "gs://b/o", dest),
+                (0, "", ""),
+            )
+            with mock.patch.object(
+                download_from_google_storage,
+                "GSUTIL_DEFAULT_PATH",
+                path_with_amp,
+            ):
+                self.assertEqual(
+                    self._gsutil(path_with_amp).call("cp", "gs://b/o", dest), 0
+                )
+            self.mock_call.assert_called_once_with(
+                [self.python, path_with_amp, "cp", "gs://b/o", dest],
+                env=mock.ANY,
+                shell=False,
+            )
+
+    def test_passes_cmd_exe_metacharacters_through_off_win32(self) -> None:
+        for platform in ("linux", "darwin"):
+            with (
+                self.subTest(platform=platform),
+                mock.patch.object(sys, "platform", platform),
+            ):
+                self.mock_call.reset_mock()
+                self.mock_communicate.reset_mock()
+                gsutil = self._gsutil()
+                self.assertEqual(
+                    gsutil.check_call("cp", "gs://b/o&calc", "out%d"),
+                    (0, "", ""),
+                )
+                self.assertEqual(gsutil.call("cp", "gs://b/o&calc", "out%d"), 0)
+                self.assertEqual(
+                    self.mock_communicate.call_args.args[0][-3:],
+                    ["cp", "gs://b/o&calc", "out%d"],
+                )
+                self.assertEqual(
+                    self.mock_call.call_args.args[0][-3:],
+                    ["cp", "gs://b/o&calc", "out%d"],
+                )
+
 
 class DownloadTests(unittest.TestCase):
     def setUp(self):

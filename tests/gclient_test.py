@@ -2988,6 +2988,44 @@ class GcsDependencyTest(trial_dir.TestCase):
         gcs_root.clobber_hash_files(symlink_entry)
         self.assertTrue(os.path.exists(victim_hash))
 
+    def test_download_refuses_cmd_exe_metacharacters_on_win32(self) -> None:
+        self.parent_mock.get_custom_deps.side_effect = lambda _name, url: url
+        for field, value in (
+            ("name", "test_dep&calc"),
+            ("bucket", "bucket&calc"),
+            ("object_name", "dir/payload|calc.tar.gz"),
+            ("output_file", "payload%PATH%.tar.gz"),
+        ):
+            dep_kwargs = {
+                "name": "test_dep",
+                "bucket": "fake_bucket",
+                "object_name": "payload.tar.gz",
+                "output_file": None,
+                field: value,
+            }
+            with (
+                self.subTest(field=field),
+                mock.patch("sys.platform", "win32"),
+                mock.patch.dict(os.environ, {"GCLIENT_TEST": "0"}),
+                mock.patch("gclient_utils.IsEnvCog", return_value=False),
+                mock.patch("subprocess2.communicate") as mock_communicate,
+            ):
+                dep = gclient.GcsDependency(
+                    parent=self.parent_mock,
+                    sha256sum="fake",
+                    size_bytes=100,
+                    gcs_root=self.gcs_root_mock,
+                    custom_vars={},
+                    should_process=True,
+                    relative=False,
+                    condition=None,
+                    **dep_kwargs,
+                )
+                with self.assertRaisesRegex(Exception, r"cmd\.exe") as ctx:
+                    dep.DownloadGoogleStorage()
+                self.assertIn(value, str(ctx.exception))
+                mock_communicate.assert_not_called()
+
 
 class TrailingSlashSolutionNameTest(trial_dir.TestCase):
     def setUp(self) -> None:
