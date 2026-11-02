@@ -15,7 +15,7 @@
       'filepath': '.+',
     },
     'build': {
-      'filepath': '.*(ninja|reclient|siso).*',
+      'filepath': '.*(ninja|siso).*',
     },
   },
 

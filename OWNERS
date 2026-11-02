@@ -10,7 +10,6 @@ ovsienko@google.com
 per-file BUILD_OWNERS=file://BUILD_OWNERS
 per-file CROS_OWNERS=file://CROS_OWNERS
 per-file LUCI_OWNERS=file://LUCI_OWNERS
-per-file RECLIENT_OWNERS=file://RECLIENT_OWNERS
 
 # Simple files that are safe to give expanded access to.
 # go/keep-sorted start
@@ -32,10 +31,6 @@ per-file gn*=file://BUILD_OWNERS
 
 # Siso
 per-file siso*=file://BUILD_OWNERS
-
-# reclient
-per-file reclient*=file://BUILD_OWNERS
-per-file reclient*=file://RECLIENT_OWNERS
 
 # Build telemetry
 per-file build_telemetry*=file://BUILD_OWNERS
