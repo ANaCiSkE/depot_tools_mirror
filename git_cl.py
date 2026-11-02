@@ -790,6 +790,7 @@ class CommentInfo:
     context_lines: Optional[List[Any]] = None
     source_content_type: Optional[str] = None
     fix_suggestions: Optional[List[Any]] = None
+    is_ai: bool = False
 
     @classmethod
     def parse_from(cls, comment: dict):
@@ -2994,7 +2995,7 @@ class Changelist(object):
                 )
                 comments[key][comment.path][patchset].setdefault(
                     line, []
-                ).append((unresolved, url, comment.message, comment.id))
+                ).append((unresolved, url, comment))
 
         summaries = []
         for msg in messages:
@@ -3033,10 +3034,11 @@ class Changelist(object):
                 message += "\n%s" % path
             for patchset, lines in sorted(patchsets.items()):
                 for line, comment_list in sorted(lines.items()):
-                    for unresolved, url, content, comment_id in comment_list:
+                    for unresolved, url, comment in comment_list:
                         resolved_str = (
                             "unresolved" if unresolved else "resolved"
                         )
+                        ai_str = " (ai)" if comment.is_ai else ""
                         if line:
                             line_str = "Line %d" % line
                             path_str = "%s:%d:" % (path, line)
@@ -3044,26 +3046,33 @@ class Changelist(object):
                             line_str = "File comment"
                             path_str = "%s:0:" % path
                         if readable:
-                            message += "\n  %s, %s: %s (%s)" % (
+                            message += "\n  %s, %s: %s (%s)%s" % (
                                 patchset,
                                 line_str,
                                 url,
                                 resolved_str,
+                                ai_str,
                             )
-                            message += "\n  %s\n" % content
+                            message += "\n  %s\n" % comment.message
                         else:
-                            message += "\n%s (%s)" % (path_str, resolved_str)
-                            message += "\n%s\n" % content
-                        message_json["comments"].append(
-                            {
-                                "path": path,
-                                "line": line,
-                                "patchset": patchset,
-                                "unresolved": unresolved,
-                                "content": content,
-                                "id": comment_id,
-                            }
-                        )
+                            message += "\n%s (%s)%s" % (
+                                path_str,
+                                resolved_str,
+                                ai_str,
+                            )
+                            message += "\n%s\n" % comment.message
+                        comment_json = {
+                            "path": path,
+                            "line": line,
+                            "patchset": patchset,
+                            "unresolved": unresolved,
+                            "content": comment.message,
+                            "id": comment.id,
+                        }
+                        # Like in Gerrit, only set if true.
+                        if comment.is_ai:
+                            comment_json["is_ai"] = True
+                        message_json["comments"].append(comment_json)
 
         return _CommentSummary(
             date=date,
