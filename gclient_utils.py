@@ -27,6 +27,7 @@ import threading
 import time
 import urllib.parse
 from collections.abc import Callable
+from typing import Optional
 
 import gclient_eval
 import subprocess2
@@ -1548,23 +1549,64 @@ def DefaultIndexPackConfig(url=""):
     return result
 
 
-def FindExecutable(executable):
-    """This mimics the "which" utility."""
-    path_folders = os.environ.get("PATH").split(os.pathsep)
+# The `PATHEXT` default that `shutil.which()` uses when it is unset or empty.
+_WIN_DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC"
 
-    for path_folder in path_folders:
-        target = os.path.join(path_folder, executable)
-        # Just in case we have some ~/blah paths.
-        target = os.path.abspath(os.path.expanduser(target))
-        if os.path.isfile(target) and os.access(target, os.X_OK):
-            return target
-        if sys.platform.startswith("win"):
-            for suffix in (".bat", ".cmd", ".exe"):
-                alt_target = target + suffix
-                if os.path.isfile(alt_target) and os.access(
-                    alt_target, os.X_OK
-                ):
-                    return alt_target
+
+def _is_abs_path(entry: str) -> bool:
+    if sys.platform != "win32":
+        return os.path.isabs(entry)
+    # Require a drive or UNC share: drive-relative entries such as `\bin` or
+    # `C:bin` depend on the current directory. `os.path` is checked alongside
+    # `ntpath` so that POSIX directories are still accepted when tests simulate
+    # Windows on a POSIX host.
+    return (bool(ntpath.splitdrive(entry)[0]) and ntpath.isabs(entry)) or (
+        os.path is not ntpath and os.path.isabs(entry)
+    )
+
+
+def GetAbsolutePathEntries() -> list[str]:
+    """Returns the absolute `PATH` entries in order, stripped of whitespace."""
+    # Relative entries (e.g. `.`, `bin`, `.\sub`, or drive-relative `\bin`) are
+    # resolved against the current working directory or its drive, which would
+    # allow a planted executable to be picked up.
+    return [
+        entry
+        for elem in os.environ.get("PATH", "").split(os.pathsep)
+        if (entry := elem.strip()) and _is_abs_path(entry)
+    ]
+
+
+def FindExecutableInAbsolutePath(name: str) -> Optional[str]:
+    """Returns the path to executable `name` in an absolute `PATH` entry.
+
+    This is like `shutil.which(name)`, except that only the entries returned by
+    `GetAbsolutePathEntries()` are searched. In particular, the current working
+    directory is never searched, while `shutil.which()` searches it first on
+    Windows (always before Python 3.12, and on later versions unless
+    `NoDefaultCurrentDirectoryInExePath` is set).
+
+    On Windows, `name` is tried with each `PATHEXT` extension, unless it already
+    ends with one. A match must be a regular file that is executable by the
+    current user.
+
+    Args:
+        name: the name of the executable, without a directory part.
+
+    Returns:
+        The path to the first match, or None if there is none.
+    """
+    candidates = [name]
+    if sys.platform == "win32":
+        pathext = os.environ.get("PATHEXT") or _WIN_DEFAULT_PATHEXT
+        exts = [ext for ext in pathext.split(";") if ext]
+        if not any(name.lower().endswith(ext.lower()) for ext in exts):
+            candidates = [f"{name}{ext}" for ext in exts]
+    for entry in GetAbsolutePathEntries():
+        for candidate in candidates:
+            path = os.path.join(entry, candidate)
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
     return None
 
 

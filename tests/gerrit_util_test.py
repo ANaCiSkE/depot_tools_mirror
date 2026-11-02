@@ -5,17 +5,20 @@
 # found in the LICENSE file.
 
 import base64
+import contextlib
 import json
 import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 
 import email.message
 import http.cookiejar
 import io
+from collections.abc import Iterator
 from io import StringIO
 from pathlib import Path
 from typing import Optional
@@ -1693,7 +1696,7 @@ class SSOAuthenticatorTest(unittest.TestCase):
             p.side_effect = ["firefly@google.com"]
             self.assertTrue(self.sso.is_applicable())
 
-    @mock.patch("gerrit_util.ssoHelper.find_cmd", return_value=None)
+    @mock.patch("gerrit_util.ssoHelper.find_cmd", return_value="")
     def testCmdAssemblyNotFound(self, _):
         self.assertEqual(self.sso._resolve_sso_cmd(), ())
         self.assertFalse(self.sso.is_applicable())
@@ -1974,23 +1977,166 @@ class SSOAuthenticatorTest(unittest.TestCase):
 
 
 class SSOHelperTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.sso = gerrit_util.SSOHelper()
-        return super().setUp()
+    def _make_temp_dir(self) -> str:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        return temp_dir.name
 
-    @mock.patch("shutil.which", return_value="/fake/git-remote-sso")
-    def testFindCmd(self, _):
-        self.assertEqual(self.sso.find_cmd(), "/fake/git-remote-sso")
+    def _chdir(self, path: str) -> None:
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(path)
 
-    @mock.patch("shutil.which", return_value=None)
-    def testFindCmdMissing(self, _):
-        self.assertEqual(self.sso.find_cmd(), "")
+    @staticmethod
+    def _plant(path: str, mode: int = 0o755) -> str:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w"):
+            pass
+        os.chmod(path, mode)
+        return path
 
-    @mock.patch("shutil.which", return_value="/fake/git-remote-sso")
-    def testFindCmdCached(self, which):
-        self.sso.find_cmd()
-        self.sso.find_cmd()
-        self.assertEqual(which.called, 1)
+    @staticmethod
+    @contextlib.contextmanager
+    def _simulate(
+        platform: str, path_entries: list[str], pathext: str = ".EXE;.BAT"
+    ) -> Iterator[None]:
+        # Use the simulated platform's PATH separator, so that e.g. the drive
+        # colon in "C:\" is not treated as a separator on POSIX hosts.
+        pathsep = ";" if platform == "win32" else ":"
+        with (
+            mock.patch.object(sys, "platform", platform),
+            mock.patch.object(os, "pathsep", pathsep),
+            mock.patch.dict(
+                os.environ,
+                {"PATH": pathsep.join(path_entries), "PATHEXT": pathext},
+            ),
+        ):
+            yield
+
+    def testFindCmd(self) -> None:
+        # Both a found helper and a missing one ("") are cached.
+        for found, expected in (
+            ("/fake/git-remote-sso", "/fake/git-remote-sso"),
+            (None, ""),
+        ):
+            with (
+                self.subTest(found=found),
+                mock.patch(
+                    "gclient_utils.FindExecutableInAbsolutePath",
+                    return_value=found,
+                ) as find,
+            ):
+                sso = gerrit_util.SSOHelper()
+                self.assertEqual(sso.find_cmd(), expected)
+                self.assertEqual(sso.find_cmd(), expected)
+                find.assert_called_once_with("git-remote-sso")
+
+    def testFindCmdOnWindowsIgnoresCwdAndRelativeEntries(self) -> None:
+        cwd = self._make_temp_dir()
+        self._chdir(cwd)
+        relative_entries = ["", ".", "bin", os.path.join(".", "sub")]
+        # Plant a helper in the current directory, which `shutil.which()`
+        # searches first on Windows, and wherever each relative entry would
+        # resolve to if it were searched.
+        for entry in relative_entries:
+            self._plant(os.path.join(cwd, entry, "git-remote-sso.BAT"))
+        empty_dir = os.path.join(cwd, "empty")
+        os.mkdir(empty_dir)
+        abs_dir = os.path.join(cwd, "abs")
+        abs_helper = self._plant(os.path.join(abs_dir, "git-remote-sso.EXE"))
+
+        for path_entries, expected in (
+            ([], ""),
+            ([empty_dir], ""),
+            (relative_entries, ""),
+            (relative_entries + [empty_dir], ""),
+            (relative_entries + [abs_dir], abs_helper),
+        ):
+            with (
+                self.subTest(path_entries=path_entries),
+                self._simulate("win32", path_entries),
+            ):
+                self.assertEqual(gerrit_util.SSOHelper().find_cmd(), expected)
+
+    def testFindCmdOnWindowsRecognizesAbsoluteEntries(self) -> None:
+        relative_entries = ["", ".", "bin", r".\sub", r"\bin", "C:", "C:bin"]
+        cases = [(relative_entries, "")]
+        for abs_dir in (r"C:\Tools", r"\\server\share\tools"):
+            cases.append(
+                (
+                    relative_entries + [abs_dir],
+                    os.path.join(abs_dir, "git-remote-sso.EXE"),
+                )
+            )
+        for path_entries, expected in cases:
+            with (
+                self.subTest(path_entries=path_entries),
+                self._simulate("win32", path_entries),
+                # Pretend every candidate exists and is executable: a searched
+                # relative entry would therefore be returned ahead of the
+                # absolute one.
+                mock.patch.object(os.path, "isfile", return_value=True),
+                mock.patch.object(os, "access", return_value=True),
+            ):
+                self.assertEqual(gerrit_util.SSOHelper().find_cmd(), expected)
+
+    def testFindCmdOnWindowsTriesPathext(self) -> None:
+        temp_dir = self._make_temp_dir()
+        first = os.path.join(temp_dir, "first")
+        second = os.path.join(temp_dir, "second")
+        self._plant(os.path.join(first, "git-remote-sso"))
+        first_bat = self._plant(os.path.join(first, "git-remote-sso.BAT"))
+        second_cmd = self._plant(os.path.join(second, "git-remote-sso.CMD"))
+        second_exe = self._plant(os.path.join(second, "git-remote-sso.EXE"))
+
+        for pathext, path_entries, expected in (
+            # Each PATH entry is searched for every extension before the next.
+            (".EXE;.BAT", [first, second], first_bat),
+            # Within a PATH entry, extensions are tried in PATHEXT order.
+            (".CMD;.EXE", [second], second_cmd),
+            (".EXE;.CMD", [second], second_exe),
+            # Extensions missing from PATHEXT are not tried.
+            (".COM;.EXE", [first], ""),
+            # An empty PATHEXT falls back to the `shutil.which()` default.
+            ("", [first], first_bat),
+        ):
+            with (
+                self.subTest(pathext=pathext, path_entries=path_entries),
+                self._simulate("win32", path_entries, pathext),
+            ):
+                self.assertEqual(gerrit_util.SSOHelper().find_cmd(), expected)
+
+    @unittest.skipIf(sys.platform == "win32", "needs POSIX file permissions")
+    def testFindCmdOnPosix(self) -> None:
+        cwd = self._make_temp_dir()
+        self._chdir(cwd)
+        # Executable helpers that are only reachable through the current
+        # directory or a relative entry.
+        self._plant(os.path.join(cwd, "git-remote-sso"))
+        self._plant(os.path.join(cwd, "bin", "git-remote-sso"))
+        non_exec_dir = os.path.join(cwd, "non_exec")
+        self._plant(os.path.join(non_exec_dir, "git-remote-sso"), mode=0o644)
+        dir_dir = os.path.join(cwd, "dir")
+        os.makedirs(os.path.join(dir_dir, "git-remote-sso"))
+        pathext_dir = os.path.join(cwd, "pathext")
+        self._plant(os.path.join(pathext_dir, "git-remote-sso.EXE"))
+        abs_dir = os.path.join(cwd, "abs")
+        abs_helper = self._plant(os.path.join(abs_dir, "git-remote-sso"))
+
+        unusable_abs_entries = [non_exec_dir, dir_dir, pathext_dir]
+        for path_entries, expected in (
+            # Like `shutil.which()`, only executable regular files match, and
+            # PATHEXT is ignored.
+            (unusable_abs_entries, ""),
+            (unusable_abs_entries + [abs_dir], abs_helper),
+            # The current directory and relative entries are never searched.
+            (["", ".", "bin"], ""),
+            (["", ".", "bin", abs_dir], abs_helper),
+        ):
+            with (
+                self.subTest(path_entries=path_entries),
+                self._simulate("linux", path_entries),
+            ):
+                self.assertEqual(gerrit_util.SSOHelper().find_cmd(), expected)
 
 
 class ShouldUseSSOTest(unittest.TestCase):

@@ -1789,7 +1789,7 @@ class WinFindGitTest(GitCommonTestBase):
         return git_exe
 
     def test_skips_relative_path_entries(self) -> None:
-        relative_entries = ["bin", "./sub", "sub/dir"]
+        relative_entries = ["", ".", "bin", "./sub", "sub/dir"]
         with tempfile.TemporaryDirectory() as td:
             # Plant a git.exe where each relative entry would resolve to if it
             # were searched against the current working directory.
@@ -1817,13 +1817,14 @@ class WinFindGitTest(GitCommonTestBase):
                 os.chdir(original_cwd)
 
     def test_recognizes_windows_absolute_entries(self) -> None:
-        # Windows-style absolute entries must be searched even on POSIX hosts,
-        # where os.path.isabs() does not recognize them, while relative entries
-        # listed ahead of them are still skipped.
+        # Windows-style absolute entries must be searched even when Windows is
+        # simulated on a POSIX host, where os.path.isabs() does not recognize
+        # them, while relative entries listed ahead of them are still skipped.
         for abs_dir in (r"C:\Git\cmd", r"\\server\share\git"):
             with self.subTest(abs_dir=abs_dir):
                 expected = os.path.join(abs_dir, "git.exe")
                 with (
+                    mock.patch.object(sys, "platform", "win32"),
                     # Use the Windows PATH separator so that the drive colon
                     # in "C:\" is not treated as a separator on POSIX hosts.
                     mock.patch.object(os, "pathsep", ";"),
@@ -1840,6 +1841,22 @@ class WinFindGitTest(GitCommonTestBase):
                     mock.patch.object(os.path, "isfile", return_value=True),
                 ):
                     self.assertEqual(self.gc.win_find_git(), expected)
+
+    def test_strips_entries_and_handles_missing_path(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            git_exe = self._plant_git_exe(td)
+            # Whitespace around entries is ignored.
+            path_val = os.pathsep.join(["", "  ", f"  {td}  "])
+            with mock.patch.dict(os.environ, {"PATH": path_val}):
+                self.assertEqual(self.gc.win_find_git(), git_exe)
+
+        for env in ({}, {"PATH": ""}):
+            with (
+                self.subTest(env=env),
+                mock.patch.dict(os.environ, env, clear=True),
+            ):
+                with self.assertRaises(ValueError):
+                    self.gc.win_find_git()
 
 
 class GitRepoFastImportTest(unittest.TestCase):

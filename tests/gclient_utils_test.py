@@ -4,10 +4,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from collections.abc import Iterator
+import contextlib
 import io
 import os
 import stat
 import sys
+import tempfile
+from typing import Optional
 import unittest
 from unittest import mock
 
@@ -740,10 +744,6 @@ class IsGitShaTest(unittest.TestCase):
         self.assertFalse(gclient_utils.IsGitSha("z" * 40))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SafeReplaceTest(unittest.TestCase):
     def setUp(self):
         self.mock_os = mock.patch("gclient_utils.os").start()
@@ -765,6 +765,180 @@ class SafeReplaceTest(unittest.TestCase):
         with mock.patch("time.sleep"):
             with self.assertRaises(OSError):
                 gclient_utils.safe_replace("old", "new")
+
+
+class GetAbsolutePathEntriesTest(unittest.TestCase):
+    def _entries(self, path: str, platform: str = "win32") -> list[str]:
+        # Use the Windows separator so that the drive colon in `C:\...` is not
+        # treated as a separator when Windows is simulated on a POSIX host.
+        pathsep = ";" if platform == "win32" else os.pathsep
+        with (
+            mock.patch.object(sys, "platform", platform),
+            mock.patch.object(os, "pathsep", pathsep),
+            mock.patch.dict(os.environ, {"PATH": path}),
+        ):
+            return gclient_utils.GetAbsolutePathEntries()
+
+    def testSkipsRelativeEntries(self) -> None:
+        for entry in (
+            "",
+            " ",
+            ".",
+            "bin",
+            "./sub",
+            r".\sub",
+            "sub/dir",
+            r"\bin",
+            "C:",
+            "C:bin",
+        ):
+            with self.subTest(entry=entry):
+                self.assertEqual(self._entries(entry), [])
+
+    def testKeepsAbsoluteEntries(self) -> None:
+        for entry in (
+            os.path.abspath(os.sep),
+            r"C:\Git\cmd",
+            r"\\server\share\git",
+        ):
+            with self.subTest(entry=entry):
+                self.assertEqual(self._entries(entry), [entry])
+                # Surrounding whitespace is stripped.
+                self.assertEqual(self._entries(f" {entry} "), [entry])
+
+    def testPreservesOrder(self) -> None:
+        self.assertEqual(self._entries(r"bin;C:\b;.;C:\a;"), [r"C:\b", r"C:\a"])
+
+    @unittest.skipIf(sys.platform == "win32", "needs POSIX path semantics")
+    def testPosixOnlyKeepsPosixAbsoluteEntries(self) -> None:
+        # Backslash-prefixed entries are relative paths on POSIX.
+        for entry, expected in (
+            ("/usr/bin", ["/usr/bin"]),
+            (r"\\server\share", []),
+            (r"\bin", []),
+        ):
+            with self.subTest(entry=entry):
+                self.assertEqual(self._entries(entry, "linux"), expected)
+
+    def testUnsetPath(self) -> None:
+        with mock.patch.dict(os.environ, clear=True):
+            self.assertEqual(gclient_utils.GetAbsolutePathEntries(), [])
+
+
+class FindExecutableInAbsolutePathTest(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = tmp.name
+
+    def _plant(self, name: str, mode: int = 0o755) -> str:
+        path = os.path.join(self.root, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("exe")
+        os.chmod(path, mode)
+        return path
+
+    @contextlib.contextmanager
+    def _simulate_platform(
+        self,
+        platform: str,
+        path_entries: list[str],
+        pathext: Optional[str] = ".com;.exe;.bat",
+    ) -> Iterator[None]:
+        pathsep = ";" if platform == "win32" else os.pathsep
+        with (
+            mock.patch.object(sys, "platform", platform),
+            mock.patch.object(os, "pathsep", pathsep),
+            mock.patch.dict(os.environ, {"PATH": pathsep.join(path_entries)}),
+        ):
+            if pathext is None:
+                os.environ.pop("PATHEXT", None)
+            else:
+                os.environ["PATHEXT"] = pathext
+            yield
+
+    def _find(self, name: str) -> Optional[str]:
+        return gclient_utils.FindExecutableInAbsolutePath(name)
+
+    def _path(self, name: Optional[str]) -> Optional[str]:
+        return None if name is None else os.path.join(self.root, name)
+
+    def testWindowsTriesPathextExtensions(self) -> None:
+        for name in ("tool.exe", "tool.bat", "script.cmd", "upper.EXE"):
+            self._plant(name)
+        self._plant("noext")
+        for name, pathext, expected in (
+            # Extensions are tried in `PATHEXT` order.
+            ("tool", ".com;.exe;.bat", "tool.exe"),
+            ("tool", ".bat;.exe", "tool.bat"),
+            # A name that already has an extension is tried as is.
+            ("tool.bat", ".com;.exe;.bat", "tool.bat"),
+            ("script", ".com;.exe;.bat", None),
+            # The `shutil.which()` default applies when `PATHEXT` is unset.
+            ("upper", None, "upper.EXE"),
+            # Like `shutil.which()`, a bare name only matches through `PATHEXT`.
+            ("noext", ".com;.exe;.bat", None),
+            ("missing", ".com;.exe;.bat", None),
+        ):
+            with (
+                self.subTest(name=name, pathext=pathext),
+                self._simulate_platform("win32", [self.root], pathext),
+            ):
+                self.assertEqual(self._find(name), self._path(expected))
+
+    def testPosixRequiresExecutableRegularFile(self) -> None:
+        self._plant("tool")
+        self._plant("only_exe.exe")
+        self._plant("not_exec", mode=0o644)
+        os.makedirs(os.path.join(self.root, "dir_tool"))
+        cases = [
+            ("tool", "tool"),
+            # `PATHEXT` does not apply on POSIX.
+            ("only_exe", None),
+            ("only_exe.exe", "only_exe.exe"),
+            ("dir_tool", None),
+            ("missing", None),
+        ]
+        if sys.platform != "win32":
+            # Windows ignores the executable bit.
+            cases.append(("not_exec", None))
+        for name, expected in cases:
+            with (
+                self.subTest(name=name),
+                self._simulate_platform("linux", [self.root]),
+            ):
+                self.assertEqual(self._find(name), self._path(expected))
+
+    def testSkipsCurrentDirectoryAndRelativeEntries(self) -> None:
+        relative_entries = [".", "bin", "./sub"]
+        for entry in relative_entries:
+            for name in ("tool", "tool.exe"):
+                self._plant(os.path.join(entry, name))
+        abs_dir = os.path.join(self.root, "abs")
+        expected = {
+            "win32": self._plant(os.path.join("abs", "tool.exe")),
+            "linux": self._plant(os.path.join("abs", "tool")),
+        }
+        with contextlib.chdir(self.root):
+            for platform in ("win32", "linux"):
+                for entries in ([], relative_entries):
+                    with (
+                        self.subTest(platform=platform, entries=entries),
+                        self._simulate_platform(platform, entries),
+                    ):
+                        self.assertIsNone(self._find("tool"))
+                entries = relative_entries + [abs_dir]
+                with (
+                    self.subTest(platform=platform, entries=entries),
+                    self._simulate_platform(platform, entries),
+                ):
+                    self.assertEqual(self._find("tool"), expected[platform])
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 # vim: ts=2:sw=2:tw=80:et:

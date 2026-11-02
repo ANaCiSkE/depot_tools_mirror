@@ -20,7 +20,6 @@ import os
 import queue
 import random
 import re
-import shutil
 import socket
 import subprocess
 import sys
@@ -115,11 +114,17 @@ class SSOHelper(object):
     def find_cmd(self) -> str:
         """Returns the cached command-line to invoke git-remote-sso.
 
-        If git-remote-sso is not in $PATH, returns None.
+        Only absolute `PATH` entries are searched, never the current directory.
+        If git-remote-sso is not found, returns "".
         """
         if self._sso_cmd is not None:
             return self._sso_cmd
-        cmd = shutil.which("git-remote-sso")
+        # Do not use `shutil.which()`: on Windows it searches the current
+        # directory first (always before Python 3.12, and on later versions
+        # unless `NoDefaultCurrentDirectoryInExePath` is set), so a
+        # `git-remote-sso.bat` at the root of a checkout would be run and its
+        # output trusted.
+        cmd = gclient_utils.FindExecutableInAbsolutePath("git-remote-sso")
         if cmd is None:
             cmd = ""
         self._sso_cmd = cmd
