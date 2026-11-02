@@ -10,7 +10,7 @@ SYNOPSIS
 --------
 [verse]
 'git map-branches' [-v...] [--no-color] [-j <maxjobs> | --maxjobs <maxjobs>]
-                 [--show-subject] [--hide-dormant]
+                 [--show-subject] [-w | --show-worktrees] [--hide-dormant]
 
 DESCRIPTION
 -----------
@@ -46,6 +46,10 @@ OPTIONS
 
 --show-subject::
   Show the commit subject.
+
+-w::
+--show-worktrees::
+  Show the worktree of each branch that is checked out.
 
 --hide-dormant::
   Hides dormant branches.

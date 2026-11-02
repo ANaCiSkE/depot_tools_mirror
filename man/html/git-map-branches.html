@@ -757,7 +757,7 @@ git-map-branches(1) Manual Page
 <div class="sectionbody">
 <div class="verseblock">
 <pre class="content"><em>git map-branches</em> [-v&#8230;] [--no-color] [-j &lt;maxjobs&gt; | --maxjobs &lt;maxjobs&gt;]
-                 [--show-subject] [--hide-dormant]</pre>
+                 [--show-subject] [-w | --show-worktrees] [--hide-dormant]</pre>
 <div class="attribution">
 </div></div>
 </div>
@@ -858,6 +858,17 @@ Branches which have this as their parent are usually misconfigured, and
 <dd>
 <p>
   Show the commit subject.
+</p>
+</dd>
+<dt class="hdlist1">
+-w
+</dt>
+<dt class="hdlist1">
+--show-worktrees
+</dt>
+<dd>
+<p>
+  Show the worktree of each branch that is checked out.
 </p>
 </dd>
 <dt class="hdlist1">

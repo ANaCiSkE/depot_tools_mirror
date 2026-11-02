@@ -33,7 +33,7 @@ git-map-branches \- Helper script to display all local git branches with \(oqups
 .sp
 .nf
 \fIgit map\-branches\fR [\-v\&...] [\-\-no\-color] [\-j <maxjobs> | \-\-maxjobs <maxjobs>]
-                 [\-\-show\-subject] [\-\-hide\-dormant]
+                 [\-\-show\-subject] [\-w | \-\-show\-worktrees] [\-\-hide\-dormant]
 .fi
 .sp
 .SH "DESCRIPTION"
@@ -160,6 +160,11 @@ The number of jobs to use when retrieving review status\&.
 \-\-show\-subject
 .RS 4
 Show the commit subject\&.
+.RE
+.PP
+\-w, \-\-show\-worktrees
+.RS 4
+Show the worktree of each branch that is checked out\&.
 .RE
 .PP
 \-\-hide\-dormant

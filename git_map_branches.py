@@ -133,6 +133,7 @@ class BranchMapper(object):
         self.verbosity = 0
         self.maxjobs = 0
         self.show_subject = False
+        self.show_worktrees = False
         self.hide_dormant = False
         self.output = OutputManager()
         self.__gone_branches = set()
@@ -143,9 +144,12 @@ class BranchMapper(object):
         self.__tag_set = None
         self.__root = None
         self.__status_info = {}
+        self.__worktree_map = collections.defaultdict(list)
 
     def start(self):
         self.__root = git_common.root()
+        if self.show_worktrees:
+            self.__worktree_map = self.__get_worktree_map()
         self.__branches_info = get_branches_info(
             include_tracking_status=self.verbosity >= 1,
             include_subject=self.show_subject or self.verbosity >= 3,
@@ -253,6 +257,34 @@ class BranchMapper(object):
 
         return get_config(f"branch.{branch}.dormant") == "true"
 
+    def __get_worktree_map(self):
+        """Returns a mapping of branch names to a list of worktree paths.
+
+        In normal usage, each branch belongs to at most one worktree.
+        However, using `--force` or due to stale unpruned worktrees, it may be possible
+        for the user to have two worktrees mapped to the same branch.
+        """
+        worktree_map = collections.defaultdict(list)
+        try:
+            output = run("worktree", "list", "--porcelain")
+        except (subprocess2.CalledProcessError, FileNotFoundError):
+            return worktree_map
+
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", "replace")
+
+        current_worktree = None
+        for line in output.splitlines():
+            if not line:
+                current_worktree = None
+            elif line.startswith("worktree "):
+                current_worktree = line[len("worktree ") :]
+            elif line.startswith("branch refs/heads/"):
+                branch = line[len("branch refs/heads/") :]
+                if current_worktree:
+                    worktree_map[branch].append(current_worktree)
+        return worktree_map
+
     def __append_branch(self, branch, output, depth=0):
         """Recurses through the tree structure and appends an OutputLine to the
         OutputManager for each branch."""
@@ -355,6 +387,14 @@ class BranchMapper(object):
             else:
                 line.append(url or "", color=color)
 
+        # The worktree of branches that are checked out in a worktree.
+        if self.show_worktrees:
+            worktree_str = ""
+            if branch in self.__worktree_map:
+                worktrees = self.__worktree_map[branch]
+                worktree_str = " ".join(f"({wt})" for wt in worktrees)
+            line.append(worktree_str, color=Fore.CYAN)
+
         # The subject of the most recent commit on the branch.
         if self.show_subject:
             if not self.__is_invalid_parent(branch):
@@ -437,6 +477,13 @@ def main(argv):
         dest="hide_dormant",
         help="Hides dormant branches.",
     )
+    parser.add_argument(
+        "-w",
+        "--show-worktrees",
+        action="store_true",
+        dest="show_worktrees",
+        help="Show the worktree of each branch that is checked out.",
+    )
 
     opts = parser.parse_args(argv)
 
@@ -445,6 +492,7 @@ def main(argv):
     mapper.output.nocolor = opts.nocolor
     mapper.maxjobs = opts.maxjobs
     mapper.show_subject = opts.show_subject
+    mapper.show_worktrees = opts.show_worktrees
     mapper.hide_dormant = opts.hide_dormant
     mapper.start()
     print(mapper.output.as_formatted_string())
