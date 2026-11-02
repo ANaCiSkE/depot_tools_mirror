@@ -6,6 +6,7 @@
 
 import io
 import os
+import stat
 import sys
 import unittest
 from unittest import mock
@@ -361,6 +362,64 @@ class GClientUtilsTest(trial_dir.TestCase):
         os.chmod(l2, 0)
         os.chmod(l1, 0)
 
+    def testRmtreeWithoutCmdExe(self) -> None:
+        # On Windows, a tree whose path cmd.exe would interpret is removed in
+        # Python, including read-only files such as git objects.
+        tree = os.path.join(self.root_dir, "a&b%c^d")
+        readonly = os.path.join(tree, "sub", "readonly")
+        os.makedirs(os.path.dirname(readonly))
+        gclient_utils.FileWrite(readonly, "foo")
+        os.chmod(readonly, stat.S_IREAD)
+        with (
+            mock.patch("sys.platform", "win32"),
+            mock.patch("gclient_utils.subprocess.call") as mock_call,
+        ):
+            gclient_utils.rmtree(tree)
+        mock_call.assert_not_called()
+        self.assertFalse(os.path.exists(tree))
+
+    @unittest.skipUnless(sys.platform == "win32", "needs cmd.exe")
+    def testRmtreeWithRdOnWindows(self) -> None:
+        # Names that `rd` must still receive intact through the real cmd.exe.
+        for name in ("with space", "parens (x86)", "bang!"):
+            with self.subTest(name=name):
+                tree = os.path.join(self.root_dir, name)
+                os.makedirs(os.path.join(tree, "sub"))
+                gclient_utils.FileWrite(os.path.join(tree, "sub", "f"), "foo")
+                gclient_utils.rmtree(tree)
+                self.assertFalse(os.path.exists(tree))
+
+    @unittest.skipIf(sys.platform == "win32", "needs POSIX file names")
+    def testRmtreePosixDoesNotUseCmdExeOrShutil(self) -> None:
+        for name in (
+            "ordinary",
+            *[
+                f"a{c}b"
+                for c in sorted(subprocess2.CMD_EXE_METACHARACTERS)
+                if c not in "\r\n"
+            ],
+        ):
+            with self.subTest(name=name):
+                tree = os.path.join(self.root_dir, name)
+                leaf = os.path.join(tree, "sub")
+                nested = os.path.join(leaf, "file")
+                os.makedirs(leaf)
+                gclient_utils.FileWrite(nested, "foo")
+                os.chmod(nested, 0)
+                os.chmod(leaf, 0)
+                os.chmod(tree, 0)
+                with (
+                    mock.patch("sys.platform", "linux"),
+                    mock.patch("gclient_utils.subprocess.call") as mock_call,
+                    mock.patch(
+                        "gclient_utils.shutil.rmtree"
+                    ) as mock_shutil_rmtree,
+                ):
+                    gclient_utils.rmtree(tree)
+                self.assertFalse(os.path.exists(tree))
+                mock_call.assert_not_called()
+                mock_shutil_rmtree.assert_not_called()
+
     def testUpgradeToHttps(self):
         values = [
             ["", ""],
@@ -477,6 +536,176 @@ class GClientUtilsTest(trial_dir.TestCase):
             ),
             ["AI_AGENT"],
         )
+
+
+class RmtreeWin32Test(unittest.TestCase):
+    """Tests the Windows branch of rmtree() with sys.platform patched."""
+
+    CMD_EXE = r"C:\Windows\System32\cmd.exe"
+
+    def setUp(self) -> None:
+        self.addCleanup(mock.patch.stopall)
+        mock.patch("sys.platform", "win32").start()
+        mock.patch.dict(os.environ, {"COMSPEC": self.CMD_EXE}).start()
+        self.mock_sleep = mock.patch("time.sleep").start()
+        self.mock_call = mock.patch(
+            "gclient_utils.subprocess.call", return_value=0
+        ).start()
+        self.mock_shutil_rmtree = mock.patch(
+            "gclient_utils.shutil.rmtree"
+        ).start()
+        # Make every path look like an existing directory.
+        mock.patch("os.path.exists", return_value=True).start()
+        mock.patch("os.path.isdir", return_value=True).start()
+        mock.patch("os.path.islink", return_value=False).start()
+
+    def _rd_cmd(self, path: str, cmd_exe: str = CMD_EXE) -> list[str]:
+        return [cmd_exe, "/d", "/v:off", "/c", "rd", "/q", "/s", path]
+
+    def testOrdinaryPathsUseRd(self) -> None:
+        # Spaces, parentheses and `!` (with delayed expansion off) are not
+        # special on a plain cmd.exe command line, so such paths must keep
+        # going through `rd`.
+        for path, expected in (
+            # The case is kept, and only `/` is converted.
+            (r"C:\src\third_party\Foo", r"C:\src\third_party\Foo"),
+            (r"C:\Program Files (x86)\Foo", r"C:\Program Files (x86)\Foo"),
+            (r"C:\src\some dir\wow!", r"C:\src\some dir\wow!"),
+            ("relative/dep", r"relative\dep"),
+        ):
+            with self.subTest(path=path):
+                self.mock_call.reset_mock()
+                gclient_utils.rmtree(path)
+                self.mock_call.assert_called_once_with(self._rd_cmd(expected))
+        self.mock_shutil_rmtree.assert_not_called()
+
+    def testCmdExePath(self) -> None:
+        for env, expected in (
+            (
+                {"COMSPEC": r"D:\Win\System32\cmd.exe"},
+                r"D:\Win\System32\cmd.exe",
+            ),
+            # A missing, empty, relative or drive-relative COMSPEC is not used,
+            # so that a cmd.exe in the current directory is never run.
+            ({"SYSTEMROOT": r"D:\Win"}, r"D:\Win\System32\cmd.exe"),
+            (
+                {"COMSPEC": "", "SYSTEMROOT": r"D:\Win"},
+                r"D:\Win\System32\cmd.exe",
+            ),
+            ({"COMSPEC": "cmd.exe"}, r"C:\Windows\System32\cmd.exe"),
+            ({"COMSPEC": r"\cmd.exe"}, r"C:\Windows\System32\cmd.exe"),
+            ({"SYSTEMROOT": "win"}, r"C:\Windows\System32\cmd.exe"),
+            ({"COMSPEC": "D:cmd.exe"}, r"C:\Windows\System32\cmd.exe"),
+            (
+                {"COMSPEC": r"\\server\share\cmd.exe"},
+                r"\\server\share\cmd.exe",
+            ),
+        ):
+            with (
+                self.subTest(env=env),
+                mock.patch.dict(os.environ, env, clear=True),
+            ):
+                self.mock_call.reset_mock()
+                gclient_utils.rmtree(r"C:\src\foo")
+                self.mock_call.assert_called_once_with(
+                    self._rd_cmd(r"C:\src\foo", expected)
+                )
+
+    def testRdIsRetriedBeforeGivingUp(self) -> None:
+        self.mock_call.return_value = 1
+        stderr = io.StringIO()
+        with mock.patch("sys.stderr", stderr):
+            with self.assertRaisesRegex(Exception, "Failed to remove path"):
+                gclient_utils.rmtree(r"C:\src\foo")
+        self.assertEqual(3, self.mock_call.call_count)
+        self.assertEqual(3, self.mock_sleep.call_count)
+        self.assertIn("rd exited with code 1", stderr.getvalue())
+
+    def testPathsRdWouldNotGetIntactNeverReachCmdExe(self) -> None:
+        # cmd.exe metacharacters, `rd` argument separators, and any control or
+        # non-ASCII character, e.g. the ideographic space U+3000 or U+212A,
+        # which lowercases to `k`.
+        for char in '&|<>^%",;=\r\n\t\x0b\x0c\xa0\xff\u3000\u00e9\u212a':
+            path = rf"C:\src\dep{char}x"
+            with self.subTest(char=char):
+                self.mock_shutil_rmtree.reset_mock()
+                gclient_utils.rmtree(path)
+                self.mock_shutil_rmtree.assert_called_once_with(
+                    path, onerror=gclient_utils._clear_readonly_and_retry
+                )
+        # Byte paths are decoded first.
+        self.mock_shutil_rmtree.reset_mock()
+        gclient_utils.rmtree(b"C:\\src\\dep&x")
+        self.mock_shutil_rmtree.assert_called_once_with(
+            r"C:\src\dep&x", onerror=gclient_utils._clear_readonly_and_retry
+        )
+        self.mock_call.assert_not_called()
+
+    def testPythonRemovalIsRetriedBeforeGivingUp(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch("sys.stderr", stderr):
+            self.mock_shutil_rmtree.side_effect = [
+                PermissionError("busy"),
+                None,
+            ]
+            gclient_utils.rmtree(r"C:\src\a&b")
+            self.assertEqual(2, self.mock_shutil_rmtree.call_count)
+            self.assertEqual(1, self.mock_sleep.call_count)
+
+            self.mock_shutil_rmtree.reset_mock()
+            self.mock_shutil_rmtree.side_effect = PermissionError("busy")
+            self.mock_sleep.reset_mock()
+            with self.assertRaisesRegex(Exception, "Failed to remove path"):
+                gclient_utils.rmtree(r"C:\src\a&b")
+            self.assertEqual(3, self.mock_shutil_rmtree.call_count)
+            self.assertEqual(3, self.mock_sleep.call_count)
+        self.assertIn("busy", stderr.getvalue())
+        self.mock_call.assert_not_called()
+
+    def testClearReadonlyAndRetry(self) -> None:
+        subpath = r"C:\src\a&b\.git\objects\pack\readonly.pack"
+        error = PermissionError("read-only")
+        exc_info = (PermissionError, error, None)
+        with mock.patch("os.chmod") as mock_chmod:
+            # Removals are retried after clearing the read-only attribute.
+            for func in (os.unlink, os.remove, os.rmdir):
+                with (
+                    self.subTest(func=func.__name__),
+                    mock.patch.object(os, func.__name__) as mock_func,
+                ):
+                    mock_chmod.reset_mock()
+                    gclient_utils._clear_readonly_and_retry(
+                        mock_func, subpath, exc_info
+                    )
+                    mock_chmod.assert_called_once_with(subpath, stat.S_IWRITE)
+                    mock_func.assert_called_once_with(subpath)
+            # An entry that is already gone is fine, whatever noticed it.
+            gone = (FileNotFoundError, FileNotFoundError("gone"), None)
+            for name in ("unlink", "rmdir", "lstat", "scandir"):
+                with (
+                    self.subTest(gone=name),
+                    mock.patch.object(os, name) as mock_func,
+                ):
+                    mock_chmod.reset_mock()
+                    gclient_utils._clear_readonly_and_retry(
+                        mock_func, subpath, gone
+                    )
+                    mock_chmod.assert_not_called()
+                    mock_func.assert_not_called()
+            # Other errors, e.g. a junction or an unreadable directory, are
+            # re-raised.
+            mock_chmod.reset_mock()
+            for name, func in (
+                ("islink", os.path.islink),
+                ("scandir", os.scandir),
+                ("lstat", os.lstat),
+            ):
+                with self.subTest(func=name):
+                    with self.assertRaises(PermissionError):
+                        gclient_utils._clear_readonly_and_retry(
+                            func, subpath, exc_info
+                        )
+            mock_chmod.assert_not_called()
 
 
 class IsGitShaTest(unittest.TestCase):

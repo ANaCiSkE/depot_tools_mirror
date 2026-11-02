@@ -11,6 +11,7 @@ import errno
 import functools
 import io
 import logging
+import ntpath
 import operator
 import os
 import platform
@@ -25,6 +26,7 @@ import tempfile
 import threading
 import time
 import urllib.parse
+from collections.abc import Callable
 
 import gclient_eval
 import subprocess2
@@ -294,6 +296,60 @@ def rm_file_or_tree(path):
         rmtree(path)
 
 
+# Characters that keep a path from reaching cmd.exe's built-in `rd` as one
+# literal argument: cmd.exe interprets
+# `subprocess2.CMD_EXE_METACHARACTERS` (`%` and `"` even inside quotes), and
+# splits the unquoted arguments of built-in commands at `,`, `;` and `=`.
+_RD_UNSAFE_CHARS = subprocess2.CMD_EXE_METACHARACTERS | frozenset(",;=")
+
+
+def _is_safe_for_rd(path: str) -> bool:
+    """Returns whether `rd /q /s` receives `path` intact through cmd.exe.
+
+    Besides `_RD_UNSAFE_CHARS`, cmd.exe also splits arguments at whitespace
+    other than the spaces and tabs that subprocess quotes, including non-ASCII
+    whitespace, so only printable ASCII paths are given to cmd.exe.
+    """
+    return (
+        path.isascii()
+        and path.isprintable()
+        and _RD_UNSAFE_CHARS.isdisjoint(path)
+    )
+
+
+def _cmd_exe_path() -> str:
+    """Returns the absolute path of cmd.exe, like subprocess for shell=True."""
+    for path in (
+        os.environ.get("COMSPEC", ""),
+        ntpath.join(os.environ.get("SYSTEMROOT", ""), "System32", "cmd.exe"),
+    ):
+        # Require a drive or UNC share, so that the current directory or drive
+        # never matters.
+        if ntpath.splitdrive(path)[0] and ntpath.isabs(path):
+            return path
+    return r"C:\Windows\System32\cmd.exe"
+
+
+def _clear_readonly_and_retry(
+    func: Callable[[str], object],
+    subpath: str,
+    exc_info: tuple[type[BaseException], BaseException, object],
+) -> None:
+    """A shutil.rmtree() `onerror` handler for read-only entries on Windows.
+
+    Unlike `rd /q /s`, shutil.rmtree() cannot delete read-only files and
+    directories, so clear the read-only attribute and retry the removal. Other
+    errors (e.g. from listing a directory) are re-raised.
+    """
+    if isinstance(exc_info[1], FileNotFoundError):
+        # Already gone, e.g. removed by another process or a previous attempt.
+        return
+    if func not in (os.remove, os.rmdir, os.unlink):
+        raise exc_info[1]
+    os.chmod(subpath, stat.S_IWRITE)
+    func(subpath)
+
+
 def rmtree(path):
     """shutil.rmtree() on steroids.
 
@@ -326,18 +382,33 @@ def rmtree(path):
         raise Error("Called rmtree(%s) in non-directory" % path)
 
     if sys.platform == "win32":
-        # Give up and use cmd.exe's rd command.
-        path = os.path.normcase(path)
+        path = os.fsdecode(path)
+        # Use cmd.exe's rd command, unless the path contains a character that
+        # would make cmd.exe run or remove something else (e.g. a dependency
+        # name with `&`, `%` or `,`). Remove such trees in Python instead.
+        # `onerror` is used rather than `onexc`, which needs Python 3.12.
+        # `rd` would parse `/` as a switch, so convert it, but don't use
+        # os.path.normcase(): lowercasing could make the path name a different
+        # directory (e.g. U+212A KELVIN SIGN becomes `k`).
+        rd_path = path.replace("/", "\\")
+        use_rd = _is_safe_for_rd(rd_path)
+        # Skip AutoRun commands (/d) and delayed expansion of `!` (/v:off).
+        cmd = [_cmd_exe_path(), "/d", "/v:off", "/c", "rd", "/q", "/s"]
+        cmd.append(rd_path)
         for _ in range(3):
-            exitcode = subprocess.call(
-                ["cmd.exe", "/c", "rd", "/q", "/s", path]
-            )
-            if exitcode == 0:
-                return
-
-            print("rd exited with code %d" % exitcode, file=sys.stderr)
+            if use_rd:
+                exitcode = subprocess.call(cmd)
+                if exitcode == 0:
+                    return
+                print(f"rd exited with code {exitcode}", file=sys.stderr)
+            else:
+                try:
+                    shutil.rmtree(path, onerror=_clear_readonly_and_retry)
+                    return
+                except OSError as e:
+                    print(f"Failed to remove {path}: {e}", file=sys.stderr)
             time.sleep(3)
-        raise Exception("Failed to remove path %s" % path)
+        raise Exception(f"Failed to remove path {path}")
 
     # On POSIX systems, we need the x-bit set on the directory to access it,
     # the r-bit to see its contents, and the w-bit to remove files from it.
