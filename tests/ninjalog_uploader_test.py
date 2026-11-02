@@ -343,6 +343,48 @@ class NinjalogUploaderTest(unittest.TestCase):
 
         self.assertEqual(metadata["edit_monitor_state"], "disabled_opt_out")
 
+    @unittest.mock.patch("platform.system", return_value="Windows")
+    @unittest.mock.patch("ninjalog_uploader.GetGCEMetadata", return_value={})
+    @unittest.mock.patch("ninjalog_uploader.ParseGNArgs", return_value=({}, []))
+    @unittest.mock.patch("subprocess.check_output", return_value=b"[]")
+    def test_get_metadata_gn_invocation_win32(
+        self,
+        mock_check_output,
+        _mock_parse_gn_args,
+        _mock_get_gce_metadata,
+        _mock_platform_system,
+    ):
+        build_dir = os.path.join("out", "Release")
+        with (
+            unittest.mock.patch.object(sys, "platform", "win32"),
+            unittest.mock.patch.dict(os.environ, {}, clear=True),
+        ):
+            ninjalog_uploader.GetMetadata(
+                cmdline=["python3", "ninja.py", "chrome"],
+                ninjalog=os.path.join(build_dir, ".ninja_log"),
+                exit_code=0,
+                build_duration=123,
+                user="user@example.com",
+                edit_monitor_state="",
+            )
+        mock_check_output.assert_called_once()
+        called_args = mock_check_output.call_args[0][0]
+        called_kwargs = mock_check_output.call_args[1]
+        self.assertEqual(
+            called_args,
+            [
+                sys.executable,
+                ninjalog_uploader._GN_PY_PATH,
+                "args",
+                build_dir,
+                "--list",
+                "--json",
+            ],
+        )
+        self.assertEqual(
+            called_kwargs["env"].get("NoDefaultCurrentDirectoryInExePath"), "1"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

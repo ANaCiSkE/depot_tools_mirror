@@ -38,6 +38,9 @@ import build_telemetry
 import gclient_utils
 import ninja
 
+_ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+_GN_PY_PATH = os.path.join(_ROOT_DIR, "gn.py")
+
 # Configs that should not be uploaded as is.
 SENSITIVE_CONFIGS = (
     "google_api_key",
@@ -152,12 +155,18 @@ def GetMetadata(
     explicit_keys = []
 
     try:
-        args = ["gn", "args", build_dir, "--list", "--json"]
-        if sys.platform == "win32":
-            # gn in PATH is bat file in windows environment (except cygwin).
-            args = ["cmd", "/c"] + args
-
-        gn_args = subprocess.check_output(args)
+        args = [
+            sys.executable,
+            _GN_PY_PATH,
+            "args",
+            build_dir,
+            "--list",
+            "--json",
+        ]
+        env = os.environ.copy()
+        if sys.platform.startswith(("cygwin", "win")):
+            env.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
+        gn_args = subprocess.check_output(args, env=env)
         build_configs, explicit_keys = ParseGNArgs(gn_args)
     except subprocess.CalledProcessError as e:
         logging.error("Failed to call gn %s", e)

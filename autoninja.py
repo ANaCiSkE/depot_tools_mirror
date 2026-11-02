@@ -625,6 +625,8 @@ def _upload_sisolog(input_args: list[str], build_id: str) -> None:
 
 def main(args):
     start = time.time()
+    if sys.platform.startswith(("cygwin", "win")):
+        os.environ.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
     # Generate Build ID randomly.
     # This ID is expected to be used consistently in all build tools.
     build_id = os.environ.get("AUTONINJA_BUILD_ID")

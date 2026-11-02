@@ -23,23 +23,34 @@ class BuildTelemetryTest(unittest.TestCase):
             auth = {"email": "bob@google.com"}
 
             def write_auth(cmd, **kwargs):
-                path = cmd.split("--json-output ")[1].strip('"')
+                self.assertIsInstance(cmd, list)
+                self.assertEqual(cmd[0], build_telemetry._cipd_path())
+                self.assertNotIn("shell", kwargs)
+                path = cmd[cmd.index("--json-output") + 1]
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(auth, f)
 
             run_mock.side_effect = write_auth
             self.assertEqual(build_telemetry.check_auth(), auth)
 
-        with unittest.mock.patch("subprocess.run") as run_mock:
+        with (
+            unittest.mock.patch.object(sys, "platform", "win32"),
+            unittest.mock.patch("subprocess.run") as run_mock,
+        ):
             run_mock.side_effect = subprocess.CalledProcessError(
                 1, cmd=["check auth"], stderr="failed"
             )
             self.assertEqual(build_telemetry.check_auth(), {})
+            called_cmd = run_mock.call_args[0][0]
+            self.assertEqual(
+                called_cmd[0],
+                os.path.join(build_telemetry._ROOT_DIR, "cipd.bat"),
+            )
 
         with unittest.mock.patch("subprocess.run") as run_mock:
 
             def write_invalid(cmd, **kwargs):
-                path = cmd.split("--json-output ")[1].strip('"')
+                path = cmd[cmd.index("--json-output") + 1]
                 with open(path, "w", encoding="utf-8") as f:
                     f.write("invalid json")
 

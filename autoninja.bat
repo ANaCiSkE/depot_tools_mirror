@@ -4,6 +4,7 @@
 :: found in the LICENSE file.
 
 setlocal
+set "NoDefaultCurrentDirectoryInExePath=1"
 
 set scriptdir=%~dp0
 
