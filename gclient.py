@@ -3153,24 +3153,24 @@ class GcsDependency(Dependency):
 
     @property
     def gcs_file_name(self):
-        return self.object_name.replace("/", "_")
+        return self.object_name.replace("/", "_").replace("\\", "_")
 
     @property
     def artifact_output_file(self):
-        if self.output_file:
-            clean_output = self.output_file.replace("\\", "/")
-            norm_output = posixpath.normpath(clean_output)
-            if (
-                self._is_abs_or_drive(clean_output)
-                or norm_output in (".", "..")
-                or norm_output.startswith("../")
-                or clean_output.endswith("/")
-                or ".." in set(clean_output.split("/"))
-            ):
-                raise Exception(f"Invalid output_file path: {self.output_file}")
-        return os.path.join(
-            self.output_dir, self.output_file or f".{self.gcs_file_name}"
+        output_file = (
+            self.output_file
+            if self.output_file is not None
+            else f".{self.gcs_file_name}"
         )
+        clean_output = output_file.replace("\\", "/")
+        parts = clean_output.split("/")
+        if (
+            self._is_abs_or_drive(clean_output)
+            or not parts[-1].rstrip(". ")
+            or any(p not in ("", ".") and not p.rstrip(". ") for p in parts)
+        ):
+            raise Exception(f"Invalid output_file path: {output_file}")
+        return os.path.join(self.output_dir, output_file)
 
     @property
     def hash_file(self):

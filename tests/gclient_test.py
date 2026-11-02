@@ -2745,6 +2745,77 @@ class GcsDependencyTest(trial_dir.TestCase):
         self.assertTrue(os.path.isdir(self.dep.output_dir))
         self.assertFalse(os.path.exists(content_file))
 
+    def test_default_artifact_name_normalizes_backslashes(self):
+        import ntpath
+
+        dep = gclient.GcsDependency(
+            parent=self.parent_mock,
+            name="test_dep",
+            bucket="fake_bucket",
+            object_name=r"a\..\..\..\..\..\outside\evil.bat",
+            sha256sum="fake",
+            output_file=None,
+            size_bytes=100,
+            gcs_root=self.gcs_root_mock,
+            custom_vars={},
+            should_process=True,
+            relative=False,
+            condition=None,
+        )
+        self.assertEqual(dep.gcs_file_name, "a_.._.._.._.._.._outside_evil.bat")
+        for path in (
+            dep.artifact_output_file,
+            dep.hash_file,
+            dep.migration_toggle_file,
+        ):
+            self.assertNotIn("\\", os.path.basename(path))
+            self.assertEqual(os.path.dirname(path), dep.output_dir)
+            win_out = r"C:\b\s\w\ir\cache\builder\src\test_dep"
+            win_path = ntpath.normpath(
+                ntpath.join(win_out, os.path.basename(path))
+            )
+            self.assertEqual(ntpath.dirname(win_path), win_out)
+
+    def test_artifact_output_file_rejects_degenerate_default_and_empty_names(
+        self,
+    ):
+        for bad_object_name in ("", ".", ". ", ".."):
+            dep = gclient.GcsDependency(
+                parent=self.parent_mock,
+                name="test_dep",
+                bucket="fake_bucket",
+                object_name=bad_object_name,
+                sha256sum="fake",
+                output_file=None,
+                size_bytes=100,
+                gcs_root=self.gcs_root_mock,
+                custom_vars={},
+                should_process=True,
+                relative=False,
+                condition=None,
+            )
+            with self.assertRaises(Exception) as ctx:
+                _ = dep.artifact_output_file
+            self.assertIn("Invalid output_file path", str(ctx.exception))
+
+        empty_output_dep = gclient.GcsDependency(
+            parent=self.parent_mock,
+            name="test_dep",
+            bucket="fake_bucket",
+            object_name="payload.tar.gz",
+            sha256sum="fake",
+            output_file="",
+            size_bytes=100,
+            gcs_root=self.gcs_root_mock,
+            custom_vars={},
+            should_process=True,
+            relative=False,
+            condition=None,
+        )
+        with self.assertRaises(Exception) as ctx:
+            _ = empty_output_dep.artifact_output_file
+        self.assertIn("Invalid output_file path", str(ctx.exception))
+
 
 class TrailingSlashSolutionNameTest(trial_dir.TestCase):
     def setUp(self) -> None:
