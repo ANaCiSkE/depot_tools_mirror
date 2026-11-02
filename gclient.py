@@ -91,8 +91,9 @@ import platform
 import posixpath
 import pprint
 import re
-import sys
 import shutil
+import stat
+import sys
 import tarfile
 import tempfile
 import time
@@ -938,6 +939,11 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                         )
                     )
                 deps_to_add.extend(gcs_deps)
+
+                if not gclient_utils.IsEnvCog() and any(
+                    gcs.should_process for gcs in gcs_deps
+                ):
+                    gcs_deps[0]._ValidateOutputDir()
 
                 if name in gcs_cleanup_blocklist_name:
                     continue
@@ -3177,6 +3183,12 @@ class GcsDependency(Dependency):
         return os.path.join(self.output_dir, f".{self.file_prefix}_hash")
 
     @property
+    def content_names_file(self):
+        return os.path.join(
+            self.output_dir, f".{self.file_prefix}_content_names"
+        )
+
+    @property
     def migration_toggle_file(self):
         return os.path.join(
             self.output_dir,
@@ -3228,6 +3240,8 @@ class GcsDependency(Dependency):
         )
 
     def WriteToFile(self, content, file):
+        if self._is_link_or_junction(file):
+            os.remove(file)
         with open(file, "w") as f:
             f.write(content)
             f.write("\n")
@@ -3239,6 +3253,15 @@ class GcsDependency(Dependency):
             return False
         if not self.should_process:
             return False
+        if any(
+            self._is_link_or_junction(f)
+            for f in (
+                self.artifact_output_file,
+                self.hash_file,
+                self.migration_toggle_file,
+            )
+        ):
+            return True
         if not os.path.exists(self.artifact_output_file):
             return True
 
@@ -3268,6 +3291,87 @@ class GcsDependency(Dependency):
             or bool(ntpath.splitdrive(path)[0])
             or path.startswith(("/", "\\"))
         )
+
+    @staticmethod
+    def _is_link_or_junction(path):
+        if os.path.islink(path):
+            return True
+        if hasattr(os.path, "isjunction") and os.path.isjunction(path):
+            return True
+        try:
+            reparse_tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+        except OSError:
+            return False
+        return reparse_tag != 0 and reparse_tag in (
+            getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0),
+            getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0),
+        )
+
+    @staticmethod
+    def _is_within_dir(path, parent_dir):
+        try:
+            norm_parent = os.path.normcase(os.path.normpath(parent_dir))
+            norm_path = os.path.normcase(os.path.normpath(path))
+            return (
+                norm_path != norm_parent
+                and os.path.commonpath([norm_parent, norm_path]) == norm_parent
+            )
+        except ValueError:
+            return False
+
+    def _ValidateOutputDir(self):
+        """Ensures output_dir is within root_dir without traversing symlinks."""
+        dep_dir = self.name.split(":", 1)[0]
+        clean_dir = dep_dir.replace("\\", "/")
+        raw_parts = clean_dir.split("/")
+        parts = [p for p in raw_parts if p and p != "."]
+        if not parts or self._is_abs_or_drive(clean_dir) or ".." in raw_parts:
+            raise gclient_utils.Error(f"Invalid GCS dependency path: {dep_dir}")
+        real_root = os.path.realpath(self.root.root_dir)
+        cur = real_root
+        for part in parts:
+            cur = os.path.join(cur, part)
+            if self._is_link_or_junction(cur):
+                raise gclient_utils.Error(
+                    f"Refusing to use symlinked GCS dependency path: {cur}"
+                )
+        real_cur = os.path.realpath(cur)
+        if not self._is_within_dir(real_cur, real_root):
+            raise gclient_utils.Error(
+                f"GCS dependency path resolves outside expected directory: "
+                f"{self.output_dir}"
+            )
+        return real_cur
+
+    def _ValidateTargetPaths(self, rel_paths, allow_internal_symlinks=False):
+        """Ensures existing paths under output_dir do not traverse unsafe symlinks."""
+        real_output_dir = self._ValidateOutputDir()
+        checked = set()
+        for rel_path in rel_paths:
+            clean = rel_path.replace("\\", "/")
+            parts = [p for p in clean.split("/") if p and p != "."]
+            cur = real_output_dir
+            for part in parts:
+                cur = os.path.join(cur, part)
+                if cur in checked:
+                    continue
+                if not os.path.lexists(cur):
+                    break
+                is_link = self._is_link_or_junction(cur)
+                if is_link and not allow_internal_symlinks:
+                    raise gclient_utils.Error(
+                        f"Refusing to write through symlink in GCS "
+                        f"output_dir: {cur}"
+                    )
+                real_cur = os.path.realpath(cur)
+                if not self._is_within_dir(real_cur, real_output_dir):
+                    raise gclient_utils.Error(
+                        f"Refusing to write outside GCS output_dir via "
+                        f"symlink: {cur}"
+                    )
+                if not is_link:
+                    checked.add(cur)
+        return real_output_dir
 
     def ValidateTarFile(self, tar, prefixes):
         members = tar.getmembers()
@@ -3335,17 +3439,29 @@ class GcsDependency(Dependency):
 
     def DownloadGoogleStorage(self):
         """Calls GCS."""
+        self._ValidateOutputDir()
 
         if not self.IsDownloadNeeded():
             return
+
+        _ = self.artifact_output_file
+        self._ValidateTargetPaths(
+            [
+                os.path.basename(self.hash_file),
+                self.output_file or f".{self.gcs_file_name}",
+                os.path.basename(self.migration_toggle_file),
+                os.path.basename(self.content_names_file),
+            ]
+        )
 
         files_to_remove = [
             self.hash_file,
             self.artifact_output_file,
             self.migration_toggle_file,
+            self.content_names_file,
         ]
         for f in files_to_remove:
-            if os.path.exists(f):
+            if os.path.lexists(f):
                 os.remove(f)
 
         # Ensure that the directory exists. Another process/thread may create
@@ -3429,6 +3545,7 @@ class GcsDependency(Dependency):
 
     def _MaybeExtractArtifact(self):
         """Extracts the artifact. Only tar and zip files supported atm."""
+        self._ValidateOutputDir()
         if tarfile.is_tarfile(self.artifact_output_file):
             with tarfile.open(self.artifact_output_file, "r:*") as tar:
                 formatted_names = []
@@ -3448,14 +3565,30 @@ class GcsDependency(Dependency):
                 if not is_valid_tar:
                     raise Exception("tarfile contains invalid entries")
 
-                tar_content_file = os.path.join(
-                    self.output_dir, f".{self.file_prefix}_content_names"
+                self._ValidateTargetPaths(
+                    [os.path.basename(self.content_names_file)]
                 )
-                self.WriteToFile(json.dumps(tar.getnames()), tar_content_file)
+                real_output_dir = self._ValidateTargetPaths(
+                    formatted_names, allow_internal_symlinks=True
+                )
+                self.WriteToFile(
+                    json.dumps(tar.getnames()), self.content_names_file
+                )
 
                 def TarFilter(member, path):
                     if hasattr(tarfile, "data_filter"):
                         member = tarfile.data_filter(member, path)
+                    else:
+                        target = os.path.realpath(
+                            os.path.join(real_output_dir, member.name)
+                        )
+                        if os.path.normcase(target) != os.path.normcase(
+                            real_output_dir
+                        ) and not self._is_within_dir(target, real_output_dir):
+                            raise gclient_utils.Error(
+                                f"Refusing to write outside GCS output_dir: "
+                                f"{target}"
+                            )
                     # Don't set mtime based on archive metadata
                     if member:
                         member.mtime = None
@@ -3474,10 +3607,15 @@ class GcsDependency(Dependency):
                     ):
                         raise Exception("zipfile contains invalid entries")
 
-                content_file = os.path.join(
-                    self.output_dir, f".{self.file_prefix}_content_names"
+                self._ValidateTargetPaths(
+                    [
+                        os.path.basename(self.content_names_file),
+                        *zip_file.namelist(),
+                    ]
                 )
-                self.WriteToFile(json.dumps(zip_file.namelist()), content_file)
+                self.WriteToFile(
+                    json.dumps(zip_file.namelist()), self.content_names_file
+                )
 
                 zip_file.extractall(path=self.output_dir)
 

@@ -2816,6 +2816,178 @@ class GcsDependencyTest(trial_dir.TestCase):
             _ = empty_output_dep.artifact_output_file
         self.assertIn("Invalid output_file path", str(ctx.exception))
 
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_maybe_extract_artifact_rejects_tar_through_existing_symlink(self):
+        outside_dir = os.path.join(self.root_dir, "outside")
+        os.makedirs(outside_dir)
+        os.symlink(
+            outside_dir, os.path.join(self.dep.output_dir, "extracted_dir")
+        )
+        tar_path = self._create_tar(
+            [{"name": "extracted_dir/file.txt", "data": b"escaped"}]
+        )
+        shutil.copy(tar_path, self.dep.artifact_output_file)
+
+        with self.assertRaises(gclient_utils.Error):
+            self.dep._MaybeExtractArtifact()
+        self.assertFalse(os.path.exists(os.path.join(outside_dir, "file.txt")))
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_maybe_extract_artifact_allows_sysroot_reextraction(self):
+        tar_path = self._create_tar(
+            [
+                {"name": ".", "type": tarfile.DIRTYPE},
+                {"name": "./usr/lib/libc.so", "data": b"libc"},
+                {"name": "./usr/lib/libc.so.6", "linkname": "libc.so"},
+                {"name": "./usr/lib64", "linkname": "lib"},
+            ]
+        )
+        shutil.copy(tar_path, self.dep.artifact_output_file)
+        self.dep._MaybeExtractArtifact()
+        # Re-extracting without wiping output_dir (as in blocklisted dirs)
+        # must succeed when internal symlinks stay within output_dir.
+        self.dep._MaybeExtractArtifact()
+        self.assertTrue(
+            os.path.islink(os.path.join(self.dep.output_dir, "usr", "lib64"))
+        )
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_maybe_extract_artifact_rejects_zip_through_existing_symlink(self):
+        import zipfile
+
+        outside_dir = os.path.join(self.root_dir, "outside")
+        os.makedirs(outside_dir)
+        os.symlink(
+            outside_dir, os.path.join(self.dep.output_dir, "extracted_dir")
+        )
+        zip_path = os.path.join(self.root_dir, "clean.zip")
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("extracted_dir/file.txt", b"escaped")
+        shutil.copy(zip_path, self.dep.artifact_output_file)
+
+        with self.assertRaises(gclient_utils.Error):
+            self.dep._MaybeExtractArtifact()
+        self.assertFalse(os.path.exists(os.path.join(outside_dir, "file.txt")))
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_download_rejects_symlinked_output_dir_and_ancestor(self):
+        outside_dir = os.path.join(self.root_dir, "outside")
+        victim_file = os.path.join(outside_dir, "sub", "keep.txt")
+        os.makedirs(os.path.dirname(victim_file))
+        write(victim_file, "keep")
+
+        shutil.rmtree(self.dep.output_dir)
+        os.symlink(outside_dir, self.dep.output_dir)
+        with self.assertRaises(gclient_utils.Error):
+            self.dep.DownloadGoogleStorage()
+
+        # Also verify _deps_to_objects rejects an ancestor symlink before
+        # rmtree can delete outside_dir/sub.
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(self.root_dir, options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=True,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        os.makedirs(os.path.join(self.root_dir, "src"), exist_ok=True)
+        os.symlink(outside_dir, os.path.join(self.root_dir, "src", "evil"))
+        deps = {
+            "src/evil/sub": {
+                "dep_type": "gcs",
+                "bucket": "b",
+                "objects": [
+                    {
+                        "object_name": "obj.tar.gz",
+                        "sha256sum": "deadbeef",
+                        "size_bytes": 10,
+                    }
+                ],
+            }
+        }
+        with self.assertRaises(gclient_utils.Error):
+            sol._deps_to_objects(deps, use_relative_paths=False)
+        self.assertTrue(os.path.exists(victim_file))
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_download_rejects_output_file_and_dotfile_symlinks(self):
+        outside_dir = os.path.join(self.root_dir, "outside")
+        os.makedirs(outside_dir)
+        victim_file = os.path.join(outside_dir, "victim.bin")
+        write(victim_file, "do not delete or overwrite")
+
+        os.symlink(outside_dir, os.path.join(self.dep.output_dir, "sub"))
+        dep = gclient.GcsDependency(
+            parent=self.parent_mock,
+            name="test_dep",
+            bucket="fake_bucket",
+            object_name="payload.bin",
+            sha256sum="fake",
+            output_file="sub/victim.bin",
+            size_bytes=10,
+            gcs_root=self.gcs_root_mock,
+            custom_vars={},
+            should_process=True,
+            relative=False,
+            condition=None,
+        )
+        with self.assertRaises(gclient_utils.Error):
+            dep.DownloadGoogleStorage()
+        with open(victim_file, "r") as f:
+            self.assertEqual(f.read(), "do not delete or overwrite")
+
+        os.symlink(
+            os.path.join(outside_dir, "new_hash"),
+            self.dep.hash_file,
+        )
+        with self.assertRaises(gclient_utils.Error):
+            self.dep.DownloadGoogleStorage()
+        self.assertFalse(os.path.exists(os.path.join(outside_dir, "new_hash")))
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def test_clobber_ignores_symlinked_subdir_and_entry_dir(self):
+        outside_dir = os.path.join(self.root_dir, "outside")
+        os.makedirs(outside_dir)
+        victim_file = os.path.join(outside_dir, "victim.txt")
+        victim_hash = os.path.join(outside_dir, ".foo_hash")
+        write(victim_file, "keep")
+        write(victim_hash, "keep")
+
+        os.symlink(outside_dir, os.path.join(self.dep.output_dir, "sub"))
+        content_file = os.path.join(self.dep.output_dir, ".test_content_names")
+        write(content_file, json.dumps(["sub/victim.txt"]))
+
+        gcs_root = gclient_scm.GcsRoot(self.root_dir)
+        gcs_root.clobber_tar_content_names(self.dep.output_dir)
+        self.assertTrue(os.path.exists(victim_file))
+
+        symlink_entry = os.path.join(self.root_dir, "symlink_dep")
+        os.symlink(outside_dir, symlink_entry)
+        gcs_root.clobber_hash_files(symlink_entry)
+        self.assertTrue(os.path.exists(victim_hash))
+
 
 class TrailingSlashSolutionNameTest(trial_dir.TestCase):
     def setUp(self) -> None:

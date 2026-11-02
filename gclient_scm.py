@@ -15,6 +15,7 @@ import platform
 import posixpath
 import re
 import shutil
+import stat
 import sys
 import tempfile
 import threading
@@ -2730,28 +2731,86 @@ class GcsRoot(object):
                     self.clobber_hash_files(full_path)
                     self.clobber_migration_files(full_path)
 
+    @staticmethod
+    def _is_link_or_junction(path):
+        if os.path.islink(path):
+            return True
+        if hasattr(os.path, "isjunction") and os.path.isjunction(path):
+            return True
+        try:
+            reparse_tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+        except OSError:
+            return False
+        return reparse_tag != 0 and reparse_tag in (
+            getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0),
+            getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0),
+        )
+
+    def _is_safe_entry_directory(self, entry_directory):
+        try:
+            rel = os.path.relpath(
+                os.path.abspath(entry_directory), os.path.abspath(self.root_dir)
+            )
+        except ValueError:
+            return False
+        parts = [p for p in rel.replace("\\", "/").split("/") if p and p != "."]
+        if not parts or ".." in parts:
+            return False
+        real_root = os.path.realpath(self.root_dir)
+        cur = real_root
+        for part in parts:
+            cur = os.path.join(cur, part)
+            if self._is_link_or_junction(cur):
+                return False
+        real_cur = os.path.realpath(cur)
+        try:
+            norm_root = os.path.normcase(os.path.normpath(real_root))
+            norm_cur = os.path.normcase(os.path.normpath(real_cur))
+            return (
+                norm_cur != norm_root
+                and os.path.commonpath([norm_root, norm_cur]) == norm_root
+            )
+        except ValueError:
+            return False
+
     def clobber_tar_content_names(self, entry_directory):
         """Delete paths written in .*_content_names files"""
-        entry_directory_abs = os.path.abspath(entry_directory)
+        if not self._is_safe_entry_directory(entry_directory):
+            return
+        entry_directory_abs = os.path.normcase(os.path.abspath(entry_directory))
+        entry_directory_real = os.path.normcase(
+            os.path.realpath(entry_directory)
+        )
         content_names_files = glob.glob(
             os.path.join(entry_directory, ".*_content_names")
         )
         for file in content_names_files:
+            if self._is_link_or_junction(file):
+                os.remove(file)
+                continue
             with open(file, "r") as f:
                 names = json.loads(f.read().strip())
                 for name in names:
                     name_path = os.path.abspath(
                         os.path.join(entry_directory, name)
                     )
+                    norm_name_path = os.path.normcase(name_path)
                     # Ensure path is strictly inside entry_directory (prevent
                     # arbitrary deletion)
                     try:
+                        parent_real = os.path.normcase(
+                            os.path.realpath(os.path.dirname(name_path))
+                        )
                         if (
-                            name_path == entry_directory_abs
+                            norm_name_path == entry_directory_abs
                             or os.path.commonpath(
-                                [entry_directory_abs, name_path]
+                                [entry_directory_abs, norm_name_path]
                             )
                             != entry_directory_abs
+                            or os.path.commonpath(
+                                [entry_directory_real, parent_real]
+                            )
+                            != entry_directory_real
                         ):
                             continue
                     except ValueError:
@@ -2773,11 +2832,15 @@ class GcsRoot(object):
             os.remove(file)
 
     def clobber_hash_files(self, entry_directory):
+        if not self._is_safe_entry_directory(entry_directory):
+            return
         files = glob.glob(os.path.join(entry_directory, ".*_hash"))
         for f in files:
             os.remove(f)
 
     def clobber_migration_files(self, entry_directory):
+        if not self._is_safe_entry_directory(entry_directory):
+            return
         files = glob.glob(
             os.path.join(entry_directory, ".*_is_first_class_gcs")
         )
