@@ -322,7 +322,7 @@ class GceAuthenticatorTest(unittest.TestCase):
         self.GceAuthenticator = GceAuthenticator
 
     def assertAuthenticatedToken(self, token: Optional[str]):
-        conn = makeConn("some.example.com")
+        conn = makeConn("chromium-review.googlesource.com")
         self.GceAuthenticator().authenticate(conn)
         if token is None:
             self.assertNotIn("Authorization", conn.req_headers)
@@ -386,6 +386,22 @@ class GceAuthenticatorTest(unittest.TestCase):
         self.assertTrue(self.GceAuthenticator.is_applicable())
         self.mock_open.assert_called_once()
 
+    def testIsApplicable_NonGooglesourceHost(self):
+        for host in (
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com:443@evil.com",
+        ):
+            self.assertFalse(
+                self.GceAuthenticator.is_applicable(gerrit_host=host)
+            )
+        self.mock_open.assert_not_called()
+        self.assertTrue(
+            self.GceAuthenticator.is_applicable(
+                gerrit_host="chromium-review.googlesource.com"
+            )
+        )
+
     def testGetAuthHeader_Error(self):
         self.mock_open.side_effect = urllib.error.URLError("error")
         self.assertAuthenticatedToken(None)
@@ -448,31 +464,111 @@ class GceAuthenticatorTest(unittest.TestCase):
         self.assertAuthenticatedToken("TYPE TOKEN")
         self.assertEqual(2, self.mock_open.call_count)
 
+    def testAuthenticate_NonGooglesourceHost(self):
+        authn = self.GceAuthenticator()
+        for host in (
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com:443@evil.com",
+        ):
+            conn = makeConn(host)
+            authn.authenticate(conn)
+            self.assertNotIn("Authorization", conn.req_headers)
+        self.mock_open.assert_not_called()
+
     def testAttemptAuthenticateWithReAuth(self):
         authn = self.GceAuthenticator()
         with mock.patch.object(authn, "authenticate") as mock_authenticate:
-            conn = makeConn("some.example.com")
+            conn = makeConn("chromium-review.googlesource.com")
             context = auth.ReAuthContext(
-                host="some.example.com", project="some/project"
+                host="chromium-review.googlesource.com", project="some/project"
             )
             self.assertTrue(
                 authn.attempt_authenticate_with_reauth(conn, context)
             )
             mock_authenticate.assert_called_once_with(conn)
 
+    def testAttemptAuthenticateWithReAuth_NonGooglesourceHost(self):
+        authn = self.GceAuthenticator()
+        conn = makeConn("review.coreboot.org")
+        context = auth.ReAuthContext(
+            host="review.coreboot.org", project="some/project"
+        )
+        self.assertFalse(authn.attempt_authenticate_with_reauth(conn, context))
+        self.assertNotIn("Authorization", conn.req_headers)
+        self.mock_open.assert_not_called()
+
 
 class LuciContextAuthenticatorTest(unittest.TestCase):
+    @mock.patch("auth.has_luci_context_local_auth", return_value=True)
+    def testIsApplicable_GooglesourceOnly(self, mock_has_luci):
+        for host in (
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com:443@evil.com",
+        ):
+            self.assertFalse(
+                gerrit_util.LuciContextAuthenticator.is_applicable(
+                    gerrit_host=host
+                )
+            )
+        mock_has_luci.assert_not_called()
+        self.assertTrue(gerrit_util.LuciContextAuthenticator.is_applicable())
+        self.assertTrue(
+            gerrit_util.LuciContextAuthenticator.is_applicable(
+                gerrit_host="chromium-review.googlesource.com"
+            )
+        )
+
+    @mock.patch("auth.Authenticator")
+    def testAuthenticate_GooglesourceOnly(self, mock_auth_cls):
+        mock_token = mock.Mock(token="secret-luci-token")
+        mock_auth_cls.return_value.get_access_token.return_value = mock_token
+        luci_context_auth = gerrit_util.LuciContextAuthenticator()
+
+        for host in (
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com:443@evil.com",
+        ):
+            conn = makeConn(host)
+            luci_context_auth.authenticate(conn)
+            self.assertNotIn("Authorization", conn.req_headers)
+        mock_auth_cls.return_value.get_access_token.assert_not_called()
+
+        conn = makeConn("chromium-review.googlesource.com")
+        luci_context_auth.authenticate(conn)
+        self.assertEqual(
+            conn.req_headers["Authorization"], "Bearer secret-luci-token"
+        )
+        mock_auth_cls.return_value.get_access_token.assert_called_once_with()
+
     @mock.patch("gerrit_util.LuciContextAuthenticator.authenticate")
     def testAttemptAuthenticateWithReAuth(self, mock_authenticate):
         luci_context_auth = gerrit_util.LuciContextAuthenticator()
-        conn = makeConn("some.example.com")
+        conn = makeConn("chromium-review.googlesource.com")
         context = auth.ReAuthContext(
-            host="some.example.com", project="some/project"
+            host="chromium-review.googlesource.com", project="some/project"
         )
         self.assertTrue(
             luci_context_auth.attempt_authenticate_with_reauth(conn, context)
         )
         mock_authenticate.assert_called_once_with(conn)
+
+    @mock.patch("auth.Authenticator")
+    def testAttemptAuthenticateWithReAuth_NonGooglesourceHost(
+        self, mock_auth_cls
+    ):
+        luci_context_auth = gerrit_util.LuciContextAuthenticator()
+        conn = makeConn("review.coreboot.org")
+        context = auth.ReAuthContext(
+            host="review.coreboot.org", project="some/project"
+        )
+        self.assertFalse(
+            luci_context_auth.attempt_authenticate_with_reauth(conn, context)
+        )
+        self.assertNotIn("Authorization", conn.req_headers)
+        mock_auth_cls.return_value.get_access_token.assert_not_called()
 
 
 class GitCredsAuthenticatorTest(unittest.TestCase):
@@ -502,11 +598,97 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
         self.assertTrue(bypassable, msg=err_msg)
         self.assertEqual(err_msg, "")
 
+    @mock.patch(
+        "gerrit_util.GitCredsAuthenticator.gerrit_account_exists",
+        return_value=True,
+    )
+    def testIsApplicableGooglesourceOnly(self, mock_exists):
+        auth_inst = gerrit_util.GitCredsAuthenticator()
+        self.assertTrue(
+            auth_inst.is_applicable(
+                gerrit_host="chromium-review.googlesource.com"
+            )
+        )
+        self.assertTrue(
+            auth_inst.is_applicable(
+                gerrit_host="CHROMIUM-REVIEW.GOOGLESOURCE.COM"
+            )
+        )
+        mock_exists.reset_mock()
+        for bad_host in (
+            None,
+            "",
+            "review.coreboot.org",
+            "googlesource.com",
+            ".googlesource.com",
+            "googlesource.com.evil.com",
+            "evil.com/.googlesource.com",
+            "chromium-review.googlesource.com:443",
+            "foo.googlesource.com:443@evil.com",
+            "https://chromium-review.googlesource.com",
+            "chromium-review.google\u017fource.com",
+        ):
+            self.assertFalse(auth_inst.is_applicable(gerrit_host=bad_host))
+        mock_exists.assert_not_called()
+
+    @mock.patch(
+        "auth.GerritAuthenticator.get_access_token",
+        return_value="secret-oauth-token",
+    )
+    def testAuthenticate_GooglesourceOnly(self, mock_get_access_token):
+        auth_inst = gerrit_util.GitCredsAuthenticator()
+        for host in (
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com:443@evil.com",
+        ):
+            conn = makeConn(host)
+            auth_inst.authenticate(conn)
+            self.assertNotIn("Authorization", conn.req_headers)
+        mock_get_access_token.assert_not_called()
+
+        conn = makeConn("chromium-review.googlesource.com")
+        auth_inst.authenticate(conn)
+        self.assertEqual(
+            conn.req_headers["Authorization"], "Bearer secret-oauth-token"
+        )
+        mock_get_access_token.assert_called_once_with()
+
+    @mock.patch(
+        "auth.GerritAuthenticator.get_authorization_header",
+        return_value="BearerReAuth xyz",
+    )
+    def testAttemptAuthenticateWithReAuth_NonGooglesourceHost(
+        self, mock_get_header
+    ):
+        auth_inst = gerrit_util.GitCredsAuthenticator()
+        conn = makeConn("review.coreboot.org")
+        context = auth.ReAuthContext(
+            host="review.coreboot.org", project="some/project"
+        )
+        self.assertFalse(
+            auth_inst.attempt_authenticate_with_reauth(conn, context)
+        )
+        self.assertNotIn("Authorization", conn.req_headers)
+        mock_get_header.assert_not_called()
+
+    @mock.patch("gerrit_util.EnsureAccountExists")
+    def testGerritAccountExists_NonGooglesourceHost(self, mock_ensure_account):
+        for host in (
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com:443@evil.com",
+        ):
+            self.assertFalse(
+                gerrit_util.GitCredsAuthenticator.gerrit_account_exists(host)
+            )
+        mock_ensure_account.assert_not_called()
+
     @mock.patch("gerrit_util.EnsureAccountExists")
     def testGerritAccountExists_Success(self, mock_ensure_account):
         self.assertTrue(
             gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
-                "example.com"
+                "chromium-review.googlesource.com"
             )
         )
 
@@ -517,7 +699,7 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
     def testGerritAccountExists_GitLoginRequired(self, mock_ensure_account):
         self.assertFalse(
             gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
-                "example.com"
+                "chromium-review.googlesource.com"
             )
         )
 
@@ -528,7 +710,7 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
     def testGerritAccountExists_400Error(self, mock_ensure_account):
         self.assertFalse(
             gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
-                "example.com"
+                "chromium-review.googlesource.com"
             )
         )
 
@@ -539,7 +721,7 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
     def testGerritAccountExists_404Error(self, mock_ensure_account):
         self.assertFalse(
             gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
-                "example.com"
+                "chromium-review.googlesource.com"
             )
         )
 
@@ -550,7 +732,7 @@ class GitCredsAuthenticatorTest(unittest.TestCase):
     def testGerritAccountExists_500ErrorRaises(self, mock_ensure_account):
         with self.assertRaises(gerrit_util.GerritError):
             gerrit_util.GitCredsAuthenticator.gerrit_account_exists(
-                "example.com"
+                "chromium-review.googlesource.com"
             )
 
     @mock.patch(
@@ -653,6 +835,44 @@ class GerritUtilTest(unittest.TestCase):
         ).start()
         self.addCleanup(mock.patch.stopall)
 
+    def testIsGooglesourceHost(self):
+        for valid_host in (
+            "chromium-review.googlesource.com",
+            "a.googlesource.com",
+            "a.b.googlesource.com",
+            "CHROMIUM-REVIEW.GOOGLESOURCE.COM",
+        ):
+            self.assertTrue(
+                gerrit_util._IsGooglesourceHost(valid_host), msg=valid_host
+            )
+
+        for invalid_host in (
+            None,
+            "",
+            "googlesource.com",
+            ".googlesource.com",
+            "a..googlesource.com",
+            "-bad.googlesource.com",
+            "bad-.googlesource.com",
+            "googlesource.com.evil.com",
+            "notgooglesource.com",
+            "review.coreboot.org",
+            "evil.com/.googlesource.com",
+            "chromium-review.googlesource.com/path",
+            "foo.googlesource.com:443@evil.com",
+            "https://chromium-review.googlesource.com",
+            "chromium-review.googlesource.com:443",
+            "chromium-review.googlesource.com:0",
+            "chromium-review.googlesource.com:",
+            "chromium-review.googlesource.com\n",
+            "chromium-review.google\u017fource.com",
+            "\u212a.googlesource.com",
+        ):
+            self.assertFalse(
+                gerrit_util._IsGooglesourceHost(invalid_host),
+                msg=repr(invalid_host),
+            )
+
     def testQueryString(self):
         self.assertEqual("", gerrit_util._QueryString([]))
         self.assertEqual(
@@ -729,6 +949,38 @@ class GerritUtilTest(unittest.TestCase):
             conn.req_params,
         )
 
+    @mock.patch("gerrit_util.EnsureAccountExists")
+    @mock.patch("auth.GerritAuthenticator.get_access_token")
+    @mock.patch("gerrit_util.GceAuthenticator._get")
+    @mock.patch(
+        "gerrit_util.ssoHelper.find_cmd", return_value="/fake/git-remote-sso"
+    )
+    @mock.patch("scm.GIT.GetConfig", return_value="user@google.com")
+    def testCreateHttpConn_ChainedAuthenticatorSkipsNonGooglesource(
+        self,
+        _mockGitConfig,
+        _mockSsoCmd,
+        mockGceGet,
+        mockGetAccessToken,
+        mockEnsureAccount,
+    ):
+        chained = gerrit_util.ChainedAuthenticator(
+            [
+                gerrit_util.SSOAuthenticator(),
+                gerrit_util.GceAuthenticator(),
+                gerrit_util.GitCredsAuthenticator(),
+                gerrit_util.NoAuthenticator(),
+            ]
+        )
+        conn = gerrit_util.CreateHttpConn(
+            "review.coreboot.org", "changes/", authenticator=chained
+        )
+        self.assertNotIn("Authorization", conn.req_headers)
+        self.assertIsNone(conn.cookie_jar)
+        mockGceGet.assert_not_called()
+        mockGetAccessToken.assert_not_called()
+        mockEnsureAccount.assert_not_called()
+
     @mock.patch("auth.GerritAuthenticator.get_authorization_header")
     @mock.patch("gerrit_util._Authenticator.get")
     def testCreateHttpConn_ReAuth(self, mockAuth, getAuthHeader):
@@ -738,7 +990,9 @@ class GerritUtilTest(unittest.TestCase):
             host="chromium", project="infra/infra"
         )
         gerrit_util.CreateHttpConn(
-            "host.example.com", "foo/bar", reauth_context=reauth_context
+            "chromium-review.googlesource.com",
+            "foo/bar",
+            reauth_context=reauth_context,
         )
         getAuthHeader.assert_called_with(reauth_context)
 
@@ -755,7 +1009,7 @@ class GerritUtilTest(unittest.TestCase):
             host="chromium", project="infra/infra"
         )
         gerrit_util.CreateHttpConn(
-            "host.example.com",
+            "chromium-review.googlesource.com",
             "foo/bar",
             reauth_context=reauth_context,
             reauth_is_optional=True,
@@ -777,7 +1031,7 @@ class GerritUtilTest(unittest.TestCase):
         )
         with self.assertRaises(auth.GitReAuthRequiredError):
             gerrit_util.CreateHttpConn(
-                "host.example.com",
+                "chromium-review.googlesource.com",
                 "foo/bar",
                 reauth_context=reauth_context,
                 reauth_is_optional=False,
@@ -1778,11 +2032,18 @@ class ShouldUseSSOTest(unittest.TestCase):
         )
 
     def testBadHost(self):
-        self.assertFalse(
-            gerrit_util.ShouldUseSSO(
-                "fake-host.coreboot.org", "firefly@google.com"
+        for bad_host in (
+            "fake-host.coreboot.org",
+            "googlesource.com",
+            ".googlesource.com",
+            "evil.com/.googlesource.com",
+            "foo.googlesource.com@evil.com",
+            "fake-host.googlesource.com:443",
+        ):
+            self.assertFalse(
+                gerrit_util.ShouldUseSSO(bad_host, "firefly@google.com"),
+                msg=bad_host,
             )
-        )
 
     def testEmptyEmail(self):
         self.assertTrue(

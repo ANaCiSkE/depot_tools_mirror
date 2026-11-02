@@ -113,6 +113,13 @@ class MyActivityTest(unittest.TestCase):
             my_activity.extract_bug_numbers_from_description(issue),
         )
 
+    def test_gerrit_instances_only_googlesource(self):
+        for instance in my_activity.gerrit_instances:
+            self.assertTrue(
+                my_activity.gerrit_util._IsGooglesourceHost(instance["url"]),
+                msg=f"Unexpected non-googlesource host: {instance['url']}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

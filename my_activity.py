@@ -100,9 +100,6 @@ gerrit_instances = [
     {
         "url": "skia-review.googlesource.com",
     },
-    {
-        "url": "review.coreboot.org",
-    },
 ]
 
 monorail_projects = {
