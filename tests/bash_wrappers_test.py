@@ -279,6 +279,30 @@ class BashWrappersTest(unittest.TestCase):
                     cipd_runs = f.read().splitlines()
                 self.assertEqual(len(cipd_runs), 1, cipd_runs)
 
+    def test_vpython3_appends_depot_tools_to_path(self) -> None:
+        _write_file(
+            os.path.join(self.cipd_bin, "vpython3"),
+            '#!/usr/bin/env bash\nprintf "%s" "$PATH"\n',
+        )
+        rel_vpython3 = os.path.relpath(
+            os.path.join(self.dt_dir, "vpython3"), self.tmpdir
+        )
+        run_env = os.environ.copy()
+        for var in ("DEPOT_TOOLS_DIR", "DEPOT_TOOLS_UNAME_S", "VPYTHON_BYPASS"):
+            run_env.pop(var, None)
+        run_env["PATH"] = os.pathsep.join([self.fake_bin, "/usr/bin", "/bin"])
+        res = subprocess.run(
+            [rel_vpython3],
+            capture_output=True,
+            env=run_env,
+            cwd=self.tmpdir,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        path_entries = res.stdout.decode("utf-8").split(os.pathsep)
+        self.assertEqual(path_entries[0], self.fake_bin)
+        self.assertEqual(path_entries[-1], os.path.realpath(self.dt_dir))
+
 
 class NoCmdExeArgvForwardingTest(unittest.TestCase):
     """Guards against bash scripts passing "$@" to cmd.exe or a .bat file."""
