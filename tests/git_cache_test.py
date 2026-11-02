@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 """Unit tests for git_cache.py"""
 
+from collections.abc import Iterator
 import contextlib
 from io import StringIO
 import logging
@@ -2332,6 +2333,26 @@ class GetBootstrapDefaultBranchTest(unittest.TestCase):
         ):
             self.assertEqual(m.get_bootstrap_default_branch(), "master")
 
+    def test_rejects_unexpected_head(self) -> None:
+        m = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
+        gp = m._gs_path
+        for head in (
+            "0" * 40 + "\n",
+            "ref: refs/tags/v1\n",
+            "ref: refs/heads/main&evil\n",
+            "ref: refs/heads/main:other\n",
+            "ref: refs/heads/a..b\n",
+            "ref: refs/heads/main.lock\n",
+            "ref: refs/heads/main\r\n",
+            "ref: refs/heads/caf\u00e9\n",
+            "ref: refs/heads/-main\n",
+        ):
+            with (
+                self.subTest(head=head),
+                self._patched([f"{gp}/7/", f"{gp}/7.ready"], head=head),
+            ):
+                self.assertIsNone(m.get_bootstrap_default_branch())
+
     def test_bucket_without_snapshot_returns_none(self):
         # Supported host, but no snapshot uploaded for this repo yet.
         m = git_cache.Mirror("https://chromium.googlesource.com/foo/bar")
@@ -2581,6 +2602,539 @@ class ObjectFormatBootstrapTest(unittest.TestCase):
                     self.assertFalse(marker_exists)
                 else:
                     self.assertTrue(marker_exists)
+
+
+class BootstrapSnapshotSanitizationTest(unittest.TestCase):
+    """Tests that GCS bootstrap snapshots are sanitized before git runs."""
+
+    # An absolute git.exe on Windows: running git.bat through cmd.exe would
+    # mangle arguments such as regular expressions.
+    _GIT = git_common.GIT_EXE
+
+    def setUp(self) -> None:
+        self.cache_dir = self._temp_dir("gc_bootstrap_sanitize_")
+        git_cache.Mirror.SetCachePath(self.cache_dir)
+        global_config = os.path.join(self._temp_dir("gc_config_"), "config")
+        mock.patch.dict(
+            "os.environ",
+            {"GIT_CONFIG_GLOBAL": global_config, "GIT_CONFIG_NOSYSTEM": "1"},
+        ).start()
+        self.addCleanup(mock.patch.stopall)
+        self._git(
+            "config", "--file", global_config, "safe.bareRepository", "explicit"
+        )
+
+    def _temp_dir(self, prefix: str) -> str:
+        path = tempfile.mkdtemp(prefix=prefix)
+        self.addCleanup(gclient_utils.rmtree, path)
+        return path
+
+    def _git(self, *args: str) -> str:
+        out = subprocess.check_output([self._GIT, *args])
+        return out.decode("utf-8").strip()
+
+    def _mirror_git(self, mirror: git_cache.Mirror, *args: str) -> str:
+        return self._git("--git-dir", mirror.mirror_path, *args)
+
+    def _has_object(self, git_dir: str, oid: str) -> bool:
+        cmd = [self._GIT, "--git-dir", git_dir, "cat-file", "-e", oid]
+        return subprocess.call(cmd, stderr=subprocess.DEVNULL) == 0
+
+    def _commit(self, repo: str, name: str) -> str:
+        with open(os.path.join(repo, name), "w", encoding="utf-8") as f:
+            f.write(f"{name}\n")
+        self._git("-C", repo, "add", name)
+        self._git(
+            "-C",
+            repo,
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-q",
+            "--no-verify",
+            "-m",
+            name,
+        )
+        return self._git("-C", repo, "rev-parse", "HEAD")
+
+    def _make_origin_repo(self, object_format: str) -> str:
+        repo = self._temp_dir("gc_origin_")
+        self._git(
+            "init", "-q", "-b", "main", f"--object-format={object_format}", repo
+        )
+        self._commit(repo, "c1")
+        return repo
+
+    def _make_snapshot(self, origin_dir: str) -> str:
+        snapshot_dir = self._temp_dir("gc_snapshot_src_")
+        self._git(
+            "clone",
+            "-q",
+            "--bare",
+            "--no-local",
+            *git_cache._ref_format_args(),
+            origin_dir,
+            snapshot_dir,
+        )
+        self._git("--git-dir", snapshot_dir, "pack-refs", "--all")
+        self._git("--git-dir", snapshot_dir, "repack", "-a", "-d", "-q")
+        self._git(
+            "--git-dir", snapshot_dir, "commit-graph", "write", "--reachable"
+        )
+        return snapshot_dir
+
+    def _make_evil_repo(self, object_format: str) -> tuple[str, str]:
+        evil_dir = os.path.join(self._temp_dir("gc_evil_"), "evil.git")
+        self._git(
+            "init", "-q", "--bare", f"--object-format={object_format}", evil_dir
+        )
+        self._git("--git-dir", evil_dir, "config", "evil.fromcommondir", "true")
+        marker = os.path.dirname(evil_dir).replace(os.sep, "/") + "/hook_ran"
+        hook_path = os.path.join(evil_dir, "hooks", "reference-transaction")
+        with open(hook_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(f'#!/bin/sh\necho "$0" >> "{marker}"\nexit 1\n')
+        os.chmod(hook_path, 0o755)
+        oid = subprocess.run(
+            [self._GIT, "--git-dir", evil_dir, "hash-object", "-w", "--stdin"],
+            input=b"evil-object\n",
+            stdout=subprocess.PIPE,
+            check=True,
+        ).stdout
+        return evil_dir, oid.decode("utf-8").strip()
+
+    def _poison_snapshot(
+        self, snapshot_dir: str, evil_dir: str, origin_url: str
+    ) -> None:
+        shutil.copytree(
+            os.path.join(evil_dir, "hooks"),
+            os.path.join(snapshot_dir, "hooks"),
+            dirs_exist_ok=True,
+        )
+        config_path = os.path.join(snapshot_dir, "config")
+        for key, val in (
+            (f"url.{evil_dir}.insteadOf", origin_url),
+            ("core.sshCommand", "/bin/false"),
+            ("core.hooksPath", os.path.join(evil_dir, "hooks")),
+            ("core.fsmonitor", "/bin/false"),
+            ("include.path", os.path.join(evil_dir, "config")),
+            ("extensions.worktreeConfig", "true"),
+            ("remote.origin.proxy", "http://127.0.0.1:1"),
+        ):
+            self._git("config", "--file", config_path, key, val)
+
+        obj_info = os.path.join(snapshot_dir, "objects", "info")
+        os.makedirs(obj_info, exist_ok=True)
+        for rel_path, content in (
+            ("commondir", f"{evil_dir}\n"),
+            ("config.worktree", "[core]\n\tsshCommand = /bin/false\n"),
+            # Git opens this as `alternates` on case-insensitive file systems,
+            # where it is created first so that this name is kept on disk.
+            (
+                os.path.join("objects", "info", "Alternates"),
+                f"{os.path.join(evil_dir, 'objects')}\n",
+            ),
+            (
+                os.path.join("objects", "info", "alternates"),
+                f"{os.path.join(evil_dir, 'objects')}\n",
+            ),
+            (
+                os.path.join("objects", "info", "http-alternates"),
+                "https://evil.example/objects\n",
+            ),
+            ("shallow", "0" * 40 + "\n"),
+            # Can name packs outside the repository.
+            (os.path.join("objects", "pack", "multi-pack-index"), "MIDX"),
+            (os.path.join("objects", "not-hex", "x"), "x"),
+        ):
+            path = os.path.join(snapshot_dir, rel_path)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+        evil_config = os.path.join(evil_dir, "config")
+        self._try_symlink(evil_config, os.path.join(snapshot_dir, "evil_link"))
+        self._try_symlink(evil_config, os.path.join(obj_info, "evil_info_link"))
+
+    @staticmethod
+    def _try_symlink(target: str, path: str) -> bool:
+        """Creates a symlink, unless the platform or user can't (Windows)."""
+        try:
+            os.symlink(target, path)
+        except (OSError, NotImplementedError):
+            return False
+        return True
+
+    @contextlib.contextmanager
+    def _serve_snapshot(
+        self, snapshot_dir: str, cp_exit_code: int = 0
+    ) -> Iterator[None]:
+        test = self
+
+        class _FakeGsutil:
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
+                pass
+
+            def check_call(self, *args: str) -> tuple[int, str, str]:
+                test.assertEqual(args[0], "ls")
+                gs_path = args[-1]
+                return (0, f"{gs_path}/100.ready\n{gs_path}/100/\n", "")
+
+            def call(self, *args: str) -> int:
+                test.assertEqual(args[:3], ("-m", "cp", "-r"))
+                test.assertTrue(args[3].endswith("/100/*"), args)
+                if not cp_exit_code:
+                    shutil.copytree(
+                        snapshot_dir,
+                        args[4],
+                        dirs_exist_ok=True,
+                        symlinks=True,
+                    )
+                return cp_exit_code
+
+        with (
+            mock.patch.object(git_cache, "Gsutil", _FakeGsutil),
+            mock.patch.dict(
+                "os.environ",
+                {"OVERRIDE_BOOTSTRAP_BUCKET": "chromium-git-cache"},
+            ),
+        ):
+            yield
+
+    def test_populate_bootstraps_and_sanitizes_snapshot(self) -> None:
+        cases = [
+            (object_format, poisoned)
+            for object_format in ("sha1", "sha256")
+            for poisoned in (False, True)
+        ]
+        for object_format, poisoned in cases:
+            with self.subTest(object_format=object_format, poisoned=poisoned):
+                origin_dir = self._make_origin_repo(object_format)
+                c1 = self._git("-C", origin_dir, "rev-parse", "HEAD")
+                self._git("-C", origin_dir, "tag", "v1")
+                self._git("-C", origin_dir, "tag", "snapshot-only")
+
+                snapshot_dir = self._make_snapshot(origin_dir)
+                snapshot_pack_dir = os.path.join(
+                    snapshot_dir, "objects", "pack"
+                )
+                snapshot_packs = {
+                    f
+                    for f in os.listdir(snapshot_pack_dir)
+                    if f.endswith(".pack")
+                }
+                self.assertTrue(snapshot_packs)
+
+                # Drop snapshot-only tag and advance origin so populate() must
+                # keep the snapshot's objects/refs and also fetch c2 from origin.
+                self._git("-C", origin_dir, "tag", "-d", "snapshot-only")
+                c2 = self._commit(origin_dir, "c2")
+
+                evil_dir, evil_oid = self._make_evil_repo(object_format)
+                if poisoned:
+                    self._poison_snapshot(snapshot_dir, evil_dir, origin_dir)
+
+                mirror = git_cache.Mirror(
+                    origin_dir, print_func=lambda *_args: None
+                )
+                gclient_utils.rmtree(mirror.mirror_path)
+
+                with (
+                    self._serve_snapshot(snapshot_dir),
+                    mock.patch.object(
+                        git_cache.scm.GIT,
+                        "GetRemoteObjectFormat",
+                        return_value=object_format,
+                    ),
+                ):
+                    mirror.populate(bootstrap=True)
+
+                self.assertEqual(mirror._get_object_format(), object_format)
+                if git_common.meets_git_version(
+                    git_cache.MIN_REFTABLE_GIT_VERSION
+                ):
+                    self.assertEqual(mirror._get_ref_format(), "files")
+                self.assertEqual(
+                    self._mirror_git(
+                        mirror, "config", "core.repositoryformatversion"
+                    ),
+                    "1" if object_format == "sha256" else "0",
+                )
+                self.assertEqual(
+                    self._mirror_git(
+                        mirror, "rev-parse", "refs/tags/snapshot-only"
+                    ),
+                    c1,
+                )
+                self.assertEqual(
+                    self._mirror_git(mirror, "rev-parse", "refs/tags/v1"), c1
+                )
+                self.assertEqual(
+                    self._mirror_git(mirror, "symbolic-ref", "HEAD"),
+                    "refs/heads/main",
+                )
+                self.assertEqual(
+                    self._mirror_git(mirror, "rev-parse", "HEAD"), c2
+                )
+                mirror_pack_dir = os.path.join(
+                    mirror.mirror_path, "objects", "pack"
+                )
+                mirror_packs = {
+                    f
+                    for f in os.listdir(mirror_pack_dir)
+                    if f.endswith(".pack")
+                }
+                self.assertTrue(snapshot_packs.issubset(mirror_packs))
+                self.assertTrue(
+                    os.path.isfile(
+                        os.path.join(
+                            mirror.mirror_path,
+                            "objects",
+                            "info",
+                            "commit-graph",
+                        )
+                    )
+                )
+
+                for forbidden_relpath in (
+                    "hooks",
+                    "commondir",
+                    "config.worktree",
+                    "evil_link",
+                    os.path.join("objects", "info", "alternates"),
+                    os.path.join("objects", "info", "http-alternates"),
+                    os.path.join("objects", "info", "Alternates"),
+                    os.path.join("objects", "info", "evil_info_link"),
+                    os.path.join("objects", "pack", "multi-pack-index"),
+                    os.path.join("objects", "not-hex"),
+                    "shallow",
+                ):
+                    self.assertFalse(
+                        os.path.lexists(
+                            os.path.join(mirror.mirror_path, forbidden_relpath)
+                        ),
+                        f"{forbidden_relpath} must be removed",
+                    )
+
+                # Only settings that bootstrap_repo() and Mirror.config() write
+                # may be in the mirror's config, including any included files.
+                config_keys = self._mirror_git(
+                    mirror, "config", "--local", "--includes", "--list"
+                ).splitlines()
+                self.assertLessEqual(
+                    {line.split("=", 1)[0] for line in config_keys},
+                    {
+                        "core.repositoryformatversion",
+                        "core.bare",
+                        "extensions.objectformat",
+                        "core.deltabasecachelimit",
+                        "gc.autodetach",
+                        "gc.autopacklimit",
+                        "maintenance.strategy",
+                        "remote.origin.url",
+                        "remote.origin.fetch",
+                    },
+                )
+                self.assertEqual(
+                    self._mirror_git(mirror, "config", "remote.origin.url"),
+                    origin_dir,
+                )
+                self.assertFalse(
+                    os.path.exists(
+                        os.path.join(os.path.dirname(evil_dir), "hook_ran")
+                    )
+                )
+                self.assertFalse(self._has_object(mirror.mirror_path, evil_oid))
+
+    def test_ensure_bootstrapped_checks_snapshot_object_format(self) -> None:
+        cases = [
+            ("sha1", "sha1", None),
+            ("sha256", "sha256", None),
+            ("sha1", "sha256", None),
+            ("sha256", "sha1", None),
+            ("sha1", "sha1", "sha256"),
+        ]
+        for snapshot_format, remote_format, included_format in cases:
+            with self.subTest(
+                snapshot=snapshot_format,
+                remote=remote_format,
+                included=included_format,
+            ):
+                origin_dir = self._make_origin_repo(snapshot_format)
+                c1 = self._git("-C", origin_dir, "rev-parse", "HEAD")
+                snapshot_dir = self._make_snapshot(origin_dir)
+                if included_format:
+                    inc_path = os.path.join(snapshot_dir, "format.inc")
+                    with open(inc_path, "w", encoding="utf-8") as f:
+                        f.write(
+                            f"[extensions]\n\tobjectformat = {included_format}\n"
+                        )
+                    self._git(
+                        "config",
+                        "--file",
+                        os.path.join(snapshot_dir, "config"),
+                        "include.path",
+                        inc_path,
+                    )
+
+                mirror = git_cache.Mirror(
+                    origin_dir, print_func=lambda *_args: None
+                )
+                gclient_utils.rmtree(mirror.mirror_path)
+
+                with (
+                    self._serve_snapshot(snapshot_dir),
+                    mock.patch.object(
+                        git_cache.scm.GIT,
+                        "GetRemoteObjectFormat",
+                        return_value=remote_format,
+                    ),
+                    mock.patch.object(mirror, "_set_symbolic_ref"),
+                ):
+                    mirror._ensure_bootstrapped(
+                        depth=None, bootstrap=True, reset_fetch_config=False
+                    )
+
+                self.assertEqual(mirror._get_object_format(), remote_format)
+                self.assertEqual(
+                    self._has_object(mirror.mirror_path, c1),
+                    snapshot_format == remote_format,
+                )
+
+    def test_bootstrap_repo_rejects_invalid_snapshot(self) -> None:
+        origin_dir = self._make_origin_repo("sha1")
+        unsupported = "Unsupported object format in bootstrap snapshot"
+        cases = [
+            (
+                "unknown format",
+                "[extensions]\n\tobjectformat = md5\n",
+                False,
+                0,
+                f"{unsupported}: 'md5'",
+            ),
+            (
+                "uppercase format",
+                "[extensions]\n\tobjectformat = SHA256\n",
+                False,
+                0,
+                f"{unsupported}: 'SHA256'",
+            ),
+            (
+                "empty format",
+                "[extensions]\n\tobjectformat =\n",
+                False,
+                0,
+                f"{unsupported}: ''",
+            ),
+            (
+                "injected newline",
+                '[extensions]\n\tobjectformat = "sha1\\n[core]"\n',
+                False,
+                0,
+                unsupported,
+            ),
+            (
+                "unparseable config",
+                "[extensions\n",
+                False,
+                0,
+                "Failed to read bootstrap snapshot config",
+            ),
+            ("symlink config", None, True, 0, "must not be a symlink"),
+            ("download fails", None, False, 1, "gsutil cp exited with code 1"),
+        ]
+        for label, config_text, symlink_config, cp_exit_code, error in cases:
+            with self.subTest(label=label):
+                snapshot_dir = self._make_snapshot(origin_dir)
+                config_path = os.path.join(snapshot_dir, "config")
+                if config_text is not None:
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        f.write(config_text)
+                elif symlink_config:
+                    os.remove(config_path)
+                    config_target = os.path.join(origin_dir, ".git", "config")
+                    if not self._try_symlink(config_target, config_path):
+                        self.skipTest("symlinks are not supported")
+
+                messages: list[str] = []
+                mirror = git_cache.Mirror(
+                    origin_dir, print_func=messages.append
+                )
+                gclient_utils.rmtree(mirror.mirror_path)
+
+                with self._serve_snapshot(snapshot_dir, cp_exit_code):
+                    self.assertFalse(mirror.bootstrap_repo(mirror.mirror_path))
+
+                errors = [m for m in messages if "Encountered error" in m]
+                self.assertEqual(len(errors), 1, messages)
+                self.assertIn(error, errors[0])
+                self.assertEqual(os.listdir(self.cache_dir), [])
+
+    def test_bootstrap_repo_rejects_unexpected_head(self) -> None:
+        origin_dir = self._make_origin_repo("sha1")
+        c1 = self._git("-C", origin_dir, "rev-parse", "HEAD")
+        for head in (
+            f"{c1}\n",
+            "ref: refs/tags/v1\n",
+            "ref: refs/heads/a&b\n",
+            "ref: refs/heads/../config\n",
+            "ref: refs/heads/main.lock\n",
+            "ref: refs/heads/main\r\n",
+            "ref: refs/heads/-main\n",
+            # Valid up to the read limit, but not as a whole.
+            "ref: refs/heads/" + "a/" * 600 + "b&c\n",
+        ):
+            with self.subTest(head=head):
+                snapshot_dir = self._make_snapshot(origin_dir)
+                with open(
+                    os.path.join(snapshot_dir, "HEAD"),
+                    "w",
+                    encoding="utf-8",
+                    newline="",
+                ) as f:
+                    f.write(head)
+                messages: list[str] = []
+                mirror = git_cache.Mirror(
+                    origin_dir, print_func=messages.append
+                )
+                gclient_utils.rmtree(mirror.mirror_path)
+                with self._serve_snapshot(snapshot_dir):
+                    self.assertFalse(mirror.bootstrap_repo(mirror.mirror_path))
+                self.assertTrue(
+                    any("Unexpected HEAD" in m for m in messages), messages
+                )
+                self.assertEqual(os.listdir(self.cache_dir), [])
+
+    def test_bootstrap_repo_without_snapshot_config(self) -> None:
+        origin_dir = self._make_origin_repo("sha1")
+        snapshot_dir = self._make_snapshot(origin_dir)
+        os.remove(os.path.join(snapshot_dir, "config"))
+        self._git(
+            "config",
+            "--file",
+            os.environ["GIT_CONFIG_GLOBAL"],
+            "init.defaultObjectFormat",
+            "sha256",
+        )
+        mirror = git_cache.Mirror(origin_dir, print_func=lambda *_args: None)
+        gclient_utils.rmtree(mirror.mirror_path)
+        with self._serve_snapshot(snapshot_dir):
+            self.assertTrue(mirror.bootstrap_repo(mirror.mirror_path))
+        self.assertEqual(mirror._get_object_format(), "sha1")
+
+    def test_bootstrap_repo_with_relative_cache_path(self) -> None:
+        origin_dir = self._make_origin_repo("sha256")
+        snapshot_dir = self._make_snapshot(origin_dir)
+        self.addCleanup(git_cache.Mirror.SetCachePath, self.cache_dir)
+        with contextlib.chdir(os.path.dirname(self.cache_dir)):
+            git_cache.Mirror.SetCachePath(os.path.basename(self.cache_dir))
+            mirror = git_cache.Mirror(
+                origin_dir, print_func=lambda *_args: None
+            )
+            with self._serve_snapshot(snapshot_dir):
+                self.assertTrue(mirror.bootstrap_repo(mirror.mirror_path))
+            self.assertEqual(mirror._get_object_format(), "sha256")
 
 
 if __name__ == "__main__":

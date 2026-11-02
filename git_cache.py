@@ -97,6 +97,34 @@ class Mirror(object):
     # Used for tests
     _GIT_CONFIG_LOCATION = []
 
+    _BOOTSTRAP_OBJECT_FORMATS = frozenset(("sha1", "sha256"))
+    # The repository data kept from GCS bootstrap snapshots, as patterns for
+    # the names of the regular files and of the directories to keep in each
+    # directory, parents first. Everything else is removed, e.g. `config`,
+    # `hooks/`, `objects/info/alternates` or `objects/pack/multi-pack-index`,
+    # which can make git read objects from elsewhere. Names are matched
+    # case-sensitively, so that case variants are removed on case-insensitive
+    # file systems too.
+    _BOOTSTRAP_ALLOWED_ENTRIES = (
+        ("", r"HEAD|packed-refs", r"objects|refs"),
+        ("objects", r"(?!)", r"info|pack|[0-9a-f]{2}"),
+        ("objects/info", r"commit-graph|packs", r"commit-graphs"),
+        (
+            "objects/pack",
+            r"pack-[0-9a-f]+\.(?:bitmap|idx|keep|mtimes|pack|rev)",
+            r"(?!)",
+        ),
+    )
+    # The only `HEAD` that bootstrap snapshots are expected to have: a branch
+    # whose name is made of ASCII words, `-` and inner `.` (so no `..`, and
+    # no component that starts or ends with `.` or ends with `.lock`), and
+    # does not start with `-`.
+    _BOOTSTRAP_HEAD_RE = re.compile(
+        r"ref: refs/heads/(?!-)((?:[\w-]+(?:\.[\w-]+)*(?<!\.lock)/)*"
+        r"[\w-]+(?:\.[\w-]+)*(?<!\.lock))\n?",
+        re.ASCII,
+    )
+
     @staticmethod
     def parse_fetch_spec(spec):
         """Parses and canonicalizes a fetch spec.
@@ -383,10 +411,120 @@ class Mirror(object):
             code, head, _ = gsutil.check_call("cat", latest + "/HEAD")
             if code:
                 return None
-            m = re.match(r"ref:\s*refs/heads/(\S+)", head.strip())
+            m = self._BOOTSTRAP_HEAD_RE.fullmatch(head)
             return m.group(1) if m else None
         except Exception:
             return None
+
+    def _read_snapshot_object_format(self, config_path: str) -> str:
+        """Reads `extensions.objectFormat` from a snapshot config file.
+
+        Uses `git config --no-includes --file` from outside the snapshot so git
+        neither sets up the snapshot as a repository nor follows `[include]`
+        directives. Returns `sha1` when unset, and raises
+        ValueError for any value other than `sha1` or `sha256`.
+        """
+        if os.path.islink(config_path):
+            raise ValueError("Bootstrap snapshot config must not be a symlink")
+        if not os.path.exists(config_path):
+            return "sha1"
+        if not os.path.isfile(config_path):
+            raise ValueError("Bootstrap snapshot config is not a regular file")
+        proc = subprocess.run(
+            [
+                self.git_exe,
+                "config",
+                "--no-includes",
+                "--file",
+                os.path.abspath(config_path),
+                "--get",
+                "extensions.objectformat",
+            ],
+            cwd=os.path.abspath(self.GetCachePath()),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        # Exit code 1 means the key is not present in the config file.
+        if proc.returncode == 1:
+            return "sha1"
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", "replace").strip()
+            raise ValueError(
+                f"Failed to read bootstrap snapshot config: {stderr}"
+            )
+        # Like git, only accept the exact lowercase names.
+        fmt = proc.stdout.decode("utf-8", "replace").strip()
+        if fmt not in self._BOOTSTRAP_OBJECT_FORMATS:
+            raise ValueError(
+                f"Unsupported object format in bootstrap snapshot: {fmt!r}"
+            )
+        return fmt
+
+    @staticmethod
+    def _remove_unless_allowed(directory: str, files: str, dirs: str) -> None:
+        """Removes the entries of `directory` other than the allowed ones.
+
+        Keeps the regular files whose names match the `files` pattern and the
+        directories whose names match the `dirs` pattern. Symlinks are always
+        removed.
+        """
+        for entry in os.listdir(directory):
+            path = os.path.join(directory, entry)
+            keep = not os.path.islink(path) and (
+                (re.fullmatch(files, entry) and os.path.isfile(path))
+                or (re.fullmatch(dirs, entry) and os.path.isdir(path))
+            )
+            if not keep:
+                gclient_utils.rm_file_or_tree(path)
+
+    def _sanitize_bootstrap_repo(self, repo_dir: str) -> None:
+        """Strips non-data files from `repo_dir` and writes a clean config.
+
+        GCS bootstrap snapshots are not integrity-protected, so only repository
+        data (`HEAD`, `objects/`, `refs/`, `packed-refs`) and the snapshot's
+        `extensions.objectFormat` setting are kept. Hooks, files that make git
+        read configuration or objects from elsewhere (such as `commondir`,
+        `config.worktree` and `objects/info/alternates`), and all other config
+        keys are removed before any git command runs in `repo_dir`.
+        """
+        config_path = os.path.join(repo_dir, "config")
+        object_format = self._read_snapshot_object_format(config_path)
+
+        for subdir, files, dirs in self._BOOTSTRAP_ALLOWED_ENTRIES:
+            directory = os.path.join(repo_dir, subdir)
+            # Parents come first, so this is not a symlink.
+            if os.path.isdir(directory):
+                self._remove_unless_allowed(directory, files, dirs)
+
+        # Read the exact bytes (no newline translation), and reject a HEAD
+        # longer than any valid one would be, rather than check a prefix.
+        with open(
+            os.path.join(repo_dir, "HEAD"), encoding="utf-8", newline=""
+        ) as f:
+            head = f.read(1025)
+        if len(head) > 1024 or not self._BOOTSTRAP_HEAD_RE.fullmatch(head):
+            raise ValueError(
+                f"Unexpected HEAD in bootstrap snapshot: {head[:100]!r}"
+            )
+
+        # The ref format stays at the files default, matching the skeleton that
+        # bootstrap_repo() creates via _ref_format_args().
+        repo_version = "1" if object_format == "sha256" else "0"
+        config_lines = [
+            "[core]",
+            f"\trepositoryformatversion = {repo_version}",
+            "\tbare = true",
+        ]
+        if object_format == "sha256":
+            config_lines.extend(
+                [
+                    "[extensions]",
+                    "\tobjectformat = sha256",
+                ]
+            )
+        with open(config_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(config_lines) + "\n")
 
     def bootstrap_repo(self, directory):
         """Bootstrap the repo from Google Storage if possible.
@@ -418,19 +556,23 @@ class Mirror(object):
             )
             return False
 
+        tempdir = None
         try:
             # create new temporary directory locally
             tempdir = tempfile.mkdtemp(
                 prefix="_cache_tmp", dir=self.GetCachePath()
             )
             # Create a bare repo skeleton so necessary directories (like
-            # refs/) exist. The snapshot's own config supplies the object
-            # format, but the GCS copy will not replace a refs/heads
-            # placeholder *file* with the snapshot's refs/heads *directory*,
-            # so the skeleton must use the same files backend the snapshots
-            # are built with.
+            # refs/) exist. The snapshot supplies the object format (see
+            # _sanitize_bootstrap_repo()), but the GCS copy will not replace a
+            # refs/heads placeholder *file* with the snapshot's refs/heads
+            # *directory*, so the skeleton must use the same files backend the
+            # snapshots are built with.
             init_cmd = ["init", "-b", "main", "--bare"] + _ref_format_args()
             self.RunGit(init_cmd, cwd=tempdir)
+            # Only the snapshot's config tells its object format, so don't let
+            # the skeleton's config stand in for a missing one.
+            os.remove(os.path.join(tempdir, "config"))
             self.print(
                 "Downloading files in %s/* into %s." % (latest_dir, tempdir)
             )
@@ -440,12 +582,14 @@ class Mirror(object):
                         "-m", "cp", "-r", latest_dir + "/*", tempdir
                     )
             if code:
-                return False
+                raise RuntimeError(f"gsutil cp exited with code {code}")
+            self._sanitize_bootstrap_repo(tempdir)
             # A quick validation that all references are valid.
             self.RunGit(["for-each-ref"], print_stdout=False, cwd=tempdir)
         except Exception as e:
             self.print("Encountered error: %s" % str(e), file=sys.stderr)
-            gclient_utils.rmtree(tempdir)
+            if tempdir:
+                gclient_utils.rmtree(tempdir)
             return False
         # delete the old directory
         if os.path.exists(directory):
