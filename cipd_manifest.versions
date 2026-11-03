@@ -558,68 +558,68 @@ infra/tools/luci/luci/mac-arm64
 	G19ag3gP96h-_IGDzSbb3Sv6XQtzSmU4iPFfgxwYecAC
 
 infra/tools/luci/lucicfg/linux-386
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	bjuUFzewA_83qaxzDljVTtSZ_cWZAnR54NMkrd1QPw0C
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	jOHfJNH3Iibysu1OS1LoWKF51vARyianGddHsRhsHxsC
 
 infra/tools/luci/lucicfg/linux-amd64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	4UxlmZO6gpLFihheb24Iw1q8EiMNfL-PxreZx9JgYIoC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	W6_F_M-54_MUZCRUu7NFTBG9AVZJHNFQzMp18B8sx5AC
 
 infra/tools/luci/lucicfg/linux-arm64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	ykT9HFPoOp1UQTqroYnBeDMNLNIszaOEaVL2y6q3pCUC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	VzXZ3fLQjk_goN0TxCAc2WfikqmnHpTMN6rzlJgnWLwC
 
 infra/tools/luci/lucicfg/linux-armv6l
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	w7mE7_D9Q4TgcJLofOCM1Z1zVJb2edZ2iWXSKdy77o0C
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	k3Va0W_E5r4JmJUFl2QjH4neO2GZfXXjMeXfjn-LTXcC
 
 infra/tools/luci/lucicfg/linux-loong64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	yXVug-d9DygAKRfNP3j9Ers_CzDSZnit84euYQAan8QC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	u1Ydx90O3bFiEyMQ3WTwp4o0Gl_ne4RW_8an2XHlL8YC
 
 infra/tools/luci/lucicfg/linux-mips64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	DqQi-GGfvExFsLYcUwjhICkq2gurSqvrvftpkcB-RRAC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	ZhGT423GpDm43gv6wohos0CoUXct_n7GKMcKx9QpUZUC
 
 infra/tools/luci/lucicfg/linux-mips64le
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	_TTEbtP2mroxRqR-EJVnr3ej4XjmMrv5rp5puBUsSjAC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	rVcaLLrprAk8EI2xIlRJlKlcYLaPqGFeGg1F3cALi-MC
 
 infra/tools/luci/lucicfg/linux-mipsle
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	JB__UX-IuC7Ke1iKVCwcfm6W_q7j4dMNDnY1SSa63XYC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	VoqnS9ljHJ9D3dy5As8ZDRUVSOvpR8GaGN2vJAUxiUkC
 
 infra/tools/luci/lucicfg/linux-ppc64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	fpIEw9tMnnHsQTb9e0Y1FjiG_WLPb2wQ9BtXui2Bw0UC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	7_JP6LrTbK4P9JC5t8P9CNUitjr2obV5LfnXVq5ApjcC
 
 infra/tools/luci/lucicfg/linux-ppc64le
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	Z2maiB6zl30AXzF8CdXaCFQkwJwjS9q3-BvXkSa5ROAC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	qLK2stwybKglSQ4nqJ56XN4nZRtZdHaF7QY04Ex78B8C
 
 infra/tools/luci/lucicfg/linux-riscv64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	XnvGYQtEx760Zt2JfbZwIykDBKbSsQ0SokK7k-O4LzEC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	vmANyNtJI3GG5_qddCr7Cnjwyz7cOt8UJFjoIS358boC
 
 infra/tools/luci/lucicfg/linux-s390x
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	AwiWpKcWMUHhladUDI_5ibsc4eIFtcoewz6Ndv3bQ4MC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	lOgDkdVKqxNN4XpBPbQHqJXj9xIApwuGegMbqGlf1X0C
 
 infra/tools/luci/lucicfg/mac-amd64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	cG5c0iC1-HpRy7XF_pt7V9EStQL3vn-788olYEBlXHoC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	vs5V7vPJmXknibjyaeCJDxcXSSlcxRBQ2LCEZ7msLuIC
 
 infra/tools/luci/lucicfg/mac-arm64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	jC5FaiC6iRI5U0K6ehYf7v578iK32PqhL_YC3ez63RsC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	yNlKzszFLrLmPNgdr-NR9JqiLyqabZCzT1hQpojVWuwC
 
 infra/tools/luci/lucicfg/windows-amd64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	-OKR3WYyUZ_dZ6Jsyb9LasR1M17FhAwEu3zYByR6wJsC
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	TlX3EVPBXV2NuNeuBQBa8LNCKw537_rtHalJc726LKQC
 
 infra/tools/luci/lucicfg/windows-arm64
-	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
-	apnYGxJLgkQv5kr0Az3zsetKmRd0KODExs4JbWXJ0E8C
+	git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
+	SJHWrCuQUNWGPBQcbTBqhd5N3UYaqjrf2aeNPODLm5gC
 
 infra/tools/luci/vpython3/linux-386
 	git_revision:1fe128e81d74b6aec15277bc535e57af04bc3209

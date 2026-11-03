@@ -39,7 +39,7 @@ infra/tools/luci/led/${platform} git_revision:9fe5fef212ec9c376f658dce50162514da
 # LUCI config generator
 # NOTE: If you update this pin and lucicfg's version number changes, also update
 # the same pin in buildbucket's settings.cfg: http://shortn/_W60brsFSVY.
-infra/tools/luci/lucicfg/${platform} git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
+infra/tools/luci/lucicfg/${platform} git_revision:7295014ab5574b6cbdbe9c50eb7d9367f1ffd065
 
 # Mac toolchain installer
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
