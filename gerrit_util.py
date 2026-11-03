@@ -1815,6 +1815,15 @@ def GetChangeComments(host, change):
     return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
+def GetChangeDrafts(host, change):
+    """Get the draft comments on a change across all revisions.
+
+    https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-change-drafts
+    """
+    path = "changes/%s/drafts" % change
+    return ReadHttpJsonResponse(CreateHttpConn(host, path))
+
+
 def GetChangeChecks(host, change, revision="current"):
     """Get automated findings from the Gerrit Findings plugin."""
     path = "changes/%s/revisions/%s/list_checks" % (change, revision)

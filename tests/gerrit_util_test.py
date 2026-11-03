@@ -1434,6 +1434,22 @@ class GerritUtilTest(unittest.TestCase):
 
     @mock.patch("gerrit_util.CreateHttpConn")
     @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    def testGetChangeDrafts(self, mockJsonResponse, mockCreateHttpConn):
+        """Verifies that `GetChangeDrafts` queries the change drafts endpoint."""
+        mockJsonResponse.return_value = {"a.py": [{"id": "d1"}]}
+        self.assertEqual(
+            {"a.py": [{"id": "d1"}]},
+            gerrit_util.GetChangeDrafts("chromium", 123456),
+        )
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium", "changes/123456/drafts"
+        )
+        mockJsonResponse.assert_called_once_with(
+            mockCreateHttpConn.return_value
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
     @mock.patch("gerrit_util.gclient_utils.IsEnvAi", return_value=True)
     def testCallGerritApi_Drafts_Ai(
         self, mockIsEnvAi, mockJsonResponse, mockCreateHttpConn

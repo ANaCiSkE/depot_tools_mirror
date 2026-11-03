@@ -1034,6 +1034,10 @@ class TestGitCl(unittest.TestCase):
             lambda *a: self._mocked_call("GetChangeComments", *a),
         ).start()
         mock.patch(
+            "git_cl.gerrit_util.GetChangeDrafts",
+            lambda *a: self._mocked_call("GetChangeDrafts", *a),
+        ).start()
+        mock.patch(
             "git_cl.gerrit_util.AddReviewers",
             lambda *a: self._mocked_call("AddReviewers", *a),
         ).start()
@@ -7569,6 +7573,286 @@ class TestGitCl(unittest.TestCase):
             0,
             git_cl.main(["comments", "-i", "1", "-j", "output.json"]),
         )
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("git_cl.Changelist.GetBranch", return_value="foo")
+    @mock.patch("gerrit_util.GetAccountDetails", getAccountDetailsMock)
+    def test_git_cl_comments_list_drafts(self, *_mocks):
+        """Verifies `--drafts` and `--only-drafts` across output formats and `--unresolved`."""
+        scm.GIT.SetConfig(
+            "",
+            "remote.origin.url",
+            "https://chromium.googlesource.com/infra/infra",
+        )
+        gerrit_util.GetChangeDetail.return_value = {
+            "owner": {"email": "getAccountDetailsMock@example.com"},
+            "current_revision": "ba5eba11",
+            "revisions": {"ba5eba11": {"_number": 1}},
+            "messages": [
+                {
+                    "_revision_number": 1,
+                    "author": {"email": "reviewer@example.com"},
+                    "date": "2017-03-17 05:19:37.500000000",
+                    "id": "msg_1",
+                    "message": "Patch Set 1:\n\n(2 comments)",
+                },
+            ],
+        }
+        file_comments = {
+            "a.py": [
+                {
+                    "id": "pub_unresolved",
+                    "author": {"email": "reviewer@example.com"},
+                    "updated": "2017-03-17 05:19:37.500000000",
+                    "patch_set": 1,
+                    "line": 10,
+                    "unresolved": True,
+                    "message": "Please rename",
+                },
+                {
+                    "id": "pub_resolved",
+                    "author": {"email": "reviewer@example.com"},
+                    "updated": "2017-03-17 05:19:37.500000000",
+                    "patch_set": 1,
+                    "line": 20,
+                    "unresolved": False,
+                    "message": "Looks good",
+                },
+            ],
+        }
+        draft_comments = {
+            "a.py": [
+                {
+                    "id": "draft_reply_done",
+                    "updated": "2017-03-17 06:00:00.000000000",
+                    "patch_set": 1,
+                    "line": 10,
+                    "in_reply_to": "pub_unresolved",
+                    "unresolved": False,
+                    "message": "Done",
+                },
+                {
+                    "id": "draft_reply_ack",
+                    "updated": "2017-03-17 06:05:00.000000000",
+                    "patch_set": 1,
+                    "line": 20,
+                    "in_reply_to": "pub_resolved",
+                    "unresolved": False,
+                    "message": "Acknowledged",
+                },
+            ],
+            "b.py": [
+                {
+                    "id": "draft_standalone_unresolved",
+                    "updated": "2017-03-17 06:10:00.000000000",
+                    "patch_set": 1,
+                    "side": "PARENT",
+                    "line": 5,
+                    "unresolved": True,
+                    "message": "Follow-up TODO",
+                },
+            ],
+        }
+        get_comments_call = (
+            (
+                "GetChangeComments",
+                "chromium-review.googlesource.com",
+                "infra%2Finfra~1",
+            ),
+            file_comments,
+        )
+        get_drafts_call = (
+            (
+                "GetChangeDrafts",
+                "chromium-review.googlesource.com",
+                "infra%2Finfra~1",
+            ),
+            draft_comments,
+        )
+
+        # Default mode does not fetch drafts.
+        self.calls = [get_comments_call]
+        self.assertEqual(0, git_cl.main(["comments", "-i", "1"]))
+        out = sys.stdout.getvalue()
+        self.assertNotIn("(draft)", out)
+        self.assertNotIn("Done", out)
+
+        # `--drafts` (and `--draft` alias) shows published comments and drafts.
+        sys.stdout.seek(0)
+        sys.stdout.truncate(0)
+        self.calls = [get_comments_call, get_drafts_call]
+        self.assertEqual(0, git_cl.main(["comments", "-i", "1", "--draft"]))
+        lines = sys.stdout.getvalue().splitlines()
+        self.assertIn(
+            "    PS1, Line 10: https://crrev.com/c/1/1/a.py#10 (unresolved)",
+            lines,
+        )
+        self.assertIn(
+            "    PS1, Line 10: https://crrev.com/c/1/1/a.py#10 (resolved) (draft)",
+            lines,
+        )
+        self.assertIn(
+            "    Base, Line 5: https://crrev.com/c/1/1/b.py#b5 (unresolved) (draft)",
+            lines,
+        )
+        self.assertIn(
+            "getAccountDetailsMock@example.com (draft)", "\n".join(lines)
+        )
+        self.assertNotIn("reviewer@example.com (draft)", "\n".join(lines))
+
+        # Machine-readable `--drafts -m`.
+        sys.stdout.seek(0)
+        sys.stdout.truncate(0)
+        self.calls = [get_comments_call, get_drafts_call]
+        self.assertEqual(
+            0, git_cl.main(["comments", "-i", "1", "--drafts", "-m"])
+        )
+        lines = sys.stdout.getvalue().splitlines()
+        self.assertIn("  a.py:10: (unresolved)", lines)
+        self.assertIn("  a.py:10: (resolved) (draft)", lines)
+        self.assertIn("  b.py:5: (unresolved) (draft)", lines)
+
+        # `--drafts --unresolved` keeps the unresolved published thread, its
+        # resolved draft reply, and the unresolved standalone draft, while
+        # dropping the resolved thread and its resolved draft reply.
+        self.calls = [
+            get_comments_call,
+            get_drafts_call,
+            (
+                (
+                    "write_json",
+                    "output.json",
+                    [
+                        {
+                            "date": "2017-03-17 05:19:37.500000",
+                            "message": {
+                                "message": "Patch Set 1:\n\n(2 comments)",
+                                "comments": [
+                                    {
+                                        "path": "a.py",
+                                        "line": 10,
+                                        "patchset": "PS1",
+                                        "unresolved": True,
+                                        "content": "Please rename",
+                                        "id": "pub_unresolved",
+                                    }
+                                ],
+                            },
+                            "sender": "reviewer@example.com",
+                            "autogenerated": False,
+                            "approval": False,
+                            "disapproval": False,
+                        },
+                        {
+                            "date": "2017-03-17 06:00:00.000000",
+                            "message": {
+                                "message": "",
+                                "comments": [
+                                    {
+                                        "path": "a.py",
+                                        "line": 10,
+                                        "patchset": "PS1",
+                                        "unresolved": False,
+                                        "content": "Done",
+                                        "id": "draft_reply_done",
+                                        "draft": True,
+                                    }
+                                ],
+                            },
+                            "sender": "getAccountDetailsMock@example.com",
+                            "autogenerated": False,
+                            "approval": False,
+                            "disapproval": False,
+                        },
+                        {
+                            "date": "2017-03-17 06:10:00.000000",
+                            "message": {
+                                "message": "",
+                                "comments": [
+                                    {
+                                        "path": "b.py",
+                                        "line": 5,
+                                        "patchset": "Base",
+                                        "unresolved": True,
+                                        "content": "Follow-up TODO",
+                                        "id": "draft_standalone_unresolved",
+                                        "draft": True,
+                                    }
+                                ],
+                            },
+                            "sender": "getAccountDetailsMock@example.com",
+                            "autogenerated": False,
+                            "approval": False,
+                            "disapproval": False,
+                        },
+                    ],
+                ),
+                "",
+            ),
+        ]
+        self.assertEqual(
+            0,
+            git_cl.main(
+                [
+                    "comments",
+                    "-i",
+                    "1",
+                    "--drafts",
+                    "--unresolved",
+                    "-j",
+                    "output.json",
+                ]
+            ),
+        )
+
+        # `--only-drafts` skips `GetChangeComments` and shows all drafts;
+        # `--only-drafts --unresolved` filters to `unresolved=True` drafts.
+        sys.stdout.seek(0)
+        sys.stdout.truncate(0)
+        self.calls = [get_drafts_call]
+        self.assertEqual(
+            0, git_cl.main(["comments", "-i", "1", "--only-drafts"])
+        )
+        out = sys.stdout.getvalue()
+        self.assertIn("Done", out)
+        self.assertIn("Acknowledged", out)
+        self.assertIn("Follow-up TODO", out)
+        self.assertNotIn("Please rename", out)
+
+        sys.stdout.seek(0)
+        sys.stdout.truncate(0)
+        self.calls = [get_drafts_call]
+        self.assertEqual(
+            0,
+            git_cl.main(
+                ["comments", "-i", "1", "--only-drafts", "--unresolved"]
+            ),
+        )
+        out = sys.stdout.getvalue()
+        self.assertNotIn("Done", out)
+        self.assertNotIn("Acknowledged", out)
+        self.assertIn("Follow-up TODO", out)
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    def test_git_cl_comments_draft_errors(self, _mock_stderr):
+        """Verifies invalid flag combinations fail cleanly."""
+        scm.GIT.SetConfig(
+            "",
+            "remote.origin.url",
+            "https://chromium.googlesource.com/infra/infra",
+        )
+        for bad_args in (
+            ["comments", "-i", "10", "--drafts", "--only-drafts"],
+            ["comments", "-i", "10", "--only-drafts", "-a", "msg"],
+            ["comments", "-i", "10", "--drafts", "-a", "msg"],
+        ):
+            with self.assertRaises(SystemExitMock):
+                git_cl.main(bad_args)
 
     def test_get_remote_url_with_pushurl(self):
         pushurl = "sso://chrome-internal/clank/internal/apps.git"
