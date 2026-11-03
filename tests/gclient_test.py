@@ -3333,6 +3333,229 @@ class RemoveUnversionedGitDirsTest(trial_dir.TestCase):
         self.assertEqual(client._ReadEntries(), current_entries)
 
 
+class RestoreRemovedCipdEntriesTest(trial_dir.TestCase):
+    def _init_repo(self, path: str, files: dict[str, str]) -> None:
+        os.makedirs(path, exist_ok=True)
+        for rel_path, content in files.items():
+            write(os.path.join(path, rel_path), content)
+        for args in (
+            ["init"],
+            ["config", "core.autocrlf", "false"],
+            ["add", "."],
+            [
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "init",
+            ],
+        ):
+            subprocess.run(
+                ["git", "-C", path] + args, check=True, capture_output=True
+            )
+
+    def testRestoresTrackedSubdirAndDeduplicates(self) -> None:
+        src_dir = os.path.join(self.root_dir, "src")
+        self._init_repo(
+            src_dir,
+            {
+                "important.txt": "committed",
+                "third_party/pkg_dir/tracked.txt": "tracked",
+            },
+        )
+        # Simulate local developer edits alongside CIPD removing pkg_dir.
+        write(os.path.join(src_dir, "important.txt"), "uncommitted")
+        gclient_utils.rmtree(os.path.join(src_dir, "third_party", "pkg_dir"))
+
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(self.root_dir, options)
+
+        with mock.patch(
+            "gclient_scm.scm.GIT.Capture",
+            wraps=gclient_scm.scm.GIT.Capture,
+        ) as mock_capture:
+            client._RestoreRemovedCipdEntries(
+                [
+                    "src/third_party/pkg_dir:infra/pkg1",
+                    "./src/third_party/pkg_dir/:infra/pkg2",
+                ]
+            )
+
+        checkout_calls = [
+            call
+            for call in mock_capture.call_args_list
+            if "checkout" in call.args[0]
+        ]
+        self.assertEqual(len(checkout_calls), 1)
+        self.assertEqual(
+            checkout_calls[0].args[0],
+            ["--literal-pathspecs", "checkout", "--", "pkg_dir"],
+        )
+        self.assertEqual(
+            gclient_utils.FileRead(
+                os.path.join(src_dir, "third_party", "pkg_dir", "tracked.txt")
+            ),
+            "tracked",
+        )
+        self.assertEqual(
+            gclient_utils.FileRead(os.path.join(src_dir, "important.txt")),
+            "uncommitted",
+        )
+
+    def testBlocksOptionPathspecAndTraversalPayloads(self) -> None:
+        work_dir = os.path.join(self.root_dir, "work")
+        src_dir = os.path.join(work_dir, "src")
+        outside_repo = os.path.join(self.root_dir, "outside", "repo")
+
+        self._init_repo(src_dir, {"important.txt": "committed_src"})
+        self._init_repo(outside_repo, {"secret.txt": "committed_out"})
+
+        write(os.path.join(src_dir, "important.txt"), "uncommitted_src")
+        write(os.path.join(outside_repo, "secret.txt"), "uncommitted_out")
+
+        options, _ = gclient.OptionParser().parse_args([])
+        options.nohooks = True
+        options.patch_refs = []
+        options.revisions = []
+        options.head = False
+        options.delete_unversioned_trees = False
+        client = gclient.GClient(work_dir, options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars={},
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=False,
+            relative=False,
+            condition=None,
+        )
+        client.add_dependencies_and_close([sol], [])
+        sol.add_dependencies_and_close([], [])
+        client._cipd_root = mock.MagicMock()
+
+        hostile_entries = {
+            "src/-f:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "src/--force:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "src/*:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "src/[i]mportant.txt:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "src/.:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "src/. :evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            ".:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "src/.git/HEAD:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "../outside/repo/-f:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "..\\outside\\repo\\-f:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            f"{outside_repo}/-f:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+            "C:\\outside\\repo\\-f:evil/pkg": "https://chrome-infra-packages.appspot.com/evil/pkg@1",
+        }
+        stale_entries = {
+            "src": "https://example.com/src.git",
+            **hostile_entries,
+        }
+        write(
+            os.path.join(work_dir, ".gclient_entries"),
+            f"entries = {stale_entries!r}\n",
+        )
+
+        with (
+            mock.patch.object(sol, "run"),
+            mock.patch.object(
+                client,
+                "_RestoreRemovedCipdEntries",
+                wraps=client._RestoreRemovedCipdEntries,
+            ) as mock_restore,
+            mock.patch("git_common.check_git_version", return_value=None),
+        ):
+            client.RunOnDeps("update", [])
+
+        mock_restore.assert_called_once()
+        self.assertCountEqual(
+            mock_restore.call_args.args[0], list(hostile_entries)
+        )
+        self.assertEqual(
+            gclient_utils.FileRead(os.path.join(src_dir, "important.txt")),
+            "uncommitted_src",
+        )
+        self.assertEqual(
+            gclient_utils.FileRead(os.path.join(outside_repo, "secret.txt")),
+            "uncommitted_out",
+        )
+
+    def testSkipsOuterGitRepoAboveRootDir(self) -> None:
+        self._init_repo(
+            self.root_dir,
+            {"work/sub/victim.txt": "committed_outer"},
+        )
+        work_dir = os.path.join(self.root_dir, "work")
+        # Even if an empty .git directory exists inside work/sub, git would walk
+        # up to self.root_dir/.git unless GetCheckoutRoot is confined to work_dir.
+        os.makedirs(os.path.join(work_dir, "sub", ".git"), exist_ok=True)
+        victim = os.path.join(work_dir, "sub", "victim.txt")
+        write(victim, "uncommitted_outer")
+
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(work_dir, options)
+        client._RestoreRemovedCipdEntries(["sub/victim.txt:evil/pkg"])
+
+        self.assertEqual(gclient_utils.FileRead(victim), "uncommitted_outer")
+
+    def testSkipsLinkOrJunctionSegments(self) -> None:
+        src_dir = os.path.join(self.root_dir, "src")
+        self._init_repo(src_dir, {"sub/tracked.txt": "tracked"})
+        gclient_utils.rmtree(os.path.join(src_dir, "sub"))
+
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(self.root_dir, options)
+
+        with (
+            mock.patch.object(
+                gclient.GcsDependency, "_is_link_or_junction", return_value=True
+            ),
+            mock.patch("gclient_scm.scm.GIT.Capture") as mock_capture,
+        ):
+            client._RestoreRemovedCipdEntries(["src/sub:infra/pkg"])
+            mock_capture.assert_not_called()
+
+    @unittest.skipIf(
+        sys.platform == "win32", "os.symlink requires elevation on Windows"
+    )
+    def testSkipsSymlinkEscape(self) -> None:
+        work_dir = os.path.join(self.root_dir, "work")
+        src_dir = os.path.join(work_dir, "src")
+        outside_repo = os.path.join(self.root_dir, "outside")
+
+        self._init_repo(src_dir, {"important.txt": "committed_src"})
+        self._init_repo(outside_repo, {"secret.txt": "committed_out"})
+        write(os.path.join(outside_repo, "secret.txt"), "uncommitted_out")
+
+        os.symlink(outside_repo, os.path.join(src_dir, "link_out"))
+        os.symlink(
+            os.path.join(outside_repo, "secret.txt"),
+            os.path.join(src_dir, "link_leaf"),
+        )
+
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(work_dir, options)
+        client._RestoreRemovedCipdEntries(
+            [
+                "src/link_out/-f:evil/pkg",
+                "src/link_out/secret.txt:evil/pkg",
+                "src/link_leaf:evil/pkg",
+            ]
+        )
+
+        self.assertEqual(
+            gclient_utils.FileRead(os.path.join(outside_repo, "secret.txt")),
+            "uncommitted_out",
+        )
+
+
 if __name__ == "__main__":
     sys.stdout = gclient_utils.MakeFileAutoFlush(sys.stdout)
     sys.stdout = gclient_utils.MakeFileAnnotated(sys.stdout)

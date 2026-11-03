@@ -2789,6 +2789,73 @@ it or fix the checkout.
         self._SaveEntries()
         return removed_cipd_entries
 
+    def _RestoreRemovedCipdEntries(self, removed_cipd_entries):
+        """Restores git-tracked paths that may have been removed by CIPD."""
+        real_root = os.path.realpath(self._root_dir)
+        norm_root = os.path.normcase(os.path.normpath(real_root))
+
+        def _is_within_root(path):
+            try:
+                norm_path = os.path.normcase(os.path.normpath(path))
+                return os.path.commonpath([norm_root, norm_path]) == norm_root
+            except ValueError:
+                return False
+
+        seen = set()
+        for cipd_entry in removed_cipd_entries:
+            subdir = cipd_entry.split(":", 1)[0]
+            clean_subdir = subdir.replace("\\", "/")
+            while clean_subdir.startswith("./"):
+                clean_subdir = clean_subdir[2:]
+            parts = [p for p in clean_subdir.split("/") if p]
+            if (
+                not parts
+                or ntpath.isabs(cipd_entry)
+                or GcsDependency._is_abs_or_drive(clean_subdir)
+                or any(
+                    not p.rstrip(". ") or p.rstrip(". ").lower() == ".git"
+                    for p in parts
+                )
+            ):
+                continue
+
+            key = tuple(parts)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            cur = real_root
+            has_symlink = False
+            for part in parts[:-1]:
+                cur = os.path.join(cur, part)
+                if GcsDependency._is_link_or_junction(cur):
+                    has_symlink = True
+                    break
+            if has_symlink:
+                continue
+
+            tail = parts[-1]
+            if GcsDependency._is_link_or_junction(os.path.join(cur, tail)):
+                continue
+
+            real_cwd = os.path.realpath(cur)
+            if not os.path.isdir(real_cwd) or not _is_within_root(real_cwd):
+                continue
+
+            try:
+                scm_root = os.path.realpath(
+                    gclient_scm.scm.GIT.GetCheckoutRoot(real_cwd)
+                )
+                if not _is_within_root(scm_root):
+                    continue
+                gclient_scm.scm.GIT.Capture(
+                    ["--literal-pathspecs", "checkout", "--", tail],
+                    cwd=real_cwd,
+                )
+            except (subprocess2.CalledProcessError, OSError):
+                # repo of the deleted cipd may also have been deleted.
+                pass
+
     def RunOnDeps(
         self, command, args, ignore_requirements=False, progress=True
     ):
@@ -2941,19 +3008,7 @@ it or fix the checkout.
                 # It's possible that CIPD removed some entries that are now part of
                 # git worktree. Try to checkout those directories
                 if removed_cipd_entries:
-                    for cipd_entry in removed_cipd_entries:
-                        cwd = os.path.join(
-                            self._root_dir, cipd_entry.split(":")[0]
-                        )
-                        cwd, tail = os.path.split(cwd)
-                        if cwd:
-                            try:
-                                gclient_scm.scm.GIT.Capture(
-                                    ["checkout", tail], cwd=cwd
-                                )
-                            except (subprocess2.CalledProcessError, OSError):
-                                # repo of the deleted cipd may also have been deleted.
-                                pass
+                    self._RestoreRemovedCipdEntries(removed_cipd_entries)
 
         if not self._options.nohooks:
             if should_show_progress:
