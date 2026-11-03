@@ -2723,7 +2723,9 @@ class GcsRoot(object):
                 resolved_objects = resolved_object_dict[path]
                 parsed_objects = parsed_object_dict[path]
 
-                full_path = os.path.join(self.root_dir, path)
+                # Like GcsDependency.output_dir, treat backslashes as
+                # separators.
+                full_path = os.path.join(self.root_dir, path.replace("\\", "/"))
                 if len(resolved_objects) != len(
                     parsed_objects
                 ) and os.path.exists(full_path):
@@ -2851,7 +2853,9 @@ class GcsRoot(object):
         """Remove all dep path gcs items and clear .gcs_entries"""
         for _, objects_dict in self._gcs_entries.items():
             for dep_path, _ in objects_dict.items():
-                full_path = os.path.join(self.root_dir, dep_path)
+                full_path = os.path.join(
+                    self.root_dir, dep_path.replace("\\", "/")
+                )
                 self.clobber_tar_content_names(full_path)
                 self.clobber_hash_files(full_path)
                 self.clobber_migration_files(full_path)

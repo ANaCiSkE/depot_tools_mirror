@@ -82,6 +82,7 @@
 __version__ = "0.7"
 
 import copy
+import functools
 import json
 import logging
 import optparse
@@ -99,6 +100,8 @@ import tempfile
 import time
 import urllib.parse
 import zipfile
+from collections.abc import Iterable
+from typing import Optional
 
 import detect_host_arch
 import download_from_google_storage
@@ -135,6 +138,26 @@ PREVIOUS_SYNC_COMMITS = "GCLIENT_PREVIOUS_SYNC_COMMITS"
 NO_SYNC_EXPERIMENT = "no-sync"
 
 PRECOMMIT_HOOK_VAR = "GCLIENT_PRECOMMIT"
+
+# Names of the metadata directories (or files) of git and jj checkouts.
+_SCM_METADATA_NAMES = (".git", ".jj")
+
+# TODO(https://crbug.com/343199633): Remove once all packages no longer
+# place content in directories with git content, and all milestone
+# branches have picked it up (m128+).
+_GCS_CLEANUP_BLOCKLIST_NAMES = frozenset(
+    [
+        "src/base/tracing/test/data",
+        "src/clank/orderfiles",
+        "src/third_party/blink/renderer/core/css/perftest_data",
+        "src/third_party/instrumented_libs/binaries",
+        "src/third_party/js_code_coverage",
+        "src/third_party/opus/tests/resources",
+        "src/third_party/test_fonts",
+        "src/third_party/tfhub_models",
+        "src/tools/perf/page_sets/maps_perf_test/",
+    ]
+)
 
 
 class GNException(Exception):
@@ -693,13 +716,22 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             )
 
         if self.name:
+            # GCS output directories are normalized, so a GCS dependency also
+            # waits for the dependencies containing it in another spelling.
+            is_gcs = isinstance(self, GcsDependency)
             requirements |= set(
                 obj.name
                 for obj in self.root.subtree(False)
                 if (
                     obj is not self
                     and obj.name
-                    and self.name.startswith(posixpath.join(obj.name, ""))
+                    and (
+                        self.name.startswith(posixpath.join(obj.name, ""))
+                        or (
+                            is_gcs
+                            and _IsInsideDir(self.claimed_dir, obj.claimed_dir)
+                        )
+                    )
                 )
             )
         requirements = tuple(sorted(requirements))
@@ -712,11 +744,26 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     def should_recurse(self):
         return self._should_recurse
 
+    @property
+    def deps_key(self) -> Optional[str]:
+        """The key of this dependency in its DEPS file, relative to the root.
+
+        With `use_relative_paths`, that is the key after making it relative to
+        the root.
+        """
+        return self.name
+
+    @functools.cached_property
+    def claimed_dir(self) -> str:
+        """The normalized directory, relative to the root, this dep uses."""
+        return _NormalizeDepPath(self.deps_key or "")
+
     def verify_validity(self):
         """Verifies that this Dependency is fine to add as a child of another one.
 
         Returns True if this entry should be added, False if it is a duplicate of
-        another entry.
+        another entry. Raises if this entry uses the output directory of a GCS
+        dependency, or a directory inside it.
         """
         logging.info("Dependency(%s).verify_validity()" % self.name)
         if self.name in [s.name for s in self.parent.dependencies]:
@@ -729,7 +776,8 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             return not any(d.name == self.name for d in self.root.subtree(True))
 
         # This require a full tree traversal with locks.
-        siblings = [d for d in self.root.subtree(False) if d.name == self.name]
+        others = list(self.root.subtree(False))
+        siblings = [d for d in others if d.name == self.name]
         for sibling in siblings:
             # Allow to have only one to be None or ''.
             if self.url != sibling.url and bool(self.url) == bool(sibling.url):
@@ -752,6 +800,9 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             # practice, simply ignore it.
             logging.warning("Won't process duplicate dependency %s" % sibling)
             return False
+        # Only check dependencies that are added, e.g. not ones that a DEPS
+        # entry without URL removes.
+        _CheckGcsDirConflicts(self, others)
         return True
 
     def _postprocess_deps(self, deps, rel_prefix):
@@ -826,26 +877,15 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
 
     def _deps_to_objects(self, deps, use_relative_paths):
         # type: (Mapping[str, Mapping[str, str]], bool) -> Sequence[Dependency]
-        """Convert a deps dict to a list of Dependency objects."""
-        deps_to_add = []
-        cached_conditions = {}
+        """Convert a deps dict to a list of Dependency objects.
 
-        # TODO(https://crbug.com/343199633): Remove once all packages no longer
-        # place content in directories with git content, and all milestone
-        # branches have picked it up (m128+).
-        gcs_cleanup_blocklist_name = set(
-            [
-                "src/base/tracing/test/data",
-                "src/clank/orderfiles",
-                "src/third_party/blink/renderer/core/css/perftest_data",
-                "src/third_party/instrumented_libs/binaries",
-                "src/third_party/js_code_coverage",
-                "src/third_party/opus/tests/resources",
-                "src/third_party/test_fonts",
-                "src/third_party/tfhub_models",
-                "src/tools/perf/page_sets/maps_perf_test/",
-            ]
-        )
+        Also prepares the output directories of GCS dependencies, see
+        _prepare_gcs_deps().
+        """
+        deps_to_add = []
+        # The GcsDependency objects of each GCS entry, by DEPS key.
+        gcs_deps_by_name = {}
+        cached_conditions = {}
 
         def _should_process(condition):
             if not condition:
@@ -904,7 +944,6 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                         "Duplicate object names detected in {} GCS "
                         "dependency.".format(name)
                     )
-                gcs_root = self.GetGcsRoot()
 
                 gcs_deps = []
                 for obj in dep_value["objects"]:
@@ -931,7 +970,6 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                             sha256sum=obj["sha256sum"],
                             output_file=obj.get("output_file"),
                             size_bytes=obj["size_bytes"],
-                            gcs_root=gcs_root,
                             custom_vars=self.custom_vars,
                             should_process=should_process_object,
                             relative=use_relative_paths,
@@ -939,27 +977,12 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                         )
                     )
                 deps_to_add.extend(gcs_deps)
+                gcs_deps_by_name[name] = gcs_deps
 
                 if not gclient_utils.IsEnvCog() and any(
                     gcs.should_process for gcs in gcs_deps
                 ):
                     gcs_deps[0]._ValidateOutputDir()
-
-                if name in gcs_cleanup_blocklist_name:
-                    continue
-
-                # Check if at least one object needs to be downloaded.
-                needs_download = any(gcs.IsDownloadNeeded() for gcs in gcs_deps)
-                # When IsEnvCog(), gcs sources are already present and are not managed by gclient.
-                if needs_download and os.path.exists(gcs_deps[0].output_dir):
-                    # Since we don't know what old content to remove, we remove
-                    # the entire output_dir. All gcs_deps are expected to have
-                    # the same output_dir, so we get the first one, which must
-                    # exist.
-                    logging.warning(
-                        "GCS dependency %s new version, removing old.", name
-                    )
-                    gclient_utils.rmtree(gcs_deps[0].output_dir)
             else:
                 url = dep_value.get("url")
                 deps_to_add.append(
@@ -981,10 +1004,84 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                     )
                 )
 
+        if gcs_deps_by_name:
+            self._prepare_gcs_deps(gcs_deps_by_name, deps_to_add)
+
         # TODO(crbug.com/1341285): Understand why we need this and remove
         # it if we don't.
         deps_to_add.sort(key=lambda x: x.name)
         return deps_to_add
+
+    def _prepare_gcs_deps(
+        self,
+        gcs_deps_by_name: dict[str, list["GcsDependency"]],
+        new_deps: list["Dependency"],
+    ) -> None:
+        """Checks, records and cleans up the GCS entries of this DEPS file.
+
+        Args:
+            gcs_deps_by_name: The GcsDependency objects of each GCS entry, by
+                DEPS key.
+            new_deps: All dependencies created from this DEPS file.
+        """
+        entries = {
+            name: (gcs_deps, next(g for g in gcs_deps if g.should_process))
+            for name, gcs_deps in gcs_deps_by_name.items()
+            if any(gcs.should_process for gcs in gcs_deps)
+        }
+        if not entries:
+            return
+        # Old GCS content is removed below, so first make sure that no GCS
+        # output directory belongs to another dependency, including the ones
+        # just created from this DEPS file. The objects of an entry share their
+        # directory, so checking one that is processed is enough.
+        tree = list(self.root.subtree(False))
+        tree_names = {dep.name for dep in tree}
+        # verify_validity() doesn't add git dependencies with the name of one in
+        # the tree.
+        others = tree + [
+            dep
+            for dep in new_deps
+            if not (isinstance(dep, GitDependency) and dep.name in tree_names)
+        ]
+        for _, processed in entries.values():
+            _CheckGcsDirConflicts(processed, others)
+
+        gcs_root = self.GetGcsRoot()
+        for name, (gcs_deps, processed) in entries.items():
+            # Record all objects of the entry, since GcsRoot cleans up entries
+            # whose number of objects changed.
+            for gcs in gcs_deps:
+                gcs_root.add_object(self.name, name, gcs.object_name)
+
+            if name in _GCS_CLEANUP_BLOCKLIST_NAMES:
+                continue
+            # Check if at least one object needs to be downloaded. When
+            # IsEnvCog(), gcs sources are already present and are not managed
+            # by gclient.
+            needs_download = any(gcs.IsDownloadNeeded() for gcs in gcs_deps)
+            output_dir = processed.output_dir
+            if not needs_download or not os.path.exists(output_dir):
+                continue
+            # The tree doesn't know about dependencies from DEPS files that
+            # are parsed later, nor about stale checkouts, so never remove a
+            # checkout.
+            checkout = self.root.FindCheckout(processed.claimed_dir)
+            if checkout:
+                what = "it" if checkout == output_dir else checkout
+                raise gclient_utils.Error(
+                    f"GCS dependency {name} needs to replace {output_dir}, "
+                    f"but {what} is a checkout:\n"
+                    f"  {processed.hierarchy()}\n"
+                    "If no DEPS file uses that checkout anymore, remove it "
+                    "manually and sync again."
+                )
+            # Since we don't know what old content to remove, we remove the
+            # entire output_dir.
+            logging.warning(
+                "GCS dependency %s new version, removing old.", name
+            )
+            gclient_utils.rmtree(output_dir)
 
     def ParseDepsFile(self):
         # type: () -> None
@@ -1990,6 +2087,112 @@ def _detect_host_os():
         return sys.platform
 
 
+def _NormalizeDepPath(path: str) -> str:
+    """Normalizes a dependency path.
+
+    Treats backslashes as separators and strips the trailing dots and spaces
+    that Windows drops from component names.
+    """
+    norm = posixpath.normpath(path.replace("\\", "/"))
+    return "/".join(p.rstrip(". ") or p for p in norm.split("/"))
+
+
+def _IsInsideDir(path: str, parent: str) -> bool:
+    """Returns whether `path` is strictly inside `parent`.
+
+    Both paths must be normalized and relative to the same directory. They are
+    compared case-insensitively, as the checkout may be on a case-insensitive
+    filesystem.
+    """
+    path, parent = path.lower(), parent.lower()
+    if parent == ".":
+        return path not in (".", "..") and not path.startswith("../")
+    return path.startswith(f"{parent}/")
+
+
+def _StartsWithScmMetadata(rel_path: str) -> bool:
+    """Returns whether `rel_path` is or is inside a `.git` or `.jj` entry.
+
+    Names are compared case-insensitively and without the trailing dots and
+    spaces that Windows drops.
+    """
+    parts = [
+        p for p in rel_path.replace("\\", "/").split("/") if p not in ("", ".")
+    ]
+    return bool(parts) and parts[0].rstrip(". ").lower() in _SCM_METADATA_NAMES
+
+
+def _UsesDir(dep: Dependency) -> bool:
+    """Returns whether `dep` puts anything in its directory."""
+    # Git dependencies without a URL, e.g. the ones removed through
+    # `custom_deps`, are not checked out. Solutions without a URL are managed
+    # by the user.
+    return dep.should_process and bool(
+        dep.url
+        or dep.parent is dep.root
+        or isinstance(dep, (GcsDependency, CipdDependency))
+    )
+
+
+def _CheckGcsDirConflicts(
+    dep: Dependency, others: Iterable[Dependency]
+) -> None:
+    """Raises if `dep` and one of `others` break GCS directory ownership.
+
+    A GCS output directory is owned by the DEPS entry that declares it: its
+    objects may share it, but no other dependency may use it or a directory
+    inside it, since old GCS content is removed by removing the whole
+    directory. A GCS output directory may be inside another dependency's
+    directory. Only dependencies that use their directory are checked, and
+    directories are compared case-insensitively, as the checkout may be on a
+    case-insensitive filesystem.
+    """
+    if not _UsesDir(dep):
+        return
+    dep_is_gcs = isinstance(dep, GcsDependency)
+    dep_dir = dep.claimed_dir
+    dep_dir_key = dep_dir.lower()
+    for other in others:
+        other_is_gcs = isinstance(other, GcsDependency)
+        if (
+            not (dep_is_gcs or other_is_gcs)
+            or other is dep
+            or not _UsesDir(other)
+            or (
+                dep_is_gcs
+                and other_is_gcs
+                and other.parent is dep.parent
+                and other.deps_key == dep.deps_key
+            )
+        ):
+            continue
+        other_dir = other.claimed_dir
+        if other_dir.lower() == dep_dir_key:
+            gcs_dir = dep_dir if dep_is_gcs else other_dir
+            problem = (
+                f"GCS dependency directory {gcs_dir} is also used by another "
+                "dependency"
+            )
+        elif dep_is_gcs and _IsInsideDir(other_dir, dep_dir):
+            problem = (
+                f"Dependency directory {other_dir} is inside GCS dependency "
+                f"directory {dep_dir}"
+            )
+        elif other_is_gcs and _IsInsideDir(dep_dir, other_dir):
+            problem = (
+                f"Dependency directory {dep_dir} is inside GCS dependency "
+                f"directory {other_dir}"
+            )
+        else:
+            continue
+        raise gclient_utils.Error(
+            f"{problem}:\n"
+            f"  {other.hierarchy()} [{other.url}]\n"
+            "vs\n"
+            f"  {dep.hierarchy()} [{dep.url}]"
+        )
+
+
 class GitDependency(Dependency):
     """A Dependency object that represents a single git checkout."""
 
@@ -2382,6 +2585,39 @@ it or fix the checkout.
             gclient_utils.FileRead(filename), filename
         )
         return scope.get("entries", {})
+
+    @functools.cached_property
+    def _previous_checkouts(self) -> tuple[str, ...]:
+        """The normalized checkout directories of the last successful sync."""
+        return tuple(
+            _NormalizeDepPath(name)
+            for name in self._ReadEntries()
+            # Skip CIPD packages and GCS objects. Dependencies removed through
+            # custom_deps are kept, as their checkouts stay on disk.
+            if ":" not in name
+        )
+
+    def FindCheckout(self, rel_dir: str) -> Optional[str]:
+        """Returns the path of a checkout at or inside `rel_dir`, or None.
+
+        This only looks at `rel_dir` itself and at the checkouts of the last
+        successful sync inside it, so `.git` directories inside e.g. archives
+        don't count.
+        """
+        rel_dir = _NormalizeDepPath(rel_dir)
+        nested = [
+            checkout
+            for checkout in self._previous_checkouts
+            if _IsInsideDir(checkout, rel_dir)
+        ]
+        for checkout in [rel_dir, *nested]:
+            path = os.path.join(self.root_dir, checkout)
+            if any(
+                os.path.lexists(os.path.join(path, name))
+                for name in _SCM_METADATA_NAMES
+            ):
+                return path
+        return None
 
     def _ExtractFileJsonContents(self, default_filename):
         # type: (str) -> Mapping[str,Any]
@@ -3179,7 +3415,6 @@ class GcsDependency(Dependency):
         sha256sum,
         output_file,
         size_bytes,
-        gcs_root,
         custom_vars,
         should_process,
         relative,
@@ -3191,8 +3426,7 @@ class GcsDependency(Dependency):
         self.output_file = output_file
         self.size_bytes = size_bytes
         url = f"gs://{self.bucket}/{self.object_name}"
-        self._gcs_root = gcs_root
-        self._gcs_root.add_object(parent.name, name, object_name)
+        self._deps_key = name
         super(GcsDependency, self).__init__(
             parent=parent,
             name=f"{name}:{object_name}",
@@ -3208,9 +3442,14 @@ class GcsDependency(Dependency):
             condition=condition,
         )
 
+    # override
+    @property
+    def deps_key(self) -> str:
+        return self._deps_key
+
     @property
     def output_dir(self):
-        return os.path.join(self.root.root_dir, self.name.split(":")[0])
+        return os.path.join(self.root.root_dir, self.claimed_dir)
 
     @property
     def gcs_file_name(self):
@@ -3229,6 +3468,8 @@ class GcsDependency(Dependency):
             self._is_abs_or_drive(clean_output)
             or not parts[-1].rstrip(". ")
             or any(p not in ("", ".") and not p.rstrip(". ") for p in parts)
+            # See _CheckArchiveTopLevel().
+            or _StartsWithScmMetadata(clean_output)
         ):
             raise Exception(f"Invalid output_file path: {output_file}")
         return os.path.join(self.output_dir, output_file)
@@ -3259,8 +3500,14 @@ class GcsDependency(Dependency):
 
     # override
     def verify_validity(self):
-        """GCS dependencies allow duplicate name for objects in same directory."""
+        """Verifies that this GCS dependency owns its output directory.
+
+        Objects of the same GCS entry may share their output directory, but
+        raises if another dependency uses it or a directory inside it, or if
+        it is inside the output directory of another GCS entry.
+        """
         logging.info("Dependency(%s).verify_validity()" % self.name)
+        _CheckGcsDirConflicts(self, self.root.subtree(False))
         return True
 
     # override
@@ -3375,12 +3622,29 @@ class GcsDependency(Dependency):
             return False
 
     def _ValidateOutputDir(self):
-        """Ensures output_dir is within root_dir without traversing symlinks."""
-        dep_dir = self.name.split(":", 1)[0]
+        """Ensures output_dir is within root_dir without traversing symlinks.
+
+        Also ensures that output_dir is not inside the metadata directory of a
+        git or jj checkout, and that its path doesn't use other names for
+        existing directories.
+        """
+        dep_dir = self.deps_key
         clean_dir = dep_dir.replace("\\", "/")
         raw_parts = clean_dir.split("/")
         parts = [p for p in raw_parts if p and p != "."]
-        if not parts or self._is_abs_or_drive(clean_dir) or ".." in raw_parts:
+        # Reject names that Windows changes (trailing dots or spaces, `:` for
+        # alternate data streams) and `.git` or `.jj` in any case, so that GCS
+        # content never ends up in the metadata directory of a checkout.
+        if (
+            not parts
+            or self._is_abs_or_drive(clean_dir)
+            or ".." in raw_parts
+            or ":" in clean_dir
+            or any(
+                p != p.rstrip(". ") or p.lower() in _SCM_METADATA_NAMES
+                for p in parts
+            )
+        ):
             raise gclient_utils.Error(f"Invalid GCS dependency path: {dep_dir}")
         real_root = os.path.realpath(self.root.root_dir)
         cur = real_root
@@ -3396,6 +3660,12 @@ class GcsDependency(Dependency):
                 f"GCS dependency path resolves outside expected directory: "
                 f"{self.output_dir}"
             )
+        # Symlinks are rejected above, so if resolving the path changes more
+        # than the case of its names, it uses aliases, such as the Windows
+        # short names GIT~1 for .git or THIRDP~1 for third_party.
+        real_parts = os.path.relpath(real_cur, real_root).split(os.sep)
+        if [p.lower() for p in real_parts] != [p.lower() for p in parts]:
+            raise gclient_utils.Error(f"Invalid GCS dependency path: {dep_dir}")
         return real_cur
 
     def _ValidateTargetPaths(self, rel_paths, allow_internal_symlinks=False):
@@ -3619,6 +3889,7 @@ class GcsDependency(Dependency):
                 )
                 if not is_valid_tar:
                     raise Exception("tarfile contains invalid entries")
+                self._CheckArchiveTopLevel(formatted_names)
 
                 self._ValidateTargetPaths(
                     [os.path.basename(self.content_names_file)]
@@ -3661,6 +3932,7 @@ class GcsDependency(Dependency):
                         or ".." in set(cleaned.split("/"))
                     ):
                         raise Exception("zipfile contains invalid entries")
+                self._CheckArchiveTopLevel(zip_file.namelist())
 
                 self._ValidateTargetPaths(
                     [
@@ -3673,6 +3945,19 @@ class GcsDependency(Dependency):
                 )
 
                 zip_file.extractall(path=self.output_dir)
+
+    def _CheckArchiveTopLevel(self, names: Iterable[str]) -> None:
+        """Raises if the archive has a `.git` or `.jj` entry at its top level.
+
+        FindCheckout() would then treat output_dir as a checkout, so later
+        versions couldn't replace it.
+        """
+        if any(_StartsWithScmMetadata(name) for name in names):
+            raise gclient_utils.Error(
+                f"GCS object {self.url} has a .git or .jj entry at its top "
+                f"level, which would make {self.output_dir} look like a "
+                "checkout"
+            )
 
     # override
     def GetScmName(self):
@@ -3712,6 +3997,7 @@ class CipdDependency(Dependency):
         url = urllib.parse.urljoin(
             cipd_root.service_url, "%s@%s" % (package, version)
         )
+        self._deps_key = name
         super(CipdDependency, self).__init__(
             parent=parent,
             name=name + ":" + package,
@@ -3735,6 +4021,11 @@ class CipdDependency(Dependency):
         self._cipd_subdir = posixpath.join(*native_subdir_path.split(os.sep))
         self._package_name = package
         self._package_version = version
+
+    # override
+    @property
+    def deps_key(self) -> str:
+        return self._deps_key
 
     # override
     def run(
@@ -3786,8 +4077,14 @@ class CipdDependency(Dependency):
 
     # override
     def verify_validity(self):
-        """CIPD dependencies allow duplicate name for packages in same directory."""
+        """Verifies that no GCS dependency owns this package's directory.
+
+        CIPD dependencies allow duplicate name for packages in same directory,
+        but raises if it is the output directory of a GCS dependency, or a
+        directory inside it.
+        """
         logging.info("Dependency(%s).verify_validity()" % self.name)
+        _CheckGcsDirConflicts(self, self.root.subtree(False))
         return True
 
     # override
@@ -3839,7 +4136,7 @@ class CipdDependency(Dependency):
             s.extend(
                 [
                     "  # %s" % self.hierarchy(include_url=False),
-                    '  "%s": {' % (self.name.split(":")[0],),
+                    f'  "{self.deps_key}": {{',
                     '    "packages": [',
                 ]
             )

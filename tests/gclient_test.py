@@ -19,9 +19,11 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from typing import Optional
+from typing import Any, Optional
 import unittest
 from unittest import mock
+
+import parameterized
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -2343,7 +2345,6 @@ class GcsDependencyTest(trial_dir.TestCase):
         self.parent_mock = mock.MagicMock()
         self.parent_mock.name = "src"
         self.parent_mock.root.root_dir = self.root_dir
-        self.gcs_root_mock = mock.MagicMock()
         self.dep = gclient.GcsDependency(
             parent=self.parent_mock,
             name="test_dep",
@@ -2352,7 +2353,6 @@ class GcsDependencyTest(trial_dir.TestCase):
             sha256sum="fake",
             output_file=None,
             size_bytes=100,
-            gcs_root=self.gcs_root_mock,
             custom_vars={},
             should_process=True,
             relative=False,
@@ -2609,6 +2609,65 @@ class GcsDependencyTest(trial_dir.TestCase):
         with open(extracted_file, "rb") as f:
             self.assertEqual(f.read(), b"valid payload")
 
+    def _create_zip(self, names: list[str]) -> str:
+        import zipfile
+
+        zip_path = os.path.join(self.root_dir, "test.zip")
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for name in names:
+                zf.writestr(name, b"test content")
+        return zip_path
+
+    @parameterized.parameterized.expand(
+        [
+            ("tar_git_dir", "tar", ".git/HEAD"),
+            ("tar_git_file", "tar", ".git"),
+            ("tar_dot_slash", "tar", "./.git/HEAD"),
+            ("tar_other_case", "tar", ".GIT/HEAD"),
+            ("tar_trailing_dot", "tar", ".git./HEAD"),
+            ("tar_jj_dir", "tar", ".jj/repo"),
+            ("zip_git_dir", "zip", ".git/HEAD"),
+        ]
+    )
+    def test_maybe_extract_artifact_rejects_top_level_checkout_metadata(
+        self, _: str, archive_type: str, name: str
+    ) -> None:
+        # FindCheckout() would treat the output directory as a checkout, so
+        # the next version couldn't replace it.
+        if archive_type == "tar":
+            archive_path = self._create_tar([{"name": name}])
+        else:
+            archive_path = self._create_zip([name])
+        shutil.copy(archive_path, self.dep.artifact_output_file)
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "look like a checkout"
+        ):
+            self.dep._MaybeExtractArtifact()
+        self.assertEqual(
+            [os.path.basename(self.dep.artifact_output_file)],
+            os.listdir(self.dep.output_dir),
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("tar_nested_git_dir", "tar", "extracted_dir/.git/HEAD"),
+            ("tar_git_prefix", "tar", ".github/CODEOWNERS"),
+            ("zip_nested_git_dir", "zip", "extracted_dir/.git/HEAD"),
+        ]
+    )
+    def test_maybe_extract_artifact_allows_other_metadata_names(
+        self, _: str, archive_type: str, name: str
+    ) -> None:
+        if archive_type == "tar":
+            archive_path = self._create_tar([{"name": name}])
+        else:
+            archive_path = self._create_zip([name])
+        shutil.copy(archive_path, self.dep.artifact_output_file)
+        self.dep._MaybeExtractArtifact()
+        self.assertTrue(
+            os.path.isfile(os.path.join(self.dep.output_dir, *name.split("/")))
+        )
+
     def test_artifact_output_file_rejects_invalid_paths(self):
         invalid_paths = [
             "/home/chrome-bot/.gitconfig",
@@ -2618,6 +2677,10 @@ class GcsDependencyTest(trial_dir.TestCase):
             "\\evil.txt",
             ".",
             "..",
+            # These would make the output directory look like a checkout.
+            ".git",
+            "./.GIT. /config",
+            ".jj\\repo",
         ]
         for path in invalid_paths:
             dep = gclient.GcsDependency(
@@ -2628,7 +2691,6 @@ class GcsDependencyTest(trial_dir.TestCase):
                 sha256sum="fake",
                 output_file=path,
                 size_bytes=100,
-                gcs_root=self.gcs_root_mock,
                 custom_vars={},
                 should_process=True,
                 relative=False,
@@ -2756,7 +2818,6 @@ class GcsDependencyTest(trial_dir.TestCase):
             sha256sum="fake",
             output_file=None,
             size_bytes=100,
-            gcs_root=self.gcs_root_mock,
             custom_vars={},
             should_process=True,
             relative=False,
@@ -2779,7 +2840,7 @@ class GcsDependencyTest(trial_dir.TestCase):
     def test_artifact_output_file_rejects_degenerate_default_and_empty_names(
         self,
     ):
-        for bad_object_name in ("", ".", ". ", ".."):
+        for bad_object_name in ("", ".", ". ", "..", "git"):
             dep = gclient.GcsDependency(
                 parent=self.parent_mock,
                 name="test_dep",
@@ -2788,7 +2849,6 @@ class GcsDependencyTest(trial_dir.TestCase):
                 sha256sum="fake",
                 output_file=None,
                 size_bytes=100,
-                gcs_root=self.gcs_root_mock,
                 custom_vars={},
                 should_process=True,
                 relative=False,
@@ -2806,7 +2866,6 @@ class GcsDependencyTest(trial_dir.TestCase):
             sha256sum="fake",
             output_file="",
             size_bytes=100,
-            gcs_root=self.gcs_root_mock,
             custom_vars={},
             should_process=True,
             relative=False,
@@ -2945,7 +3004,6 @@ class GcsDependencyTest(trial_dir.TestCase):
             sha256sum="fake",
             output_file="sub/victim.bin",
             size_bytes=10,
-            gcs_root=self.gcs_root_mock,
             custom_vars={},
             should_process=True,
             relative=False,
@@ -3014,7 +3072,6 @@ class GcsDependencyTest(trial_dir.TestCase):
                     parent=self.parent_mock,
                     sha256sum="fake",
                     size_bytes=100,
-                    gcs_root=self.gcs_root_mock,
                     custom_vars={},
                     should_process=True,
                     relative=False,
@@ -3025,6 +3082,810 @@ class GcsDependencyTest(trial_dir.TestCase):
                     dep.DownloadGoogleStorage()
                 self.assertIn(value, str(ctx.exception))
                 mock_communicate.assert_not_called()
+
+
+def _deps_entry(
+    dep_type: str, condition: Optional[str] = None, num_objects: int = 1
+) -> dict[str, Any]:
+    """Returns a DEPS entry of type `dep_type` ("git", "cipd" or "gcs")."""
+    if dep_type == "git":
+        entry = {"dep_type": "git", "url": "https://example.com/repo.git"}
+    elif dep_type == "cipd":
+        entry = {
+            "dep_type": "cipd",
+            "packages": [{"package": "some/package", "version": "version:1"}],
+        }
+    elif dep_type == "gcs":
+        entry = {
+            "dep_type": "gcs",
+            "bucket": "some-bucket",
+            "objects": [
+                {
+                    "object_name": f"object{i}.tar.gz",
+                    "sha256sum": "abcd",
+                    "size_bytes": 10,
+                    "generation": 1,
+                }
+                for i in range(num_objects)
+            ],
+        }
+    else:
+        raise ValueError(f"Unknown dep_type: {dep_type}")
+    if condition:
+        entry["condition"] = condition
+    return entry
+
+
+def _gcs_entry_with_unprocessed_first_object() -> dict[str, Any]:
+    """Returns a GCS DEPS entry whose first object isn't processed."""
+    return {
+        "dep_type": "gcs",
+        "bucket": "some-bucket",
+        "objects": [
+            {
+                "object_name": "other_os.tar.gz",
+                "sha256sum": "abcd",
+                "size_bytes": 10,
+                "condition": "False",
+            },
+            {
+                "object_name": "this_os.tar.gz",
+                "sha256sum": "abcd",
+                "size_bytes": 10,
+            },
+        ],
+    }
+
+
+class GcsDirOwnershipTest(trial_dir.TestCase):
+    """A GCS output directory belongs to the DEPS entry that declares it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # GCS and CIPD entries are skipped in Cog workspaces.
+        mock.patch("gclient_utils.IsEnvCog", return_value=False).start()
+        self.addCleanup(mock.patch.stopall)
+        self.solution = self._create_solution()
+
+    def _create_solution(
+        self,
+        custom_deps: Optional[dict[str, Optional[str]]] = None,
+        url: Optional[str] = "https://example.com/src.git",
+    ) -> gclient.Dependency:
+        """Returns the "src" solution of a new client."""
+        options, _ = gclient.OptionParser().parse_args([])
+        self.client = gclient.GClient(self.root_dir, options)
+        self.client._cipd_root = CIPDRootMock(
+            self.root_dir, "https://example.com"
+        )
+        solution = gclient.GitDependency(
+            parent=self.client,
+            name="src",
+            url=url,
+            managed=True,
+            custom_deps=custom_deps,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        self.client.add_dependencies_and_close([solution], [])
+        return solution
+
+    def _add_deps(
+        self, parent: gclient.Dependency, deps: dict[str, Any]
+    ) -> None:
+        """Adds `deps` to `parent` like ParseDepsFile() does."""
+        parent.add_dependencies_and_close(
+            parent._deps_to_objects(deps, use_relative_paths=False), []
+        )
+
+    def _add_child(self, parent_deps: dict[str, Any]) -> gclient.Dependency:
+        """Adds `parent_deps` and a "src/child" git dep to the solution."""
+        self._add_deps(
+            self.solution, {**parent_deps, "src/child": _deps_entry("git")}
+        )
+        return next(
+            d for d in self.solution.dependencies if d.name == "src/child"
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("same_name", "src/victim"),
+            ("trailing_slash", "src/victim/"),
+            ("dot_component", "src/./victim"),
+            ("backslash", "src\\victim"),
+            ("other_case", "src/Victim"),
+        ]
+    )
+    def test_gcs_dep_cannot_take_over_git_dep_dir(
+        self, _: str, gcs_name: str
+    ) -> None:
+        victim_dir = os.path.join(self.root_dir, "src", "victim")
+        reviewed_file = os.path.join(victim_dir, "reviewed_file.txt")
+        write(reviewed_file, "reviewed")
+        os.makedirs(os.path.join(victim_dir, ".git"))
+        child = self._add_child({"src/victim": _deps_entry("git")})
+
+        with mock.patch(
+            "gclient_utils.rmtree", wraps=gclient_utils.rmtree
+        ) as rmtree_mock:
+            with self.assertRaisesRegex(
+                gclient_utils.Error,
+                "(?i)GCS dependency directory src/victim is also used by "
+                "another dependency",
+            ):
+                self._add_deps(child, {gcs_name: _deps_entry("gcs")})
+        rmtree_mock.assert_not_called()
+        self.assertEqual((), child.dependencies)
+        self.assertTrue(os.path.isfile(reviewed_file))
+        self.assertTrue(os.path.isdir(os.path.join(victim_dir, ".git")))
+
+    def test_conflict_error_shows_both_dependencies(self) -> None:
+        child = self._add_child({"src/foo": _deps_entry("git")})
+        with self.assertRaises(gclient_utils.Error) as ctx:
+            self._add_deps(child, {"src/foo": _deps_entry("gcs")})
+        self.assertEqual(
+            "GCS dependency directory src/foo is also used by another "
+            "dependency:\n"
+            "  src(https://example.com/src.git) -> "
+            "src/foo(https://example.com/repo.git) "
+            "[https://example.com/repo.git]\n"
+            "vs\n"
+            "  src(https://example.com/src.git) -> "
+            "src/child(https://example.com/repo.git) -> "
+            "src/foo:object0.tar.gz(gs://some-bucket/object0.tar.gz) "
+            "[gs://some-bucket/object0.tar.gz]",
+            str(ctx.exception),
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("git_then_gcs", "src/foo", "git", "src/foo", "gcs"),
+            ("gcs_then_git", "src/foo", "gcs", "src/foo", "git"),
+            ("cipd_then_gcs", "src/foo", "cipd", "src/foo", "gcs"),
+            ("gcs_then_cipd", "src/foo", "gcs", "src/foo", "cipd"),
+            ("gcs_then_gcs", "src/foo", "gcs", "src/foo", "gcs"),
+            ("gcs_then_same_dir_gcs", "src/foo", "gcs", "src/./foo/", "gcs"),
+            ("git_then_other_case_gcs", "src/foo", "git", "src/FOO", "gcs"),
+            ("gcs_then_trailing_dot_git", "src/foo", "gcs", "src/foo.", "git"),
+            ("nested_git_then_gcs", "src/foo/bar", "git", "src/foo", "gcs"),
+            ("gcs_then_nested_git", "src/foo", "gcs", "src/foo/bar", "git"),
+            (
+                "gcs_then_trailing_space_nested_git",
+                "src/foo",
+                "gcs",
+                "src/foo /bar",
+                "git",
+            ),
+            ("nested_cipd_then_gcs", "src/foo/bar", "cipd", "src/foo", "gcs"),
+            ("gcs_then_nested_cipd", "src/foo", "gcs", "src/foo/bar", "cipd"),
+            ("nested_gcs_then_gcs", "src/foo/bar", "gcs", "src/foo", "gcs"),
+            ("gcs_then_nested_gcs", "src/foo", "gcs", "src/foo/bar", "gcs"),
+        ]
+    )
+    def test_rejects_conflict_across_deps_files(
+        self,
+        _: str,
+        first_name: str,
+        first_type: str,
+        second_name: str,
+        second_type: str,
+    ) -> None:
+        child = self._add_child({first_name: _deps_entry(first_type)})
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "(?i)GCS dependency directory src/foo"
+        ):
+            self._add_deps(child, {second_name: _deps_entry(second_type)})
+        self.assertEqual((), child.dependencies)
+
+    @parameterized.parameterized.expand(
+        [
+            ("nested_git", {}, "src/foo/bar", "git"),
+            ("nested_cipd", {}, "src/foo/bar", "cipd"),
+            ("nested_gcs", {}, "src/foo/bar", "gcs"),
+            ("same_dir_gcs", {}, "src/foo/", "gcs"),
+            (
+                # Unlike git dependencies, CIPD dependencies are added even if
+                # the tree has a dependency with their name.
+                "nested_cipd_named_like_removed_dep",
+                {"src/foo/bar:some/package": {"dep_type": "git", "url": None}},
+                "src/foo/bar",
+                "cipd",
+            ),
+        ]
+    )
+    def test_rejects_conflict_within_deps_file_before_cleanup(
+        self,
+        _: str,
+        parent_deps: dict[str, Any],
+        other_name: str,
+        other_type: str,
+    ) -> None:
+        # "src/foo" needs a download and exists, so it would be removed.
+        kept_file = os.path.join(self.root_dir, "src", "foo", "bar", "keep")
+        write(kept_file, "keep")
+        child = self._add_child(parent_deps)
+        with mock.patch(
+            "gclient_utils.rmtree", wraps=gclient_utils.rmtree
+        ) as rmtree_mock:
+            with self.assertRaisesRegex(
+                gclient_utils.Error, "GCS dependency directory src/foo"
+            ):
+                self._add_deps(
+                    child,
+                    {
+                        "src/foo": _deps_entry("gcs"),
+                        other_name: _deps_entry(other_type),
+                    },
+                )
+        rmtree_mock.assert_not_called()
+        self.assertTrue(os.path.isfile(kept_file))
+
+    def test_validates_all_gcs_entries_before_any_cleanup(self) -> None:
+        old_file = os.path.join(self.root_dir, "src", "a", "old")
+        write(old_file, "old")
+        child = self._add_child({"src/b": _deps_entry("git")})
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "GCS dependency directory src/b"
+        ):
+            self._add_deps(
+                child,
+                {"src/a": _deps_entry("gcs"), "src/b": _deps_entry("gcs")},
+            )
+        self.assertTrue(os.path.isfile(old_file))
+
+    def test_gcs_verify_validity_checks_tree_again(self) -> None:
+        # Another DEPS file may add a conflicting dependency after the GCS
+        # dependencies were created, e.g. when parsed in parallel.
+        self._add_deps(
+            self.solution,
+            {"src/a": _deps_entry("git"), "src/b": _deps_entry("git")},
+        )
+        dep_a, dep_b = self.solution.dependencies
+        gcs_deps = dep_a._deps_to_objects(
+            {"src/foo": _deps_entry("gcs")}, use_relative_paths=False
+        )
+        self._add_deps(dep_b, {"src/foo": _deps_entry("git")})
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "GCS dependency directory src/foo"
+        ):
+            dep_a.add_dependencies_and_close(gcs_deps, [])
+
+    def test_git_deps_keep_duplicate_name_check(self) -> None:
+        child = self._add_child({"src/foo": _deps_entry("git")})
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "Dependency src/foo specified more than once"
+        ):
+            self._add_deps(
+                child, {"src/foo": {"url": "https://example.com/other.git"}}
+            )
+
+    @parameterized.parameterized.expand(
+        [
+            ("same_path", False, "src/victim"),
+            ("relative_path", True, "../victim"),
+        ]
+    )
+    def test_parse_deps_file_rejects_recursed_gcs_conflict(
+        self, _: str, use_relative_paths: bool, gcs_name: str
+    ) -> None:
+        src_deps = {
+            "src/victim": _deps_entry("git"),
+            "src/recursed": _deps_entry("git"),
+        }
+        write(
+            os.path.join(self.root_dir, "src", "DEPS"),
+            f"deps = {src_deps!r}\nrecursedeps = ['src/recursed']\n",
+        )
+        write(
+            os.path.join(self.root_dir, "src", "recursed", "DEPS"),
+            f"use_relative_paths = {use_relative_paths!r}\n"
+            f"deps = {{{gcs_name!r}: {_deps_entry('gcs')!r}}}\n",
+        )
+        self.solution.ParseDepsFile()
+        recursed = next(
+            d for d in self.solution.dependencies if d.name == "src/recursed"
+        )
+        with self.assertRaisesRegex(
+            gclient_utils.Error,
+            "GCS dependency directory src/victim is also used by another "
+            "dependency",
+        ):
+            recursed.ParseDepsFile()
+
+    @parameterized.parameterized.expand(
+        [
+            (
+                "objects_of_one_gcs_entry",
+                {},
+                {"src/foo": _deps_entry("gcs", num_objects=2)},
+            ),
+            ("gcs_inside_solution", {}, {"src/foo": _deps_entry("gcs")}),
+            (
+                "gcs_inside_git_dep",
+                {"src/foo": _deps_entry("git")},
+                {"src/foo/bar": _deps_entry("gcs")},
+            ),
+            (
+                "gcs_inside_cipd_dep",
+                {"src/foo": _deps_entry("cipd")},
+                {"src/foo/bar": _deps_entry("gcs")},
+            ),
+            (
+                "gcs_next_to_dir_with_same_prefix",
+                {"src/foo": _deps_entry("gcs")},
+                {"src/foobar": _deps_entry("git")},
+            ),
+            (
+                "unprocessed_gcs_dep",
+                {"src/foo": _deps_entry("git")},
+                {"src/foo": _deps_entry("gcs", condition="False")},
+            ),
+            (
+                "unprocessed_gcs_object",
+                {"src/foo": _deps_entry("git")},
+                {
+                    "src/foo": {
+                        "dep_type": "gcs",
+                        "bucket": "some-bucket",
+                        "objects": [
+                            {
+                                "object_name": "object.tar.gz",
+                                "sha256sum": "abcd",
+                                "size_bytes": 10,
+                                "condition": "False",
+                            }
+                        ],
+                    }
+                },
+            ),
+            (
+                "unprocessed_git_dep",
+                {"src/foo": _deps_entry("git", condition="False")},
+                {"src/foo": _deps_entry("gcs")},
+            ),
+            (
+                "unprocessed_nested_git_dep",
+                {"src/foo": _deps_entry("gcs")},
+                {"src/foo/bar": _deps_entry("git", condition="False")},
+            ),
+            (
+                # This is what `"src/foo": None` in a DEPS file becomes.
+                "git_dep_without_url",
+                {"src/foo": {"dep_type": "git", "url": None}},
+                {"src/foo": _deps_entry("gcs")},
+            ),
+            (
+                "git_and_cipd_same_dir",
+                {"src/foo": _deps_entry("git")},
+                {"src/foo": _deps_entry("cipd")},
+            ),
+            (
+                "git_dep_around_existing_gcs_dep",
+                {"src/foo/bar": _deps_entry("gcs")},
+                {"src/foo": _deps_entry("git")},
+            ),
+            (
+                "cipd_dep_around_existing_gcs_dep",
+                {"src/foo/bar": _deps_entry("gcs")},
+                {"src/foo": _deps_entry("cipd")},
+            ),
+            (
+                # Like src/third_party/instrumented_libs in Chromium.
+                "gcs_inside_git_dep_of_same_deps_file",
+                {},
+                {
+                    "src/foo": _deps_entry("git"),
+                    "src/foo/bar": _deps_entry("gcs"),
+                },
+            ),
+        ]
+    )
+    def test_allows(
+        self, _: str, parent_deps: dict[str, Any], child_deps: dict[str, Any]
+    ) -> None:
+        child = self._add_child(parent_deps)
+        deps = child._deps_to_objects(child_deps, use_relative_paths=False)
+        child.add_dependencies_and_close(deps, [])
+        self.assertEqual(deps, list(child.dependencies))
+
+    @parameterized.parameterized.expand(
+        [
+            (
+                "gcs_dep_in_parent_deps_file",
+                {
+                    "src/foo": _deps_entry("gcs"),
+                    "src/foo/bar": {"dep_type": "git", "url": None},
+                },
+                {"src/foo/bar": _deps_entry("git")},
+                [],
+            ),
+            (
+                "gcs_dep_in_same_deps_file",
+                {"src/foo/bar": {"dep_type": "git", "url": None}},
+                {
+                    "src/foo": _deps_entry("gcs"),
+                    "src/foo/bar": _deps_entry("git"),
+                },
+                ["src/foo:object0.tar.gz"],
+            ),
+        ]
+    )
+    def test_ignores_deps_removed_by_parent_deps_file(
+        self,
+        _: str,
+        parent_deps: dict[str, Any],
+        child_deps: dict[str, Any],
+        expected_names: list[str],
+    ) -> None:
+        # A DEPS entry without URL removes the dependency of the same name
+        # from recursed DEPS files, so it doesn't conflict with anything.
+        child = self._add_child(parent_deps)
+        self._add_deps(child, child_deps)
+        self.assertEqual(expected_names, [d.name for d in child.dependencies])
+
+    @parameterized.parameterized.expand(
+        [("gcs_dep_first", False), ("git_dep_first", True)]
+    )
+    def test_removed_dep_doesnt_depend_on_parse_order(
+        self, _: str, git_dep_first: bool
+    ) -> None:
+        self._add_deps(
+            self.solution,
+            {
+                "src/a": _deps_entry("git"),
+                "src/b": _deps_entry("git"),
+                "src/foo": {"dep_type": "git", "url": None},
+            },
+        )
+        children = {d.name: d for d in self.solution.dependencies}
+        steps = [
+            (children["src/a"], {"src/foo": _deps_entry("gcs")}),
+            (children["src/b"], {"src/foo": _deps_entry("git")}),
+        ]
+        if git_dep_first:
+            steps.reverse()
+        for parent, deps in steps:
+            self._add_deps(parent, deps)
+        self.assertEqual(
+            ["src/foo:object0.tar.gz"],
+            [d.name for d in children["src/a"].dependencies],
+        )
+        self.assertEqual((), children["src/b"].dependencies)
+
+    def test_allows_dir_of_dep_removed_by_custom_deps(self) -> None:
+        self.solution = self._create_solution(custom_deps={"src/foo": None})
+        child = self._add_child({"src/foo": _deps_entry("git")})
+        removed = next(
+            d for d in self.solution.dependencies if d.name == "src/foo"
+        )
+        self.assertIsNone(removed.url)
+        deps = child._deps_to_objects(
+            {"src/foo": _deps_entry("gcs")}, use_relative_paths=False
+        )
+        child.add_dependencies_and_close(deps, [])
+        self.assertEqual(deps, list(child.dependencies))
+
+    def test_gcs_object_without_url_keeps_its_dir(self) -> None:
+        # Unlike git dependencies, GCS objects still use their directory if
+        # custom_deps removes their URL.
+        self.solution = self._create_solution(
+            custom_deps={"src/foo:object0.tar.gz": None}
+        )
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "GCS dependency directory src/foo"
+        ):
+            self._add_deps(
+                self.solution,
+                {
+                    "src/foo": _deps_entry("gcs"),
+                    "src/foo/bar": _deps_entry("git"),
+                },
+            )
+
+    def test_solution_without_url_keeps_its_dir(self) -> None:
+        # Solutions without a URL are managed by the user, e.g. extracted from
+        # a tarball, so they may not even have a .git directory.
+        self.solution = self._create_solution(url=None)
+        child = self._add_child({})
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "GCS dependency directory src is also used"
+        ):
+            self._add_deps(child, {"src": _deps_entry("gcs")})
+
+    @parameterized.parameterized.expand(
+        [
+            ("same_spelling", "src/foo/bar"),
+            ("backslashes", "src\\foo\\bar"),
+            ("dot_component", "src/./foo/bar"),
+            ("other_case", "src/FOO/bar"),
+        ]
+    )
+    def test_gcs_dep_waits_for_enclosing_dep(
+        self, _: str, gcs_name: str
+    ) -> None:
+        # Otherwise the GCS dependency could create its output directory
+        # before the git dependency is cloned there.
+        self._add_deps(self.solution, {"src/foo": _deps_entry("git")})
+        (gcs,) = self.solution._deps_to_objects(
+            {gcs_name: _deps_entry("gcs")}, use_relative_paths=False
+        )
+        self.assertIn("src/foo", gcs.requirements)
+
+    def test_process_all_deps_checks_conflicts(self) -> None:
+        # `gclient sync --process-all-deps` checks out dependencies regardless
+        # of their conditions, so they may not use the same directory either.
+        self.client._options.process_all_deps = True
+        child = self._add_child(
+            {"src/foo": _deps_entry("git", condition="False")}
+        )
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "GCS dependency directory src/foo"
+        ):
+            self._add_deps(child, {"src/foo": _deps_entry("gcs")})
+
+    def test_records_all_objects_of_processed_entries(self) -> None:
+        child = self._add_child({"src/foo": _deps_entry("git")})
+        self._add_deps(
+            child,
+            {
+                "src/foo": _deps_entry("gcs", condition="False"),
+                "src/bar": _gcs_entry_with_unprocessed_first_object(),
+            },
+        )
+        # GcsRoot cleans up entries whose number of objects changes, so it
+        # sees all objects of an entry, but not entries that aren't processed.
+        self.assertEqual(
+            {"src/bar": ["other_os.tar.gz", "this_os.tar.gz"]},
+            self.client.GetGcsRoot()._parsed_objects["src/child"],
+        )
+
+    def test_checks_entry_whose_first_object_isnt_processed(self) -> None:
+        kept_file = os.path.join(self.root_dir, "src", "foo", "bar", "keep")
+        write(kept_file, "keep")
+        child = self._add_child({"src/foo/bar": _deps_entry("git")})
+        with mock.patch("gclient_utils.rmtree") as rmtree_mock:
+            with self.assertRaisesRegex(
+                gclient_utils.Error, "inside GCS dependency directory src/foo"
+            ):
+                self._add_deps(
+                    child,
+                    {"src/foo": _gcs_entry_with_unprocessed_first_object()},
+                )
+        rmtree_mock.assert_not_called()
+        self.assertTrue(os.path.isfile(kept_file))
+
+    @parameterized.parameterized.expand([("clobber",), ("updated_objects",)])
+    def test_gcs_root_treats_backslashes_as_separators(
+        self, method: str
+    ) -> None:
+        hash_file = os.path.join(self.root_dir, "src", "out", ".obj_hash")
+        write(hash_file, "abcd")
+        write(
+            os.path.join(self.root_dir, ".gcs_entries"),
+            json.dumps({"src": {"src\\out": ["obj"]}}),
+        )
+        gcs_root = gclient_scm.GcsRoot(self.root_dir)
+        if method == "clobber":
+            gcs_root.clobber()
+        else:
+            gcs_root.add_object("src", "src\\out", "obj")
+            gcs_root.add_object("src", "src\\out", "other_obj")
+            gcs_root.clobber_deps_with_updated_objects("src")
+        self.assertFalse(os.path.exists(hash_file))
+
+    @parameterized.parameterized.expand(
+        [
+            ("git_dir", "src/out/.git"),
+            ("in_git_dir", "src/out/.git/hooks"),
+            ("in_git_dir_other_case", "src/out/.GIT/hooks"),
+            ("in_git_dir_trailing_dot", "src/out/.git./hooks"),
+            ("in_git_dir_trailing_space", "src/out/.git /hooks"),
+            ("in_git_dir_backslashes", "src\\out\\.git\\hooks"),
+            ("in_jj_dir", "src/out/.jj/repo"),
+            ("trailing_dot", "src/out."),
+            ("colon", "src/out:stream"),
+        ]
+    )
+    def test_rejects_invalid_gcs_dir(self, _: str, gcs_name: str) -> None:
+        # This must not depend on what exists, e.g. on a fresh sync, the .git
+        # directory of a git dependency may only be created later.
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "Invalid GCS dependency path"
+        ):
+            self._add_deps(self.solution, {gcs_name: _deps_entry("gcs")})
+
+    @parameterized.parameterized.expand(
+        [
+            ("git_dir", "src/out/GIT~1/hooks", "GIT~1", ".git"),
+            ("other_dir", "src/THIRDP~1", "THIRDP~1", "third_party"),
+        ]
+    )
+    def test_rejects_short_names(
+        self, _: str, gcs_name: str, short_name: str, long_name: str
+    ) -> None:
+        # On Windows, realpath() expands the short names of existing
+        # directories, which would bypass the checks of the given path.
+        long_path = gcs_name.split(short_name)[0] + long_name
+        os.makedirs(os.path.join(self.root_dir, *long_path.split("/")))
+        realpath = os.path.realpath
+        with mock.patch(
+            "os.path.realpath",
+            side_effect=lambda p: realpath(p).replace(short_name, long_name),
+        ):
+            with self.assertRaisesRegex(
+                gclient_utils.Error, "Invalid GCS dependency path"
+            ):
+                self._add_deps(self.solution, {gcs_name: _deps_entry("gcs")})
+
+    @parameterized.parameterized.expand(
+        [
+            ("backslash", "src\\out"),
+            ("backslashes_and_slashes", "src\\sub/out"),
+        ]
+    )
+    def test_output_dir_treats_backslashes_as_separators(
+        self, _: str, gcs_name: str
+    ) -> None:
+        # On POSIX, a literal backslash in a name could otherwise make the
+        # output directory differ from the validated one, e.g. through a
+        # checked in symlink with a backslash in its name.
+        (dep,) = self.solution._deps_to_objects(
+            {gcs_name: _deps_entry("gcs")}, use_relative_paths=False
+        )
+        self.assertEqual(
+            os.path.join(
+                self.root_dir, *gcs_name.replace("\\", "/").split("/")
+            ),
+            os.path.normpath(dep.output_dir),
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("git_dir", ".git", True),
+            ("git_file", ".git", False),
+            ("jj_dir", ".jj", True),
+        ]
+    )
+    def test_cleanup_keeps_checkout(
+        self, _: str, metadata_name: str, is_dir: bool
+    ) -> None:
+        # The tree doesn't know about this checkout, e.g. it is stale or from
+        # a DEPS file that is parsed later.
+        output_dir = os.path.join(self.root_dir, "src", "out")
+        metadata_path = os.path.join(output_dir, metadata_name)
+        if is_dir:
+            os.makedirs(metadata_path)
+        else:
+            write(metadata_path, "gitdir: ../.git/modules/out")
+        old_file = os.path.join(output_dir, "old")
+        write(old_file, "old")
+
+        with mock.patch(
+            "gclient_utils.rmtree", wraps=gclient_utils.rmtree
+        ) as rmtree_mock:
+            with self.assertRaises(gclient_utils.Error) as ctx:
+                self._add_deps(self.solution, {"src/out": _deps_entry("gcs")})
+        self.assertIn("is a checkout", str(ctx.exception))
+        self.assertIn("remove it manually", str(ctx.exception))
+        rmtree_mock.assert_not_called()
+        self.assertTrue(os.path.isfile(old_file))
+        self.assertTrue(os.path.lexists(metadata_path))
+
+    @parameterized.parameterized.expand(
+        [
+            ("checkout_exists", "'https://example.com/bar.git'", True),
+            # E.g. custom_deps removed it, but gclient keeps its checkout.
+            ("checkout_without_url_exists", "None", True),
+            # The user removed the checkout, as the error asked them to.
+            ("checkout_removed", "'https://example.com/bar.git'", False),
+        ]
+    )
+    def test_cleanup_keeps_nested_checkout_of_last_sync(
+        self, _: str, url_literal: str, checkout_exists: bool
+    ) -> None:
+        # E.g. a DEPS file that is parsed later declares src/out/bar, or no
+        # DEPS file does anymore, but the checkout is kept, as in
+        # `gclient sync` without `-D`.
+        write(
+            os.path.join(self.root_dir, ".gclient_entries"),
+            "entries = {\n"
+            "  'src': 'https://example.com/src.git',\n"
+            f"  'src/out/bar': {url_literal},\n"
+            "  'src/out/bar/baz:package': 'https://example.com/package',\n"
+            "}\n",
+        )
+        output_dir = os.path.join(self.root_dir, "src", "out")
+        local_file = os.path.join(output_dir, "bar", "local_change")
+        write(local_file, "local change")
+        if checkout_exists:
+            os.makedirs(os.path.join(output_dir, "bar", ".git"))
+            with self.assertRaisesRegex(gclient_utils.Error, "is a checkout"):
+                self._add_deps(self.solution, {"src/out": _deps_entry("gcs")})
+            self.assertTrue(os.path.isfile(local_file))
+        else:
+            self._add_deps(self.solution, {"src/out": _deps_entry("gcs")})
+            self.assertFalse(os.path.exists(output_dir))
+
+    @parameterized.parameterized.expand(
+        [
+            ("same_spelling", "src/out"),
+            ("backslash", "src\\out"),
+            ("trailing_slash", "src/out/"),
+            ("trailing_dot_and_space", "src/out. "),
+            ("other_case", "SRC/OUT"),
+            ("root", "."),
+        ]
+    )
+    def test_find_checkout_normalizes_dir(self, _: str, rel_dir: str) -> None:
+        write(
+            os.path.join(self.root_dir, ".gclient_entries"),
+            "entries = {'src/out/bar': 'https://example.com/bar.git'}\n",
+        )
+        os.makedirs(os.path.join(self.root_dir, "src", "out", "bar", ".git"))
+        self.assertEqual(
+            os.path.join(self.root_dir, "src", "out", "bar"),
+            os.path.normpath(self.client.FindCheckout(rel_dir)),
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("child", "src/foo", "src", True),
+            ("other_case", "SRC/foo/bar", "src", True),
+            ("same_dir", "src", "src", False),
+            ("same_prefix", "srcfoo", "src", False),
+            ("parent", "src", "src/foo", False),
+            ("in_root", "src", ".", True),
+            ("dots_name_in_root", "..src", ".", True),
+            ("root_in_root", ".", ".", False),
+            ("outside_root", "../src", ".", False),
+        ]
+    )
+    def test_is_inside_dir(
+        self, _: str, path: str, parent: str, expected: bool
+    ) -> None:
+        self.assertEqual(expected, gclient._IsInsideDir(path, parent))
+
+    @parameterized.parameterized.expand(
+        [
+            ("plain_file", ("sub", "old")),
+            # Archives may contain .git entries. Dependencies the tree knows
+            # about are kept out of GCS output directories anyway.
+            ("nested_git_entry", ("sub", ".git", "HEAD")),
+        ]
+    )
+    def test_cleanup_removes_old_content(
+        self, _: str, old_file_parts: tuple[str, ...]
+    ) -> None:
+        output_dir = os.path.join(self.root_dir, "src", "out")
+        write(os.path.join(output_dir, *old_file_parts), "old")
+        with mock.patch(
+            "gclient_utils.rmtree", wraps=gclient_utils.rmtree
+        ) as rmtree_mock:
+            self._add_deps(self.solution, {"src/out": _deps_entry("gcs")})
+        self.assertEqual(
+            os.path.normpath(output_dir),
+            os.path.normpath(rmtree_mock.call_args_list[0].args[0]),
+        )
+        self.assertFalse(os.path.exists(output_dir))
+
+    def test_cleanup_skips_blocklisted_dirs(self) -> None:
+        old_file = os.path.join(
+            self.root_dir, "src", "third_party", "test_fonts", "old"
+        )
+        write(old_file, "old")
+        with mock.patch("gclient_utils.rmtree") as rmtree_mock:
+            self._add_deps(
+                self.solution,
+                {"src/third_party/test_fonts": _deps_entry("gcs")},
+            )
+        rmtree_mock.assert_not_called()
+        self.assertTrue(os.path.isfile(old_file))
 
 
 class TrailingSlashSolutionNameTest(trial_dir.TestCase):
