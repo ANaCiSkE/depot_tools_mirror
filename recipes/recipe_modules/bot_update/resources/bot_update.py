@@ -67,6 +67,12 @@ COMMIT_FOOTER_ENTRY_RE = re.compile(r"([^:]+):\s*(.*)")
 COMMIT_POSITION_FOOTER_KEY = "Cr-Commit-Position"
 COMMIT_ORIGINAL_POSITION_FOOTER_KEY = "Cr-Original-Commit-Position"
 
+# Regular expression that matches a commit position on a numbered branch, e.g.
+# refs/heads/main@{#123}. Group 1 is the branch.
+COMMIT_POSITION_RE = re.compile(
+  r"(refs/(?:heads|branch-heads)/[A-Za-z0-9_./-]+)@\{#[0-9]+\}"
+)
+
 # Copied from scripts/recipes/chromium.py.
 GOT_REVISION_MAPPINGS = {
   CHROMIUM_SRC_URL: {
@@ -713,7 +719,7 @@ def get_target_branch_and_revision(solution_name, git_url, revisions):
   solution_name = solution_name.strip("/")
   configured = revisions.get(solution_name) or revisions.get(git_url)
 
-  if configured is None or COMMIT_HASH_RE.match(configured):
+  if configured is None or COMMIT_HASH_RE.fullmatch(configured):
     # TODO(crbug.com/1104182): Get the default branch instead of assuming
     # 'main'.
     branch = "refs/remotes/origin/main"
@@ -844,7 +850,7 @@ def _git_checkout(
   url = sln["url"]
 
   branch, revision = get_target_branch_and_revision(name, url, revisions)
-  pin = revision if COMMIT_HASH_RE.match(revision) else None
+  pin = revision if COMMIT_HASH_RE.fullmatch(revision) else None
 
   populate_cmd = [
     "cache",
@@ -944,11 +950,72 @@ def _git_disable_gc(cwd):
   git("config", "gc.autopacklimit", "0", cwd=cwd)
 
 
-def get_commit_position(git_path, revision="HEAD"):
+def _is_ancestor(
+  git_path: str, revision: str, ref: str, git_dir: str | None = None
+) -> bool:
+  """Returns whether `revision` is reachable from `ref`.
+
+  Args:
+    git_path: The checkout to run git in.
+    revision: The commit to check.
+    ref: The ref that `revision` should be reachable from.
+    git_dir: If set, the repo to look up `revision` and `ref` in instead of the
+      checkout.
+  """
+  cmd = [f"--git-dir={git_dir}"] if git_dir else []
+  cmd += ["merge-base", "--is-ancestor", revision, ref]
+  try:
+    git(*cmd, cwd=git_path)
+    return True
+  except SubprocessFailed:
+    return False
+
+
+def _is_on_remote_branch(git_path: str, revision: str, branch: str) -> bool:
+  """Returns whether `revision` is reachable from the upstream `branch`.
+
+  Checks the checkout's remote-tracking ref, then its git cache mirror, and
+  finally fetches `branch` from the upstream repo in case both are stale.
+  """
+  branches = [branch]
+  # Repos like chromium/src renamed master to main, which kept its history.
+  if branch == "refs/heads/master":
+    branches.append("refs/heads/main")
+  remote_refs = [ref_to_remote_ref(b) for b in branches]
+  if any(_is_ancestor(git_path, revision, ref) for ref in remote_refs):
+    return True
+  try:
+    # gclient refreshes the git cache mirror (`origin`) of dependencies, but not
+    # the remote-tracking refs of their checkouts.
+    origin = git("remote", "get-url", "origin", cwd=git_path).strip()
+    if os.path.isabs(origin) and os.path.isdir(origin):
+      sha = git("rev-parse", revision, cwd=git_path).strip()
+      if any(_is_ancestor(git_path, sha, b, git_dir=origin) for b in branches):
+        return True
+    # Without the full history, fetching a branch could download all of it.
+    shallow = git("rev-parse", "--is-shallow-repository", cwd=git_path)
+    if shallow.strip() == "true":
+      return False
+    # bot_update.py and gclient set the push URL to the upstream repo.
+    url = git("remote", "get-url", "--push", "origin", cwd=git_path).strip()
+  except SubprocessFailed:
+    return False
+  for b in branches:
+    try:
+      git("fetch", "--no-tags", "--", url, b, cwd=git_path)
+    except SubprocessFailed:
+      continue
+    if _is_ancestor(git_path, revision, "FETCH_HEAD"):
+      return True
+  return False
+
+
+def get_commit_position(git_path: str, revision: str = "HEAD") -> str | None:
   """Dumps the 'git' log for a specific revision and parses out the commit
   position.
 
-  If a commit position metadata key is found, its value will be returned.
+  If a commit position metadata key is found, its value will be returned if
+  `revision` is reachable from the branch that it names.
   """
   # TODO(iannucci): Use git-footers for this.
   git_log = git("log", "--format=%B", "-n1", revision, cwd=git_path)
@@ -958,9 +1025,16 @@ def get_commit_position(git_path, revision="HEAD"):
   value = footer_map.get(COMMIT_POSITION_FOOTER_KEY) or footer_map.get(
     COMMIT_ORIGINAL_POSITION_FOOTER_KEY
   )
-  if value:
-    return value
-  return None
+  if not value:
+    return None
+  # Anyone can upload a commit with arbitrary footers (e.g. an unsubmitted
+  # Gerrit patchset), so only trust the footer if `revision` was actually
+  # submitted to the branch that it names.
+  m = COMMIT_POSITION_RE.fullmatch(value)
+  if not m or not _is_on_remote_branch(git_path, revision, m.group(1)):
+    print(f"Ignoring unverified commit position in {git_path}: {value!r}")
+    return None
+  return value
 
 
 def parse_got_revision(manifest, got_revision_mapping):
@@ -1109,6 +1183,14 @@ def parse_revisions(revisions, root):
         f"Invalid revision spec {revision!r}: ',' is not allowed in a revision"
       )
     split_revision = revision.split("@", 1)
+    # A `ref:commit` revision is split on the first ':' downstream. A second ':'
+    # would turn the commit into a refspec that can overwrite refs in the shared
+    # git cache mirror, and a leading '-' into an option.
+    commit = split_revision[-1].partition(":")[2]
+    if ":" in commit or commit.startswith("-"):
+      raise ValueError(
+        f"Invalid revision spec {revision!r}: expected 'ref:commit' syntax"
+      )
     if len(split_revision) == 1:
       # This is just a plain revision, set it as the revision for root.
       current_rev = split_revision[0]
@@ -1279,6 +1361,14 @@ def parse_args():
   if options.with_tags:
     options.refs.append(TAGS_REFSPEC)
     del options.with_tags
+
+  for ref in options.refs:
+    # A refspec could overwrite any ref in the shared git cache mirror, e.g. its
+    # refs/heads/main that later builds on the bot rely on.
+    if ref.startswith("-") or ":" in ref:
+      parse.error(
+        f"Invalid --refs value {ref!r}: cannot start with '-' or contain ':'"
+      )
 
   try:
     if not options.revision_mapping_file:

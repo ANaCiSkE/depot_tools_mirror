@@ -782,12 +782,14 @@ class BotUpdateUnittests(unittest.TestCase):
             "src@deadbeef",
             "https://foo.googlesource.com/bar@12345",
             "bar@refs/experimental/test@example.com/test",
+            "src/v8@refs/branch-heads/4.2:deadbeef",
         ]
         expected_results = {
             "root": "f671d3baeb64d9dba628ad582e867cf1aebc0207",
             "src": "deadbeef",
             "https://foo.googlesource.com/bar.git": "12345",
             "bar": "refs/experimental/test@example.com/test",
+            "src/v8": "refs/branch-heads/4.2:deadbeef",
         }
         actual_results = bot_update.parse_revisions(revisions, "root")
         self.assertEqual(expected_results, actual_results)
@@ -813,6 +815,45 @@ class BotUpdateUnittests(unittest.TestCase):
             with self.subTest(revisions=bad_revs, root=bad_root):
                 with self.assertRaisesRegex(ValueError, "','"):
                     bot_update.parse_revisions(bad_revs, bad_root)
+
+        # The commit of a 'ref:commit' revision must not smuggle in a refspec
+        # that overwrites refs in the shared git cache mirror, or an option.
+        for bad_rev in (
+            "src@refs/heads/main:deadbeef:refs/heads/main",
+            "deadbeef:refs/heads/main:refs/heads/main",
+            "src@refs/heads/main:--upload-pack=foo",
+        ):
+            with self.subTest(revision=bad_rev):
+                with self.assertRaisesRegex(ValueError, "'ref:commit'"):
+                    bot_update.parse_revisions([bad_rev], "root")
+
+    def testGetTargetBranchAndRevision(self) -> None:
+        sha = "a" * 40
+        cases = {
+            "commit": (sha, ("refs/remotes/origin/main", sha)),
+            "branch": (
+                "refs/branch-heads/7000",
+                ("refs/remotes/branch-heads/7000", "HEAD"),
+            ),
+            "branch and commit": (
+                f"refs/branch-heads/7000:{sha}",
+                ("refs/remotes/branch-heads/7000", sha),
+            ),
+            "branch starting with hex digits": (
+                "deadbeef-feature",
+                ("refs/remotes/origin/deadbeef-feature", "HEAD"),
+            ),
+        }
+        for name, (configured, want) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(
+                    bot_update.get_target_branch_and_revision(
+                        "src",
+                        "https://example.com/src.git",
+                        {"src": configured},
+                    ),
+                    want,
+                )
 
 
 class CallUnitTest(unittest.TestCase):
@@ -1041,6 +1082,237 @@ class CallUnitTest(unittest.TestCase):
             bot_update.call("git", "status", env={"GIT_CONFIG_GLOBAL": custom})
             _, kwargs = mock_popen.call_args
             self.assertEqual(kwargs["env"]["GIT_CONFIG_GLOBAL"], custom)
+
+
+class GetCommitPositionTest(unittest.TestCase):
+    UPSTREAM_URL = "https://chromium.googlesource.com/chromium/src.git"
+    SHA = "a" * 40
+
+    def _getCommitPosition(
+        self,
+        footer: str,
+        local_refs: set[str] | None = None,
+        mirror_refs: set[str] | None = None,
+        upstream_branches: dict[str, bool] | None = None,
+        shallow: bool = False,
+        has_origin: bool = True,
+    ) -> tuple[str | None, list[str]]:
+        """Runs `get_commit_position()` against a fake git checkout.
+
+        Args:
+            footer: The footer of the checked-out commit's message.
+            local_refs: Remote-tracking refs that the commit is reachable from.
+            mirror_refs: Refs of the git cache mirror that the commit is
+                reachable from, or None if `origin` is not a local mirror.
+            upstream_branches: Maps each upstream branch to whether the commit
+                is reachable from it.
+            shallow: Whether the checkout is shallow.
+            has_origin: Whether the checkout has an `origin` remote.
+
+        Returns:
+            The commit position, and the branches that were fetched.
+        """
+        local_refs = local_refs or set()
+        upstream_branches = upstream_branches or {}
+        fetches = []
+        with tempfile.TemporaryDirectory() as mirror:
+
+            def git_stub(*args: str, **_: Any) -> str:
+                ok = False
+                if args[0] == "log":
+                    return f"Subject\n\n{footer}\n"
+                elif args[:2] == ("remote", "get-url"):
+                    if has_origin:
+                        if "--push" in args or mirror_refs is None:
+                            return f"{self.UPSTREAM_URL}\n"
+                        return f"{mirror}\n"
+                elif args == ("rev-parse", "HEAD"):
+                    return f"{self.SHA}\n"
+                elif args == ("rev-parse", "--is-shallow-repository"):
+                    return f"{str(shallow).lower()}\n"
+                elif args[0] == "fetch":
+                    self.assertEqual(
+                        args[1:4], ("--no-tags", "--", self.UPSTREAM_URL)
+                    )
+                    fetches.append(args[4])
+                    ok = args[4] in upstream_branches
+                elif args[0] == f"--git-dir={mirror}":
+                    self.assertEqual(
+                        args[1:4], ("merge-base", "--is-ancestor", self.SHA)
+                    )
+                    ok = args[4] in mirror_refs
+                elif args[:3] == ("merge-base", "--is-ancestor", "HEAD"):
+                    if args[3] == "FETCH_HEAD":
+                        ok = upstream_branches[fetches[-1]]
+                    else:
+                        ok = args[3] in local_refs
+                else:
+                    self.fail(f"Unexpected git call: {args}")
+                if not ok:
+                    raise bot_update.SubprocessFailed("git failed", 1, "")
+                return ""
+
+            with mock.patch.object(bot_update, "git", git_stub):
+                return bot_update.get_commit_position("src"), fetches
+
+    def testGetCommitPosition(self) -> None:
+        main = "refs/remotes/origin/main"
+        branch = "refs/remotes/branch-heads/7000"
+        main_cp = "refs/heads/main@{#123}"
+        master_cp = "refs/heads/master@{#45}"
+        branch_cp = "refs/branch-heads/7000@{#6}"
+        cases = {
+            "no footer": dict(footer="Bug: 1", want=None),
+            "on main": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                local_refs={main},
+                want=main_cp,
+            ),
+            "on branch-heads": dict(
+                footer=f"Cr-Commit-Position: {branch_cp}",
+                local_refs={branch},
+                want=branch_cp,
+            ),
+            "cherry-picked to branch-heads": dict(
+                footer=(
+                    f"Cr-Original-Commit-Position: {main_cp}\n"
+                    f"Cr-Commit-Position: {branch_cp}"
+                ),
+                local_refs={branch},
+                want=branch_cp,
+            ),
+            "mirrored commit on main": dict(
+                footer=f"Cr-Original-Commit-Position: {main_cp}",
+                local_refs={main},
+                want=main_cp,
+            ),
+            "stale local ref, in mirror": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                mirror_refs={"refs/heads/main"},
+                want=main_cp,
+            ),
+            "stale local ref and mirror": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                mirror_refs=set(),
+                upstream_branches={"refs/heads/main": True},
+                want=main_cp,
+                fetches=["refs/heads/main"],
+            ),
+            "master renamed to main": dict(
+                footer=f"Cr-Commit-Position: {master_cp}",
+                local_refs={main},
+                want=master_cp,
+            ),
+            "master renamed to main, upstream": dict(
+                footer=f"Cr-Commit-Position: {master_cp}",
+                upstream_branches={"refs/heads/main": True},
+                want=master_cp,
+                fetches=["refs/heads/master", "refs/heads/main"],
+            ),
+            "master stale upstream, on main": dict(
+                footer=f"Cr-Commit-Position: {master_cp}",
+                upstream_branches={
+                    "refs/heads/master": False,
+                    "refs/heads/main": True,
+                },
+                want=master_cp,
+                fetches=["refs/heads/master", "refs/heads/main"],
+            ),
+            "unsubmitted patchset": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                mirror_refs=set(),
+                upstream_branches={"refs/heads/main": False},
+                want=None,
+                fetches=["refs/heads/main"],
+            ),
+            "original footer on another branch": dict(
+                footer=f"Cr-Original-Commit-Position: {main_cp}",
+                local_refs={"refs/remotes/origin/feature"},
+                upstream_branches={"refs/heads/main": False},
+                want=None,
+                fetches=["refs/heads/main"],
+            ),
+            "no fallback to original footer": dict(
+                footer=(
+                    f"Cr-Original-Commit-Position: {main_cp}\n"
+                    f"Cr-Commit-Position: {branch_cp}"
+                ),
+                local_refs={main},
+                want=None,
+                fetches=["refs/branch-heads/7000"],
+            ),
+            "shallow checkout": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                upstream_branches={"refs/heads/main": True},
+                shallow=True,
+                want=None,
+            ),
+            "shallow checkout, in mirror": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                mirror_refs={"refs/heads/main"},
+                shallow=True,
+                want=main_cp,
+            ),
+            "no origin remote": dict(
+                footer=f"Cr-Commit-Position: {main_cp}",
+                has_origin=False,
+                want=None,
+            ),
+            "malformed": dict(
+                footer="Cr-Commit-Position: main@{#123}",
+                want=None,
+            ),
+            "unnumbered ref": dict(
+                footer="Cr-Commit-Position: refs/changes/11/1111/1@{#123}",
+                want=None,
+            ),
+            "revision syntax": dict(
+                footer="Cr-Commit-Position: refs/heads/main~1@{#123}",
+                want=None,
+            ),
+        }
+        for name, case in cases.items():
+            with self.subTest(name):
+                want = case.pop("want")
+                want_fetches = case.pop("fetches", [])
+                got, fetches = self._getCommitPosition(**case)
+                self.assertEqual(got, want)
+                self.assertEqual(fetches, want_fetches)
+
+
+class ParseArgsTest(unittest.TestCase):
+    def testRefs(self) -> None:
+        cases = {
+            "branch": (["--refs=refs/branch-heads/7000"], True),
+            "branch-heads refspec": (["--with_branch_heads"], True),
+            "refspec": (
+                ["--refs=refs/changes/11/1111/1:refs/heads/main"],
+                False,
+            ),
+            "leading dash": (["--refs=--upload-pack=evil"], False),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            mapping = os.path.join(tmp, "mapping.json")
+            with open(mapping, "w") as f:
+                json.dump({}, f)
+            for name, (args, valid) in cases.items():
+                argv = [
+                    "bot_update.py",
+                    "--output_json=out.json",
+                    f"--git-cache-dir={tmp}",
+                    f"--revision_mapping_file={mapping}",
+                    *args,
+                ]
+                with (
+                    self.subTest(name),
+                    mock.patch.object(sys, "argv", argv),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    if valid:
+                        bot_update.parse_args()
+                    else:
+                        with self.assertRaises(SystemExit):
+                            bot_update.parse_args()
 
 
 if __name__ == "__main__":

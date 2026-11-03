@@ -144,6 +144,11 @@ class Mirror(object):
         self.url = url
         self.fetch_specs = {self.parse_fetch_spec(ref) for ref in (refs or [])}
         self.fetch_commits = set(commits or [])
+        for commit in self.fetch_commits:
+            # Commits are fetched as `git fetch origin <commit>`, so a refspec
+            # could overwrite refs of the mirror and a leading '-' is an option.
+            if ":" in commit or commit.startswith("-"):
+                raise ValueError(f"Invalid commit {commit!r}")
         self.basedir = self.UrlToCacheDir(url)
         self.mirror_path = os.path.join(self.GetCachePath(), self.basedir)
         if print_func:

@@ -388,6 +388,17 @@ class GitCacheTest(unittest.TestCase):
             git_cache.GIT_CACHE_CORRUPT_MESSAGE, sys.stdout.getvalue()
         )
 
+    def testRejectsInvalidCommits(self) -> None:
+        git_cache.Mirror(self.origin_dir, commits=["a" * 40])
+        for commit in (
+            "deadbeef:refs/heads/main",
+            "+refs/changes/11/1111/1:refs/heads/main",
+            "--upload-pack=foo",
+        ):
+            with self.subTest(commit=commit):
+                with self.assertRaises(ValueError):
+                    git_cache.Mirror(self.origin_dir, commits=[commit])
+
     def testPopulateInitObjectFormat(self):
         """A fresh mirror pins the bare repo to the remote object format.
 
