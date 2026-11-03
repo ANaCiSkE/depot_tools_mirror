@@ -1073,6 +1073,14 @@ class ChangeDescription(object):
                 values = list(_get_bug_line_values(prefix, fixed))
                 self.append_footer("Fixed: %s" % ", ".join(values))
 
+    def has_issue(self):
+        bug_regexp = re.compile(self.BUG_LINE)
+        fixed_regexp = re.compile(self.FIXED_LINE)
+        return any(
+            bug_regexp.match(line) or fixed_regexp.match(line)
+            for line in self._description_lines
+        )
+
     @property  # www.logilab.org/ticket/89786
     def description(self):
         return "\n".join(self._description_lines)
@@ -1129,12 +1137,9 @@ class ChangeDescription(object):
             ]
             + self._description_lines
         )
-        bug_regexp = re.compile(self.BUG_LINE)
-        fixed_regexp = re.compile(self.FIXED_LINE)
         prefix = settings.GetBugPrefix()
-        has_issue = lambda l: bug_regexp.match(l) or fixed_regexp.match(l)  # noqa: E731, E741
 
-        if not any((has_issue(line) for line in self._description_lines)):
+        if not self.has_issue():
             self.append_footer("Bug: %s" % prefix)
 
         print("Waiting for editor...")
@@ -2094,9 +2099,13 @@ class Changelist(object):
 
         bug = options.bug
         fixed = options.fixed
-        if not self.GetIssue():
+        if (
+            not self.GetIssue()
+            and not ChangeDescription(description).has_issue()
+        ):
             # Extract bug number from branch name, but only if issue is being
-            # created. It must start with bug or fix, followed by _ or - and
+            # created and the description does not already have a Bug: or Fixed:
+            # line. It must start with bug or fix, followed by _ or - and
             # number. Optionally, it may contain _ or - after number with
             # arbitrary text. Examples: bug-123 bug_123 fix-123
             # fix-123-some-description

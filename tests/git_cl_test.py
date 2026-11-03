@@ -628,6 +628,18 @@ class TestGitClBasic(unittest.TestCase):
             ["v8:456", "chromium:123", "v8:123"],
         )
 
+    def test_change_description_has_issue(self):
+        self.assertFalse(git_cl.ChangeDescription("Simple.").has_issue())
+        self.assertTrue(
+            git_cl.ChangeDescription("Simple.\n\nBug: 123").has_issue()
+        )
+        self.assertTrue(
+            git_cl.ChangeDescription("Simple.\n\nBUG=123").has_issue()
+        )
+        self.assertTrue(
+            git_cl.ChangeDescription("Simple.\n\nFixed: 123").has_issue()
+        )
+
     @mock.patch("gerrit_util.GetAccountDetails")
     def test_valid_accounts(self, mockGetAccountDetails):
         mock_per_account = {
@@ -5076,6 +5088,28 @@ class TestGitCl(unittest.TestCase):
                     "Fixed: prefix:1234",
                 ]
             ),
+        )
+
+    @mock.patch("git_cl.Changelist.GetIssue")
+    def testGetDescriptionForUpload_SkipBugFromBranchIfFixedPresent(
+        self, mockGetIssue
+    ):
+        mockGetIssue.return_value = None
+        self.getDescriptionForUploadTest(
+            initial_description="desc\n\nFixed: 1234",
+            branch="bug-1234",
+            expected_description="desc\n\nFixed: 1234",
+        )
+
+    @mock.patch("git_cl.Changelist.GetIssue")
+    def testGetDescriptionForUpload_SkipFixedFromBranchIfBugPresent(
+        self, mockGetIssue
+    ):
+        mockGetIssue.return_value = None
+        self.getDescriptionForUploadTest(
+            initial_description="desc\n\nBug: 1234",
+            branch="fix-1234",
+            expected_description="desc\n\nBug: 1234",
         )
 
     def testGetDescriptionForUpload_SkipBugFromBranchIfAlreadyUploaded(self):
