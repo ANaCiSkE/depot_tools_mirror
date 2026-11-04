@@ -26,7 +26,7 @@ class NotFoundError(Exception):
 
 
 def FindSwiftFormatToolInChromiumTree():
-    """Return a path to the rustfmt executable, or die trying."""
+    """Return a path to the swift-format executable, or die trying."""
     chromium_src_path = gclient_paths.GetChromiumSrcPath()
     if not chromium_src_path:
         raise NotFoundError(
@@ -36,7 +36,12 @@ def FindSwiftFormatToolInChromiumTree():
         )
 
     tool_path = os.path.join(
-        chromium_src_path, "third_party", "swift-format", "swift-format"
+        chromium_src_path,
+        "third_party",
+        "swift-toolchain",
+        "usr",
+        "bin",
+        "swift-format",
     )
     if not os.path.exists(tool_path):
         raise NotFoundError("File does not exist: %s" % tool_path)
