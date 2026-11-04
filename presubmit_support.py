@@ -2632,25 +2632,26 @@ def main(argv=None):
 
     if options.description_file:
         options.description = gclient_utils.FileRead(options.description_file)
-    gerrit_obj = _parse_gerrit_options(parser, options)
     change = _parse_change(parser, options)
 
     try:
-        if options.post_upload:
-            return DoPostUploadExecuter(change, gerrit_obj, options.verbose)
-        with canned_check_filter(options.skip_canned):
-            return DoPresubmitChecks(
-                change,
-                options.commit,
-                options.verbose,
-                options.default_presubmit,
-                options.may_prompt,
-                gerrit_obj,
-                options.dry_run,
-                options.parallel,
-                options.json_output,
-                options.no_diffs,
-            )
+        with gerrit_util.WithGitConfigDir(change.RepositoryRoot()):
+            gerrit_obj = _parse_gerrit_options(parser, options)
+            if options.post_upload:
+                return DoPostUploadExecuter(change, gerrit_obj, options.verbose)
+            with canned_check_filter(options.skip_canned):
+                return DoPresubmitChecks(
+                    change,
+                    options.commit,
+                    options.verbose,
+                    options.default_presubmit,
+                    options.may_prompt,
+                    gerrit_obj,
+                    options.dry_run,
+                    options.parallel,
+                    options.json_output,
+                    options.no_diffs,
+                )
     except PresubmitFailure as e:
         import utils
 

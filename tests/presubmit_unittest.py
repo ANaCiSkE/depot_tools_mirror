@@ -198,7 +198,9 @@ index fe3de7b..54ae6e1 100755
         mock.patch("scm.GIT.GenerateDiff").start()
         mock.patch("scm.GIT.GetBranch", lambda x: None).start()
         mock.patch("scm.determine_scm").start()
-        mock.patch("subprocess2.Popen").start()
+        popen_mock = mock.patch("subprocess2.Popen").start()
+        popen_mock.return_value.communicate.return_value = (b"", b"")
+        popen_mock.return_value.wait.return_value = 0
         mock.patch("sys.stderr", StringIO()).start()
         mock.patch("sys.stdout", StringIO()).start()
         mock.patch("tempfile.NamedTemporaryFile").start()
