@@ -2931,7 +2931,8 @@ it or fix the checkout.
                             print(
                                 "\nWARNING: '%s' has been moved from DEPS to a higher "
                                 "level checkout. The git folder containing all the local"
-                                " branches has been saved to %s.\n"
+                                " branches has been saved to %s. It will not be "
+                                "restored automatically.\n"
                                 "If you don't care about its state you can safely "
                                 "remove that folder to free up space."
                                 % (entry, save_dir)

@@ -4181,6 +4181,82 @@ class RemoveUnversionedGitDirsTest(trial_dir.TestCase):
 
         self.assertEqual(client._ReadEntries(), current_entries)
 
+    def testVersionedDirTransitionSavesGitBackup(self) -> None:
+        # Simulate 'src/sub' migrating from a DEPS git checkout into a normal
+        # versioned directory tracked by 'src'.
+        self._init_repo("src", os.path.join("sub", "tracked.txt"))
+        sub_dir = os.path.join("src", "sub")
+        self._init_repo(sub_dir, "old_sub_file.txt")
+        subprocess.run(
+            ["git", "-C", sub_dir, "branch", "local-wip"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                sub_dir,
+                "config",
+                "branch.local-wip.gerritissue",
+                "12345",
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient(".", options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+
+        stale_entries = {
+            "src": "https://example.com/src.git",
+            "src/sub": "https://example.com/sub.git@aaaa",
+        }
+        write(".gclient_entries", f"entries = {stale_entries!r}\n")
+
+        client._RemoveUnversionedGitDirs()
+
+        self.assertFalse(os.path.exists(os.path.join(sub_dir, ".git")))
+        self.assertTrue(os.path.isfile(os.path.join(sub_dir, "tracked.txt")))
+        self.assertFalse(
+            os.path.exists(os.path.join(sub_dir, "old_sub_file.txt"))
+        )
+        scm_wrapper = gclient.gclient_scm.GitWrapper(
+            "https://example.com/sub.git",
+            self.root_dir,
+            os.path.join("src", "sub"),
+        )
+        backup_dir = scm_wrapper.GetGitBackupDirPath()
+        self.assertTrue(os.path.isdir(backup_dir))
+        issue = subprocess.run(
+            [
+                "git",
+                f"--git-dir={backup_dir}",
+                "config",
+                "branch.local-wip.gerritissue",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(issue, "12345")
+
 
 class RestoreRemovedCipdEntriesTest(trial_dir.TestCase):
     def _init_repo(self, path: str, files: dict[str, str]) -> None:
