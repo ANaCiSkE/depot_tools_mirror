@@ -128,8 +128,6 @@ PRESUBMIT_SUPPORT = os.path.join(DEPOT_TOOLS, "presubmit_support.py")
 GIT_HASH_RE = re.compile(
     r"\b([a-f0-9]{6})(?:[a-f0-9]{34}|[a-f0-9]{58})\b", flags=re.I
 )
-# Used to redact the cookies from the gitcookies file.
-GITCOOKIES_REDACT_RE = re.compile(r"1/.*")
 
 # Validates standard email format for reviewers and CCs added via push options.
 SAFE_EMAIL_RE = re.compile(

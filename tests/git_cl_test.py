@@ -1751,7 +1751,7 @@ class TestGitCl(unittest.TestCase):
                                     "TEMP_DIR",
                                     "CookiesAuthenticatorMock.debug_summary_state",
                                 ),
-                                "gitcookies REDACTED",
+                                "REDACTED",
                             ],
                         ),
                         None,

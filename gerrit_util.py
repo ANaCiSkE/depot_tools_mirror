@@ -841,15 +841,37 @@ class CookiesAuthenticator(_Authenticator):
             )
         )
 
-    # Used to redact the cookies from the gitcookies file.
-    GITCOOKIES_REDACT_RE = re.compile(r"1/.*")
+    @classmethod
+    def _redact_cookie_value(cls, value: str) -> str:
+        if value.startswith("git-") and "=" in value:
+            login, _ = value.split("=", 1)
+            return f"{login}=REDACTED"
+        return "REDACTED"
+
+    @classmethod
+    def _redact_gitcookies_line(cls, line: str) -> str:
+        if not line.strip():
+            return line
+        fields = line.split("\t")
+        if len(fields) == 7:
+            fields[6] = cls._redact_cookie_value(fields[6])
+            return "\t".join(fields)
+        return "REDACTED"
 
     def debug_summary_state(self) -> str:
         gitcookies_path = self.get_gitcookies_path()
-        if os.path.isfile(gitcookies_path):
+        if not os.path.isfile(gitcookies_path):
+            return ""
+        try:
             gitcookies = gclient_utils.FileRead(gitcookies_path)
-            return self.GITCOOKIES_REDACT_RE.sub("REDACTED", gitcookies)
-        return ""
+        except OSError:
+            return ""
+        out = []
+        for raw_line in gitcookies.splitlines(keepends=True):
+            body = raw_line.rstrip("\r\n")
+            ending = raw_line[len(body) :]
+            out.append(f"{self._redact_gitcookies_line(body)}{ending}")
+        return "".join(out)
 
     def get_auth_email(self, host):
         """Best effort parsing of email to be used for auth for the given host."""
