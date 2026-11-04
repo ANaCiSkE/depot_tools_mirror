@@ -6086,14 +6086,14 @@ def CMDcomments(parser, args):
         dest="drafts",
         action="store_true",
         default=False,
-        help="Include draft comments when listing",
+        help="Include your draft comments when listing",
     )
     parser.add_option(
         "--only-drafts",
         dest="only_drafts",
         action="store_true",
         default=False,
-        help="Show only draft comments",
+        help="Show only your draft comments",
     )
     options, args = parser.parse_args(args)
 
