@@ -66,8 +66,8 @@ infra/chromeperf/pinpoint/windows-arm64
 	yNbf-DvYVJUGZZVrJdJtP_XVVDD3GD1btd6iJy1RuvUC
 
 infra/rbe/client/linux-amd64
-	re_client_version:0.124.1.13f78cc-gomaip
-	LCOZhNACP54nV-xYsKIGGOzlFnVyacNwmv4YzqxxgOYC
+	re_client_version:0.187.0.ad10b508-gomaip
+	WjMk7QCvJtd1z5GTZfF46Z6sF3zlOxBlmMXPo10XkN0C
 
 infra/tools/bb/linux-386
 	git_revision:9fe5fef212ec9c376f658dce50162514dababfe4
