@@ -4481,6 +4481,540 @@ class RestoreRemovedCipdEntriesTest(trial_dir.TestCase):
         )
 
 
+class UpdateProtocolTest(trial_dir.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.previous_dir: str = os.getcwd()
+        os.chdir(self.root_dir)
+
+    def tearDown(self) -> None:
+        os.chdir(self.previous_dir)
+        super().tearDown()
+
+    @parameterized.parameterized.expand(
+        [
+            (
+                "https_to_sso_googlesource",
+                "https://chromium.googlesource.com/chromium/src.git",
+                "sso",
+                "sso://chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "https_to_sso_with_sha_revision",
+                "https://chromium.googlesource.com/chromium/src.git@deadbeef",
+                "sso",
+                "sso://chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "https_to_sso_with_ref_revision",
+                "https://chromium.googlesource.com/chromium/src.git@refs/heads/main",
+                "sso",
+                "sso://chromium.googlesource.com/chromium/src.git@refs/heads/main",
+            ),
+            (
+                "https_to_ssh_chrome_internal",
+                "https://chrome-internal.googlesource.com/chrome/src-internal.git@1234",
+                "ssh",
+                "ssh://chrome-internal.googlesource.com/chrome/src-internal.git@1234",
+            ),
+            (
+                "https_to_http_nested_googlesource",
+                "https://a.b.googlesource.com/project/repo.git",
+                "http",
+                "http://a.b.googlesource.com/project/repo.git",
+            ),
+            (
+                "https_to_sso_git_corp_google_com",
+                "https://chromium.git.corp.google.com/chromium/src.git@deadbeef",
+                "sso",
+                "sso://chromium.git.corp.google.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "http_to_https_nested_git_corp",
+                "http://a.b.git.corp.google.com/repo.git",
+                "https",
+                "https://a.b.git.corp.google.com/repo.git",
+            ),
+            (
+                "sso_to_https_with_revision",
+                "sso://chromium.googlesource.com/chromium/src.git@deadbeef",
+                "https",
+                "https://chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "ssh_to_https_with_revision",
+                "ssh://chromium.googlesource.com/chromium/src.git@test-stable",
+                "https",
+                "https://chromium.googlesource.com/chromium/src.git@test-stable",
+            ),
+            (
+                "ssh_to_sso_with_port_and_revision",
+                "ssh://chromium.googlesource.com:29418/chromium/src.git@stable",
+                "sso",
+                "sso://chromium.googlesource.com:29418/chromium/src.git@stable",
+            ),
+            (
+                "git_to_https",
+                "git://chromium.googlesource.com/chromium/src.git",
+                "https",
+                "https://chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "https_to_git",
+                "https://chromium.googlesource.com/chromium/src.git",
+                "git",
+                "git://chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "https_with_port_and_revision",
+                "https://chromium.googlesource.com:443/chromium/src.git@deadbeef",
+                "sso",
+                "sso://chromium.googlesource.com:443/chromium/src.git@deadbeef",
+            ),
+            (
+                "uppercase_hostname",
+                "https://CHROMIUM.GOOGLESOURCE.COM/chromium/src.git",
+                "sso",
+                "sso://CHROMIUM.GOOGLESOURCE.COM/chromium/src.git",
+            ),
+            (
+                "trailing_slash_path_with_revision",
+                "https://chromium.googlesource.com/chromium/src.git/@deadbeef",
+                "sso",
+                "sso://chromium.googlesource.com/chromium/src.git/@deadbeef",
+            ),
+            (
+                "plus_in_repo_path_to_sso",
+                "https://chromium.googlesource.com/external/libcxx+abi.git@deadbeef",
+                "sso",
+                "sso://chromium.googlesource.com/external/libcxx+abi.git@deadbeef",
+            ),
+            (
+                "none_protocol",
+                "https://chromium.googlesource.com/chromium/src.git",
+                None,
+                "https://chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "empty_protocol",
+                "https://chromium.googlesource.com/chromium/src.git",
+                "",
+                "https://chromium.googlesource.com/chromium/src.git",
+            ),
+            ("none_url", None, "sso", None),
+            ("empty_url", "", "sso", ""),
+        ]
+    )
+    def testRewritesTrustedHosts(
+        self,
+        _name: str,
+        url: Optional[str],
+        protocol: Optional[str],
+        expected: Optional[str],
+    ) -> None:
+        self.assertEqual(
+            gclient.GitDependency.updateProtocol(url, protocol),
+            expected,
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("ext_helper", "ext"),
+            ("ext_command_payload", "ext::sh -c touch /tmp/pwned"),
+            ("fd_helper", "fd"),
+            ("fd_command_payload", "fd::1"),
+            ("file_scheme", "file"),
+            ("ftp_scheme", "ftp"),
+            ("gopher_scheme", "gopher"),
+            ("svn_scheme", "svn"),
+            ("javascript_scheme", "javascript"),
+            ("uppercase_https", "HTTPS"),
+            ("uppercase_sso", "SSO"),
+            ("scheme_with_colon_slashes", "sso://"),
+            ("scheme_with_colon", "https:"),
+            ("trailing_whitespace", "sso "),
+            ("leading_whitespace", " sso"),
+            ("embedded_newline", "sso\n"),
+            ("option_injection", "-oProxyCommand=evil"),
+            ("non_string_int", 123),
+            ("non_string_zero", 0),
+            ("non_string_false", False),
+            ("non_string_list", ["sso"]),
+            ("non_string_empty_list", []),
+        ]
+    )
+    def testRejectsUnsupportedProtocols(
+        self,
+        _name: str,
+        protocol: Any,
+    ) -> None:
+        for url in (
+            "https://chromium.googlesource.com/chromium/src.git",
+            "https://github.com/example/repo.git",
+            None,
+        ):
+            with self.subTest(url=url):
+                with self.assertRaises(gclient_utils.Error):
+                    gclient.GitDependency.updateProtocol(url, protocol)
+
+    @parameterized.parameterized.expand(
+        [
+            # Third-party and attacker-controlled hosts.
+            ("github_host", "https://github.com/org/repo.git"),
+            (
+                "github_host_with_rev",
+                "https://github.com/org/repo.git@deadbeef",
+            ),
+            ("attacker_host", "https://attacker.example.com/repo.git@deadbeef"),
+            (
+                "trusted_host_in_path",
+                "https://attacker.example.com/chromium.googlesource.com/repo.git",
+            ),
+            (
+                "googlesource_subdomain_of_attacker",
+                "https://chromium.googlesource.com.attacker.example.com/repo.git",
+            ),
+            (
+                "git_corp_subdomain_of_attacker",
+                "https://chromium.git.corp.google.com.attacker.example.com/repo.git",
+            ),
+            (
+                "suffix_spoof_googlesource",
+                "https://fakegooglesource.com/repo.git",
+            ),
+            (
+                "hyphen_spoof_googlesource",
+                "https://evil-googlesource.com/repo.git",
+            ),
+            (
+                "suffix_spoof_git_corp",
+                "https://fakegit.corp.google.com/repo.git",
+            ),
+            # Bare root domains and malformed domain labels.
+            ("bare_googlesource", "https://googlesource.com/repo.git"),
+            ("bare_git_corp", "https://git.corp.google.com/repo.git"),
+            ("leading_dot_googlesource", "https://.googlesource.com/repo.git"),
+            ("leading_dot_git_corp", "https://.git.corp.google.com/repo.git"),
+            ("double_dot_googlesource", "https://..googlesource.com/repo.git"),
+            ("empty_middle_label", "https://a..googlesource.com/repo.git"),
+            ("leading_hyphen_label", "https://-bad.googlesource.com/repo.git"),
+            ("trailing_hyphen_label", "https://bad-.googlesource.com/repo.git"),
+            (
+                "semicolon_in_netloc",
+                "https://attacker.com;chromium.googlesource.com/repo.git",
+            ),
+            (
+                "percent_encoded_in_netloc",
+                "https://attacker.com%2f.googlesource.com/repo.git",
+            ),
+            (
+                "malformed_ipv6_bracket",
+                "https://[chromium.googlesource.com/repo.git",
+            ),
+            # Userinfo / credentials in netloc or `/@` authority confusion in path.
+            (
+                "userinfo_username",
+                "https://user@chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "userinfo_username_with_rev",
+                "https://user@chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "userinfo_user_pass",
+                "https://user:pass@chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "userinfo_user_pass_with_rev",
+                "https://user:pass@chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "userinfo_empty_user_pass_with_rev",
+                "https://:pass@chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "userinfo_empty_user",
+                "https://@chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "userinfo_empty_user_with_rev",
+                "https://@chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "authority_confusion_no_rev",
+                "https://chromium.googlesource.com@attacker.example.com/repo.git",
+            ),
+            (
+                "authority_confusion_no_path",
+                "https://chromium.googlesource.com@attacker.example.com",
+            ),
+            (
+                "authority_confusion_with_rev",
+                "https://chromium.googlesource.com@attacker.example.com/repo.git@deadbeef",
+            ),
+            (
+                "authority_confusion_attacker_user_with_rev",
+                "https://attacker.example.com@chromium.googlesource.com/repo.git@deadbeef",
+            ),
+            (
+                "slash_at_authority_confusion_with_rev",
+                "https://chromium.googlesource.com/@attacker.example.com/repo.git@deadbeef",
+            ),
+            (
+                "slash_at_authority_confusion_no_rev",
+                "https://chromium.googlesource.com/@attacker.example.com/repo.git",
+            ),
+            (
+                "multiple_at_in_path_revision",
+                "https://chromium.googlesource.com/chromium/src.git@branch@123",
+            ),
+            (
+                "empty_revision_after_at",
+                "https://chromium.googlesource.com/chromium/src.git@",
+            ),
+            (
+                "host_only_without_path_or_revision",
+                "https://chromium.googlesource.com",
+            ),
+            (
+                "root_only_slash_path",
+                "https://chromium.googlesource.com/",
+            ),
+            (
+                "root_only_slash_path_with_revision",
+                "https://chromium.googlesource.com/@deadbeef",
+            ),
+            (
+                "authority_confusion_query_at",
+                "https://chromium.googlesource.com?@attacker.example.com/repo.git",
+            ),
+            (
+                "authority_confusion_path_query_at",
+                "https://chromium.googlesource.com/repo.git?@attacker.example.com/repo.git",
+            ),
+            (
+                "authority_confusion_fragment_at",
+                "https://chromium.googlesource.com#@attacker.example.com/repo.git",
+            ),
+            (
+                "authority_confusion_path_fragment_at",
+                "https://chromium.googlesource.com/repo.git#@attacker.example.com/repo.git",
+            ),
+            (
+                "ssh_userinfo",
+                "ssh://user@chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "ssh_userinfo_with_rev",
+                "ssh://user@chromium.googlesource.com/chromium/src.git@deadbeef",
+            ),
+            (
+                "ssh_user_pass",
+                "ssh://user:pass@chromium.googlesource.com/chromium/src.git",
+            ),
+            # Backslashes in netloc.
+            (
+                "backslash_attacker_first",
+                "https://attacker.example.com\\chromium.googlesource.com/repo.git",
+            ),
+            (
+                "backslash_attacker_first_dot",
+                "https://attacker.example.com\\.chromium.googlesource.com/repo.git",
+            ),
+            (
+                "backslash_trusted_first",
+                "https://chromium.googlesource.com\\attacker.example.com/repo.git",
+            ),
+            (
+                "backslash_before_at_no_rev",
+                "https://chromium.googlesource.com\\@attacker.example.com/repo.git",
+            ),
+            (
+                "backslash_before_at_with_rev",
+                "https://chromium.googlesource.com\\@attacker.example.com/repo.git@deadbeef",
+            ),
+            (
+                "backslash_attacker_before_at_with_rev",
+                "https://attacker.example.com\\@chromium.googlesource.com/repo.git@deadbeef",
+            ),
+            (
+                "ssh_backslash_before_at",
+                "ssh://chromium.googlesource.com\\@attacker.example.com/repo.git",
+            ),
+            # Non-rewritable schemes, local paths, SCP-like URLs, and invalid ports/chars.
+            ("file_local_path", "file:///path/to/local/repo"),
+            (
+                "file_trusted_host",
+                "file://chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "uppercase_file_trusted_host",
+                "FILE://chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "uppercase_https_scheme",
+                "HTTPS://chromium.googlesource.com/chromium/src.git",
+            ),
+            ("local_abs_path", "/path/to/local/repo"),
+            ("relative_dep_with_rev", "/relative/dep@deadbeef"),
+            (
+                "scheme_relative_url",
+                "//chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "scheme_without_slashes",
+                "https:chromium.googlesource.com/chromium/src.git",
+            ),
+            (
+                "scp_style_url",
+                "git@chromium.googlesource.com:chromium/src.git",
+            ),
+            (
+                "empty_port",
+                "https://chromium.googlesource.com:/chromium/src.git",
+            ),
+            (
+                "non_numeric_port",
+                "https://chromium.googlesource.com:badport/chromium/src.git",
+            ),
+            (
+                "unicode_kelvin_homograph",
+                "https://\u212a.googlesource.com/chromium/src.git",
+            ),
+            (
+                "unicode_long_s_homograph",
+                "https://chromium.google\u017fource.com/chromium/src.git",
+            ),
+            (
+                "embedded_newline",
+                "https://chromium.googlesource.com\n/chromium/src.git",
+            ),
+            (
+                "embedded_tab",
+                "https://chromium.googlesource.\tcom/chromium/src.git",
+            ),
+            (
+                "ssh_query_unanchored_match",
+                "ssh://evil.example.com/?x=ssh://chromium.googlesource.com/repo.git",
+            ),
+        ]
+    )
+    def testSkipsUntrustedHostsCredentialsAndMalformedUrls(
+        self,
+        _name: str,
+        url: str,
+    ) -> None:
+        for protocol in ("sso", "https", "ssh"):
+            with self.subTest(protocol=protocol):
+                self.assertEqual(
+                    gclient.GitDependency.updateProtocol(url, protocol),
+                    url,
+                )
+
+    @parameterized.parameterized.expand(
+        [
+            (
+                "plus_in_path_with_revision_to_ssh",
+                "https://chromium.googlesource.com/external/libcxx+abi.git@deadbeef",
+            ),
+            (
+                "percent_encoded_path_to_ssh",
+                "https://chromium.googlesource.com/external/my%20repo.git@deadbeef",
+            ),
+        ]
+    )
+    def testSkipsSshRewriteWhenSplitUrlRevisionWouldTruncate(
+        self,
+        _name: str,
+        url: str,
+    ) -> None:
+        self.assertEqual(
+            gclient.GitDependency.updateProtocol(url, "ssh"),
+            url,
+        )
+
+    def testConfigAndDepsProtocolOverride(self) -> None:
+        solutions = [
+            {
+                "name": "src",
+                "url": "https://chromium.googlesource.com/chromium/src.git",
+                "deps_file": "DEPS",
+                "protocol_override": "sso",
+            }
+        ]
+        write(".gclient", f"solutions = {solutions!r}\n")
+        deps = {
+            "src/internal": (
+                "https://chrome-internal.googlesource.com/chrome/internal.git@1111"
+            ),
+            "src/corp": (
+                "https://chromium.git.corp.google.com/corp/repo.git@2222"
+            ),
+            "src/relative": "/v8/v8.git@3333",
+            "src/third_party/github_dep": (
+                "https://github.com/example/repo.git@4444"
+            ),
+            "src/third_party/attacker_dep": (
+                "https://attacker.example.com/evil.git@5555"
+            ),
+            "src/third_party/slash_at_dep": (
+                "https://chromium.googlesource.com/@attacker.example.com/evil.git@6666"
+            ),
+            "src/local_dep": "file:///tmp/local_repo.git",
+        }
+        write(os.path.join("src", "DEPS"), f"deps = {deps!r}\n")
+
+        options, _ = gclient.OptionParser().parse_args([])
+        client = gclient.GClient.LoadCurrentConfig(options)
+        self.assertEqual(len(client.dependencies), 1)
+        sol = client.dependencies[0]
+        self.assertEqual(
+            sol.url,
+            "sso://chromium.googlesource.com/chromium/src.git",
+        )
+
+        sol.ParseDepsFile()
+        dep_urls = {dep.name: dep.url for dep in sol.dependencies}
+        self.assertEqual(
+            dep_urls,
+            {
+                "src/internal": (
+                    "sso://chrome-internal.googlesource.com/chrome/internal.git@1111"
+                ),
+                "src/corp": (
+                    "sso://chromium.git.corp.google.com/corp/repo.git@2222"
+                ),
+                "src/relative": (
+                    "sso://chromium.googlesource.com/chromium/v8/v8.git@3333"
+                ),
+                "src/third_party/github_dep": (
+                    "https://github.com/example/repo.git@4444"
+                ),
+                "src/third_party/attacker_dep": (
+                    "https://attacker.example.com/evil.git@5555"
+                ),
+                "src/third_party/slash_at_dep": (
+                    "https://chromium.googlesource.com@attacker.example.com/evil.git@6666"
+                ),
+                "src/local_dep": "file:///tmp/local_repo.git",
+            },
+        )
+
+    def testInvalidProtocolOverrideInConfigRaisesError(self) -> None:
+        solutions = [
+            {
+                "name": "src",
+                "url": "https://chromium.googlesource.com/chromium/src.git",
+                "deps_file": "DEPS",
+                "protocol_override": "ext::sh -c evil",
+            }
+        ]
+        write(".gclient", f"solutions = {solutions!r}\n")
+        options, _ = gclient.OptionParser().parse_args([])
+        with self.assertRaises(gclient_utils.Error):
+            gclient.GClient.LoadCurrentConfig(options)
+
+
 if __name__ == "__main__":
     sys.stdout = gclient_utils.MakeFileAutoFlush(sys.stdout)
     sys.stdout = gclient_utils.MakeFileAnnotated(sys.stdout)

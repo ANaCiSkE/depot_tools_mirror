@@ -2177,6 +2177,13 @@ def _CheckGcsDirConflicts(
 class GitDependency(Dependency):
     """A Dependency object that represents a single git checkout."""
 
+    ALLOWED_PROTOCOLS = ("http", "https", "sso", "ssh", "git")
+    _TRUSTED_HOST_RE = re.compile(
+        r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+"
+        r"(?:googlesource\.com|git\.corp\.google\.com)",
+        re.ASCII | re.IGNORECASE,
+    )
+
     _is_env_cog = None
     _scm = None
 
@@ -2189,18 +2196,94 @@ class GitDependency(Dependency):
         return GitDependency._is_env_cog
 
     @staticmethod
-    def updateProtocol(url, protocol):
-        """Updates given URL's protocol"""
-        # only works on urls, skips local paths
+    def _IsTrustedHost(hostname: Optional[str]) -> bool:
+        """Returns True if `hostname` is a trusted Gerrit/Git-on-Borg host."""
+        return bool(
+            hostname and GitDependency._TRUSTED_HOST_RE.fullmatch(hostname)
+        )
+
+    @staticmethod
+    def updateProtocol(
+        url: Optional[str], protocol: Optional[str]
+    ) -> Optional[str]:
+        """Updates given URL's protocol for trusted Gerrit/Git-on-Borg hosts."""
+        if protocol is None or protocol == "":
+            return url
+
+        if (
+            not isinstance(protocol, str)
+            or protocol not in GitDependency.ALLOWED_PROTOCOLS
+        ):
+            expected = ", ".join(
+                repr(p) for p in GitDependency.ALLOWED_PROTOCOLS
+            )
+            raise gclient_utils.Error(
+                f"Unsupported protocol {protocol!r}; expected one of "
+                f"{expected}."
+            )
+
+        # Only works on well-formed URLs; skips local paths.
         if (
             not url
-            or not protocol
-            or not re.match("([a-z]+)://", url)
-            or re.match("file://", url)
+            or not isinstance(url, str)
+            or not url.isascii()
+            or not url.isprintable()
+            or any(c.isspace() for c in url)
+            or not re.match(r"^[a-z]+://", url)
         ):
             return url
 
-        return re.sub("^([a-z]+):", protocol + ":", url)
+        try:
+            base_url, revision = gclient_utils.SplitUrlRevision(url)
+            parsed = urllib.parse.urlsplit(base_url)
+            _ = parsed.port
+        except (gclient_utils.Error, AttributeError, ValueError):
+            return url
+
+        unsplit_base = urllib.parse.urlunsplit(parsed)
+        expected_url = (
+            f"{unsplit_base}@{revision}"
+            if revision is not None
+            else unsplit_base
+        )
+        if expected_url != url:
+            return url
+
+        if parsed.scheme not in GitDependency.ALLOWED_PROTOCOLS:
+            return url
+
+        if (
+            "@" in parsed.netloc
+            or "\\" in parsed.netloc
+            or (":" in parsed.netloc and parsed.port is None)
+            or not parsed.path.strip("/")
+            or "@" in parsed.path
+            or "?" in base_url
+            or "#" in base_url
+            or revision == ""
+        ):
+            return url
+
+        if not GitDependency._IsTrustedHost(parsed.hostname):
+            return url
+
+        updated_base_url = urllib.parse.urlunsplit(
+            parsed._replace(scheme=protocol)
+        )
+        updated_url = (
+            f"{updated_base_url}@{revision}"
+            if revision is not None
+            else updated_base_url
+        )
+        try:
+            if gclient_utils.SplitUrlRevision(updated_url) != (
+                updated_base_url,
+                revision,
+            ):
+                return url
+        except (gclient_utils.Error, AttributeError, ValueError):
+            return url
+        return updated_url
 
     # override
     def GetScmName(self):
