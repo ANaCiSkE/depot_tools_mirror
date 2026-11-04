@@ -142,23 +142,6 @@ PRECOMMIT_HOOK_VAR = "GCLIENT_PRECOMMIT"
 # Names of the metadata directories (or files) of git and jj checkouts.
 _SCM_METADATA_NAMES = (".git", ".jj")
 
-# TODO(https://crbug.com/343199633): Remove once all packages no longer
-# place content in directories with git content, and all milestone
-# branches have picked it up (m128+).
-_GCS_CLEANUP_BLOCKLIST_NAMES = frozenset(
-    [
-        "src/base/tracing/test/data",
-        "src/clank/orderfiles",
-        "src/third_party/blink/renderer/core/css/perftest_data",
-        "src/third_party/instrumented_libs/binaries",
-        "src/third_party/js_code_coverage",
-        "src/third_party/opus/tests/resources",
-        "src/third_party/test_fonts",
-        "src/third_party/tfhub_models",
-        "src/tools/perf/page_sets/maps_perf_test/",
-    ]
-)
-
 
 class GNException(Exception):
     pass
@@ -1054,8 +1037,6 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             for gcs in gcs_deps:
                 gcs_root.add_object(self.name, name, gcs.object_name)
 
-            if name in _GCS_CLEANUP_BLOCKLIST_NAMES:
-                continue
             # Check if at least one object needs to be downloaded. When
             # IsEnvCog(), gcs sources are already present and are not managed
             # by gclient.

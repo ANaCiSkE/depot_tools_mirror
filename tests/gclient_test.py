@@ -2907,8 +2907,9 @@ class GcsDependencyTest(trial_dir.TestCase):
         )
         shutil.copy(tar_path, self.dep.artifact_output_file)
         self.dep._MaybeExtractArtifact()
-        # Re-extracting without wiping output_dir (as in blocklisted dirs)
-        # must succeed when internal symlinks stay within output_dir.
+        # Extracting over existing content, e.g. when several objects of an
+        # entry share output_dir, must succeed when internal symlinks stay
+        # within output_dir.
         self.dep._MaybeExtractArtifact()
         self.assertTrue(
             os.path.islink(os.path.join(self.dep.output_dir, "usr", "lib64"))
@@ -3873,19 +3874,6 @@ class GcsDirOwnershipTest(trial_dir.TestCase):
             os.path.normpath(rmtree_mock.call_args_list[0].args[0]),
         )
         self.assertFalse(os.path.exists(output_dir))
-
-    def test_cleanup_skips_blocklisted_dirs(self) -> None:
-        old_file = os.path.join(
-            self.root_dir, "src", "third_party", "test_fonts", "old"
-        )
-        write(old_file, "old")
-        with mock.patch("gclient_utils.rmtree") as rmtree_mock:
-            self._add_deps(
-                self.solution,
-                {"src/third_party/test_fonts": _deps_entry("gcs")},
-            )
-        rmtree_mock.assert_not_called()
-        self.assertTrue(os.path.isfile(old_file))
 
 
 class TrailingSlashSolutionNameTest(trial_dir.TestCase):
