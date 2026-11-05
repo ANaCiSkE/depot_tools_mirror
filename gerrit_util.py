@@ -62,24 +62,6 @@ GERRIT_PROTOCOL = "https"
 MAX_CONCURRENT_CONNECTION = 20
 
 
-_GIT_CONFIG_DIR = None
-
-
-@contextlib.contextmanager
-def WithGitConfigDir(cwd: str):
-    global _GIT_CONFIG_DIR
-    old_cwd = _GIT_CONFIG_DIR
-    _GIT_CONFIG_DIR = os.path.abspath(cwd)
-    try:
-        yield
-    finally:
-        _GIT_CONFIG_DIR = old_cwd
-
-
-def _GetGitConfigDir() -> str:
-    return _GIT_CONFIG_DIR or os.getcwd()
-
-
 def time_sleep(seconds):
     # Use this so that it can be mocked in tests without interfering with python
     # system machinery.
@@ -443,9 +425,7 @@ class SSOAuthenticator(_Authenticator):
     def is_applicable(cls, *, gerrit_host: Optional[str] = None) -> bool:
         if not cls._resolve_sso_cmd():
             return False
-        email: str = scm.GIT.GetConfig(
-            _GetGitConfigDir(), "user.email", default=""
-        )
+        email: str = scm.GIT.GetConfig(os.getcwd(), "user.email", default="")
         if gerrit_host is not None:
             return ShouldUseSSO(gerrit_host, email)
         return email.endswith("@google.com")
@@ -733,9 +713,7 @@ class CookiesAuthenticator(_Authenticator):
 
         return os.path.expanduser(
             scm.GIT.GetConfig(
-                _GetGitConfigDir(),
-                "http.cookiefile",
-                os.path.join("~", ".gitcookies"),
+                os.getcwd(), "http.cookiefile", os.path.join("~", ".gitcookies")
             )
         )
 
@@ -1173,8 +1151,7 @@ class GitCredsAuthenticator(_Authenticator):
                     "--get-urlmatch",
                     "credential.usehttppath",
                     url,
-                ],
-                cwd=_GetGitConfigDir(),
+                ]
             )
             return output.decode().rstrip() in ["true", "yes", "on"]
         except subprocess.CalledProcessError as e:
@@ -2504,7 +2481,7 @@ def InvalidateAccountCache(
     host: str, email: Optional[str] = None, *, cwd: Optional[str] = None
 ) -> None:
     """Evicts cached account existence entry for host/email from Git config."""
-    cwd = cwd or _GetGitConfigDir()
+    cwd = cwd or os.getcwd()
     try:
         hosts = scm.GIT.GetConfigList(cwd, _HOST_HAS_ACCOUNT_CONFIG_KEY)
         if not hosts:
@@ -2550,7 +2527,7 @@ def _GetAccountCacheInfo(
     cwd: Optional[str] = None,
 ) -> _AccountCacheInfo:
     """Resolves normalized host/email, cache entry key, and checks cache existence."""
-    cwd = cwd or _GetGitConfigDir()
+    cwd = cwd or os.getcwd()
     if not email:
         try:
             email = scm.GIT.GetConfig(cwd, "user.email")
