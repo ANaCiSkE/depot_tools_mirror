@@ -1815,6 +1815,45 @@ class GerritUtilTest(unittest.TestCase):
             reqtype="GET",
         )
 
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.CreateHttpConn")
+    def testCreateGerritTag(
+self, mockCreateHttpConn, mockReadHttpJsonResponse
+    ):
+        expected = {"ref": "refs/tags/1.0", "revision": "deadbeef"}
+        mockReadHttpJsonResponse.return_value = expected
+
+        result = gerrit_util.CreateGerritTag(
+            "host", "project", "1.0", "deadbeef"
+        )
+
+        self.assertEqual(expected, result)
+        mockCreateHttpConn.assert_called_once_with(
+            "host",
+            "projects/project/tags/1.0",
+            reqtype="PUT",
+            body={"revision": "deadbeef"},
+        )
+        mockReadHttpJsonResponse.assert_called_once_with(
+            mockCreateHttpConn.return_value, accept_statuses=[201, 409]
+        )
+
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.CreateHttpConn")
+    def testGetGerritTag(self, mockCreateHttpConn, mockReadHttpJsonResponse):
+        expected = {"ref": "refs/tags/1.0", "revision": "deadbeef"}
+        mockReadHttpJsonResponse.return_value = expected
+
+        result = gerrit_util.GetGerritTag("host", "project", "1.0")
+
+        self.assertEqual(expected, result)
+        mockCreateHttpConn.assert_called_once_with(
+            "host", "projects/project/tags/1.0", reqtype="GET"
+        )
+        mockReadHttpJsonResponse.assert_called_once_with(
+            mockCreateHttpConn.return_value, accept_statuses=[200, 404]
+        )
+
 
 class SSOAuthenticatorTest(unittest.TestCase):
     @classmethod

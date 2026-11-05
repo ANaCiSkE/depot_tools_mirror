@@ -2383,7 +2383,7 @@ def CreateGerritTag(host, project, tag, commit):
     path = "projects/%s/tags/%s" % (project, tag)
     body = {"revision": commit}
     conn = CreateHttpConn(host, path, reqtype="PUT", body=body)
-    response = ReadHttpJsonResponse(conn, accept_statuses=[201])
+    response = ReadHttpJsonResponse(conn, accept_statuses=[201, 409])
     if response:
         return response
     raise GerritError(200, "Unable to create gerrit tag")
@@ -2432,6 +2432,20 @@ def GetGerritBranch(host, project, branch):
         A JSON object with 'revision' key if the branch exists, otherwise None.
     """
     path = "projects/%s/branches/%s" % (project, branch)
+    conn = CreateHttpConn(host, path, reqtype="GET")
+    return ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
+
+
+def GetGerritTag(host, project, tag):
+    """Gets a tag info from given project and tag name.
+
+    See:
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-tag
+
+    Returns:
+        A JSON object with 'revision' key if the tag exists, otherwise None.
+    """
+    path = f"projects/{project}/tags/{tag}"
     conn = CreateHttpConn(host, path, reqtype="GET")
     return ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
 

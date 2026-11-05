@@ -16,6 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import gerrit_client
+import gerrit_util
 
 
 class TestGerritClient(unittest.TestCase):
@@ -54,6 +55,100 @@ class TestGerritClient(unittest.TestCase):
         )
         CreateGerritBranch_mock.assert_called_once_with(
             "example.org", "projectname", "branchname", "commitname"
+        )
+
+    @mock.patch("gerrit_util.CreateGerritTag", return_value={"ref": "refs/tags/v1"})
+    def test_tag(self, CreateGerritTag_mock):
+        gerrit_client.main(
+            [
+                "tag",
+                "--host",
+                "https://example.org/foo",
+                "--project",
+                "projectname",
+                "--tag",
+                "v1",
+                "--commit",
+                "commitname",
+            ]
+        )
+        CreateGerritTag_mock.assert_called_once_with(
+            "example.org", "projectname", "v1", "commitname"
+        )
+
+    @mock.patch("gerrit_client.write_result")
+    @mock.patch(
+        "gerrit_util.GetGerritTag",
+        return_value={"ref": "refs/tags/v1", "revision": "commitname"},
+    )
+    @mock.patch(
+        "gerrit_util.CreateGerritTag",
+        side_effect=gerrit_util.GerritError(
+            200, 'Unexpected json output: Tag "v1" already exists'
+        ),
+    )
+    def test_tag_conflict_same_commit(
+        self, CreateGerritTag_mock, GetGerritTag_mock, write_result_mock
+    ):
+        gerrit_client.main(
+            [
+                "tag",
+                "--host",
+                "https://example.org/foo",
+                "--project",
+                "projectname",
+                "--tag",
+                "v1",
+                "--commit",
+                "commitname",
+            ]
+        )
+        CreateGerritTag_mock.assert_called_once_with(
+            "example.org", "projectname", "v1", "commitname"
+        )
+        GetGerritTag_mock.assert_called_once_with(
+            "example.org", "projectname", "v1"
+        )
+        write_result_mock.assert_called_once_with(
+            {"ref": "refs/tags/v1", "revision": "commitname"}, mock.ANY
+        )
+
+    @mock.patch(
+        "gerrit_util.GetGerritTag",
+        return_value={"ref": "refs/tags/v1", "revision": "othercommit"},
+    )
+    @mock.patch(
+        "gerrit_util.CreateGerritTag",
+        side_effect=gerrit_util.GerritError(
+            200, 'Unexpected json output: Tag "v1" already exists'
+        ),
+    )
+    def test_tag_conflict_different_commit(
+        self, CreateGerritTag_mock, GetGerritTag_mock
+    ):
+        with self.assertRaisesRegex(
+            gerrit_util.GerritError,
+            "Conflict: tag 'v1' was created at 'othercommit' but "
+            "the tag is not at the given commit 'commitname'",
+        ):
+            gerrit_client.main(
+                [
+                    "tag",
+                    "--host",
+                    "https://example.org/foo",
+                    "--project",
+                    "projectname",
+                    "--tag",
+                    "v1",
+                    "--commit",
+                    "commitname",
+                ]
+            )
+        CreateGerritTag_mock.assert_called_once_with(
+            "example.org", "projectname", "v1", "commitname"
+        )
+        GetGerritTag_mock.assert_called_once_with(
+            "example.org", "projectname", "v1"
         )
 
     @mock.patch("gerrit_util.QueryChanges", return_value="")

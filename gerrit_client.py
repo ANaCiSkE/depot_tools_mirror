@@ -192,7 +192,23 @@ def CMDtag(parser, args):
     project = urllib.parse.quote_plus(opt.project)
     host = urllib.parse.urlparse(opt.host).netloc
     tag = urllib.parse.quote_plus(opt.tag)
-    result = gerrit_util.CreateGerritTag(host, project, tag, opt.commit)
+    try:
+        result = gerrit_util.CreateGerritTag(host, project, tag, opt.commit)
+    except gerrit_util.GerritError as e:
+        result = gerrit_util.GetGerritTag(host, project, tag)
+        if not result:
+            raise e
+        # If reached here, we hit a real conflict error, because the
+        # tag just created is pointing a different commit.
+        if result.get("revision") != opt.commit:
+            raise gerrit_util.GerritError(
+                200,
+                (
+                    f"Conflict: tag '{opt.tag}' was created at "
+                    f"'{result.get('revision')}' but "
+                    f"the tag is not at the given commit '{opt.commit}'"
+                ),
+            )
     logging.info(result)
     write_result(result, opt)
 
