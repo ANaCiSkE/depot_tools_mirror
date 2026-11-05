@@ -6,7 +6,7 @@ dependencies = [
   'charset-normalizer==2.0.4',
   'urllib3==1.26.6',
   'idna==2.8',
-  "brotli==1.0.9; python_version != '3.11' or sys_platform != 'linux' or platform_machine != 'riscv64'",
+  "brotli==1.2.1; python_version != '3.11' or sys_platform != 'linux' or platform_machine != 'riscv64'",
   'tzdata==2023.4',
   'python-dateutil==2.7.3',
   'certifi==2021.5.30',
