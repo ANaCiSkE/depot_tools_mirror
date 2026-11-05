@@ -1868,6 +1868,7 @@ class Changelist(object):
             self._GerritChangeIdentifier(),
             description,
             notify="NONE",
+            project=self.GetGerritProject(),
         )
 
         self.description = description

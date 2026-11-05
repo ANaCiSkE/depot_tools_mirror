@@ -233,7 +233,11 @@ class GerritAccessor(object):
 
     def UpdateDescription(self, description, issue):
         gerrit_util.SetCommitMessage(
-            self.host, issue, description, notify="NONE"
+            self.host,
+            issue,
+            description,
+            notify="NONE",
+            project=self.project,
         )
 
     def IsCodeOwnersEnabledOnRepo(self):

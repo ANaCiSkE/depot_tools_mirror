@@ -6131,6 +6131,35 @@ class TestGitCl(unittest.TestCase):
     @unittest.skipIf(
         gclient_utils.IsEnvCog(), "not supported in non-git environment"
     )
+    @mock.patch("git_cl.gerrit_util.HasPendingChangeEdit", return_value=False)
+    @mock.patch("git_cl.gerrit_util.SetCommitMessage")
+    def test_update_description_passes_project(
+        self, mock_set_msg, _mock_has_edit
+    ):
+        scm.GIT.SetConfig("", "branch.main.gerritissue", "123")
+        scm.GIT.SetConfig(
+            "",
+            "branch.main.gerritserver",
+            "https://chromium-review.googlesource.com",
+        )
+        scm.GIT.SetConfig(
+            "",
+            "remote.origin.url",
+            "https://chromium.googlesource.com/v8/v8",
+        )
+        cl = git_cl.Changelist(branchref="refs/heads/main")
+        cl.UpdateDescription("Updated description")
+        mock_set_msg.assert_called_once_with(
+            "chromium-review.googlesource.com",
+            "v8%2Fv8~123",
+            "Updated description",
+            notify="NONE",
+            project="v8/v8",
+        )
+
+    @unittest.skipIf(
+        gclient_utils.IsEnvCog(), "not supported in non-git environment"
+    )
     def test_diff_with_files(self):
         mock.patch("git_common.current_branch", return_value="main").start()
 

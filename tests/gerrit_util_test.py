@@ -1744,16 +1744,163 @@ class GerritUtilTest(unittest.TestCase):
 
     @mock.patch("gerrit_util.CreateHttpConn")
     @mock.patch("gerrit_util.ReadHttpJsonResponse")
-    def testCherryPickWithConflicts(self, mockJsonResponse, mockCreateHttpConn):
+    @mock.patch("gerrit_util.GetChangeDetail")
+    def testCherryPickWithConflicts(
+        self, mockGetChangeDetail, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockGetChangeDetail.return_value = {"project": "infra/infra"}
         mockJsonResponse.return_value = {"_number": 1}
         gerrit_util.CherryPick(
             "host", "change", "destination", allow_conflicts=True
         )
+        mockGetChangeDetail.assert_called_once_with("host", "change")
         mockCreateHttpConn.assert_called_once_with(
             "host",
             "changes/change/revisions/current/cherrypick",
             reqtype="POST",
             body={"destination": "destination", "allow_conflicts": True},
+            reauth_context=auth.ReAuthContext(
+                host="host", project="infra/infra"
+            ),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.GetChangeDetail")
+    def testCherryPick_WithProject(
+        self, mockGetChangeDetail, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockJsonResponse.return_value = {"_number": 1}
+        gerrit_util.CherryPick(
+            "host",
+            "change",
+            "destination",
+            project="infra/experimental",
+        )
+        mockGetChangeDetail.assert_not_called()
+        mockCreateHttpConn.assert_called_once_with(
+            "host",
+            "changes/change/revisions/current/cherrypick",
+            reqtype="POST",
+            body={"destination": "destination"},
+            reauth_context=auth.ReAuthContext(
+                host="host", project="infra/experimental"
+            ),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    def testCherryPickCommit_ReAuth(self, mockJsonResponse, mockCreateHttpConn):
+        mockJsonResponse.return_value = {"_number": 1}
+        gerrit_util.CherryPickCommit(
+            "host", "chromium/src", "deadbeef", "refs/branch-heads/1234"
+        )
+        mockCreateHttpConn.assert_called_once_with(
+            "host",
+            "projects/chromium%2Fsrc/commits/deadbeef/cherrypick",
+            reqtype="POST",
+            body={"destination": "refs/branch-heads/1234"},
+            reauth_context=auth.ReAuthContext(
+                host="host", project="chromium/src"
+            ),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpResponse")
+    @mock.patch("gerrit_util.GetChangeDetail")
+    def testSetCommitMessage_ReAuth(
+        self, mockGetChangeDetail, mockReadResponse, mockCreateHttpConn
+    ):
+        mockGetChangeDetail.return_value = {"project": "v8/v8"}
+        gerrit_util.SetCommitMessage("chromium", 123456, "New msg")
+        mockGetChangeDetail.assert_called_once_with("chromium", 123456)
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "changes/123456/message",
+            reqtype="PUT",
+            body={"message": "New msg", "notify": "ALL"},
+            reauth_context=auth.ReAuthContext(host="chromium", project="v8/v8"),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpResponse")
+    @mock.patch("gerrit_util.GetChangeDetail")
+    def testSetCommitMessage_ReAuth_WithProject(
+        self, mockGetChangeDetail, mockReadResponse, mockCreateHttpConn
+    ):
+        gerrit_util.SetCommitMessage(
+            "chromium",
+            123456,
+            "New msg",
+            notify="NONE",
+            project="v8/v8",
+        )
+        mockGetChangeDetail.assert_not_called()
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "changes/123456/message",
+            reqtype="PUT",
+            body={"message": "New msg", "notify": "NONE"},
+            reauth_context=auth.ReAuthContext(host="chromium", project="v8/v8"),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.GetChangeDetail")
+    def testRebaseChange_ReAuth(
+        self, mockGetChangeDetail, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockGetChangeDetail.return_value = {"project": "infra/infra"}
+        gerrit_util.RebaseChange("chromium", 123456, base="base_rev")
+        mockGetChangeDetail.assert_called_once_with("chromium", 123456)
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "changes/123456/rebase",
+            reqtype="POST",
+            body={"base": "base_rev"},
+            reauth_context=auth.ReAuthContext(
+                host="chromium", project="infra/infra"
+            ),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    @mock.patch("gerrit_util.GetChangeDetail")
+    def testPublishChangeEdit_ReAuth(
+        self, mockGetChangeDetail, mockJsonResponse, mockCreateHttpConn
+    ):
+        mockGetChangeDetail.return_value = {"project": "infra/infra"}
+        gerrit_util.PublishChangeEdit("chromium", 123456, notify=False)
+        mockGetChangeDetail.assert_called_once_with("chromium", 123456)
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "changes/123456/edit:publish",
+            reqtype="POST",
+            body={"notify": "NONE"},
+            reauth_context=auth.ReAuthContext(
+                host="chromium", project="infra/infra"
+            ),
+        )
+
+    @mock.patch("gerrit_util.CreateHttpConn")
+    @mock.patch("gerrit_util.ReadHttpJsonResponse")
+    def testCreateChange_ReAuth(self, mockJsonResponse, mockCreateHttpConn):
+        mockJsonResponse.return_value = {"_number": 123}
+        gerrit_util.CreateChange(
+            "chromium", "chromium/src", branch="main", subject="Test"
+        )
+        mockCreateHttpConn.assert_called_once_with(
+            "chromium",
+            "changes/",
+            reqtype="POST",
+            body={
+                "project": "chromium/src",
+                "branch": "main",
+                "subject": "Test",
+            },
+            reauth_context=auth.ReAuthContext(
+                host="chromium", project="chromium/src"
+            ),
         )
 
     @mock.patch("gerrit_util.ReadHttpJsonResponse")
