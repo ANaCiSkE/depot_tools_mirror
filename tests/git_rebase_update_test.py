@@ -4,9 +4,11 @@
 # found in the LICENSE file.
 """Unit tests for git_rebase_update.py"""
 
+import copy
 import os
 import shutil
 import sys
+import tempfile
 from unittest import mock
 
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +31,24 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         return {commit: {"data": commit.encode("utf-8")}}
 
     @classmethod
+    def _copyRepo(
+        cls, template: git_test_utils.GitRepo
+    ) -> git_test_utils.GitRepo:
+        repo = copy.copy(template)
+        repo.repo_path = os.path.realpath(
+            tempfile.mkdtemp(dir=template.BASE_TEMP_DIR)
+        )
+        shutil.copytree(
+            template.repo_path,
+            repo.repo_path,
+            symlinks=True,
+            dirs_exist_ok=True,
+        )
+        repo.commit_map = dict(template.commit_map)
+        repo.to_schema_refs = list(template.to_schema_refs)
+        return repo
+
+    @classmethod
     def setUpClass(cls):
         super(GitRebaseUpdateTest, cls).setUpClass()
         import git_rebase_update
@@ -44,8 +64,6 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         cls.gc = git_common
         cls.gc.TEST_MODE = True
 
-    def setUp(self):
-        super(GitRebaseUpdateTest, self).setUp()
         # Include branch_K, branch_L to make sure that ABCDEFG all get the
         # same commit hashes as self.repo. Otherwise they get committed with the
         # wrong timestamps, due to commit ordering.
@@ -57,22 +75,45 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
       B H I J K
             J L
     """,
-            self.getRepoContent,
+            cls.getRepoContent,
         )
-        self.origin = origin_schema.reify()
-        self.origin.git("checkout", "main")
-        self.origin.git("branch", "-d", *["branch_" + l for l in "KLG"])  # noqa: E741
+        cls._origin_template = origin_schema.reify()
+        cls._origin_template.git("checkout", "main")
+        cls._origin_template.git(
+            "branch", "-d", *[f"branch_{b}" for b in "KLG"]
+        )
 
-        self.repo.git("remote", "add", "origin", self.origin.repo_path)
-        self.repo.git(
+        cls._repo_template = cls.r_schema.reify()
+        cls._repo_template.git(
+            "remote", "add", "origin", cls._origin_template.repo_path
+        )
+        cls._repo_template.git(
             "config", "--add", "remote.origin.fetch", "+refs/tags/*:refs/tags/*"
         )
-        self.repo.git("update-ref", "refs/remotes/origin/main", "tag_E")
-        self.repo.git("branch", "--set-upstream-to", "branch_G", "branch_K")
-        self.repo.git("branch", "--set-upstream-to", "branch_K", "branch_L")
-        self.repo.git("branch", "--set-upstream-to", "origin/main", "branch_G")
+        cls._repo_template.git(
+            "update-ref", "refs/remotes/origin/main", "tag_E"
+        )
+        cls._repo_template.git(
+            "branch", "--set-upstream-to", "branch_G", "branch_K"
+        )
+        cls._repo_template.git(
+            "branch", "--set-upstream-to", "branch_K", "branch_L"
+        )
+        cls._repo_template.git(
+            "branch", "--set-upstream-to", "origin/main", "branch_G"
+        )
+        cls._repo_template.to_schema_refs += ["origin/main"]
 
-        self.repo.to_schema_refs += ["origin/main"]
+    @classmethod
+    def tearDownClass(cls):
+        cls._repo_template.nuke()
+        cls._origin_template.nuke()
+        super(GitRebaseUpdateTest, cls).tearDownClass()
+
+    def setUp(self):
+        self.origin = self._copyRepo(self._origin_template)
+        self.repo = self._copyRepo(self._repo_template)
+        self.repo.git("config", "remote.origin.url", self.origin.repo_path)
         mock.patch("git_rebase_update.RESET", "").start()
         mock.patch("git_rebase_update.BRIGHT", "").start()
 
@@ -366,12 +407,10 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
             f.write(content)
         self.origin.git("add", "stack")
         self.origin.git_commit(f"Land {content.strip()}")
-        return self.origin.git("rev-parse", "HEAD").stdout.strip()
 
     def _createStackBranch(self, name, upstream, content):
         """Creates `name` tracking `upstream`, writing `content` to `stack`."""
-        self.repo.git("checkout", "-b", name, upstream)
-        self.repo.git("branch", "--set-upstream-to", upstream, name)
+        self.repo.git("checkout", "--track", "-b", name, upstream)
         with self.repo.open("stack", "w") as f:
             f.write(content)
         self.repo.git("add", "stack")
