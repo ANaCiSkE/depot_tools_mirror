@@ -101,7 +101,7 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                 "https://example.com/foo",
                 "faa",
                 "--cache-dir",
-                "something",
+                "../something",
             ],
             {
                 "solutions": [
@@ -114,7 +114,7 @@ class GClientSmoke(gclient_smoketest_base.GClientSmokeBase):
                         "custom_vars": {},
                     }
                 ],
-                "cache_dir": "something",
+                "cache_dir": "../something",
             },
         )
 

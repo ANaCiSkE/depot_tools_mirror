@@ -2280,6 +2280,99 @@ def _HasLinkOrJunction(root_dir: str, path: str) -> bool:
     return False
 
 
+def _StripExtendedLengthPrefix(path: str) -> str:
+    """Returns `path` without a Windows extended-length or device prefix.
+
+    Only paths with a drive letter and UNC paths lose it, as other ones, e.g.
+    volume GUID paths, would be relative without it.
+    """
+    for prefix in ("\\\\?\\", "\\\\.\\"):
+        if not path.startswith(prefix):
+            continue
+        rest = path[len(prefix) :]
+        if rest[:4].upper() == "UNC\\":
+            return "\\\\" + rest[4:]
+        if rest[1:2] == ":" and rest[:1].isascii() and rest[:1].isalpha():
+            return rest
+    return path
+
+
+def _NormalizeRealPath(path: str) -> str:
+    """Returns the real path `path` normalized to compare it by name."""
+    path = os.path.normcase(os.path.normpath(_StripExtendedLengthPrefix(path)))
+    # commonpath() treats UNC share roots and volume GUID roots without the
+    # separator as relative.
+    if not os.path.splitdrive(path)[1]:
+        path += os.sep
+    return path
+
+
+def _IsSameOrInsideDir(path: str, directory: str) -> bool:
+    """Returns whether the absolute path `path` is `directory` or inside it.
+
+    This compares `path` and its parents with `directory` by identity rather
+    than by name, so that case, Unicode normalization and path prefixes don't
+    matter, except on file systems without file IDs. `path` doesn't need to
+    exist, but its parents are found by name, so symlinks in it must be
+    resolved first to compare where it leads.
+    """
+    try:
+        directory_stat = os.stat(directory)
+    except OSError:
+        # E.g. a git cache that doesn't exist yet, which the existing gclient
+        # root can't be inside.
+        return False
+    if not directory_stat.st_ino:
+        # Some Windows file systems have no file IDs, so all of them are 0.
+        path, directory = (
+            _NormalizeRealPath(os.path.realpath(p)) for p in (path, directory)
+        )
+        try:
+            return os.path.commonpath([path, directory]) == directory
+        except ValueError:
+            # The paths are on different drives.
+            return False
+    while True:
+        try:
+            if os.path.samestat(os.stat(path), directory_stat):
+                return True
+        except OSError:
+            # E.g. `path` doesn't exist yet.
+            pass
+        parent = os.path.dirname(path)
+        if parent == path:
+            return False
+        path = parent
+
+
+def _GoesThroughDir(path: str, directory: str) -> bool:
+    """Returns whether `path` is `directory`, is inside it or goes through it.
+
+    `path` goes through `directory` if one of its parents leads into it, e.g.
+    like `/proc/self/cwd` does if the working directory is inside it, even if
+    a symlink inside `directory` then leads out of it again.
+    """
+    path = os.path.abspath(path)
+    while True:
+        if _IsSameOrInsideDir(os.path.realpath(path), directory):
+            return True
+        parent = os.path.dirname(path)
+        if parent == path:
+            return False
+        path = parent
+
+
+def _PathsOverlap(path: str, other: str) -> bool:
+    """Returns whether `path` and `other` are the same or one contains the other.
+
+    Directories are compared by identity, see `_IsSameOrInsideDir()`, and a
+    path that goes through a directory counts as inside it, see
+    `_GoesThroughDir()`, as e.g. a checkout can replace a symlink inside it
+    that leads out of it.
+    """
+    return _GoesThroughDir(path, other) or _GoesThroughDir(other, path)
+
+
 def _StartsWithScmMetadata(rel_path: str) -> bool:
     """Returns whether `rel_path` is or is inside a `.git` or `.jj` entry.
 
@@ -2596,6 +2689,8 @@ solutions = %(solution_list)s
                 and dep.url
                 and not _HasLinkOrJunction(self.root_dir, dep.deps_key)
             ):
+                # GetActualRemoteURL() may look at the mirror in the git cache.
+                self._CheckEffectiveGitCacheDir()
                 scm = dep.CreateSCM()
                 actual_url = scm.GetActualRemoteURL(self._options)
                 if actual_url and not scm.DoesRemoteURLMatch(self._options):
@@ -2634,6 +2729,52 @@ it or fix the checkout.
                         }
                     )
 
+    def _CheckGitCacheDir(self, cache_dir: str, setting: str) -> None:
+        """Raises if the git cache directory `cache_dir` overlaps the root.
+
+        git runs commands from the config and the hooks of the mirrors in the
+        cache, so the cache must not be inside the checkout, where
+        repositories (e.g. one that ships the .gclient file) could commit fake
+        mirrors, nor contain it, as the checkout could then be a mirror itself.
+
+        Args:
+            cache_dir: The absolute and normalized git cache directory, as
+                git_cache uses it.
+            setting: The setting that `cache_dir` comes from, for the error.
+        """
+        root_dir = os.path.abspath(self.root_dir)
+        if _PathsOverlap(cache_dir, root_dir):
+            raise gclient_utils.Error(
+                "The git cache must live outside the gclient checkout, but "
+                f"{setting} {cache_dir!r} is the gclient root {root_dir!r}, is "
+                f"inside it or contains it. Set {setting} to a directory "
+                "outside the checkout."
+            )
+
+    def _CheckEffectiveGitCacheDir(self) -> None:
+        """Raises if the git cache that git_cache uses overlaps the root.
+
+        Without cache_dir in .gclient, which SetConfig() checks, git_cache
+        uses cache.cachepath from the git config, which a repository can
+        supply too (e.g. as a bare repository in the working directory), or
+        $GIT_CACHE_PATH. Like SetConfig() does with cache_dir, this makes the
+        path absolute and normalizes it for git_cache, so that git commands
+        in other directories (e.g. in checkouts) use the checked directory,
+        too, and so that symlinks followed by `..` can't lead elsewhere.
+        """
+        try:
+            cache_dir = git_cache.Mirror.GetCachePath()
+        except RuntimeError:
+            # No git cache is configured.
+            return
+        if cache_dir:
+            # git_cache resolves a relative path against the working directory.
+            cache_dir = os.path.abspath(cache_dir)
+            self._CheckGitCacheDir(
+                cache_dir, "cache.cachepath or $GIT_CACHE_PATH"
+            )
+            git_cache.Mirror.SetCachePath(cache_dir)
+
     def SetConfig(self, content):
         assert not self.dependencies
         self.config_content = content
@@ -2660,6 +2801,7 @@ it or fix the checkout.
             if cache_dir:
                 cache_dir = os.path.join(self.root_dir, cache_dir)
                 cache_dir = os.path.abspath(cache_dir)
+                self._CheckGitCacheDir(cache_dir, "cache_dir")
 
             git_cache.Mirror.SetCachePath(cache_dir)
 
@@ -3404,6 +3546,9 @@ it or fix the checkout.
         """
         if not self.dependencies:
             raise gclient_utils.Error("No solution specified")
+
+        if command in ("update", "revert"):
+            self._CheckEffectiveGitCacheDir()
 
         revision_overrides = {}
         patch_refs = {}
