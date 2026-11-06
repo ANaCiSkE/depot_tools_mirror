@@ -8,6 +8,7 @@ from collections.abc import Iterator
 import contextlib
 from io import StringIO
 import logging
+import ntpath
 import os
 import shutil
 import subprocess
@@ -16,6 +17,8 @@ import tempfile
 import time
 import unittest
 from unittest import mock
+
+import parameterized
 
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
@@ -2495,6 +2498,170 @@ class MirrorTest(unittest.TestCase):
             ),
             ssh_url[:-4],
         )
+
+    @parameterized.parameterized.expand(
+        [
+            (
+                "https",
+                "https://host.example/path/repo.git",
+                "host.example-path-repo",
+            ),
+            (
+                "https_authenticated",
+                "https://chromium.googlesource.com/a/chromium/src.git",
+                "chromium.googlesource.com-chromium-src",
+            ),
+            (
+                "http_with_port",
+                "http://host.example:8080/repo",
+                "host.example__8080-repo",
+            ),
+            (
+                "ssh_scheme",
+                "ssh://git@host.example:2222/path/repo.git",
+                "git@host.example__2222-path-repo",
+            ),
+            (
+                "scp_style_ssh",
+                "git@github.com:chromium/chromium.git",
+                "git@github.com__chromium-chromium",
+            ),
+            (
+                "dashes_and_case",
+                "https://Host.example/My-Repo",
+                "host.example-my--repo",
+            ),
+            ("sso", "sso://chromium/src", "chromium-src"),
+            (
+                "alias",
+                "https://chrome-internal.googlesource.com/chrome/experimental/chromium/src",
+                "chromium.googlesource.com-chromium-src",
+            ),
+            ("file", "file:///srv/git/repo", "-srv-git-repo"),
+            # A `..` path component is fine inside a single directory name.
+            (
+                "dotdot_in_path",
+                "https://host.example/../repo",
+                "host.example-..-repo",
+            ),
+            # Backslashes would be path separators on Windows.
+            (
+                "backslash_in_url",
+                "https://host.example/a\\b",
+                "host.example-a-b",
+            ),
+        ]
+    )
+    def test_url_to_cache_dir_keeps_names_of_normal_urls(
+        self, _: str, url: str, expected: str
+    ) -> None:
+        # Existing caches must keep being used.
+        self.assertEqual(git_cache.Mirror.UrlToCacheDir(url), expected)
+        self.assertEqual(
+            git_cache.Mirror(url).mirror_path,
+            os.path.join(self.cache_dir, expected),
+        )
+
+    def test_url_to_cache_dir_keeps_names_of_local_directories(self) -> None:
+        repo = os.path.join(self.cache_dir, "my-repo")
+        os.mkdir(repo)
+        # Apart from colons, which are escaped now, the name is what git_cache
+        # has always used for local directories.
+        self.assertEqual(
+            git_cache.Mirror.UrlToCacheDir(repo),
+            os.path.splitdrive(repo)[1]
+            .replace(":", "__")
+            .replace("-", "--")
+            .replace(os.sep, "-"),
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("forward_slashes", "C:/Users/x/my-repo", "-Users-x-my--repo"),
+            ("backslashes", "C:\\Users\\x\\my-repo", "-Users-x-my--repo"),
+            ("mixed_separators", "C:/Users\\x/my-repo", "-Users-x-my--repo"),
+            ("unc", "\\\\server\\share\\repo", "-repo"),
+            ("drive_root", "C:/", "-"),
+            ("relative_parents", "../../repo", "..-..-repo"),
+            ("relative_parents_with_backslashes", "..\\..\\repo", "..-..-repo"),
+            (
+                "ntfs_stream",
+                "C:/x/repo::$INDEX_ALLOCATION",
+                "-x-repo____$INDEX_ALLOCATION",
+            ),
+        ]
+    )
+    def test_url_to_cache_dir_windows_local_directories(
+        self, _: str, path: str, expected: str
+    ) -> None:
+        # Both `/` and `\` are path separators on Windows, and `:` can name a
+        # stream; the name must be a single directory name either way.
+        with (
+            mock.patch("os.path.isdir", return_value=True),
+            mock.patch("os.path.splitdrive", ntpath.splitdrive),
+        ):
+            self.assertEqual(git_cache.Mirror.UrlToCacheDir(path), expected)
+
+    @parameterized.parameterized.expand(
+        [
+            ("current_directory", "."),
+            ("parent_directory", ".."),
+            ("relative_parents", "../.."),
+            ("dots_only", "..."),
+            ("dots_and_spaces", ".. ."),
+            ("empty", ""),
+            ("spaces_only", "   "),
+            ("dots_dot_git", "...git"),
+            ("https_empty", "https://"),
+            ("https_dot", "https://."),
+            ("https_dotdot", "https://.."),
+            ("https_dots_only", "https://..."),
+            ("https_dots_and_spaces", "https://. ."),
+            ("https_dot_git", "https://..git"),
+            ("https_parent_path", "https://host.example/.."),
+            ("trailing_dot", "https://host.example/repo."),
+            ("trailing_space", "https://host.example/repo "),
+            ("nul", "https://host.example/repo\x00"),
+            ("trailing_dot_before_nul", "https://host.example/repo.\x00x"),
+            ("control_character", "https://host.example/re\x1fpo"),
+            ("file_dotdot", "file://.."),
+        ]
+    )
+    def test_url_to_cache_dir_rejects_unsafe_names(
+        self, _: str, url: str
+    ) -> None:
+        # Windows drops trailing dots and spaces, so the mirror of such a url
+        # could be another mirror, the cache directory or its parent, which
+        # populate() may rmtree().
+        with self.assertRaises(ValueError) as cm:
+            git_cache.Mirror.UrlToCacheDir(url)
+        self.assertIn(repr(url), str(cm.exception))
+        with self.assertRaises(ValueError) as cm:
+            git_cache.Mirror(url)
+        self.assertIn(repr(url), str(cm.exception))
+
+    @parameterized.parameterized.expand(
+        [
+            ("drive_only", "C:"),
+            ("drive_current_directory", "C:."),
+            ("drive_parent_directory", "C:.."),
+            ("unc_root", "\\\\server\\share"),
+            ("trailing_dot", "C:/x/repo."),
+        ]
+    )
+    def test_url_to_cache_dir_rejects_unsafe_windows_directories(
+        self, _: str, path: str
+    ) -> None:
+        with (
+            mock.patch("os.path.isdir", return_value=True),
+            mock.patch("os.path.splitdrive", ntpath.splitdrive),
+        ):
+            with self.assertRaises(ValueError) as cm:
+                git_cache.Mirror.UrlToCacheDir(path)
+            self.assertIn(repr(path), str(cm.exception))
+            with self.assertRaises(ValueError) as cm:
+                git_cache.Mirror(path)
+            self.assertIn(repr(path), str(cm.exception))
 
     def test_git_exe_uses_git_common_git_exe(self):
         self.assertEqual(git_cache.Mirror.git_exe, git_common.GIT_EXE)

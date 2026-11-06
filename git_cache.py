@@ -222,26 +222,50 @@ class Mirror(object):
         return cls(cls.CacheDirToUrl(path))
 
     @staticmethod
-    def UrlToCacheDir(url):
-        """Convert a git url to a normalized form for the cache dir path."""
+    def UrlToCacheDir(url: str) -> str:
+        """Convert a git url to a normalized form for the cache dir path.
+
+        The result is a single directory name, so that the mirror of any url
+        is a directory directly inside the cache directory.
+
+        Raises:
+            ValueError: if `url` has no such directory name.
+        """
         if os.path.isdir(url):
             # Ignore the drive letter in Windows
-            url = os.path.splitdrive(url)[1]
-            return url.replace("-", "--").replace(os.sep, "-")
+            norm_url = os.path.splitdrive(url)[1]
+        else:
+            parsed = urllib.parse.urlparse(url)
+            norm_url = parsed.netloc + parsed.path
+            if norm_url.endswith(".git"):
+                norm_url = norm_url[: -len(".git")]
 
-        parsed = urllib.parse.urlparse(url)
-        norm_url = parsed.netloc + parsed.path
-        if norm_url.endswith(".git"):
-            norm_url = norm_url[: -len(".git")]
+            # Use the same dir for authenticated URLs and unauthenticated URLs.
+            norm_url = norm_url.replace(
+                "googlesource.com/a/", "googlesource.com/"
+            )
 
-        # Use the same dir for authenticated URLs and unauthenticated URLs.
-        norm_url = norm_url.replace("googlesource.com/a/", "googlesource.com/")
+            norm_url = Mirror.URL_ALIASES.get(norm_url, norm_url).lower()
 
-        norm_url = Mirror.URL_ALIASES.get(norm_url, norm_url)
-
-        norm_url = norm_url.replace(":", "__")
-
-        return norm_url.replace("-", "--").replace("/", "-").lower()
+        # `/` and `\` are path separators on Windows, and `:` can name a drive
+        # or an NTFS stream there.
+        name = (
+            norm_url.replace(":", "__")
+            .replace("-", "--")
+            .replace("/", "-")
+            .replace("\\", "-")
+        )
+        # Windows drops trailing dots and spaces, so such a name could be
+        # another mirror, the cache directory (e.g. `.`) or its parent (`..`).
+        # Control characters aren't valid in names on Windows, and some APIs
+        # cut a name at a NUL character.
+        if (
+            not name
+            or name != name.rstrip(". ")
+            or any(ord(c) < 32 for c in name)
+        ):
+            raise ValueError(f"Invalid git url {url!r}")
+        return name
 
     @staticmethod
     def CacheDirToUrl(path):
