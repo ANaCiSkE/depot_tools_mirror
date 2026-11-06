@@ -1032,6 +1032,11 @@ class ExecutionQueue(object):
         finally:
             self.ready_cond.release()
 
+    def running_items(self) -> list[WorkItem]:
+        """Returns the items that are running."""
+        with self.ready_cond:
+            return [t.item for t in self.running]
+
     def out_cb(self, _):
         self.last_subproc_output = datetime.datetime.now()
         return True

@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from collections.abc import Iterator
 from typing import Any, Optional
 import unittest
 from unittest import mock
@@ -2269,6 +2270,33 @@ class GNArgsValidationTest(unittest.TestCase):
             with self.assertRaises(gclient_utils.Error):
                 dep.WriteGNArgsFile()
 
+    @parameterized.parameterized.expand(
+        [
+            ("dep_in_dot_git", "src/.git", None),
+            # Relative to src.
+            ("link_to_dot_git", "src/ext", ".git"),
+        ]
+    )
+    def test_write_gn_args_file_with_relative_paths_in_dot_git_rejected(
+        self, _: str, name: str, link_target: Optional[str]
+    ) -> None:
+        dot_git = os.path.join(self.tmpdir, "src", ".git")
+        os.makedirs(dot_git)
+        if link_target:
+            _make_dir_symlink(
+                self, link_target, os.path.join(self.tmpdir, name)
+            )
+        dep = self._make_dep(name)
+        dep._use_relative_paths = True
+        dep._gn_args_file = "config"
+        dep._gn_args = ["foo_var"]
+        dep._vars = {"foo_var": "true"}
+        with self.assertRaisesRegex(
+            gclient_utils.Error, "Target must not be a hidden or sensitive file"
+        ):
+            dep.WriteGNArgsFile()
+        self.assertEqual([], os.listdir(dot_git))
+
     def test_write_gn_args_missing_variable_rejected(self) -> None:
         dep = self._make_dep()
         dep._gn_args_file = "args.gn"
@@ -2277,6 +2305,38 @@ class GNArgsValidationTest(unittest.TestCase):
         with self.assertRaises(gclient_utils.Error) as ctx:
             dep.WriteGNArgsFile()
         self.assertIn("not defined in vars", str(ctx.exception))
+
+    @parameterized.parameterized.expand(
+        [("inside_root", False), ("outside_root", True)]
+    )
+    def test_write_gn_args_file_with_relative_paths_through_symlink(
+        self, _: str, outside: bool
+    ) -> None:
+        # A later checkout may have replaced a parent of the dependency with a
+        # symlink.
+        if outside:
+            target = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, target, ignore_errors=True)
+        else:
+            target = os.path.join(self.tmpdir, "real_ext")
+            os.makedirs(target)
+        _make_dir_symlink(self, target, os.path.join(self.tmpdir, "src", "ext"))
+        dep = self._make_dep("src/ext")
+        dep._use_relative_paths = True
+        dep._gn_args_file = "args.gn"
+        dep._gn_args = ["foo_var"]
+        dep._vars = {"foo_var": "true"}
+        with (
+            self.assertRaisesRegex(
+                gclient_utils.Error, "'src/ext' leads outside the gclient root"
+            )
+            if outside
+            else contextlib.nullcontext()
+        ):
+            dep.WriteGNArgsFile()
+        self.assertEqual(
+            not outside, os.path.isfile(os.path.join(target, "args.gn"))
+        )
 
     def test_parse_deps_file_gn_args_traversal_rejected(self) -> None:
         dep = self._make_dep()
@@ -3085,6 +3145,16 @@ class GcsDependencyTest(trial_dir.TestCase):
                 mock_communicate.assert_not_called()
 
 
+def _make_dir_symlink(test: unittest.TestCase, target: str, link: str) -> None:
+    """Creates the directory symlink `link` to `target`, or skips `test`."""
+    os.makedirs(os.path.dirname(link), exist_ok=True)
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except (NotImplementedError, OSError) as e:
+        # E.g. on Windows without the privilege to create symlinks.
+        test.skipTest(f"Can't create symlinks: {e}")
+
+
 def _deps_entry(
     dep_type: str, condition: Optional[str] = None, num_objects: int = 1
 ) -> dict[str, Any]:
@@ -3876,6 +3946,748 @@ class GcsDirOwnershipTest(trial_dir.TestCase):
         self.assertFalse(os.path.exists(output_dir))
 
 
+class RootConfinementTest(trial_dir.TestCase):
+    """Dependencies that gclient uses must be inside the gclient root."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # GCS and CIPD entries are skipped in Cog workspaces.
+        mock.patch("gclient_utils.IsEnvCog", return_value=False).start()
+        self.addCleanup(mock.patch.stopall)
+        options, _ = gclient.OptionParser().parse_args([])
+        self.client = gclient.GClient(self.root_dir, options)
+        self.client._cipd_root = CIPDRootMock(
+            self.root_dir, "https://example.com"
+        )
+
+    def _set_solution(
+        self, name: str = "src", **settings: Any
+    ) -> gclient.Dependency:
+        """Configures the client with a single solution called `name`."""
+        solution = {"name": name, "url": "https://example.com/src.git"}
+        solution.update(settings)
+        self.client.SetConfig(f"solutions = [{solution!r}]")
+        return self.client.dependencies[0]
+
+    def _write_deps(self, dep_dir: str, content: str) -> None:
+        """Writes the DEPS file of the dependency in `dep_dir`."""
+        write(os.path.join(self.root_dir, dep_dir, "DEPS"), content)
+
+    @contextlib.contextmanager
+    def _assert_rejects(self, path: str) -> Iterator[None]:
+        """Asserts that the block rejects the dependency path `path`."""
+        with self.assertRaises(gclient_utils.Error) as ctx:
+            yield
+        self.assertIn(
+            f"Dependency path {path!r} may lead outside the gclient root",
+            str(ctx.exception),
+        )
+
+    def _make_outside_dir(self) -> str:
+        """Returns a new directory outside the gclient root."""
+        outside = tempfile.mkdtemp(prefix="gclient_outside_")
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        return outside
+
+    def _get_recursed_dep(self, deps: dict[str, Any]) -> gclient.Dependency:
+        """Returns src/recursed, whose DEPS file has `deps` and relative paths.
+
+        The DEPS file of src/recursed isn't parsed yet.
+        """
+        solution = self._set_solution()
+        src_deps = {"src/recursed": _deps_entry("git")}
+        self._write_deps(
+            "src",
+            f"deps = {src_deps!r}\nrecursedeps = ['src/recursed']\n",
+        )
+        self._write_deps(
+            os.path.join("src", "recursed"),
+            f"use_relative_paths = True\ndeps = {deps!r}\n",
+        )
+        solution.ParseDepsFile()
+        (recursed,) = solution.dependencies
+        return recursed
+
+    @parameterized.parameterized.expand(
+        [
+            ("root", ".", False),
+            ("child", "src", False),
+            ("trailing_slash", "src/", False),
+            ("dot_component", "./src", False),
+            ("double_slash", "src//foo", False),
+            ("dots_in_names", "..src/.foo./a..b", False),
+            ("backslash_in_name", "src\\foo", False),
+            ("dot_and_backslash_in_name", "src/.\\foo", False),
+            ("parent_dir", "..", True),
+            ("in_parent_dir", "../src", True),
+            ("dot_component_then_parent_dir", "./../src", True),
+            ("parent_dir_through_child", "src/../../x", True),
+            # The OS resolves `..` after following symlinks, so this may be
+            # outside the root if `src/foo` is a symlink.
+            ("parent_dir_inside_root", "src/foo/../bar", True),
+            ("root_through_child", "src/..", True),
+            ("backslash_parent_dir", "src\\..\\x", True),
+            # Windows may treat these like `.` or `..`.
+            ("dots_only", "src/...", True),
+            ("dot_dot_space", "src/.. /x", True),
+            ("dot_space", "src/. ", True),
+            ("nul_byte", "src/a\0b", True),
+            # Elsewhere, backslashes are part of names, which these would make
+            # disappear when they count as separators.
+            ("dot_backslash", "src/.\\", True),
+            ("dot_backslash_in_the_middle", "src/.\\/x", True),
+            ("backslashes_only", "src/\\\\/x", True),
+            ("absolute", "/x", True),
+            ("rooted_backslash", "\\x", True),
+            ("drive", "C:\\x", True),
+            ("drive_slash", "C:/x", True),
+            ("drive_relative", "C:x", True),
+            ("unc", "\\\\server\\share\\x", True),
+            ("unc_slashes", "//server/share/x", True),
+            ("extended_length", "\\\\?\\C:\\x", True),
+        ]
+    )
+    def test_escapes_root(self, _: str, path: str, expected: bool) -> None:
+        self.assertEqual(expected, gclient._EscapesRoot(path))
+
+    @parameterized.parameterized.expand(
+        [
+            (f"{dep_type}_{label}", dep_type, path)
+            for dep_type in ("git", "cipd", "gcs")
+            for label, path in (
+                ("parent_dir", ".."),
+                ("in_parent_dir", "../victim"),
+                ("parent_dir_through_child", "src/../../victim"),
+                ("parent_dir_inside_root", "src/foo/../victim"),
+                ("backslash_parent_dir", "src\\..\\..\\victim"),
+                ("dot_dot_space", "src/.. /victim"),
+                ("absolute", "/victim"),
+                ("drive", "C:\\victim"),
+                ("drive_relative", "C:victim"),
+                ("unc", "\\\\server\\share\\victim"),
+            )
+        ]
+    )
+    def test_rejects_dep_outside_root(
+        self, _: str, dep_type: str, path: str
+    ) -> None:
+        solution = self._set_solution()
+        # Nothing may be done to the file system before the check, e.g. the
+        # cleanup of GCS output directories.
+        with mock.patch("gclient_utils.rmtree") as rmtree_mock:
+            with self._assert_rejects(path):
+                solution._deps_to_objects(
+                    {path: _deps_entry(dep_type)}, use_relative_paths=False
+                )
+        rmtree_mock.assert_not_called()
+
+    @parameterized.parameterized.expand(
+        [
+            ("git", "../victim(https://example.com/repo.git)"),
+            (
+                "cipd",
+                "../victim:some/package"
+                "(https://example.com/some/package@version:1)",
+            ),
+            (
+                "gcs",
+                "../victim:object0.tar.gz(gs://some-bucket/object0.tar.gz)",
+            ),
+        ]
+    )
+    def test_error_shows_where_dep_comes_from(
+        self, dep_type: str, dep_description: str
+    ) -> None:
+        solution = self._set_solution()
+        with self.assertRaises(gclient_utils.Error) as ctx:
+            solution._deps_to_objects(
+                {"../victim": _deps_entry(dep_type)}, use_relative_paths=False
+            )
+        self.assertEqual(
+            "Dependency path '../victim' may lead outside the gclient root; "
+            "it must be relative and must not contain `..`:\n"
+            f"  src(https://example.com/src.git) -> {dep_description}",
+            str(ctx.exception),
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            (f"{dep_type}_{label}", dep_type, path)
+            for dep_type in ("git", "cipd")
+            for label, path in (
+                ("dots_in_names", "src/..foo/.bar."),
+                ("trailing_slash", "src/foo/"),
+            )
+        ]
+        # CIPD packages may be installed into the root itself.
+        + [("cipd_root", "cipd", ".")]
+    )
+    def test_allows_dep_inside_root(
+        self, _: str, dep_type: str, path: str
+    ) -> None:
+        # GCS dependency paths have stricter checks of their own.
+        solution = self._set_solution()
+        deps = solution._deps_to_objects(
+            {path: _deps_entry(dep_type)}, use_relative_paths=False
+        )
+        self.assertEqual([path], [d.deps_key for d in deps])
+
+    @parameterized.parameterized.expand([("dot", "."), ("dot_slash", "./")])
+    def test_rejects_git_dep_at_root(self, _: str, path: str) -> None:
+        solution = self._set_solution()
+        with self.assertRaisesRegex(
+            gclient_utils.Error,
+            "Only a solution can be checked out into the gclient root",
+        ):
+            solution._deps_to_objects(
+                {path: _deps_entry("git")}, use_relative_paths=False
+            )
+
+    def test_rejects_relative_paths_git_dep_at_root(self) -> None:
+        # Relative to src/recursed, this is the root.
+        recursed = self._get_recursed_dep({"../..": _deps_entry("git")})
+        with self.assertRaisesRegex(
+            gclient_utils.Error,
+            "Only a solution can be checked out into the gclient root",
+        ):
+            recursed.ParseDepsFile()
+
+    @parameterized.parameterized.expand([("git",), ("cipd",), ("gcs",)])
+    def test_rejects_relative_paths_dep_outside_root(
+        self, dep_type: str
+    ) -> None:
+        # Relative to src/recursed, this is ../victim.
+        recursed = self._get_recursed_dep(
+            {"../../../victim": _deps_entry(dep_type)}
+        )
+        with self._assert_rejects("../victim"):
+            recursed.ParseDepsFile()
+        self.assertEqual((), recursed.dependencies)
+
+    @parameterized.parameterized.expand([("git",), ("cipd",), ("gcs",)])
+    def test_allows_relative_paths_dep_inside_root(self, dep_type: str) -> None:
+        recursed = self._get_recursed_dep({"../sibling": _deps_entry(dep_type)})
+        recursed.ParseDepsFile()
+        self.assertEqual(
+            ["src/sibling"], [d.deps_key for d in recursed.dependencies]
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("parent_dir", "../src", "https://example.com/src.git"),
+            ("absolute", "/src", "https://example.com/src.git"),
+            ("drive", "C:\\src", "https://example.com/src.git"),
+            # gclient parses the DEPS file of solutions without a URL.
+            ("without_url", "../src", None),
+        ]
+    )
+    def test_rejects_solution_outside_root(
+        self, _: str, name: str, url: Optional[str]
+    ) -> None:
+        with self._assert_rejects(name):
+            self._set_solution(name, url=url)
+        self.assertEqual((), self.client.dependencies)
+
+    @parameterized.parameterized.expand(
+        [
+            ("root", "."),
+            ("child", "src"),
+            ("trailing_slash", "src/"),
+            ("dot_component", "./src"),
+        ]
+    )
+    def test_allows_solution_inside_root(self, _: str, name: str) -> None:
+        self.assertEqual(name, self._set_solution(name).name)
+
+    @parameterized.parameterized.expand(
+        [
+            ("new_dep", {}),
+            # The custom_deps URL makes gclient check out this dependency.
+            ("dep_without_url", {"../victim": None}),
+        ]
+    )
+    def test_rejects_custom_dep_outside_root(
+        self, _: str, deps: dict[str, Any]
+    ) -> None:
+        solution = self._set_solution(
+            custom_deps={"../victim": "https://example.com/victim.git"}
+        )
+        self._write_deps("src", f"deps = {deps!r}\n")
+        with self._assert_rejects("../victim"):
+            solution.ParseDepsFile()
+        self.assertEqual((), solution.dependencies)
+
+    @parameterized.parameterized.expand(
+        [
+            ("paths_relative_to_root", "", "src/../../victim"),
+            ("relative_paths", "use_relative_paths = True\n", "../victim"),
+        ]
+    )
+    def test_rejects_gitmodules_dep_outside_root(
+        self, _: str, deps_settings: str, dep_path: str
+    ) -> None:
+        solution = self._set_solution()
+        self._write_deps(
+            "src", f"{deps_settings}git_dependencies = 'SUBMODULES'\n"
+        )
+        write(
+            os.path.join(self.root_dir, "src", ".gitmodules"),
+            '[submodule "victim"]\n'
+            "\tpath = ../../victim\n"
+            "\turl = https://example.com/victim.git\n",
+        )
+        with (
+            mock.patch("scm.GIT.GetSubmoduleCommits", return_value={}),
+            mock.patch.object(solution, "CreateSCM"),
+            self._assert_rejects(dep_path),
+        ):
+            solution.ParseDepsFile()
+        self.assertEqual((), solution.dependencies)
+
+    @parameterized.parameterized.expand(
+        [
+            # Like '/repoLocal' in testing_support/fake_repos.py.
+            ("absolute", "/local"),
+            ("parent_dir", "../local"),
+        ]
+    )
+    def test_allows_unused_git_dep_outside_root(
+        self, _: str, path: str
+    ) -> None:
+        # gclient neither checks out nor recurses into this dependency.
+        solution = self._set_solution()
+        self._write_deps("src", f"deps = {{{path!r}: None}}\n")
+        solution.ParseDepsFile()
+        self.assertEqual(
+            [(path, None)], [(d.name, d.url) for d in solution.dependencies]
+        )
+
+    def test_rejects_recursed_git_dep_without_url_outside_root(self) -> None:
+        solution = self._set_solution()
+        self._write_deps(
+            "src",
+            "deps = {'../local': None}\nrecursedeps = ['../local']\n",
+        )
+        with self._assert_rejects("../local"):
+            solution.ParseDepsFile()
+
+    def _set_up_links(self) -> str:
+        """Adds symlinks to src that point inside and outside the root.
+
+        Returns the directory outside the root that src/outside_link points
+        to.
+        """
+        outside = self._make_outside_dir()
+        os.makedirs(os.path.join(self.root_dir, "src", "real"))
+        _make_dir_symlink(
+            self, "real", os.path.join(self.root_dir, "src", "inside_link")
+        )
+        _make_dir_symlink(
+            self, outside, os.path.join(self.root_dir, "src", "outside_link")
+        )
+        return outside
+
+    def _link_solution(self, target: str) -> str:
+        """Makes src a symlink to `target` ("inside_root" or "outside_root").
+
+        Returns the directory that src points to.
+        """
+        if target == "inside_root":
+            real_src = os.path.join(self.root_dir, "real_src")
+            os.makedirs(real_src)
+        else:
+            real_src = self._make_outside_dir()
+        _make_dir_symlink(self, real_src, os.path.join(self.root_dir, "src"))
+        return real_src
+
+    @parameterized.parameterized.expand(
+        [
+            ("solution", "src", False),
+            ("plain_dir", "src/real/dep", False),
+            ("missing_dir", "src/missing/dep", False),
+            ("redundant_parts", "./src//real/./dep/", False),
+            # Even ones that stay inside the root.
+            ("link_inside_root", "src/inside_link/dep", True),
+            ("link_outside_root", "src/outside_link/dep", True),
+            ("is_link", "src/outside_link", True),
+            ("backslashes", "src\\outside_link\\dep", True),
+        ]
+    )
+    def test_has_link_or_junction(
+        self, _: str, path: str, expected: bool
+    ) -> None:
+        self._set_up_links()
+        self.assertEqual(
+            expected, gclient._HasLinkOrJunction(self.root_dir, path)
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("solution", "src"),
+            ("existing_dep", "src/dep"),
+            ("new_dep", "src/new"),
+        ]
+    )
+    def test_symlinked_root_has_no_link(self, _: str, path: str) -> None:
+        # E.g. to put the checkout on another disk.
+        os.makedirs(os.path.join(self.root_dir, "src", "dep"))
+        link_root = os.path.join(self._make_outside_dir(), "link_root")
+        _make_dir_symlink(self, self.root_dir, link_root)
+        self.assertFalse(gclient._HasLinkOrJunction(link_root, path))
+
+    @parameterized.parameterized.expand(
+        [
+            (f"{target}_{label}", target, path)
+            for target in ("inside_root", "outside_root")
+            for label, path in (("solution", "src"), ("dep", "src/dep"))
+        ]
+    )
+    def test_symlinked_solution_has_link(
+        self, _: str, target: str, path: str
+    ) -> None:
+        self._link_solution(target)
+        self.assertTrue(gclient._HasLinkOrJunction(self.root_dir, path))
+
+    @parameterized.parameterized.expand(
+        [
+            ("backslash_in_name", "a\\b"),
+            # The path normalized with backslashes as separators is src.
+            ("dot_backslash", ".\\"),
+        ]
+    )
+    @unittest.skipIf(
+        sys.platform == "win32", "Backslashes are separators on Windows."
+    )
+    def test_link_with_backslash_in_name(self, _: str, link_name: str) -> None:
+        # On other OSes, backslashes are part of names.
+        _make_dir_symlink(
+            self,
+            self._make_outside_dir(),
+            os.path.join(self.root_dir, "src", link_name),
+        )
+        self.assertTrue(
+            gclient._HasLinkOrJunction(self.root_dir, f"src/{link_name}/dep")
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            ("git_with_url", "git", True, False, True),
+            ("git_recursed", "git", False, True, True),
+            ("git_unused", "git", False, False, False),
+            ("cipd", "cipd", True, False, True),
+            ("gcs", "gcs", True, False, True),
+        ]
+    )
+    def test_path_is_used(
+        self,
+        _: str,
+        dep_type: str,
+        with_url: bool,
+        recursed: bool,
+        expected: bool,
+    ) -> None:
+        solution = self._set_solution()
+        entry = _deps_entry(dep_type) if with_url else None
+        recursedeps = ["src/dep"] if recursed else []
+        self._write_deps(
+            "src",
+            f"deps = {{'src/dep': {entry!r}}}\nrecursedeps = {recursedeps!r}\n",
+        )
+        solution.ParseDepsFile()
+        (dep,) = solution.dependencies
+        self.assertEqual(expected, dep._path_is_used)
+
+    @parameterized.parameterized.expand(
+        [
+            # Every path is inside the root.
+            ("cipd_dep_at_root", "other", {".": _deps_entry("cipd")}),
+            (
+                "dep_around_nested_solution",
+                "src/foo/sub",
+                {"src/foo": _deps_entry("git")},
+            ),
+        ]
+    )
+    def test_solution_doesnt_wait_for_other_dependencies(
+        self, _: str, other_solution: str, src_deps: dict[str, Any]
+    ) -> None:
+        # Those wait for all solutions, so this would deadlock.
+        solutions = [
+            {"name": "src", "url": "https://example.com/src.git"},
+            {"name": other_solution, "url": "https://example.com/other.git"},
+        ]
+        self.client.SetConfig(f"solutions = {solutions!r}")
+        src, other = self.client.dependencies
+        self._write_deps("src", f"deps = {src_deps!r}\n")
+        src.ParseDepsFile()
+        (dep,) = src.dependencies
+        self.assertIn(other.name, dep.requirements)
+        self.assertNotIn(dep.name, other.requirements)
+
+    @parameterized.parameterized.expand(
+        [
+            (f"{dep_type}_{link}_{command}", dep_type, link, command)
+            for dep_type in ("git", "cipd")
+            for link in ("inside_link", "outside_link")
+            for command in ("update", "revert")
+        ]
+    )
+    def test_run_rejects_dep_through_symlink(
+        self, _: str, dep_type: str, link: str, command: str
+    ) -> None:
+        solution = self._set_solution()
+        outside = self._set_up_links()
+        dep_path = f"src/{link}/dep"
+        (dep,) = solution._deps_to_objects(
+            {dep_path: _deps_entry(dep_type)}, use_relative_paths=False
+        )
+        options, _ = gclient.OptionParser().parse_args([])
+        with (
+            mock.patch.object(dep, "CreateSCM") as create_scm_mock,
+            mock.patch.object(
+                gclient.CipdDependency, "_CreatePackageIfNecessary"
+            ) as create_package_mock,
+            self.assertRaisesRegex(
+                gclient_utils.Error, f"'{dep_path}' goes through a symlink"
+            ),
+        ):
+            dep.run({}, command, [], mock.MagicMock(), options, {}, {}, {})
+        create_scm_mock.assert_not_called()
+        # Nor is a CIPD package recorded for `cipd ensure`.
+        create_package_mock.assert_not_called()
+        self.assertEqual([], os.listdir(outside))
+        self.assertEqual(
+            [], os.listdir(os.path.join(self.root_dir, "src", "real"))
+        )
+
+    @parameterized.parameterized.expand(
+        [
+            (f"{target}_{command}", target, command)
+            for target in ("inside_root", "outside_root")
+            for command in ("update", "revert")
+        ]
+    )
+    def test_run_rejects_symlinked_solution(
+        self, _: str, target: str, command: str
+    ) -> None:
+        # Like GCS dependencies, solutions may not be symlinks either, as e.g.
+        # a repository that ships a .gclient file could also ship one.
+        solution = self._set_solution()
+        real_src = self._link_solution(target)
+        options, _ = gclient.OptionParser().parse_args([])
+        with (
+            mock.patch.object(solution, "CreateSCM") as create_scm_mock,
+            self.assertRaisesRegex(
+                gclient_utils.Error, "'src' goes through a symlink"
+            ),
+        ):
+            solution.run({}, command, [], mock.MagicMock(), options, {}, {}, {})
+        create_scm_mock.assert_not_called()
+        self.assertEqual([], os.listdir(real_src))
+
+    @parameterized.parameterized.expand([("update",), ("revert",)])
+    def test_run_rejects_recursed_dep_without_url_through_symlink(
+        self, command: str
+    ) -> None:
+        # gclient reads its DEPS file and may write its gclient_gn_args_file.
+        solution = self._set_solution()
+        self._set_up_links()
+        self._write_deps(
+            "src",
+            "deps = {'src/outside_link/dep': None}\n"
+            "recursedeps = ['src/outside_link/dep']\n",
+        )
+        solution.ParseDepsFile()
+        (dep,) = solution.dependencies
+        options, _ = gclient.OptionParser().parse_args([])
+        with (
+            mock.patch.object(dep, "ParseDepsFile") as parse_deps_file_mock,
+            self.assertRaisesRegex(
+                gclient_utils.Error,
+                "'src/outside_link/dep' goes through a symlink",
+            ),
+        ):
+            dep.run({}, command, [], mock.MagicMock(), options, {}, {}, {})
+        parse_deps_file_mock.assert_not_called()
+
+    @parameterized.parameterized.expand(
+        [("without_link", False), ("link", True)]
+    )
+    def test_checks_cipd_package_paths_before_cipd_ensure(
+        self, _: str, link: bool
+    ) -> None:
+        # `cipd ensure` runs after all git checkouts, which may have added a
+        # symlink since the CIPD dependency was processed.
+        solution = self._set_solution()
+        deps = {"src/later/dep": _deps_entry("cipd")}
+        self._write_deps("src", f"deps = {deps!r}\n")
+        solution.ParseDepsFile()
+        (dep,) = solution.dependencies
+        self.client._cipd_root.add_package = mock.Mock(
+            return_value=mock.sentinel.cipd_package
+        )
+        dep._CreatePackageIfNecessary()
+        if link:
+            _make_dir_symlink(
+                self,
+                self._make_outside_dir(),
+                os.path.join(self.root_dir, "src", "later"),
+            )
+        with (
+            self.assertRaisesRegex(
+                gclient_utils.Error, "'src/later/dep' goes through a symlink"
+            )
+            if link
+            else contextlib.nullcontext()
+        ):
+            self.client._CheckCipdPackagePaths()
+
+    @parameterized.parameterized.expand(
+        [
+            (f"{dep_type}_{label}", dep_type, path)
+            for dep_type in ("git", "cipd", "gcs")
+            for label, path in (
+                ("same_spelling", "src/foo/link/dep"),
+                ("dot_component", "src/./foo/link/dep"),
+                ("double_slash", "src//foo/link/dep"),
+                ("backslashes", "src\\foo\\link\\dep"),
+                ("other_case", "src/FOO/link/dep"),
+            )
+        ]
+    )
+    def test_waits_for_dep_containing_it(
+        self, _: str, dep_type: str, path: str
+    ) -> None:
+        # So that its path is checked after src/foo added its symlinks.
+        solution = self._set_solution()
+        self._write_deps(
+            "src",
+            f"deps = {{'src/foo': {_deps_entry('git')!r}, "
+            f"{path!r}: {_deps_entry(dep_type)!r}}}\n",
+        )
+        solution.ParseDepsFile()
+        (dep,) = [d for d in solution.dependencies if d.deps_key == path]
+        self.assertIn("src/foo", dep.requirements)
+
+    @parameterized.parameterized.expand(
+        [
+            ("running_inside", "src/foo/link/dep", "git", True, True),
+            (
+                "running_inside_other_spelling",
+                "src/FOO//link",
+                "git",
+                True,
+                True,
+            ),
+            ("running_gcs_inside", "src/foo/link/dep", "gcs", True, True),
+            ("not_running_inside", "src/foo/link/dep", "git", False, False),
+            ("running_elsewhere", "src/bar", "git", True, False),
+            # These don't write to their directory while running.
+            ("running_cipd_inside", "src/foo/link/dep", "cipd", True, False),
+            (
+                "running_recursed_without_url_inside",
+                "src/foo/link/dep",
+                None,
+                True,
+                False,
+            ),
+        ]
+    )
+    def test_checks_for_running_dep_inside(
+        self,
+        _: str,
+        other_path: str,
+        other_type: Optional[str],
+        running: bool,
+        expected: bool,
+    ) -> None:
+        # E.g. src/foo comes from a DEPS file that gclient parsed after it
+        # started to process the other dependency.
+        solution = self._set_solution()
+        other_entry = _deps_entry(other_type) if other_type else None
+        # Without a URL, gclient only uses its path if it recurses into it.
+        recursedeps = [] if other_type else [other_path]
+        self._write_deps(
+            "src",
+            f"deps = {{{other_path!r}: {other_entry!r}, "
+            f"'src/foo': {_deps_entry('git')!r}}}\n"
+            f"recursedeps = {recursedeps!r}\n",
+        )
+        solution.ParseDepsFile()
+        by_path = {d.deps_key: d for d in solution.dependencies}
+        work_queue = gclient_utils.ExecutionQueue(
+            jobs=2, progress=None, ignore_requirements=False
+        )
+        if running:
+            work_queue.running.append(mock.Mock(item=by_path[other_path]))
+        with (
+            self.assertRaisesRegex(
+                gclient_utils.Error,
+                f"'src/foo' contains the path of '{other_path}",
+            )
+            if expected
+            else contextlib.nullcontext()
+        ):
+            by_path["src/foo"]._CheckNoRunningDependencyInside(work_queue)
+
+    @parameterized.parameterized.expand([("update",), ("revert",)])
+    def test_run_doesnt_check_running_deps_for_cipd_dep(
+        self, command: str
+    ) -> None:
+        # Its package is only installed after all other dependencies, so
+        # dependencies inside its directory may be running, e.g. ones that a
+        # DEPS file parsed earlier added.
+        solution = self._set_solution()
+        (dep,) = solution._deps_to_objects(
+            {"src/foo": _deps_entry("cipd")}, use_relative_paths=False
+        )
+        options, _ = gclient.OptionParser().parse_args([])
+        with (
+            mock.patch.object(dep, "CreateSCM"),
+            # This only records the package for `cipd ensure`.
+            mock.patch.object(dep, "_CreatePackageIfNecessary"),
+            mock.patch.object(
+                dep, "_CheckNoRunningDependencyInside"
+            ) as check_mock,
+        ):
+            dep.run({}, command, [], mock.MagicMock(), options, {}, {}, {})
+        check_mock.assert_not_called()
+
+    def test_unused_dep_with_parent_dir_doesnt_deadlock(self) -> None:
+        # 'src/foo/..' is exempt from the path checks, see __init__(), and
+        # would otherwise both contain src/foo and be inside it.
+        solution = self._set_solution()
+        self._write_deps(
+            "src",
+            f"deps = {{'src/foo': {_deps_entry('git')!r}, 'src/foo/..': None}}\n",
+        )
+        solution.ParseDepsFile()
+        by_name = {d.name: d for d in solution.dependencies}
+        self.assertNotIn("src/foo/..", by_name["src/foo"].requirements)
+        self.assertNotIn("src/foo", by_name["src/foo/.."].requirements)
+
+    @parameterized.parameterized.expand([("plain_dir", False), ("link", True)])
+    def test_check_config_skips_symlinked_solution(
+        self, _: str, link: bool
+    ) -> None:
+        # Its run() rejects it later.
+        self._set_solution(managed=True)
+        if link:
+            _make_dir_symlink(
+                self,
+                self._make_outside_dir(),
+                os.path.join(self.root_dir, "src"),
+            )
+        else:
+            os.makedirs(os.path.join(self.root_dir, "src"))
+        with mock.patch.object(
+            gclient.GitDependency, "CreateSCM"
+        ) as create_scm_mock:
+            create_scm_mock.return_value.GetActualRemoteURL.return_value = None
+            self.client._CheckConfig()
+        self.assertEqual(not link, create_scm_mock.called)
+
+
 class TrailingSlashSolutionNameTest(trial_dir.TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -4257,6 +5069,283 @@ class RemoveUnversionedGitDirsTest(trial_dir.TestCase):
         ).stdout.strip()
         self.assertEqual(issue, "12345")
 
+    @parameterized.parameterized.expand(
+        [
+            ("parent_dir", "../outside/victim", False),
+            ("parent_dir_through_child", "src/../../outside/victim", False),
+            # The absolute path of the victim, without a drive so that it has
+            # no colon on Windows either.
+            ("absolute", "{victim}", False),
+            # A symlink to the parent of the victim may have replaced a
+            # directory since the last sync.
+            ("through_symlink", "src/link/victim", True),
+        ]
+    )
+    def testSkipsEntryOutsideRoot(
+        self, _: str, entry_template: str, link: bool
+    ) -> None:
+        # Older gclient versions recorded such entries. A clean checkout that
+        # isn't part of the client would be removed if it were inside.
+        outside = os.path.join(self.root_dir, "outside")
+        victim = os.path.join(outside, "victim")
+        self._init_repo(victim, "secret.txt")
+        entry = entry_template.format(
+            victim=os.path.splitdrive(victim)[1].replace(os.sep, "/")
+        )
+
+        options = gclient.OptionParser().parse_args([])[0]
+        options.delete_unversioned_trees = True
+        options.force = True
+        work_dir = os.path.join(self.root_dir, "work")
+        if link:
+            _make_dir_symlink(
+                self, outside, os.path.join(work_dir, "src", "link")
+            )
+        client = gclient.GClient(work_dir, options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+        current_entries = {"src": "https://example.com/src.git"}
+        stale_entries = {
+            **current_entries,
+            entry: "https://example.com/victim.git",
+        }
+        write(
+            os.path.join(work_dir, ".gclient_entries"),
+            f"entries = {stale_entries!r}\n",
+        )
+
+        out = io.StringIO()
+        with (
+            mock.patch(
+                "gclient_scm.GitWrapper", wraps=gclient_scm.GitWrapper
+            ) as git_wrapper_mock,
+            mock.patch(
+                "gclient_utils.rmtree", wraps=gclient_utils.rmtree
+            ) as rmtree_mock,
+            contextlib.redirect_stdout(out),
+        ):
+            client._RemoveUnversionedGitDirs()
+
+        git_wrapper_mock.assert_not_called()
+        rmtree_mock.assert_not_called()
+        self.assertTrue(os.path.isfile(os.path.join(victim, "secret.txt")))
+        self.assertIn(f"'{entry}' is outside the gclient root", out.getvalue())
+        # The entry is forgotten, so that later syncs don't warn again.
+        self.assertEqual(client._ReadEntries(), current_entries)
+
+    @parameterized.parameterized.expand(
+        [
+            # src/sub/src is now src itself.
+            ("link_to_root", "..", "src/sub/src"),
+            ("link_to_checkout", ".", "src/sub"),
+        ]
+    )
+    def testSkipsEntryThroughSymlinkInsideRoot(
+        self, _: str, link_target: str, entry: str
+    ) -> None:
+        # src/sub was a directory with a dependency checkout and is now a
+        # symlink to a directory inside the root, so that the stale entry
+        # leads to a current checkout.
+        self._init_repo("src", "DEPS")
+        _make_dir_symlink(
+            self, link_target, os.path.join(self.root_dir, "src", "sub")
+        )
+        options = gclient.OptionParser().parse_args([])[0]
+        options.delete_unversioned_trees = True
+        options.force = True
+        client = gclient.GClient(self.root_dir, options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+        current_entries = {"src": "https://example.com/src.git"}
+        stale_entries = {
+            **current_entries,
+            entry: "https://example.com/sub.git",
+        }
+        write(".gclient_entries", f"entries = {stale_entries!r}\n")
+
+        out = io.StringIO()
+        with (
+            mock.patch(
+                "gclient_utils.rmtree", wraps=gclient_utils.rmtree
+            ) as rmtree_mock,
+            contextlib.redirect_stdout(out),
+        ):
+            client._RemoveUnversionedGitDirs()
+
+        rmtree_mock.assert_not_called()
+        self.assertTrue(
+            os.path.isfile(os.path.join(self.root_dir, "src", "DEPS"))
+        )
+        self.assertIn(
+            f"'{entry}' is outside the gclient root or goes", out.getvalue()
+        )
+        self.assertEqual(client._ReadEntries(), current_entries)
+
+    def testSkipsEntryWhoseCheckoutRootIsOutsideRoot(self) -> None:
+        # The gclient root is inside another repository, so git finds that one
+        # for a former checkout without its own .git directory.
+        self._init_repo(".", "outer.txt")
+        work_dir = os.path.join(self.root_dir, "work")
+        self._init_repo(os.path.join(work_dir, "src"), "DEPS")
+        write(os.path.join(work_dir, "stale", "file.txt"), "content")
+        options = gclient.OptionParser().parse_args([])[0]
+        options.delete_unversioned_trees = True
+        options.force = True
+        client = gclient.GClient(work_dir, options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+        current_entries = {"src": "https://example.com/src.git"}
+        stale_entries = {
+            **current_entries,
+            "stale": "https://example.com/stale.git",
+        }
+        write(
+            os.path.join(work_dir, ".gclient_entries"),
+            f"entries = {stale_entries!r}\n",
+        )
+
+        with (
+            mock.patch("gclient_utils.rmtree") as rmtree_mock,
+            mock.patch.object(gclient_scm.GitWrapper, "status") as status_mock,
+        ):
+            client._RemoveUnversionedGitDirs()
+
+        rmtree_mock.assert_not_called()
+        status_mock.assert_not_called()
+        self.assertTrue(
+            os.path.isfile(os.path.join(work_dir, "stale", "file.txt"))
+        )
+
+    @parameterized.parameterized.expand([("dot", "."), ("dot_slash", "./")])
+    def testKeepsRoot(self, _: str, entry: str) -> None:
+        # E.g. the root was a solution before, which still has its .git
+        # directory.
+        self._init_repo(".", "root.txt")
+        self._init_repo("src", "DEPS")
+        options = gclient.OptionParser().parse_args([])[0]
+        options.delete_unversioned_trees = True
+        options.force = True
+        client = gclient.GClient(self.root_dir, options)
+        sol = gclient.GitDependency(
+            parent=client,
+            name="src",
+            url="https://example.com/src.git",
+            managed=False,
+            custom_deps=None,
+            custom_vars=None,
+            custom_hooks=None,
+            deps_file="DEPS",
+            should_process=True,
+            should_recurse=True,
+            relative=False,
+            condition=None,
+            protocol="https",
+        )
+        client.add_dependencies_and_close([sol], [])
+        current_entries = {"src": "https://example.com/src.git"}
+        stale_entries = {
+            **current_entries,
+            entry: "https://example.com/root.git",
+        }
+        write(".gclient_entries", f"entries = {stale_entries!r}\n")
+
+        with mock.patch("gclient_utils.rmtree") as rmtree_mock:
+            client._RemoveUnversionedGitDirs()
+
+        rmtree_mock.assert_not_called()
+        self.assertTrue(os.path.isfile(os.path.join(self.root_dir, "root.txt")))
+        self.assertEqual(client._ReadEntries(), current_entries)
+
+    @parameterized.parameterized.expand(
+        [("double_slash", "src//sub"), ("dot_component", "./src/sub")]
+    )
+    def testKeepsCheckoutAroundCurrentOneInOtherSpelling(
+        self, _: str, entry: str
+    ) -> None:
+        # src/sub was a dependency, and src/sub/inner still is.
+        self._init_repo("src", "DEPS")
+        self._init_repo(os.path.join("src", "sub"), "sub.txt")
+        self._init_repo(os.path.join("src", "sub", "inner"), "inner.txt")
+        options = gclient.OptionParser().parse_args([])[0]
+        options.delete_unversioned_trees = True
+        options.force = True
+        client = gclient.GClient(self.root_dir, options)
+        deps = []
+        for name, parent in (("src", client), ("src/sub/inner", None)):
+            deps.append(
+                gclient.GitDependency(
+                    parent=parent or deps[0],
+                    name=name,
+                    url=f"https://example.com/{name}.git",
+                    managed=False,
+                    custom_deps=None,
+                    custom_vars=None,
+                    custom_hooks=None,
+                    deps_file="DEPS",
+                    should_process=True,
+                    should_recurse=True,
+                    relative=False,
+                    condition=None,
+                    protocol="https",
+                )
+            )
+        sol, inner = deps
+        client.add_dependencies_and_close([sol], [])
+        sol.add_dependencies_and_close([inner], [])
+        current_entries = {d.name: d.url for d in deps}
+        stale_entries = {
+            **current_entries,
+            entry: "https://example.com/sub.git",
+        }
+        write(".gclient_entries", f"entries = {stale_entries!r}\n")
+
+        with mock.patch("gclient_utils.rmtree") as rmtree_mock:
+            client._RemoveUnversionedGitDirs()
+
+        rmtree_mock.assert_not_called()
+
 
 class RestoreRemovedCipdEntriesTest(trial_dir.TestCase):
     def _init_repo(self, path: str, files: dict[str, str]) -> None:
@@ -4439,9 +5528,7 @@ class RestoreRemovedCipdEntriesTest(trial_dir.TestCase):
         client = gclient.GClient(self.root_dir, options)
 
         with (
-            mock.patch.object(
-                gclient.GcsDependency, "_is_link_or_junction", return_value=True
-            ),
+            mock.patch("gclient._IsLinkOrJunction", return_value=True),
             mock.patch("gclient_scm.scm.GIT.Capture") as mock_capture,
         ):
             client._RestoreRemovedCipdEntries(["src/sub:infra/pkg"])

@@ -557,6 +557,41 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
 
         if not self.name and self.parent:
             raise gclient_utils.Error("Dependency without name")
+        # Use the base hierarchy(), as subclasses may not be fully initialized
+        # yet.
+        if self.parent and self._path_is_used and _EscapesRoot(self.deps_key):
+            raise gclient_utils.Error(
+                f"Dependency path {self.deps_key!r} may lead outside the "
+                "gclient root; it must be relative and must not contain "
+                f"`..`:\n  {Dependency.hierarchy(self)}"
+            )
+        # Checking out a dependency other than a solution into the root would
+        # move away, or on bots delete, the whole checkout, `.gclient`
+        # included.
+        if (
+            self.parent
+            and self.parent.parent
+            and self.url
+            and isinstance(self, GitDependency)
+            and _NormalizeDepPath(self.deps_key) == "."
+        ):
+            raise gclient_utils.Error(
+                "Only a solution can be checked out into the gclient root:\n"
+                f"  {Dependency.hierarchy(self)}"
+            )
+
+    @property
+    def _path_is_used(self) -> bool:
+        """Whether gclient uses the path of this dependency.
+
+        The path of a git dependency without a URL is only used if gclient
+        recurses into it, e.g. not for the ones that remove a dependency.
+        """
+        return bool(
+            self.url
+            or self.should_recurse
+            or not isinstance(self, GitDependency)
+        )
 
     def _OverrideUrl(self):
         """Resolves the parsed url from the parent hierarchy."""
@@ -698,22 +733,30 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                 i.name for i in self.root.dependencies if i.name
             )
 
-        if self.name:
-            # GCS output directories are normalized, so a GCS dependency also
-            # waits for the dependencies containing it in another spelling.
-            is_gcs = isinstance(self, GcsDependency)
+        # Unused dependencies don't touch the disk, and their paths may even
+        # contain `..`, see __init__().
+        if self.name and self._path_is_used:
+            # Dependency paths may be spelled differently, e.g. with `./`,
+            # backslashes or in another case, so a dependency also waits for
+            # the dependencies containing it in another spelling: GCS
+            # dependencies clean up their directory, and all dependencies check
+            # that their path doesn't go through symlinks, which the
+            # dependencies containing it may add. Solutions only wait for other
+            # solutions, as all other dependencies wait for them, see above.
+            root = self.root
+            is_solution = self.parent is root
             requirements |= set(
                 obj.name
-                for obj in self.root.subtree(False)
+                for obj in root.subtree(False)
                 if (
                     obj is not self
                     and obj.name
+                    and (not is_solution or obj.parent is root)
+                    and obj._path_is_used
                     and (
                         self.name.startswith(posixpath.join(obj.name, ""))
-                        or (
-                            is_gcs
-                            and _IsInsideDir(self.claimed_dir, obj.claimed_dir)
-                        )
+                        # Like _IsInsideDir(), which is slower here.
+                        or obj.claimed_dir.lower() in self._containing_dirs
                     )
                 )
             )
@@ -740,6 +783,62 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     def claimed_dir(self) -> str:
         """The normalized directory, relative to the root, this dep uses."""
         return _NormalizeDepPath(self.deps_key or "")
+
+    @functools.cached_property
+    def _containing_dirs(self) -> frozenset[str]:
+        """The directories that contain claimed_dir, in lowercase.
+
+        These are the directories that claimed_dir is inside according to
+        _IsInsideDir().
+        """
+        path = self.claimed_dir.lower()
+        if path in (".", "..") or path.startswith("../"):
+            return frozenset()
+        parts = path.split("/")
+        return frozenset(
+            [".", *("/".join(parts[:i]) for i in range(1, len(parts)))]
+        )
+
+    def CheckPathHasNoLinks(self) -> None:
+        """Raises if the path of this dependency goes through a symlink.
+
+        Earlier checkouts, e.g. the parent's, may have added symlinks. Like for
+        GCS dependencies, any symlink is rejected, not just ones that lead
+        outside the gclient root: others may lead to the root itself, to
+        another checkout, or into a directory that a later checkout adds a
+        symlink to.
+        """
+        if _HasLinkOrJunction(self.root.root_dir, self.deps_key):
+            raise gclient_utils.Error(
+                f"Dependency path {self.deps_key!r} goes through a symlink, "
+                "which may lead outside the gclient root:\n"
+                f"  {self.hierarchy()}"
+            )
+
+    def _CheckNoRunningDependencyInside(
+        self, work_queue: gclient_utils.ExecutionQueue
+    ) -> None:
+        """Raises if a dependency inside this one's directory is running.
+
+        Dependencies wait for the ones that contain them, see requirements, but
+        a DEPS file parsed later can add a dependency that contains one that is
+        running already. Checking it out could add a symlink to the path of the
+        other one after that checked its path.
+        """
+        for dep in work_queue.running_items():
+            # Others don't write to their directory while running, e.g. CIPD
+            # dependencies only record their package for `cipd ensure`.
+            if (
+                dep is not self
+                and isinstance(dep, (GitDependency, GcsDependency))
+                and dep.url
+                and _IsInsideDir(dep.claimed_dir, self.claimed_dir)
+            ):
+                raise gclient_utils.Error(
+                    f"Dependency path {self.deps_key!r} contains the path of "
+                    f"{dep.name!r}, which gclient is processing already:\n"
+                    f"  {self.hierarchy()}"
+                )
 
     def verify_validity(self):
         """Verifies that this Dependency is fine to add as a child of another one.
@@ -1470,6 +1569,10 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         )
         if not revision_override and not self.managed:
             revision_override = "unmanaged"
+        if command in ("update", "revert") and self._path_is_used:
+            self.CheckPathHasNoLinks()
+            if self.url and isinstance(self, GitDependency):
+                self._CheckNoRunningDependencyInside(work_queue)
         if run_scm and self.url:
             # Create a shallow copy to mutate revision.
             options = copy.copy(options)
@@ -1748,6 +1851,14 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                 f"Invalid gclient_gn_args_file {self._gn_args_file!r}: Target must not be a symbolic link."
             )
         try:
+            # With use_relative_paths, a symlink that a later checkout added
+            # may lead path_prefix outside the gclient root.
+            real_root = os.path.realpath(self.root.root_dir)
+            if os.path.commonpath([real_root, real_prefix]) != real_root:
+                raise gclient_utils.Error(
+                    f"Invalid gclient_gn_args_file {self._gn_args_file!r}: "
+                    f"{self.name!r} leads outside the gclient root."
+                )
             if (
                 os.path.commonpath([real_prefix, real_gn_args_path])
                 != real_prefix
@@ -1755,7 +1866,9 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                 raise gclient_utils.Error(
                     f"Invalid gclient_gn_args_file {self._gn_args_file!r}: Path escapes directory {path_prefix!r}."
                 )
-            rel_real_path = os.path.relpath(real_gn_args_path, real_prefix)
+            # Relative to the root, as path_prefix may be or be inside a `.git`
+            # directory, too.
+            rel_real_path = os.path.relpath(real_gn_args_path, real_root)
             rel_parts = rel_real_path.replace("\\", "/").split("/")
             if any(not part or part.startswith(".") for part in rel_parts):
                 raise gclient_utils.Error(
@@ -2091,6 +2204,82 @@ def _IsInsideDir(path: str, parent: str) -> bool:
     return path.startswith(f"{parent}/")
 
 
+def _IsAbsOrDrive(path: str) -> bool:
+    """Returns whether `path` is absolute or has a drive on any OS.
+
+    This includes paths that start with a slash or a backslash, UNC paths and
+    drive-relative paths such as `C:foo`.
+    """
+    return (
+        os.path.isabs(path)
+        or ntpath.isabs(path)
+        or bool(ntpath.splitdrive(path)[0])
+        or path.startswith(("/", "\\"))
+    )
+
+
+def _EscapesRoot(path: str) -> bool:
+    """Returns whether the dependency path `path` may lead outside the root.
+
+    `path` is relative to the gclient root and used as is, so the OS resolves
+    a `..` in it after following symlinks. Hence absolute and drive paths and
+    paths with a `..` component may lead outside the root, and so may ones
+    with a component made only of dots and spaces, which Windows may treat as
+    `.` or `..`. Backslashes count as separators, as on Windows. Other OSes
+    treat them as part of names, so names that disappear when they count as
+    separators, e.g. `.\\`, are rejected too, as gclient compares normalized
+    paths, e.g. to order dependencies.
+    """
+    if "\0" in path or _IsAbsOrDrive(path):
+        return True
+    return any(
+        p not in ("", ".") and not p.rstrip(". ")
+        for p in path.replace("\\", "/").split("/")
+    ) or any(
+        "\\" in p and not p.replace("\\", "").rstrip(". ")
+        for p in path.split("/")
+    )
+
+
+def _IsLinkOrJunction(path: str) -> bool:
+    """Returns whether `path` is a symlink or a Windows junction or mount point."""
+    if os.path.islink(path):
+        return True
+    if hasattr(os.path, "isjunction") and os.path.isjunction(path):
+        return True
+    try:
+        reparse_tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+    except OSError:
+        return False
+    return reparse_tag != 0 and reparse_tag in (
+        getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0),
+        getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0),
+    )
+
+
+def _HasLinkOrJunction(root_dir: str, path: str) -> bool:
+    """Returns whether the path `path` inside `root_dir` goes through a link.
+
+    That is, whether `path` or one of its parents up to `root_dir` is a
+    symlink or a Windows junction or mount point. `root_dir` itself may be
+    one. `path` is relative to `root_dir` and must not contain `..`; parts of
+    it that don't exist yet aren't links. Backslashes count both as
+    separators, as on Windows and in some gclient code, and as part of names,
+    as on other OSes.
+    """
+    for spelling in {path.replace("\\", "/"), path.replace(os.sep, "/")}:
+        current = root_dir
+        for part in spelling.split("/"):
+            if part in ("", "."):
+                continue
+            current = os.path.join(current, part)
+            if not os.path.lexists(current):
+                break
+            if _IsLinkOrJunction(current):
+                return True
+    return False
+
+
 def _StartsWithScmMetadata(rel_path: str) -> bool:
     """Returns whether `rel_path` is or is inside a `.git` or `.jj` entry.
 
@@ -2400,7 +2589,13 @@ solutions = %(solution_list)s
         """Verify that the config matches the state of the existing checked-out
         solutions."""
         for dep in self.dependencies:
-            if dep.managed and dep.url:
+            # Dependency.run() rejects paths that go through symlinks, which
+            # may lead outside the root.
+            if (
+                dep.managed
+                and dep.url
+                and not _HasLinkOrJunction(self.root_dir, dep.deps_key)
+            ):
                 scm = dep.CreateSCM()
                 actual_url = scm.GetActualRemoteURL(self._options)
                 if actual_url and not scm.DoesRemoteURLMatch(self._options):
@@ -2656,9 +2851,10 @@ it or fix the checkout.
         return tuple(
             _NormalizeDepPath(name)
             for name in self._ReadEntries()
-            # Skip CIPD packages and GCS objects. Dependencies removed through
+            # Skip CIPD packages and GCS objects, and paths outside the root
+            # that older versions recorded. Dependencies removed through
             # custom_deps are kept, as their checkouts stay on disk.
-            if ":" not in name
+            if ":" not in name and not _EscapesRoot(name)
         )
 
     def FindCheckout(self, rel_dir: str) -> Optional[str]:
@@ -2866,6 +3062,26 @@ it or fix the checkout.
             f.write(f"{gclient_hook_content}\n")
         os.chmod(hook, 0o755)
 
+    def _IsInsideRoot(self, path: str) -> bool:
+        """Returns whether `path` resolves to the root or a path inside it."""
+        norm_root = os.path.normcase(os.path.realpath(self.root_dir))
+        norm_path = os.path.normcase(os.path.realpath(path))
+        try:
+            return os.path.commonpath([norm_root, norm_path]) == norm_root
+        except ValueError:
+            # The paths are on different drives.
+            return False
+
+    def _CheckCipdPackagePaths(self) -> None:
+        """Raises if a CIPD package would be installed through a symlink.
+
+        `cipd ensure` runs after all git checkouts, which may have added
+        symlinks since the CIPD dependencies were processed.
+        """
+        for dep in self.subtree(False):
+            if isinstance(dep, CipdDependency) and dep._cipd_package:
+                dep.CheckPathHasNoLinks()
+
     def _RemoveUnversionedGitDirs(self):
         """Remove directories that are no longer part of the checkout.
 
@@ -2895,6 +3111,14 @@ it or fix the checkout.
             for name, should_sync in entry_names_and_sync
             if not should_sync
         ]
+        # The current checkouts and the directories that contain them, also
+        # in other spellings, which are never removed.
+        current_dirs = set()
+        for e in entries:
+            parts = _NormalizeDepPath(e).lower().split("/")
+            current_dirs.update(
+                "/".join(parts[:i]) for i in range(1, len(parts) + 1)
+            )
 
         removed_cipd_entries = []
         read_entries = self._ReadEntries()
@@ -2935,12 +3159,29 @@ it or fix the checkout.
                 if entry not in entries:
                     removed_cipd_entries.append(entry)
                 continue
+            if entry not in entries and (
+                _EscapesRoot(entry) or _HasLinkOrJunction(self.root_dir, entry)
+            ):
+                # Older gclient versions recorded paths outside the root, and a
+                # symlink may have replaced a directory since, e.g. one that
+                # leads outside the root or to a current checkout. Leave the
+                # path alone; this entry is dropped when the entries are saved.
+                print(
+                    f"\nWARNING: '{entry}' is outside the gclient root or goes "
+                    "through a symlink, so gclient no longer manages it.\n"
+                    "Remove it manually if it is not needed anymore."
+                )
+                continue
             # Fix path separator on Windows.
             entry_fixed = entry.replace("/", os.path.sep)
             e_dir = os.path.join(self.root_dir, entry_fixed)
             # Use entry and not entry_fixed there.
+            norm_entry = _NormalizeDepPath(entry)
             if (
                 entry not in entries
+                # Nor the root itself, e.g. that of a former solution.
+                and norm_entry != "."
+                and norm_entry.lower() not in current_dirs
                 and (
                     not any(
                         path.startswith(entry.rstrip("/") + "/")
@@ -2963,7 +3204,9 @@ it or fix the checkout.
                     )
                 except subprocess2.CalledProcessError:
                     pass
-                if not scm_root:
+                # A checkout root outside the gclient root is e.g. that of a
+                # repository that contains the gclient root.
+                if not scm_root or not self._IsInsideRoot(scm_root):
                     logging.warning(
                         "Could not find checkout root for %s. Unable to "
                         "determine whether it is part of a higher-level "
@@ -2975,10 +3218,12 @@ it or fix the checkout.
                 # Check if this is a submodule or versioned directory.
                 if os.path.abspath(scm_root) == os.path.abspath(e_dir):
                     e_par_dir = os.path.join(e_dir, os.pardir)
+                    par_scm_root = None
                     if gclient_scm.scm.GIT.IsInsideWorkTree(e_par_dir):
                         par_scm_root = gclient_scm.scm.GIT.GetCheckoutRoot(
                             e_par_dir
                         )
+                    if par_scm_root and self._IsInsideRoot(par_scm_root):
                         # rel_e_dir : relative path of entry w.r.t. its parent
                         # repo.
                         rel_e_dir = os.path.relpath(e_dir, par_scm_root)
@@ -3093,15 +3338,6 @@ it or fix the checkout.
     def _RestoreRemovedCipdEntries(self, removed_cipd_entries):
         """Restores git-tracked paths that may have been removed by CIPD."""
         real_root = os.path.realpath(self._root_dir)
-        norm_root = os.path.normcase(os.path.normpath(real_root))
-
-        def _is_within_root(path):
-            try:
-                norm_path = os.path.normcase(os.path.normpath(path))
-                return os.path.commonpath([norm_root, norm_path]) == norm_root
-            except ValueError:
-                return False
-
         seen = set()
         for cipd_entry in removed_cipd_entries:
             subdir = cipd_entry.split(":", 1)[0]
@@ -3112,7 +3348,7 @@ it or fix the checkout.
             if (
                 not parts
                 or ntpath.isabs(cipd_entry)
-                or GcsDependency._is_abs_or_drive(clean_subdir)
+                or _IsAbsOrDrive(clean_subdir)
                 or any(
                     not p.rstrip(". ") or p.rstrip(". ").lower() == ".git"
                     for p in parts
@@ -3129,25 +3365,25 @@ it or fix the checkout.
             has_symlink = False
             for part in parts[:-1]:
                 cur = os.path.join(cur, part)
-                if GcsDependency._is_link_or_junction(cur):
+                if _IsLinkOrJunction(cur):
                     has_symlink = True
                     break
             if has_symlink:
                 continue
 
             tail = parts[-1]
-            if GcsDependency._is_link_or_junction(os.path.join(cur, tail)):
+            if _IsLinkOrJunction(os.path.join(cur, tail)):
                 continue
 
             real_cwd = os.path.realpath(cur)
-            if not os.path.isdir(real_cwd) or not _is_within_root(real_cwd):
+            if not os.path.isdir(real_cwd) or not self._IsInsideRoot(real_cwd):
                 continue
 
             try:
                 scm_root = os.path.realpath(
                     gclient_scm.scm.GIT.GetCheckoutRoot(real_cwd)
                 )
-                if not _is_within_root(scm_root):
+                if not self._IsInsideRoot(scm_root):
                     continue
                 gclient_scm.scm.GIT.Capture(
                     ["--literal-pathspecs", "checkout", "--", tail],
@@ -3304,6 +3540,8 @@ it or fix the checkout.
         # dependency was moved to CIPD, we want to remove the old git directory
         # first and then sync the CIPD dep.
         if self._cipd_root:
+            if command in ("update", "revert"):
+                self._CheckCipdPackagePaths()
             with trace_utils.trace("CipdSync", cat="gclient"):
                 self._cipd_root.run(command)
                 # It's possible that CIPD removed some entries that are now part of
@@ -3530,7 +3768,7 @@ class GcsDependency(Dependency):
         clean_output = output_file.replace("\\", "/")
         parts = clean_output.split("/")
         if (
-            self._is_abs_or_drive(clean_output)
+            _IsAbsOrDrive(clean_output)
             or not parts[-1].rstrip(". ")
             or any(p not in ("", ".") and not p.rstrip(". ") for p in parts)
             # See _CheckArchiveTopLevel().
@@ -3607,7 +3845,7 @@ class GcsDependency(Dependency):
         )
 
     def WriteToFile(self, content, file):
-        if self._is_link_or_junction(file):
+        if _IsLinkOrJunction(file):
             os.remove(file)
         with open(file, "w") as f:
             f.write(content)
@@ -3621,7 +3859,7 @@ class GcsDependency(Dependency):
         if not self.should_process:
             return False
         if any(
-            self._is_link_or_junction(f)
+            _IsLinkOrJunction(f)
             for f in (
                 self.artifact_output_file,
                 self.hash_file,
@@ -3651,30 +3889,6 @@ class GcsDependency(Dependency):
         return False
 
     @staticmethod
-    def _is_abs_or_drive(path):
-        return (
-            os.path.isabs(path)
-            or ntpath.isabs(path)
-            or bool(ntpath.splitdrive(path)[0])
-            or path.startswith(("/", "\\"))
-        )
-
-    @staticmethod
-    def _is_link_or_junction(path):
-        if os.path.islink(path):
-            return True
-        if hasattr(os.path, "isjunction") and os.path.isjunction(path):
-            return True
-        try:
-            reparse_tag = getattr(os.lstat(path), "st_reparse_tag", 0)
-        except OSError:
-            return False
-        return reparse_tag != 0 and reparse_tag in (
-            getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0),
-            getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0),
-        )
-
-    @staticmethod
     def _is_within_dir(path, parent_dir):
         try:
             norm_parent = os.path.normcase(os.path.normpath(parent_dir))
@@ -3702,7 +3916,7 @@ class GcsDependency(Dependency):
         # content never ends up in the metadata directory of a checkout.
         if (
             not parts
-            or self._is_abs_or_drive(clean_dir)
+            or _IsAbsOrDrive(clean_dir)
             or ".." in raw_parts
             or ":" in clean_dir
             or any(
@@ -3715,7 +3929,7 @@ class GcsDependency(Dependency):
         cur = real_root
         for part in parts:
             cur = os.path.join(cur, part)
-            if self._is_link_or_junction(cur):
+            if _IsLinkOrJunction(cur):
                 raise gclient_utils.Error(
                     f"Refusing to use symlinked GCS dependency path: {cur}"
                 )
@@ -3747,7 +3961,7 @@ class GcsDependency(Dependency):
                     continue
                 if not os.path.lexists(cur):
                     break
-                is_link = self._is_link_or_junction(cur)
+                is_link = _IsLinkOrJunction(cur)
                 if is_link and not allow_internal_symlinks:
                     raise gclient_utils.Error(
                         f"Refusing to write through symlink in GCS "
@@ -3776,12 +3990,12 @@ class GcsDependency(Dependency):
 
         def _validate(tarinfo):
             """Returns false if the tarinfo is something we explicitly forbid."""
-            if self._is_abs_or_drive(tarinfo.name):
+            if _IsAbsOrDrive(tarinfo.name):
                 return False
 
             if tarinfo.issym() or tarinfo.islnk():
                 clean_linkname = (tarinfo.linkname or "").replace("\\", "/")
-                if not clean_linkname or self._is_abs_or_drive(clean_linkname):
+                if not clean_linkname or _IsAbsOrDrive(clean_linkname):
                     return False
                 if tarinfo.issym():
                     clean_dirname = posixpath.dirname(
@@ -3797,7 +4011,7 @@ class GcsDependency(Dependency):
                 if (
                     link_target == ".."
                     or link_target.startswith("../")
-                    or self._is_abs_or_drive(link_target)
+                    or _IsAbsOrDrive(link_target)
                     or not any(
                         link_target == prefix
                         or link_target.startswith(prefix + "/")
@@ -3815,7 +4029,7 @@ class GcsDependency(Dependency):
             path_parts = set(cleaned_name.split("/"))
             if (
                 ".." in path_parts
-                or self._is_abs_or_drive(cleaned_name)
+                or _IsAbsOrDrive(cleaned_name)
                 or not any(
                     cleaned_name == prefix
                     or cleaned_name.startswith(prefix + "/")
@@ -3993,7 +4207,7 @@ class GcsDependency(Dependency):
                     cleaned = name.replace("\\", "/")
                     if (
                         not cleaned
-                        or self._is_abs_or_drive(cleaned)
+                        or _IsAbsOrDrive(cleaned)
                         or ".." in set(cleaned.split("/"))
                     ):
                         raise Exception("zipfile contains invalid entries")
@@ -4115,7 +4329,6 @@ class CipdDependency(Dependency):
             return
         if not self.should_process:
             return
-        self._CreatePackageIfNecessary()
         super(CipdDependency, self).run(
             revision_overrides,
             command,
@@ -4126,6 +4339,8 @@ class CipdDependency(Dependency):
             target_branches,
             skip_sync_revisions,
         )
+        # After super().run(), which checks the path first.
+        self._CreatePackageIfNecessary()
 
     def _CreatePackageIfNecessary(self):
         # We lazily create the CIPD package to make sure that only packages
