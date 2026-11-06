@@ -2636,35 +2636,36 @@ def main(argv=None):
 
     if options.description_file:
         options.description = gclient_utils.FileRead(options.description_file)
-    gerrit_obj = _parse_gerrit_options(parser, options)
-    change = _parse_change(parser, options)
+    with gerrit_util.WithGitConfigDir(options.root):
+        gerrit_obj = _parse_gerrit_options(parser, options)
+        change = _parse_change(parser, options)
 
-    try:
-        if options.post_upload:
-            return DoPostUploadExecuter(change, gerrit_obj, options.verbose)
-        with canned_check_filter(options.skip_canned):
-            return DoPresubmitChecks(
-                change,
-                options.commit,
-                options.verbose,
-                options.default_presubmit,
-                options.may_prompt,
-                gerrit_obj,
-                options.dry_run,
-                options.parallel,
-                options.json_output,
-                options.no_diffs,
+        try:
+            if options.post_upload:
+                return DoPostUploadExecuter(change, gerrit_obj, options.verbose)
+            with canned_check_filter(options.skip_canned):
+                return DoPresubmitChecks(
+                    change,
+                    options.commit,
+                    options.verbose,
+                    options.default_presubmit,
+                    options.may_prompt,
+                    gerrit_obj,
+                    options.dry_run,
+                    options.parallel,
+                    options.json_output,
+                    options.no_diffs,
+                )
+        except PresubmitFailure as e:
+            import utils
+
+            print(e, file=sys.stderr)
+            print("Maybe your depot_tools is out of date?", file=sys.stderr)
+            print(
+                "depot_tools version: %s" % utils.depot_tools_version(),
+                file=sys.stderr,
             )
-    except PresubmitFailure as e:
-        import utils
-
-        print(e, file=sys.stderr)
-        print("Maybe your depot_tools is out of date?", file=sys.stderr)
-        print(
-            "depot_tools version: %s" % utils.depot_tools_version(),
-            file=sys.stderr,
-        )
-        return 2
+            return 2
 
 
 if __name__ == "__main__":

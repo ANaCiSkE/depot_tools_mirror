@@ -1964,9 +1964,7 @@ class GerritUtilTest(unittest.TestCase):
 
     @mock.patch("gerrit_util.ReadHttpJsonResponse")
     @mock.patch("gerrit_util.CreateHttpConn")
-    def testCreateGerritTag(
-self, mockCreateHttpConn, mockReadHttpJsonResponse
-    ):
+    def testCreateGerritTag(self, mockCreateHttpConn, mockReadHttpJsonResponse):
         expected = {"ref": "refs/tags/1.0", "revision": "deadbeef"}
         mockReadHttpJsonResponse.return_value = expected
 
@@ -3313,6 +3311,74 @@ class GerritFlowsTest(unittest.TestCase):
         )
         with self.assertRaises(gerrit_util.GerritError):
             gerrit_util.CreateScheduledSubmitFlow("example.com", 123456)
+
+
+class WithGitConfigDirTest(unittest.TestCase):
+    def testNestingAndRestoreOnException(self):
+        dir1 = os.path.abspath("/repo/one")
+        dir2 = os.path.abspath("/repo/two")
+        self.assertEqual(gerrit_util._GetGitConfigDir(), os.getcwd())
+
+        with gerrit_util.WithGitConfigDir(dir1):
+            self.assertEqual(gerrit_util._GetGitConfigDir(), dir1)
+            with self.assertRaises(RuntimeError):
+                with gerrit_util.WithGitConfigDir(dir2):
+                    self.assertEqual(gerrit_util._GetGitConfigDir(), dir2)
+                    raise RuntimeError("boom")
+            self.assertEqual(gerrit_util._GetGitConfigDir(), dir1)
+
+        self.assertEqual(gerrit_util._GetGitConfigDir(), os.getcwd())
+        self.assertIsNone(gerrit_util._GIT_CONFIG_DIR)
+
+    @mock.patch("scm.GIT.GetConfig")
+    def testAuthenticatorsUseGitConfigDir(self, mock_get_config):
+        mock_get_config.return_value = "user@google.com"
+        repo_dir = os.path.abspath("/sub/repo")
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GIT_COOKIES_PATH", None)
+            with gerrit_util.WithGitConfigDir(repo_dir):
+                with mock.patch.object(
+                    gerrit_util.SSOAuthenticator,
+                    "_resolve_sso_cmd",
+                    return_value=("git-remote-sso",),
+                ):
+                    self.assertTrue(
+                        gerrit_util.SSOAuthenticator.is_applicable()
+                    )
+                mock_get_config.assert_called_with(
+                    repo_dir, "user.email", default=""
+                )
+
+                mock_get_config.return_value = "/custom/.gitcookies"
+                self.assertEqual(
+                    gerrit_util.CookiesAuthenticator.get_gitcookies_path(),
+                    "/custom/.gitcookies",
+                )
+                mock_get_config.assert_called_with(
+                    repo_dir,
+                    "http.cookiefile",
+                    os.path.join("~", ".gitcookies"),
+                )
+
+                with mock.patch(
+                    "subprocess.check_output", return_value=b"true\n"
+                ) as mock_check_output:
+                    self.assertTrue(
+                        gerrit_util.GitCredsAuthenticator._is_usehttppath_set(
+                            "https://chromium.googlesource.com"
+                        )
+                    )
+                    mock_check_output.assert_called_once_with(
+                        [
+                            "git",
+                            "config",
+                            "--get-urlmatch",
+                            "credential.usehttppath",
+                            "https://chromium.googlesource.com",
+                        ],
+                        cwd=repo_dir,
+                    )
 
 
 if __name__ == "__main__":

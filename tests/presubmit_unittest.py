@@ -198,7 +198,9 @@ index fe3de7b..54ae6e1 100755
         mock.patch("scm.GIT.GenerateDiff").start()
         mock.patch("scm.GIT.GetBranch", lambda x: None).start()
         mock.patch("scm.determine_scm").start()
-        mock.patch("subprocess2.Popen").start()
+        popen_mock = mock.patch("subprocess2.Popen").start()
+        popen_mock.return_value.communicate.return_value = (b"", b"")
+        popen_mock.return_value.wait.return_value = 0
         mock.patch("sys.stderr", StringIO()).start()
         mock.patch("sys.stdout", StringIO()).start()
         mock.patch("tempfile.NamedTemporaryFile").start()
@@ -1469,6 +1471,59 @@ def CheckChangeOnCommit(input_api, output_api):
             "presubmit_unittest.py: error: unversioned directories must "
             "specify <files>, <all_files>, <diff_file>, or <description>.\n",
         )
+
+    @mock.patch("presubmit_support.ListRelevantPresubmitFiles")
+    @mock.patch("presubmit_support.GerritAccessor.GetChangeOwner")
+    @mock.patch("presubmit_support.GerritAccessor.GetChangeDescription")
+    def testMainGerritFetch(
+        self, mock_description, mock_owner, mock_list_files
+    ):
+        observed_config_dirs = []
+
+        def fake_get_owner(_issue):
+            observed_config_dirs.append(
+                presubmit.gerrit_util._GetGitConfigDir()
+            )
+            return "fetched_owner@example.com"
+
+        mock_owner.side_effect = fake_get_owner
+        mock_description.return_value = "Fetched CL description"
+        os.path.isfile.side_effect = lambda f: "PRESUBMIT.py" in f
+        gclient_utils.FileRead.return_value = (
+            "def CheckChangeOnUpload(input_api, output_api):\n"
+            "  import gerrit_util\n"
+            '  if input_api.change.DescriptionText() != "Fetched CL description":\n'
+            '    return [output_api.PresubmitError("missing description")]\n'
+            '  if input_api.change.author_email != "fetched_owner@example.com":\n'
+            '    return [output_api.PresubmitError("missing author")]\n'
+            f"  if gerrit_util._GetGitConfigDir() != {self.fake_root_dir!r}:\n"
+            '    return [output_api.PresubmitError("wrong git config dir")]\n'
+            "  return []\n"
+        )
+        scm.determine_scm.return_value = None
+        mock_list_files.return_value = [
+            os.path.join(os.path.dirname(self.fake_root_dir), "PRESUBMIT.py")
+        ]
+
+        self.assertEqual(
+            0,
+            presubmit.main(
+                [
+                    "--root",
+                    self.fake_root_dir,
+                    "--gerrit_url",
+                    "https://foo-review.googlesource.com",
+                    "--gerrit_fetch",
+                    "--issue",
+                    "123",
+                    "--patchset",
+                    "4",
+                    "random_file.txt",
+                ]
+            ),
+        )
+        self.assertEqual([self.fake_root_dir], observed_config_dirs)
+        self.assertIsNone(presubmit.gerrit_util._GIT_CONFIG_DIR)
 
     @mock.patch("presubmit_support.Change", mock.Mock())
     def testParseChange_Files(self):
