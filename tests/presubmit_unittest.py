@@ -2709,6 +2709,27 @@ class AffectedFileUnittest(PresubmitTestsBase):
         self.assertEqual(2, len(output))
         self.assertEqual(files[:2], output[:2])
 
+    @mock.patch("mimetypes.guess_type", return_value=(None, None))
+    def testIsTestableFileProvidedDiff(self, _):
+        files = [
+            presubmit.ProvidedDiffAffectedFile(
+                "foo/Blat.java", "A", self.fake_root_dir, None
+            ),
+            presubmit.ProvidedDiffAffectedFile(
+                "foo/blat.cc", "M", self.fake_root_dir, None
+            ),
+            presubmit.ProvidedDiffAffectedFile(
+                "blat/flop.cc", "D", self.fake_root_dir, None
+            ),
+        ]
+        os.path.isfile.side_effect = lambda f: f in [
+            os.path.join(self.fake_root_dir, "foo", "Blat.java"),
+            os.path.join(self.fake_root_dir, "foo", "blat.cc"),
+        ]
+
+        output = [f for f in files if f.IsTestableFile()]
+        self.assertEqual(files[:2], output)
+
     def testGetUnixLocalPath(self):
         # If current platform already uses Unix-style paths,
         # there is nothing to test

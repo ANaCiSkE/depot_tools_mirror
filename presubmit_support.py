@@ -19,7 +19,6 @@ import glob
 import inspect
 import json  # Exposed through the API.
 import logging
-import mimetypes
 import multiprocessing
 import os  # Somewhat exposed through the API.
 import random
@@ -1010,16 +1009,15 @@ class AffectedFile(object):
         return self._action
 
     def IsTestableFile(self):
-        """Returns True if the file is a text file and not a binary file.
-
-        Deleted files are not text file."""
+        """Returns True if the file was not deleted and exists on disk."""
         if self._is_testable_file is None:
             if self.Action() == "D":
                 # A deleted file is not testable.
                 self._is_testable_file = False
             else:
-                t, _ = mimetypes.guess_type(self.AbsoluteLocalPath())
-                self._is_testable_file = bool(t and t.startswith("text/"))
+                self._is_testable_file = os.path.isfile(
+                    self.AbsoluteLocalPath()
+                )
         return self._is_testable_file
 
     def IsTextFile(self):
@@ -1133,17 +1131,6 @@ class GitAffectedFile(AffectedFile):
 
     def __init__(self, *args, **kwargs):
         AffectedFile.__init__(self, *args, **kwargs)
-
-    def IsTestableFile(self):
-        if self._is_testable_file is None:
-            if self.Action() == "D":
-                # A deleted file is not testable.
-                self._is_testable_file = False
-            else:
-                self._is_testable_file = os.path.isfile(
-                    self.AbsoluteLocalPath()
-                )
-        return self._is_testable_file
 
 
 class ProvidedDiffAffectedFile(AffectedFile):
@@ -2624,10 +2611,6 @@ def main(argv=None):
         "%(filename)s] %(message)s"
     )
     logging.basicConfig(format=log_format, level=log_level)
-
-    # Recognize *.gn files as text files, so they are included in testable
-    # files.
-    mimetypes.add_type("text/ninja", ".gn")
 
     # Print call stacks when _PresubmitResult objects are created with -v -v is
     # specified. This helps track down where presubmit messages are coming from.
