@@ -8,6 +8,7 @@ Swift format binaries are pulled down from CIPD whenever you sync Chrome.
 This script knows how to locate those tools, assuming the script is
 invoked from inside a Chromium checkout."""
 
+import detect_host_arch
 import gclient_paths
 import os
 import subprocess
@@ -25,6 +26,17 @@ class NotFoundError(Exception):
         )
 
 
+def _GetHostPlatformSubdir():
+    """Returns the CIPD platform subdirectory for the current host, or None."""
+    arch = detect_host_arch.HostArch()
+    if sys.platform == "darwin":
+        if arch == "x64":
+            return "mac-amd64"
+        if arch == "arm64":
+            return "mac-arm64"
+    return None
+
+
 def FindSwiftFormatToolInChromiumTree():
     """Return a path to the swift-format executable, or die trying."""
     chromium_src_path = gclient_paths.GetChromiumSrcPath()
@@ -35,7 +47,7 @@ def FindSwiftFormatToolInChromiumTree():
             "checkout."
         )
 
-    tool_path = os.path.join(
+    old_tool_path = os.path.join(
         chromium_src_path,
         "third_party",
         "swift-toolchain",
@@ -43,9 +55,29 @@ def FindSwiftFormatToolInChromiumTree():
         "bin",
         "swift-format",
     )
-    if not os.path.exists(tool_path):
-        raise NotFoundError("File does not exist: %s" % tool_path)
-    return tool_path
+
+    possible_paths = []
+    platform_subdir = _GetHostPlatformSubdir()
+    if platform_subdir:
+        possible_paths.append(
+            os.path.join(
+                chromium_src_path,
+                "third_party",
+                "swift-toolchain",
+                platform_subdir,
+                "usr",
+                "bin",
+                "swift-format",
+            )
+        )
+    possible_paths.append(old_tool_path)
+
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    raise NotFoundError(
+        "File does not exist in either path: %s" % possible_paths
+    )
 
 
 def IsSwiftFormatSupported():
