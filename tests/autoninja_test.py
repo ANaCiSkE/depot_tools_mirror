@@ -5,9 +5,12 @@
 
 import contextlib
 import io
+import ntpath
 import os
 import os.path
+import subprocess
 import sys
+import time
 import unittest
 from unittest import mock
 
@@ -85,14 +88,54 @@ class AutoninjaTest(trial_dir.TestCase):
 
         metrics_file = os.path.join(out_dir, "siso_metrics.json")
         write(metrics_file, "{}")
-        autoninja._upload_sisolog(["autoninja.py", "-C", out_dir], "test-id")
+        fixed_gmtime = time.struct_time((2026, 11, 4, 12, 0, 0, 2, 308, 0))
+        with mock.patch("time.gmtime", return_value=fixed_gmtime):
+            autoninja._upload_sisolog(
+                ["autoninja.py", "-C", out_dir], "test-id"
+            )
         mock_popen.assert_called_once()
         cmd = mock_popen.call_args[0][0]
         self.assertEqual(
-            cmd[:5],
-            [sys.executable, autoninja._GSUTIL_PY, "-q", "cp", "-r"],
+            cmd,
+            [
+                sys.executable,
+                autoninja._GSUTIL_PY,
+                "-q",
+                "cp",
+                "-r",
+                metrics_file,
+                "gs://chrome-build-logs/2026/11/04/siso/"
+                "reports.20261104T120000Z.test-id/siso_metrics.json",
+            ],
         )
-        self.assertEqual(cmd[5], metrics_file)
+
+    @mock.patch("subprocess.Popen")
+    @mock.patch("sys.platform", "win32")
+    @mock.patch.object(subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True)
+    @mock.patch.object(autoninja.os, "path", ntpath)
+    @mock.patch.object(
+        ntpath,
+        "exists",
+        side_effect=lambda p: p == r"out\dir\siso_metadata.json",
+    )
+    def test_upload_sisolog_windows(
+        self,
+        _mock_exists: mock.MagicMock,
+        mock_popen: mock.MagicMock,
+    ) -> None:
+        fixed_gmtime = time.struct_time((2026, 11, 4, 12, 0, 0, 2, 308, 0))
+        with mock.patch("time.gmtime", return_value=fixed_gmtime):
+            autoninja._upload_sisolog(
+                ["autoninja.py", "-C", r"out\dir"], "test-id"
+            )
+        mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        self.assertEqual(cmd[5], r"out\dir\siso_metadata.json")
+        self.assertEqual(
+            cmd[6],
+            "gs://chrome-build-logs/2026/11/04/siso/"
+            "reports.20261104T120000Z.test-id/siso_metadata.json",
+        )
 
     def test_autoninja(self):
         """Test that by default (= no GN args) autoninja delegates to ninja."""

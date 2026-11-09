@@ -18,6 +18,7 @@ import importlib.util
 import multiprocessing
 import os
 import platform
+import posixpath
 import re
 import shlex
 import shutil
@@ -594,7 +595,7 @@ def _upload_sisolog(input_args: list[str], build_id: str) -> None:
             continue
         # This folder structure mimics the recipe used by the RBE workers
         # https://source.chromium.org/chromium/infra/infra_superproject/+/main:build/recipes/recipe_modules/siso/api.py
-        formatted_gcs_path = os.path.join(
+        formatted_gcs_path = posixpath.join(
             _LOGS_STORAGE_BUCKET,
             top_dir,
             f"reports.{timestamp}.{build_id}",
