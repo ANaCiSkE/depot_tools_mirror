@@ -777,5 +777,425 @@ class PresubmitResultTest(unittest.TestCase):
         self.assertEqual(result.json_format(), expected)
 
 
+class GerritAccessorCherryPickTest(unittest.TestCase):
+    def _make_label(self, max_val: int, voters: list[tuple[str, int]]) -> dict:
+        return {
+            "values": {"0": "No score", f"+{max_val}": "Approved"},
+            "all": [{"email": email, "value": val} for email, val in voters],
+        }
+
+    def _make_parent_change(
+        self,
+        *,
+        status: str = "MERGED",
+        project: str = "chromium/src",
+        owner_email: str = "author@chromium.org",
+        owner_tags: list[str] | None = None,
+        merged_ps: int = 6,
+        cr_voters: list[tuple[str, int]] | None = None,
+        owners_override: bool = False,
+        unapproved_reviewers: list[str] | None = None,
+    ) -> dict:
+        owner: dict = {"email": owner_email}
+        if owner_tags:
+            owner["tags"] = owner_tags
+        labels: dict = {}
+        if cr_voters is not None:
+            labels["Code-Review"] = self._make_label(1, cr_voters)
+        if owners_override:
+            labels["Owners-Override"] = self._make_label(
+                1, [("sheriff@chromium.org", 1)]
+            )
+        return {
+            "project": project,
+            "status": status,
+            "owner": owner,
+            "current_revision": "merged_sha",
+            "revisions": {
+                "early_sha": {"_number": 1, "kind": "REWORK"},
+                "merged_sha": {
+                    "_number": merged_ps,
+                    "kind": "TRIVIAL_REBASE_WITH_MESSAGE_UPDATE",
+                },
+            },
+            "labels": labels,
+            "reviewers": {
+                "REVIEWER": [{"email": r} for r in (unapproved_reviewers or [])]
+            },
+        }
+
+    def _make_cherry_pick_change(
+        self,
+        *,
+        parent_issue: int | bool | None = 100,
+        parent_ps: int | bool | None = 6,
+        project: str = "chromium/src",
+        owner_email: str = "chrome-cherry-picker@chops-service-accounts.iam.gserviceaccount.com",
+        owner_tags: list[str] | None = None,
+        messages: list[str] | None = None,
+        revisions: dict | None = None,
+        cr_voters: list[tuple[str, int]] | None = None,
+        unapproved_reviewers: list[str] | None = None,
+    ) -> dict:
+        if owner_tags is None:
+            owner_tags = ["SERVICE_USER"]
+        if messages is None:
+            messages = [
+                "Patch Set 1: Cherry Picked from branch main.",
+                "Patch Set 2: Commit message was updated.",
+            ]
+        if revisions is None:
+            revisions = {
+                "ps1": {"_number": 1, "kind": "REWORK"},
+                "ps2": {"_number": 2, "kind": "NO_CODE_CHANGE"},
+            }
+        labels: dict = {}
+        if cr_voters is not None:
+            labels["Code-Review"] = self._make_label(1, cr_voters)
+        info: dict = {
+            "project": project,
+            "status": "NEW",
+            "owner": {"email": owner_email, "tags": owner_tags},
+            "current_revision": "ps2",
+            "revisions": revisions,
+            "messages": [{"message": m} for m in messages],
+            "labels": labels,
+            "reviewers": {
+                "REVIEWER": [{"email": r} for r in (unapproved_reviewers or [])]
+            },
+        }
+        if parent_issue is not None:
+            info["cherry_pick_of_change"] = parent_issue
+        if parent_ps is not None:
+            info["cherry_pick_of_patch_set"] = parent_ps
+        return info
+
+    def test_fetch_change_detail_requests_messages(self):
+        accessor = presubmit_support.GerritAccessor(
+            url="https://chromium-review.googlesource.com",
+            project="chromium/src",
+        )
+        with mock.patch(
+            "gerrit_util.GetChangeDetail", return_value={}
+        ) as mock_detail:
+            accessor._FetchChangeDetail(200)
+            mock_detail.assert_called_once_with(
+                "chromium-review.googlesource.com",
+                "200",
+                [
+                    "ALL_REVISIONS",
+                    "DETAILED_LABELS",
+                    "ALL_COMMITS",
+                    "MESSAGES",
+                ],
+            )
+
+    def test_clean_cherry_pick_transfers_approvers_and_parent_owner(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(
+                owner_email="author@chromium.org",
+                cr_voters=[
+                    ("target_owner@chromium.org", 1),
+                    ("unapproved@chromium.org", 0),
+                ],
+                unapproved_reviewers=["unapproved@chromium.org"],
+            ),
+            200: self._make_cherry_pick_change(
+                unapproved_reviewers=["local_reviewer@chromium.org"],
+            ),
+        }
+
+        self.assertEqual(
+            accessor.GetChangeReviewers(200, approving_only=True),
+            ["target_owner@chromium.org", "author@chromium.org"],
+        )
+        # Upload checks (approving_only=False) include current CL's reviewers
+        # plus only approving reviewers and owner from the merged parent CL.
+        self.assertEqual(
+            accessor.GetChangeReviewers(200, approving_only=False),
+            [
+                "local_reviewer@chromium.org",
+                "target_owner@chromium.org",
+                "author@chromium.org",
+            ],
+        )
+
+    def test_clean_cherry_pick_with_get_codereview_owner_and_reviewers(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(
+                owner_email="author@chromium.org",
+                cr_voters=[("target_owner@chromium.org", 1)],
+            ),
+            200: self._make_cherry_pick_change(),
+        }
+        input_api = mock.Mock()
+        input_api.re = presubmit_support.re
+        input_api.change.issue = 200
+        input_api.gerrit = accessor
+
+        owner, reviewers = (
+            presubmit_support.presubmit_canned_checks.GetCodereviewOwnerAndReviewers(
+                input_api, None, approval_needed=True
+            )
+        )
+        self.assertEqual(
+            owner,
+            "chrome-cherry-picker@chops-service-accounts.iam.gserviceaccount.com",
+        )
+        self.assertEqual(
+            reviewers,
+            {"target_owner@chromium.org", "author@chromium.org"},
+        )
+
+    def test_clean_cherry_pick_transfers_owners_override(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(owners_override=True),
+            200: self._make_cherry_pick_change(),
+        }
+        self.assertTrue(accessor.IsOwnersOverrideApproved(200))
+
+    def test_multi_hop_cherry_pick_chain_skips_service_user_owners(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(
+                owner_email="human_author@chromium.org",
+                merged_ps=3,
+                cr_voters=[("dep_owner@chromium.org", 1)],
+            ),
+            200: {
+                **self._make_cherry_pick_change(
+                    parent_issue=100,
+                    parent_ps=3,
+                ),
+                "status": "MERGED",
+                "current_revision": "ps2",
+            },
+            300: self._make_cherry_pick_change(
+                parent_issue=200,
+                parent_ps=2,
+            ),
+        }
+        # The cherry-picker owns the intermediate hop but authored nothing.
+        self.assertEqual(
+            accessor.GetChangeReviewers(300, approving_only=True),
+            ["dep_owner@chromium.org", "human_author@chromium.org"],
+        )
+
+    def test_accepts_all_non_code_change_revision_kinds(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(
+                cr_voters=[("dep_owner@chromium.org", 1)],
+            ),
+            200: self._make_cherry_pick_change(
+                revisions={
+                    "ps1": {"_number": 1, "kind": "REWORK"},
+                    "ps2": {"_number": 2, "kind": "NO_CHANGE"},
+                    "ps3": {"_number": 3, "kind": "NO_CODE_CHANGE"},
+                    "ps4": {"_number": 4, "kind": "TRIVIAL_REBASE"},
+                    "ps5": {
+                        "_number": 5,
+                        "kind": "TRIVIAL_REBASE_WITH_MESSAGE_UPDATE",
+                    },
+                },
+            ),
+        }
+        self.assertIn(
+            "dep_owner@chromium.org",
+            accessor.GetChangeReviewers(200, approving_only=True),
+        )
+
+    def test_rejects_cherry_pick_with_code_changes_or_invalid_metadata(self):
+        parent = self._make_parent_change(
+            cr_voters=[("dep_owner@chromium.org", 1)],
+            owners_override=True,
+        )
+        cases = [
+            (
+                "rework_on_ps2",
+                parent,
+                self._make_cherry_pick_change(
+                    revisions={
+                        "ps1": {"_number": 1, "kind": "REWORK"},
+                        "ps2": {"_number": 2, "kind": "REWORK"},
+                    }
+                ),
+            ),
+            (
+                "merge_first_parent_update_on_ps2",
+                parent,
+                self._make_cherry_pick_change(
+                    revisions={
+                        "ps1": {"_number": 1, "kind": "REWORK"},
+                        "ps2": {
+                            "_number": 2,
+                            "kind": "MERGE_FIRST_PARENT_UPDATE",
+                        },
+                    }
+                ),
+            ),
+            (
+                "git_conflicts_on_ps1",
+                parent,
+                self._make_cherry_pick_change(
+                    messages=[
+                        "Patch Set 1: Cherry Picked from branch main.\n\n"
+                        "The following files contain Git conflicts:\n* DEPS"
+                    ]
+                ),
+            ),
+            (
+                "not_cherry_picked_at_ps1",
+                parent,
+                self._make_cherry_pick_change(
+                    messages=["Uploaded patch set 1."]
+                ),
+            ),
+            (
+                "re_cherry_picked_at_ps2",
+                parent,
+                self._make_cherry_pick_change(
+                    messages=[
+                        "Patch Set 1: Cherry Picked from branch main.",
+                        "Patch Set 2: Cherry Picked from branch main.",
+                    ]
+                ),
+            ),
+            (
+                "missing_patchset_gap",
+                parent,
+                self._make_cherry_pick_change(
+                    revisions={
+                        "ps1": {"_number": 1, "kind": "REWORK"},
+                        "ps3": {"_number": 3, "kind": "NO_CODE_CHANGE"},
+                    }
+                ),
+            ),
+            (
+                "parent_not_merged",
+                self._make_parent_change(
+                    status="NEW",
+                    cr_voters=[("dep_owner@chromium.org", 1)],
+                    owners_override=True,
+                ),
+                self._make_cherry_pick_change(),
+            ),
+            (
+                "cherry_picked_from_unmerged_patchset",
+                parent,
+                self._make_cherry_pick_change(parent_ps=1),
+            ),
+            (
+                "project_mismatch",
+                self._make_parent_change(
+                    project="other/repo",
+                    cr_voters=[("dep_owner@chromium.org", 1)],
+                    owners_override=True,
+                ),
+                self._make_cherry_pick_change(project="chromium/src"),
+            ),
+            (
+                "project_missing",
+                parent,
+                self._make_cherry_pick_change(project=""),
+            ),
+        ]
+
+        for name, parent_info, child_info in cases:
+            with self.subTest(case=name):
+                accessor = presubmit_support.GerritAccessor()
+                accessor.cache = {100: parent_info, 200: child_info}
+                self.assertEqual(
+                    accessor.GetChangeReviewers(200, approving_only=True), []
+                )
+                self.assertFalse(accessor.IsOwnersOverrideApproved(200))
+
+    def test_comment_mentioning_cherry_pick_does_not_block_transfer(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(
+                cr_voters=[("dep_owner@chromium.org", 1)],
+            ),
+            200: self._make_cherry_pick_change(
+                messages=[
+                    "Patch Set 1: Cherry Picked from branch main.",
+                    "Patch Set 2: Commit message was updated.",
+                    "Patch Set 2:\n\nNote: Cherry Picked from main by a bot.",
+                ]
+            ),
+        }
+        self.assertEqual(
+            accessor.GetChangeReviewers(200, approving_only=True),
+            ["dep_owner@chromium.org", "author@chromium.org"],
+        )
+
+    def test_cherry_pick_chain_stops_at_max_depth(self):
+        depth = presubmit_support._MAX_CHERRY_PICK_DEPTH
+        last = 100 + depth + 2
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: self._make_parent_change(
+                merged_ps=2,
+                cr_voters=[("approver100@chromium.org", 1)],
+            ),
+        }
+        for issue in range(101, last + 1):
+            accessor.cache[issue] = {
+                **self._make_cherry_pick_change(
+                    parent_issue=issue - 1,
+                    parent_ps=2,
+                    cr_voters=[(f"approver{issue}@chromium.org", 1)],
+                ),
+                "status": "MERGED",
+            }
+
+        self.assertEqual(
+            accessor.GetChangeReviewers(last, approving_only=True),
+            [
+                f"approver{issue}@chromium.org"
+                for issue in range(last, last - depth - 1, -1)
+            ],
+        )
+
+    def test_non_cherry_pick_skips_missing_and_duplicate_emails(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            100: {
+                "owner": {"email": "author@chromium.org"},
+                "labels": {},
+                "reviewers": {
+                    "REVIEWER": [
+                        {"email": "reviewer@chromium.org"},
+                        {"_account_id": 1},
+                        {"email": "reviewer@chromium.org"},
+                    ]
+                },
+            },
+        }
+        self.assertEqual(
+            accessor.GetChangeReviewers(100, approving_only=False),
+            ["reviewer@chromium.org"],
+        )
+
+    def test_parent_fetch_failure_degrades_gracefully(self):
+        accessor = presubmit_support.GerritAccessor()
+        accessor.cache = {
+            200: self._make_cherry_pick_change(
+                cr_voters=[("direct_approver@chromium.org", 1)]
+            ),
+        }
+        with mock.patch.object(
+            accessor, "_FetchChangeDetail", side_effect=Exception("404")
+        ):
+            self.assertEqual(
+                accessor.GetChangeReviewers(200, approving_only=True),
+                ["direct_approver@chromium.org"],
+            )
+            self.assertFalse(accessor.IsOwnersOverrideApproved(200))
+
+
 if __name__ == "__main__":
     unittest.main()
