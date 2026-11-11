@@ -238,16 +238,13 @@ def _check_reclient_cfgs(output_dir):
     elif sys.platform == "darwin":
         rewrapper_cfg_path += "mac.cfg"
     else:
-        rewrapper_cfg_path += "linux.cfg"
+        return
     rewrapper_cfg_lines = None
     if os.path.exists(rewrapper_cfg_path):
         with open(rewrapper_cfg_path) as f:
             rewrapper_cfg_lines = f.readlines()
     if cr_build_revision and rewrapper_cfg_lines:
         rewrapper_cfg_revision = rewrapper_cfg_lines[0].strip().lstrip("# ")
-        if "llvmorg" not in rewrapper_cfg_revision:
-            # linux.cfg may set revision in 2nd line.
-            rewrapper_cfg_revision = rewrapper_cfg_lines[1].strip().lstrip("# ")
         if rewrapper_cfg_revision != cr_build_revision:
             print(
                 "You have wrong version of reclient_cfgs "
