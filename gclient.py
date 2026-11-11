@@ -3774,7 +3774,9 @@ class GcsDependency(Dependency):
             # See _CheckArchiveTopLevel().
             or _StartsWithScmMetadata(clean_output)
         ):
-            raise Exception(f"Invalid output_file path: {output_file}")
+            raise gclient_utils.Error(
+                f"Invalid output_file path: {output_file}"
+            )
         return os.path.join(self.output_dir, output_file)
 
     @property
@@ -4097,10 +4099,10 @@ class GcsDependency(Dependency):
                 "cp", self.url, self.artifact_output_file
             )
             if code and err:
-                raise Exception(f"{code}: {err}")
+                raise gclient_utils.Error(f"{code}: {err}")
             # Check that something actually downloaded into the path
             if not os.path.exists(self.artifact_output_file):
-                raise Exception(
+                raise gclient_utils.Error(
                     f"Nothing was downloaded into {self.artifact_output_file}"
                 )
 
@@ -4118,7 +4120,7 @@ class GcsDependency(Dependency):
             calculated_size_bytes = os.path.getsize(self.artifact_output_file)
 
         if calculated_sha256sum != self.sha256sum:
-            raise Exception(
+            raise gclient_utils.Error(
                 "sha256sum does not match calculated hash. "
                 "{original} vs {calculated}".format(
                     original=self.sha256sum,
@@ -4127,7 +4129,7 @@ class GcsDependency(Dependency):
             )
 
         if calculated_size_bytes != self.size_bytes:
-            raise Exception(
+            raise gclient_utils.Error(
                 "size_bytes does not match calculated size bytes. "
                 "{original} vs {calculated}".format(
                     original=self.size_bytes,
@@ -4142,7 +4144,7 @@ class GcsDependency(Dependency):
                 self.artifact_output_file, self.url, gsutil
             )
             if code != 0:
-                raise Exception(f"{code}: {err}")
+                raise gclient_utils.Error(f"{code}: {err}")
 
         self.WriteToFile(calculated_sha256sum, self.hash_file)
         self.WriteToFile(str(1), self.migration_toggle_file)
@@ -4167,7 +4169,9 @@ class GcsDependency(Dependency):
                     tar, possible_top_level_dirs
                 )
                 if not is_valid_tar:
-                    raise Exception("tarfile contains invalid entries")
+                    raise gclient_utils.Error(
+                        "tarfile contains invalid entries"
+                    )
                 self._CheckArchiveTopLevel(formatted_names)
 
                 self._ValidateTargetPaths(
@@ -4210,7 +4214,9 @@ class GcsDependency(Dependency):
                         or _IsAbsOrDrive(cleaned)
                         or ".." in set(cleaned.split("/"))
                     ):
-                        raise Exception("zipfile contains invalid entries")
+                        raise gclient_utils.Error(
+                            "zipfile contains invalid entries"
+                        )
                 self._CheckArchiveTopLevel(zip_file.namelist())
 
                 self._ValidateTargetPaths(

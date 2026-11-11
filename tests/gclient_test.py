@@ -2562,7 +2562,7 @@ class GcsDependencyTest(trial_dir.TestCase):
             ]
         )
         shutil.copy(tar_path, self.dep.artifact_output_file)
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(gclient_utils.Error) as ctx:
             self.dep._MaybeExtractArtifact()
         self.assertIn("tarfile contains invalid entries", str(ctx.exception))
         self.assertFalse(os.path.exists(escaped_file))
@@ -2756,7 +2756,7 @@ class GcsDependencyTest(trial_dir.TestCase):
                 relative=False,
                 condition=None,
             )
-            with self.assertRaises(Exception) as ctx:
+            with self.assertRaises(gclient_utils.Error) as ctx:
                 _ = dep.artifact_output_file
             self.assertIn("Invalid output_file path", str(ctx.exception))
 
@@ -2793,7 +2793,7 @@ class GcsDependencyTest(trial_dir.TestCase):
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr(escaped_file, "evil zip payload")
         shutil.copy(zip_path, self.dep.artifact_output_file)
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(gclient_utils.Error) as ctx:
             self.dep._MaybeExtractArtifact()
         self.assertIn("zipfile contains invalid entries", str(ctx.exception))
         self.assertFalse(os.path.exists(escaped_file))
@@ -2850,7 +2850,7 @@ class GcsDependencyTest(trial_dir.TestCase):
             zinfo.filename = ""
             zf.writestr(zinfo, b"")
         shutil.copy(zip_path, self.dep.artifact_output_file)
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(gclient_utils.Error) as ctx:
             self.dep._MaybeExtractArtifact()
         self.assertIn("zipfile contains invalid entries", str(ctx.exception))
 
