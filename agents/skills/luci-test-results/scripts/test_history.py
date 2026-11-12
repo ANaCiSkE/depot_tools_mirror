@@ -22,6 +22,7 @@ DEFAULT_SINGLE_BUILDER_LIMIT = 100
 DEFAULT_MULTI_BUILDER_LIMIT = 15
 MAX_PARALLEL_BUILDERS = 40
 MAX_WORKERS = 16
+REVIVER_BUCKET = "reviver"
 
 
 def query_tests(project, test_query):
@@ -34,8 +35,38 @@ def query_tests(project, test_query):
     return res.get("testIds", []) if res else []
 
 
+def _builder_label(def_map):
+    """Returns bucket/builder, naming the target builder of a reviver run.
+
+    Test reviver runs every target builder under one LUCI builder (e.g.
+    reviver/runner) and records the builder it stands in for in
+    reviver_builder, so the plain bucket/builder is the same for all of them.
+    """
+    label = f"{def_map.get('bucket', 'ci')}/{def_map['builder']}"
+    target = def_map.get("reviver_builder")
+    if not target:
+        return label
+    target_bucket = def_map.get("reviver_bucket")
+    if target_bucket:
+        target = f"{target_bucket}/{target}"
+    return f"{label} ({target})"
+
+
 def query_variant_builders(project, test_id, predicate=None):
     """Maps variantHash -> bucket/builder using TestHistory.QueryVariants."""
+    return {
+        v_hash: _builder_label(def_map)
+        for v_hash, def_map in query_variant_defs(
+            project, test_id, predicate=predicate
+        ).items()
+    }
+
+
+def query_variant_defs(project, test_id, predicate=None):
+    """Maps variantHash -> variant def using TestHistory.QueryVariants.
+
+    Only variants that name a builder are returned.
+    """
     mapping = {}
     page_token = None
     while True:
@@ -56,10 +87,8 @@ def query_variant_builders(project, test_id, predicate=None):
         for v in res.get("variants", []):
             v_hash = v.get("variantHash")
             def_map = v.get("variant", {}).get("def", {})
-            builder = def_map.get("builder")
-            bucket = def_map.get("bucket", "ci")
-            if v_hash and builder:
-                mapping[v_hash] = f"{bucket}/{builder}"
+            if v_hash and def_map.get("builder"):
+                mapping[v_hash] = def_map
         page_token = res.get("nextPageToken")
         if not page_token:
             break
@@ -67,11 +96,19 @@ def query_variant_builders(project, test_id, predicate=None):
 
 
 def _build_predicate(
-    builder, bucket, device_os, device_type, os_val, test_suite
+    builder,
+    bucket,
+    device_os,
+    device_type,
+    os_val,
+    test_suite,
+    reviver_builder=None,
 ):
     variant_def = {}
     if builder:
         variant_def["builder"] = builder
+    if reviver_builder:
+        variant_def["reviver_builder"] = reviver_builder
     if bucket:
         variant_def["bucket"] = bucket
     if device_os:
@@ -97,10 +134,17 @@ def test_history(
     device_type=None,
     os_val=None,
     test_suite=None,
+    reviver_builder=None,
 ):
     """Queries LUCI Analysis for the test history of a specific test variant."""
     predicate = _build_predicate(
-        builder, bucket, device_os, device_type, os_val, test_suite
+        builder,
+        bucket,
+        device_os,
+        device_type,
+        os_val,
+        test_suite,
+        reviver_builder=reviver_builder,
     )
     verdicts = []
     page_token = None
@@ -155,14 +199,21 @@ def fetch_multi_builder_history(
     predicate = _build_predicate(
         None, target_bucket, device_os, device_type, os_val, test_suite
     )
-    variant_builders = query_variant_builders(
-        project, test_id, predicate=predicate
-    )
+    variant_defs = query_variant_defs(project, test_id, predicate=predicate)
+    variant_builders = {
+        v_hash: _builder_label(def_map)
+        for v_hash, def_map in variant_defs.items()
+    }
+    # One query per builder; a reviver runner is one per target builder, so
+    # a busy target cannot crowd the others out of the runner's sample.
     distinct = sorted(
         {
-            (b.split("/", 1)[0], b.split("/", 1)[1])
-            for b in variant_builders.values()
-            if "/" in b
+            (
+                def_map.get("bucket", "ci"),
+                def_map["builder"],
+                def_map.get("reviver_builder", ""),
+            )
+            for def_map in variant_defs.values()
         }
     )
     if not distinct:
@@ -186,8 +237,8 @@ def fetch_multi_builder_history(
         )
     targets = distinct[:max_builders]
 
-    def _fetch_one(bkt_bld):
-        bkt, bld = bkt_bld
+    def _fetch_one(target):
+        bkt, bld, reviver_bld = target
         try:
             batch = test_history(
                 project,
@@ -199,6 +250,7 @@ def fetch_multi_builder_history(
                 device_type=device_type,
                 os_val=os_val,
                 test_suite=test_suite,
+                reviver_builder=reviver_bld or None,
             )
             for v in batch:
                 v.setdefault("bucket", bkt)
@@ -206,7 +258,8 @@ def fetch_multi_builder_history(
             return batch
         except Exception as e:
             print(
-                f"Warning: Failed to fetch history for {bkt}/{bld}: {e}",
+                f"Warning: Failed to fetch history for {bkt}/{bld}"
+                f"{f' ({reviver_bld})' if reviver_bld else ''}: {e}",
                 file=sys.stderr,
             )
             return []
@@ -223,12 +276,16 @@ def fetch_multi_builder_history(
 def _verdict_glyph(v):
     status = v.get("status", "")
     status_v2 = v.get("statusV2", "")
+    # Before EXPECTED: a test disabled or restricted in code (e.g. @DisableIf,
+    # @Restriction) reports status EXPECTED with statusV2 SKIPPED, and it did
+    # not pass. A skip reported with status FLAKY (a NOTRUN attempt retried
+    # into a skip) is a skip too, not a flake.
+    if status_v2 == "SKIPPED" or status in ("SKIPPED", "UNEXPECTEDLY_SKIPPED"):
+        return GLYPH_SKIP
     if status == "EXPECTED" or status_v2 == "PASSED":
         return GLYPH_PASS
     if status == "FLAKY" or status_v2 == "FLAKY":
         return GLYPH_FLAKY
-    if status_v2 == "SKIPPED" or status in ("SKIPPED", "UNEXPECTEDLY_SKIPPED"):
-        return GLYPH_SKIP
     return GLYPH_FAIL
 
 
@@ -258,6 +315,7 @@ def format_summary(verdicts, variant_builders=None, default_builder=None):
 
     lines = []
     passing_builders = []
+    skipped_builders = []
     for bld, v_list in sorted(by_builder.items(), key=sort_key):
         glyphs = "".join(_verdict_glyph(v) for v in v_list)
         p = glyphs.count(GLYPH_PASS)
@@ -266,7 +324,11 @@ def format_summary(verdicts, variant_builders=None, default_builder=None):
         s = glyphs.count(GLYPH_SKIP)
 
         if f == 0 and r == 0 and len(by_builder) > 1:
-            passing_builders.append(f"{bld} ({p} pass)")
+            skip = f", {s} skip" if s else ""
+            if p == 0 and s:
+                skipped_builders.append(f"{bld} ({s} skip)")
+            else:
+                passing_builders.append(f"{bld} ({p} pass{skip})")
             continue
 
         lines.append(
@@ -292,6 +354,11 @@ def format_summary(verdicts, variant_builders=None, default_builder=None):
         lines.append(
             f"100% Passing Builders ({len(passing_builders)}): "
             + ", ".join(passing_builders)
+        )
+    if skipped_builders:
+        lines.append(
+            f"Skipped-only Builders ({len(skipped_builders)}): "
+            + ", ".join(skipped_builders)
         )
     return "\n".join(lines)
 
@@ -333,7 +400,16 @@ def main():
         ),
     )
     parser.add_argument("--builder", help="Filter by builder name")
-    parser.add_argument("--bucket", help="Filter by bucket (e.g. try, ci)")
+    parser.add_argument(
+        "--bucket", help="Filter by bucket (e.g. try, ci, reviver)"
+    )
+    parser.add_argument(
+        "--reviver-builder",
+        help=(
+            "Filter test reviver runs by the builder they stand in for "
+            "(e.g. android-12l-x64-dbg-tests); implies --bucket reviver"
+        ),
+    )
     parser.add_argument("--device-os", help="Filter by device OS")
     parser.add_argument("--device-type", help="Filter by device type")
     parser.add_argument("--os", help="Filter by OS")
@@ -370,19 +446,34 @@ def main():
                 file=sys.stderr,
             )
 
-    if args.builder:
-        verdicts = test_history(
-            args.project,
-            target_test_id,
-            limit=args.limit or DEFAULT_SINGLE_BUILDER_LIMIT,
+    if args.reviver_builder and not args.bucket:
+        args.bucket = REVIVER_BUCKET
+    default_builder = args.builder
+    variant_builders = None
+    if args.builder or args.reviver_builder:
+        filters = dict(
             builder=args.builder,
             bucket=args.bucket,
             device_os=args.device_os,
             device_type=args.device_type,
             os_val=args.os,
             test_suite=args.test_suite,
+            reviver_builder=args.reviver_builder,
         )
-        variant_builders = None
+        verdicts = test_history(
+            args.project,
+            target_test_id,
+            limit=args.limit or DEFAULT_SINGLE_BUILDER_LIMIT,
+            **filters,
+        )
+        if args.reviver_builder and verdicts and not args.raw:
+            # Label rows like the multi-builder path does.
+            default_builder = None
+            variant_builders = query_variant_builders(
+                args.project,
+                target_test_id,
+                predicate=_build_predicate(**filters),
+            )
     else:
         verdicts, variant_builders = fetch_multi_builder_history(
             args.project,
@@ -425,7 +516,7 @@ def main():
             format_summary(
                 verdicts,
                 variant_builders=variant_builders,
-                default_builder=args.builder,
+                default_builder=default_builder,
             )
         )
 

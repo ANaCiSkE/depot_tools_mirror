@@ -154,6 +154,7 @@ vpython3 scripts/test_history.py \
   [--project <chromium|chrome>] \
   [--builder <BUILDER>] \
   [--bucket <BUCKET>] \
+  [--reviver-builder <TARGET_BUILDER>] \
   [--device-os <DEVICE_OS>] \
   [--device-type <DEVICE_TYPE>] \
   [--os <OS>] \
@@ -178,7 +179,14 @@ vpython3 scripts/test_history.py \
   verdicts when a single `--builder` is specified). This prevents high-frequency bots
   from crowding out slower platform/form-factor bots.
 - **Per-Builder Structuring**: Failing and flaky builders are sorted first, while
-  100% passing builders are condensed into a single summary line.
+  100% passing builders are condensed into a single summary line. Builders where
+  the test only ever skipped (e.g. disabled or restricted there by `@DisableIf`
+  or `@Restriction`) are listed separately as `Skipped-only Builders`; they say
+  nothing about whether it passes.
+- **Test Reviver Runs**: `--bucket reviver` lists each target builder the reviver
+  stands in for as `reviver/runner (ci/<TARGET_BUILDER>)`. Use
+  `--reviver-builder <TARGET_BUILDER>` (implies `--bucket reviver`) for one
+  target's runs; `--builder` there names the runner itself.
 - **Timeline Glyphs**: Displays recent verdicts ordered newest →
   oldest (`P` = Pass, `F` = Fail, `R` = Flaky/Pass on Retry, `S` = Skip), along
   with daily breakdowns.

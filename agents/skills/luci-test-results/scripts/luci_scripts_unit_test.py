@@ -585,11 +585,14 @@ class TestLuciScripts(unittest.TestCase):
 
     @mock.patch("sys.stderr", new_callable=io.StringIO)
     @mock.patch("test_history.test_history")
-    @mock.patch("test_history.query_variant_builders")
+    @mock.patch("test_history.query_variant_defs")
     def test_fetch_multi_builder_history_handles_worker_exception(
         self, mock_variants, mock_history, mock_stderr
     ):
-        mock_variants.return_value = {"h1": "ci/b1", "h2": "ci/b2"}
+        mock_variants.return_value = {
+            "h1": {"bucket": "ci", "builder": "b1"},
+            "h2": {"bucket": "ci", "builder": "b2"},
+        }
 
         def history_side_effect(project, test_id, **kwargs):
             if kwargs.get("builder") == "b1":
@@ -623,6 +626,157 @@ class TestLuciScripts(unittest.TestCase):
             verdicts, default_builder="ci/bot-skip"
         )
         self.assertIn("Skip=1", summary)
+
+    def test_expected_skip_is_a_skip_not_a_pass(self):
+        # A test disabled in code reports status EXPECTED, statusV2 SKIPPED.
+        skip = {"status": "EXPECTED", "statusV2": "SKIPPED"}
+        self.assertEqual(
+            test_history._verdict_glyph(skip), test_history.GLYPH_SKIP
+        )
+        for verdict, glyph in (
+            ({"status": "EXPECTED", "statusV2": "PASSED"}, "P"),
+            ({"status": "EXPECTED"}, "P"),
+            ({"status": "FLAKY", "statusV2": "FLAKY"}, "R"),
+            ({"status": "FLAKY", "statusV2": "SKIPPED"}, "S"),
+            ({"status": "UNEXPECTEDLY_SKIPPED"}, "S"),
+            ({"status": "UNEXPECTED", "statusV2": "FAILED"}, "F"),
+        ):
+            self.assertEqual(test_history._verdict_glyph(verdict), glyph)
+
+        def verdicts(builder, *pairs):
+            return [
+                {
+                    "builder": builder,
+                    "status": status,
+                    "statusV2": status_v2,
+                    "partitionTime": "2026-08-25T12:00:00Z",
+                }
+                for status, status_v2 in pairs
+            ]
+
+        summary = test_history.format_summary(
+            verdicts("skips", ("EXPECTED", "SKIPPED"), ("EXPECTED", "SKIPPED"))
+            + verdicts("mixed", ("EXPECTED", "PASSED"), ("EXPECTED", "SKIPPED"))
+            + verdicts("passes", ("EXPECTED", "PASSED"))
+        )
+        self.assertIn(
+            "100% Passing Builders (2): mixed (1 pass, 1 skip), "
+            "passes (1 pass)",
+            summary,
+        )
+        self.assertIn("Skipped-only Builders (1): skips (2 skip)", summary)
+
+        # A single builder is always shown in full.
+        summary = test_history.format_summary(
+            verdicts("skips", ("EXPECTED", "SKIPPED")),
+            default_builder="skips",
+        )
+        self.assertIn(
+            "Builder: skips | Pass: 0, Fail: 0, Flaky: 0, Skip: 1", summary
+        )
+
+    @staticmethod
+    def _reviver_prpc(calls):
+        """Fakes a reviver runner standing in for two target builders."""
+        targets = {"h1": "target-a", "h2": "target-b"}
+
+        def side_effect(service, method, payload):
+            calls.append((method, payload))
+            if method == "luci.analysis.v1.TestHistory.QueryVariants":
+                return {
+                    "variants": [
+                        {
+                            "variantHash": v_hash,
+                            "variant": {
+                                "def": {
+                                    "bucket": "reviver",
+                                    "builder": "runner",
+                                    "reviver_bucket": "ci",
+                                    "reviver_builder": target,
+                                }
+                            },
+                        }
+                        for v_hash, target in targets.items()
+                    ]
+                }
+            wanted = payload["predicate"]["variantPredicate"]["contains"]["def"]
+            return {
+                "verdicts": [
+                    {"variantHash": v_hash, "status": "EXPECTED"}
+                    for v_hash, target in targets.items()
+                    if wanted.get("builder", "runner") == "runner"
+                    and wanted.get("reviver_builder", target) == target
+                ]
+            }
+
+        return side_effect
+
+    @mock.patch("test_history.run_prpc")
+    def test_reviver_runner_is_split_by_target_builder(self, mock_prpc):
+        calls = []
+        mock_prpc.side_effect = self._reviver_prpc(calls)
+        verdicts, mapping = test_history.fetch_multi_builder_history(
+            "chromium", SAMPLE_TEST_ID, bucket="reviver"
+        )
+        self.assertEqual(
+            mapping,
+            {
+                "h1": "reviver/runner (ci/target-a)",
+                "h2": "reviver/runner (ci/target-b)",
+            },
+        )
+        queried = sorted(
+            payload["predicate"]["variantPredicate"]["contains"]["def"][
+                "reviver_builder"
+            ]
+            for method, payload in calls
+            if method == "luci.analysis.v1.TestHistory.Query"
+        )
+        self.assertEqual(queried, ["target-a", "target-b"])
+        self.assertEqual(len(verdicts), 2)
+        summary = test_history.format_summary(
+            verdicts, variant_builders=mapping
+        )
+        self.assertIn("reviver/runner (ci/target-a) (1 pass)", summary)
+        self.assertIn("reviver/runner (ci/target-b) (1 pass)", summary)
+
+    @mock.patch("sys.stdout", new_callable=io.StringIO)
+    @mock.patch("sys.stderr", new_callable=io.StringIO)
+    @mock.patch("test_history.run_prpc")
+    def test_main_reviver_builder_filters(
+        self, mock_prpc, mock_stderr, mock_stdout
+    ):
+        def run(*args):
+            calls = []
+            mock_prpc.side_effect = self._reviver_prpc(calls)
+            mock_stdout.seek(0)
+            mock_stdout.truncate()
+            argv = ["test_history.py", "--test-id", SAMPLE_TEST_ID, *args]
+            with mock.patch("sys.argv", argv):
+                test_history.main()
+            return [
+                payload["predicate"]["variantPredicate"]["contains"]["def"]
+                for method, payload in calls
+                if method == "luci.analysis.v1.TestHistory.Query"
+            ]
+
+        # --reviver-builder implies the reviver bucket.
+        self.assertEqual(
+            run("--reviver-builder", "target-a"),
+            [{"reviver_builder": "target-a", "bucket": "reviver"}],
+        )
+        # The row is labelled the way the multi-builder path labels it.
+        self.assertIn(
+            "Builder: reviver/runner (ci/target-a) | Pass: 1",
+            mock_stdout.getvalue(),
+        )
+
+        # --builder in the reviver bucket names the runner itself.
+        self.assertEqual(
+            run("--bucket", "reviver", "--builder", "runner"),
+            [{"builder": "runner", "bucket": "reviver"}],
+        )
+        self.assertIn("Builder: runner | Pass: 2", mock_stdout.getvalue())
 
     @mock.patch("sys.stdout", new_callable=io.StringIO)
     @mock.patch("sys.stderr", new_callable=io.StringIO)
@@ -757,6 +911,7 @@ class TestLuciScripts(unittest.TestCase):
             device_type=None,
             os_val=None,
             test_suite=None,
+            reviver_builder=None,
         )
 
         # Unresolved substring should exit early with code 1 without calling test_history
