@@ -6192,6 +6192,36 @@ def CMDmetrics(parser, args):
     return 0
 
 
+DEFAULT_MAX_JOBS = 32
+
+
+def _default_jobs() -> int:
+    """Returns the default `--jobs` concurrency for gclient commands.
+
+    gclient workers are primarily network, subprocess, and disk I/O bound (and
+    on cold `--git-cache` bootstraps each `gsutil -m cp` spawns its own worker
+    pool), so scaling linearly past 32 on high-core machines increases
+    contention and regresses dependency latency. Honor `$GCLIENT_JOBS` when set.
+    """
+    env_jobs = os.environ.get("GCLIENT_JOBS")
+    if env_jobs:
+        try:
+            parsed = int(env_jobs)
+            if parsed >= 1:
+                return parsed
+        except ValueError:
+            pass
+        sys.stderr.write(
+            f"WARNING: Ignoring invalid GCLIENT_JOBS={env_jobs!r}; "
+            "must be an integer >= 1.\n"
+        )
+    # Some arm boards have issues with parallel sync.
+    # ARM Mac should be fine.
+    if sys.platform != "darwin" and platform.machine().startswith("arm"):
+        return 1
+    return min(DEFAULT_MAX_JOBS, max(8, gclient_utils.NumLocalCpus()))
+
+
 class OptionParser(optparse.OptionParser):
     gclientfile_default = os.environ.get("GCLIENT_FILE", ".gclient")
 
@@ -6200,12 +6230,7 @@ class OptionParser(optparse.OptionParser):
             self, version="%prog " + __version__, **kwargs
         )
 
-        # Some arm boards have issues with parallel sync.
-        # ARM Mac should be fine.
-        if sys.platform != "darwin" and platform.machine().startswith("arm"):
-            jobs = 1
-        else:
-            jobs = max(8, gclient_utils.NumLocalCpus())
+        jobs = _default_jobs()
 
         self.add_option(
             "-j",
@@ -6213,7 +6238,7 @@ class OptionParser(optparse.OptionParser):
             default=jobs,
             type="int",
             help="Specify how many SCM commands can run in parallel; defaults to "
-            "%default on this machine",
+            "%default on this machine (or $GCLIENT_JOBS when set)",
         )
         self.add_option(
             "-v",

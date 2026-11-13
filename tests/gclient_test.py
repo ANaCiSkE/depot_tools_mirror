@@ -120,6 +120,53 @@ class GclientTest(trial_dir.TestCase):
     def testDependenciesJobs(self):
         self._dependencies("1000")
 
+    def testDefaultJobsCappedAndEnvOverride(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=False),
+            mock.patch("sys.platform", "linux"),
+            mock.patch("platform.machine", return_value="x86_64"),
+            mock.patch("gclient_utils.NumLocalCpus", return_value=128),
+        ):
+            os.environ.pop("GCLIENT_JOBS", None)
+            options, _ = gclient.OptionParser().parse_args([])
+            self.assertEqual(options.jobs, gclient.DEFAULT_MAX_JOBS)
+
+            with mock.patch("gclient_utils.NumLocalCpus", return_value=16):
+                options_uncapped, _ = gclient.OptionParser().parse_args([])
+            self.assertEqual(options_uncapped.jobs, 16)
+
+            os.environ["GCLIENT_JOBS"] = "48"
+            options_env, _ = gclient.OptionParser().parse_args([])
+            self.assertEqual(options_env.jobs, 48)
+            options_cli, _ = gclient.OptionParser().parse_args(["-j", "16"])
+            self.assertEqual(options_cli.jobs, 16)
+
+            for bad in ("invalid", "0", "-4"):
+                os.environ["GCLIENT_JOBS"] = bad
+                stderr_buf = io.StringIO()
+                with mock.patch("sys.stderr", stderr_buf):
+                    options_bad, _ = gclient.OptionParser().parse_args([])
+                self.assertEqual(options_bad.jobs, gclient.DEFAULT_MAX_JOBS)
+                self.assertIn(
+                    "Ignoring invalid GCLIENT_JOBS", stderr_buf.getvalue()
+                )
+
+            # Ensure invalid GCLIENT_JOBS does not pre-initialize root logging
+            # and break -v/-vvv verbosity in parse_args().
+            root_logger = logging.getLogger()
+            saved_handlers = list(root_logger.handlers)
+            saved_level = root_logger.level
+            try:
+                root_logger.handlers.clear()
+                root_logger.setLevel(logging.NOTSET)
+                os.environ["GCLIENT_JOBS"] = "invalid"
+                with mock.patch("sys.stderr", io.StringIO()):
+                    gclient.OptionParser().parse_args(["-vvv"])
+                self.assertEqual(root_logger.level, logging.DEBUG)
+            finally:
+                root_logger.handlers[:] = saved_handlers
+                root_logger.setLevel(saved_level)
+
     def _dependencies(self, jobs):
         """Verifies that dependencies are processed in the right order.
 
