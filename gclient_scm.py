@@ -2136,6 +2136,19 @@ class GitWrapper(SCMWrapper):
         self.Print("Finished running: %s %s" % ("git", " ".join(args)))
         return ret
 
+    DEFAULT_MAX_CHECKOUT_WORKERS = 16
+    DEFAULT_WIN_MAX_CHECKOUT_WORKERS = 8
+
+    def _HasExplicitCheckoutWorkers(self) -> bool:
+        checkout_path = getattr(self, "checkout_path", None)
+        if not checkout_path or not os.path.isdir(checkout_path):
+            return False
+        return any(
+            scm.GIT.GetConfig(checkout_path, "checkout.workers", scope=scope)
+            is not None
+            for scope in ("global", "local", "worktree", "command")
+        )
+
     def _Checkout(self, options, ref, force=False, quiet=None):
         """Performs a 'git-checkout' operation.
 
@@ -2157,7 +2170,25 @@ class GitWrapper(SCMWrapper):
                 )
             if quiet is None:
                 quiet = not options.verbose
-            checkout_args = ["checkout"]
+            # Upstream Git defaults checkout.workers to 1 (sequential), and some
+            # system gitconfigs cap it at 2, stalling large checkouts on
+            # networked disks. Parallelize checkouts (>100 files) up to 16
+            # workers per checkout on POSIX (8 on Windows to limit git.exe
+            # CreateProcess/Defender cost) unless configured explicitly in
+            # global, local, worktree, or command git config.
+            checkout_args = []
+            if not self._HasExplicitCheckoutWorkers():
+                max_workers = (
+                    self.DEFAULT_WIN_MAX_CHECKOUT_WORKERS
+                    if sys.platform == "win32"
+                    else self.DEFAULT_MAX_CHECKOUT_WORKERS
+                )
+                workers = min(
+                    max_workers,
+                    max(1, gclient_utils.NumLocalCpus()),
+                )
+                checkout_args.extend(["-c", f"checkout.workers={workers}"])
+            checkout_args.append("checkout")
             if force:
                 checkout_args.append("--force")
             if quiet:

@@ -804,8 +804,17 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
         with self.assertRaises(gclient_utils.Error):
             git_wrapper._Checkout(options, None)
 
+    @mock.patch("sys.platform", "linux")
+    @mock.patch("gclient_utils.NumLocalCpus", return_value=32)
+    @mock.patch.object(
+        gclient_scm.GitWrapper,
+        "_HasExplicitCheckoutWorkers",
+        return_value=False,
+    )
     @mock.patch("git_common.meets_git_version")
-    def testCheckoutEndOfOptionsGatedByGitVersion(self, mock_meets_git_version):
+    def testCheckoutEndOfOptionsGatedByGitVersion(
+        self, mock_meets_git_version, _mock_explicit, _mock_cpus
+    ):
         git_wrapper = gclient_scm.GitWrapper(
             self.url, self.root_dir, self.relpath
         )
@@ -816,12 +825,97 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
         mock_meets_git_version.return_value = True
         git_wrapper._Checkout(options, "main")
         mock_capture.assert_called_with(
-            ["checkout", "--quiet", "--end-of-options", "main"]
+            [
+                "-c",
+                "checkout.workers=16",
+                "checkout",
+                "--quiet",
+                "--end-of-options",
+                "main",
+            ]
         )
 
         mock_meets_git_version.return_value = False
         git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(
+            ["-c", "checkout.workers=16", "checkout", "--quiet", "main"]
+        )
+
+    @mock.patch("git_common.meets_git_version", return_value=False)
+    def testCheckoutWorkersBoundAndUserConfigOverride(self, _mock_git_ver):
+        scm_mock.GIT(self, system_config={"checkout.workers": ["2"]})
+        git_wrapper = gclient_scm.GitWrapper(
+            self.url, self.root_dir, self.relpath
+        )
+        options = self.Options()
+        mock_capture = mock.Mock()
+        git_wrapper._Capture = mock_capture
+
+        # System-only config is overridden up to 16 on POSIX and 8 on Windows.
+        with (
+            mock.patch("sys.platform", "linux"),
+            mock.patch("gclient_utils.NumLocalCpus", return_value=128),
+        ):
+            git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(
+            ["-c", "checkout.workers=16", "checkout", "--quiet", "main"]
+        )
+
+        with (
+            mock.patch("sys.platform", "win32"),
+            mock.patch("gclient_utils.NumLocalCpus", return_value=128),
+        ):
+            git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(
+            ["-c", "checkout.workers=8", "checkout", "--quiet", "main"]
+        )
+
+        # Lower CPU count scales down below cap.
+        with (
+            mock.patch("sys.platform", "linux"),
+            mock.patch("gclient_utils.NumLocalCpus", return_value=6),
+        ):
+            git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(
+            ["-c", "checkout.workers=6", "checkout", "--quiet", "main"]
+        )
+
+        # Explicit command-scope config (e.g. GIT_CONFIG_PARAMETERS) is respected.
+        orig_get_config = scm.GIT.GetConfig
+        with (
+            mock.patch("sys.platform", "linux"),
+            mock.patch("gclient_utils.NumLocalCpus", return_value=128),
+            mock.patch(
+                "scm.GIT.GetConfig",
+                side_effect=lambda cwd, key, default=None, scope=None: (
+                    "12"
+                    if scope == "command" and key == "checkout.workers"
+                    else orig_get_config(cwd, key, default, scope)
+                ),
+            ),
+        ):
+            git_wrapper._Checkout(options, "main")
         mock_capture.assert_called_with(["checkout", "--quiet", "main"])
+
+        # Explicit user global/local checkout.workers config is respected.
+        scm.GIT.SetConfig(
+            git_wrapper.checkout_path,
+            "checkout.workers",
+            "4",
+            scope="global",
+        )
+        with (
+            mock.patch("sys.platform", "linux"),
+            mock.patch("gclient_utils.NumLocalCpus", return_value=128),
+        ):
+            git_wrapper._Checkout(options, "main")
+        mock_capture.assert_called_with(["checkout", "--quiet", "main"])
+
+        # Unset checkout_path (when root_dir or relpath is omitted) returns False
+        # cleanly without raising AttributeError.
+        unset_wrapper = gclient_scm.GitWrapper(self.url)
+        self.assertFalse(hasattr(unset_wrapper, "checkout_path"))
+        self.assertFalse(unset_wrapper._HasExplicitCheckoutWorkers())
 
     def testFetchRejectsInvalidRefspecOrRemoteStartingWithHyphen(self):
         git_wrapper = gclient_scm.GitWrapper(
