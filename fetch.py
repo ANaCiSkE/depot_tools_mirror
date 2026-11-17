@@ -116,24 +116,20 @@ class GclientGitCheckout(GclientCheckout, GitCheckout):
         assert "solutions" in self.spec
 
     def _format_spec(self):
-        def _format_literal(lit):
-            if isinstance(lit, str):
-                return '"%s"' % lit
-            if isinstance(lit, list):
-                return "[%s]" % ", ".join(_format_literal(i) for i in lit)
-            return "%r" % lit
-
+        # .gclient is evaluated as Python, so values must be emitted as valid
+        # Python literals. repr() (!r) escapes backslashes and quotes, e.g. in
+        # Windows paths such as cache_dir = 'C:\\Users\\...'.
         soln_strings = []
         for soln in self.spec["solutions"]:
             soln_string = "\n".join(
-                '    "%s": %s,' % (key, _format_literal(value))
-                for key, value in soln.items()
+                f"    {key!r}: {value!r}," for key, value in soln.items()
             )
-            soln_strings.append("  {\n%s\n  }," % soln_string)
-        gclient_spec = "solutions = [\n%s\n]\n" % "\n".join(soln_strings)
+            soln_strings.append(f"  {{\n{soln_string}\n  }},")
+        solutions = "\n".join(soln_strings)
+        gclient_spec = f"solutions = [\n{solutions}\n]\n"
         extra_keys = ["target_os", "target_os_only", "cache_dir", "cache_mode"]
         gclient_spec += "".join(
-            "%s = %s\n" % (key, _format_literal(self.spec[key]))
+            f"{key} = {self.spec[key]!r}\n"
             for key in extra_keys
             if key in self.spec
         )

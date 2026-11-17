@@ -19,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import fetch
+import gclient_eval
 
 
 class SystemExitMock(Exception):
@@ -313,6 +314,29 @@ class TestGclientGitCheckout(unittest.TestCase):
         args = self.run_gclient.call_args_list[0][0]
         self.assertEqual("config", args[0])
         self.assertIn("foo", args[2])
+
+    def test_format_spec_escapes_strings(self):
+        # .gclient is evaluated as Python; backslashes (e.g. Windows paths)
+        # and quotes must be escaped or parsing fails with a syntax error.
+        cache_dir = "C:\\Users\\me\\AppData\\Local\\depot_tools\\git_cache"
+        url = 'https://example.com/"quoted"\\repo.git'
+        specs = {
+            "solutions": [{"name": "src", "url": url, "managed": False}],
+            "target_os": ["win", "android"],
+            "cache_dir": cache_dir,
+            "cache_mode": "bootstrap",
+        }
+        checkout = fetch.GclientGitCheckout(self.opts, specs, "/root")
+        config = gclient_eval.ParseLocalConfig(
+            checkout._format_spec(), ".gclient"
+        )
+        self.assertEqual(cache_dir, config["cache_dir"])
+        self.assertEqual("bootstrap", config["cache_mode"])
+        self.assertEqual(["win", "android"], config["target_os"])
+        self.assertEqual(
+            [{"name": "src", "url": url, "managed": False}],
+            config["solutions"],
+        )
 
 
 class TestRunGitCache(unittest.TestCase):
