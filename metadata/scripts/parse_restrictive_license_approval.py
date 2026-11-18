@@ -4,7 +4,7 @@
 # found in the LICENSE file.
 
 # /// script
-# requires-python = '>=3.11,<3.12'
+# requires-python = '>=3.14,<3.15'
 # dependencies = [
 #   'protobuf==4.25.1',
 #   'googleapis-common-protos==1.61.0'

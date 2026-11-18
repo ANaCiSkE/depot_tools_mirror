@@ -223,11 +223,9 @@ typing-extensions==4.15.0 \
     --hash=sha256:3b54e157664af21be3fe447ad494c33b4bf65ba2fb51bb25b77a8c2baee1f9ef \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
-    #   anyio
     #   opentelemetry-sdk
     #   pydantic
     #   pydantic-core
-    #   starlette
     #   typing-inspection
 typing-inspection==0.4.4 \
     --hash=sha256:65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147

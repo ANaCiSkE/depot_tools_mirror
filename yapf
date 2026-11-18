@@ -1,7 +1,7 @@
 #!/usr/bin/env vpython3
 
 # /// script
-# requires-python = '>=3.11,<3.12'
+# requires-python = '>=3.14,<3.15'
 # dependencies = [
 #   'yapf==0.40.2',
 #   'platformdirs==4.1.0',

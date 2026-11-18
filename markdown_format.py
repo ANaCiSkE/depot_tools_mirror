@@ -1,6 +1,6 @@
 #!/usr/bin/env vpython3
 # /// script
-# requires-python = '>=3.11,<3.12'
+# requires-python = '>=3.14,<3.15'
 # dependencies = [
 #   'mdurl==0.1.2',
 #   'markdown-it-py==2.2.0',
