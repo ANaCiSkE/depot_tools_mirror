@@ -1212,13 +1212,8 @@ _FREEZE_TZ = datetime.timezone(-datetime.timedelta(hours=8), "PST")
 # (freeze start, freeze end, freeze details)
 _CHROMIUM_FREEZES = [
     (
-        datetime.datetime(2025, 11, 21, 17, 1, tzinfo=_FREEZE_TZ),
-        datetime.datetime(2025, 11, 30, 17, 0, tzinfo=_FREEZE_TZ),
-        "Holiday freeze",
-    ),
-    (
-        datetime.datetime(2025, 12, 19, 17, 1, tzinfo=_FREEZE_TZ),
-        datetime.datetime(2026, 1, 4, 17, 0, tzinfo=_FREEZE_TZ),
+        datetime.datetime(2026, 12, 18, 8, 0, tzinfo=_FREEZE_TZ),
+        datetime.datetime(2027, 1, 4, 7, 59, tzinfo=_FREEZE_TZ),
         "Holiday freeze",
     ),
 ]
