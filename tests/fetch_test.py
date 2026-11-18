@@ -255,16 +255,31 @@ class TestGClientCheckout(unittest.TestCase):
 
         self.addCleanup(mock.patch.stopall)
 
-    @mock.patch("distutils.spawn.find_executable", return_value=True)
+    @mock.patch("sys.platform", "linux")
+    @mock.patch("shutil.which", return_value=True)
     def test_run_gclient_executable_found(self, find_executable):
         self.checkout.run_gclient("foo", "bar", baz="qux")
         find_executable.assert_called_once_with("gclient")
         self.run.assert_called_once_with(("gclient", "foo", "bar"), baz="qux")
 
-    @mock.patch("distutils.spawn.find_executable", return_value=False)
+    @mock.patch("sys.platform", "linux")
+    @mock.patch("shutil.which", return_value=False)
     def test_run_gclient_executable_not_found(self, find_executable):
         self.checkout.run_gclient("foo", "bar", baz="qux")
         find_executable.assert_called_once_with("gclient")
+        args = self.run.call_args[0][0]
+        kargs = self.run.call_args[1]
+
+        self.assertEqual(4, len(args))
+        self.assertEqual(sys.executable, args[0])
+        self.assertTrue(args[1].endswith("gclient.py"))
+        self.assertEqual(("foo", "bar"), args[2:])
+        self.assertEqual({"baz": "qux"}, kargs)
+
+    @mock.patch("sys.platform", "win32")
+    @mock.patch("shutil.which", return_value="gclient.bat")
+    def test_run_gclient_windows_uses_python_script(self, _find_executable):
+        self.checkout.run_gclient("foo", "bar", baz="qux")
         args = self.run.call_args[0][0]
         kargs = self.run.call_args[1]
 

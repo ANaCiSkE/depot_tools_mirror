@@ -7,8 +7,8 @@
 # /// script
 # requires-python = '>=3.11,<3.12'
 # dependencies = [
-#   'cffi==1.15.1+chromium.2',
-#   'cryptography==43.0.0',
+#   'cffi==2.0.0',
+#   'cryptography==45.0.5',
 #   'pycparser==2.21',
 #   'fido2==2.0.0'
 # ]

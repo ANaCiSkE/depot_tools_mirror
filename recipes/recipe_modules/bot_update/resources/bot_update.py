@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import atexit
-import codecs
 from contextlib import contextmanager
 import copy
 import ctypes
@@ -449,7 +448,7 @@ def remove(target, cleanup_dir):
     os.rename(target, dest)
   except OSError as os_e:
     print("Error renaming %s to %s: %s" % (target, dest, str(os_e)))
-    if not target.endswith(("/.", "\.")):
+    if not target.endswith(("/.", "\\.")):
       raise
     # Because the solutions name is '.', we might be in a bot
     # directory that is locked to prevent renaming. Instead
@@ -499,7 +498,7 @@ def gclient_configure(
   solutions, target_os, target_os_only, target_cpu, git_cache_dir
 ):
   """Should do the same thing as gclient --spec='...'."""
-  with codecs.open(".gclient", mode="w", encoding="utf-8") as f:
+  with open(".gclient", mode="w", encoding="utf-8", newline="") as f:
     f.write(
       get_gclient_spec(
         solutions, target_os, target_os_only, target_cpu, git_cache_dir
@@ -903,7 +902,7 @@ def _git_checkout(
       # Use "tries=1", since we retry manually in this loop.
       if not path.isdir(sln_dir) or (
         path.isdir(sln_dir)
-        and sln_dir.endswith(("/.", "\."))
+        and sln_dir.endswith(("/.", "\\."))
         and len(os.listdir(sln_dir)) == 0
       ):
         git(

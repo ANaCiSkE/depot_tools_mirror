@@ -148,8 +148,9 @@ class AutoninjaTest(trial_dir.TestCase):
         self.assertIn("-C", args)
         self.assertEqual(args[args.index("-C") + 1], out_dir)
 
+    @mock.patch("autoninja._is_google_corp_machine", return_value=False)
     @mock.patch("sys.platform", "win32")
-    def test_autoninja_splits_args_on_windows(self):
+    def test_autoninja_splits_args_on_windows(self, _mock_corp):
         """
         Test that autoninja correctly handles the special case of being
         passed its arguments as a quoted, whitespace-delimited string on

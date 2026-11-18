@@ -484,6 +484,12 @@ class GClientUtilsTest(trial_dir.TestCase):
             gclient_utils.FileWrite(tmp, "foo ✔ bar")
             self.assertEqual("foo ✔ bar", gclient_utils.FileRead(tmp))
 
+    def testFileWrite_PreservesLineEndings(self):
+        with gclient_utils.temporary_file() as tmp:
+            gclient_utils.FileWrite(tmp, "line1\nline2\n")
+            with open(tmp, "rb") as f:
+                self.assertEqual(b"line1\nline2\n", f.read())
+
     def testTemporaryFile(self):
         with gclient_utils.temporary_file() as tmp:
             gclient_utils.FileWrite(tmp, "test")

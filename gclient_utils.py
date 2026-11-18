@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 """Generic utils."""
 
-import codecs
 import collections
 import contextlib
 import datetime
@@ -222,7 +221,12 @@ def FileRead(filename, mode="rbU"):
 
 
 def FileWrite(filename, content, mode="w", encoding="utf-8"):
-    with codecs.open(filename, mode=mode, encoding=encoding) as f:
+    # Preserve codecs.open()'s binary-underlying behavior so LF is not
+    # translated to CRLF on Windows.
+    kwargs = {"mode": mode, "encoding": encoding}
+    if "b" not in mode:
+        kwargs["newline"] = ""
+    with open(filename, **kwargs) as f:
         f.write(content)
 
 

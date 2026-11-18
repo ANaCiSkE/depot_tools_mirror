@@ -180,7 +180,7 @@ index fe3de7b..54ae6e1 100755
         mock.patch("os.chdir").start()
         mock.patch("os.getcwd", self.RootDir)
         mock.patch("os.listdir").start()
-        mock.patch("os.path.abspath", lambda f: f).start()
+        mock.patch("os.path.abspath", lambda f: f.replace("/", os.sep)).start()
         mock.patch("os.path.isfile").start()
         mock.patch("os.remove").start()
         mock.patch("presubmit_support._parse_files").start()
@@ -407,7 +407,7 @@ class PresubmitUnittest(PresubmitTestsBase):
             "+   erratically,",
             " into still different texts",
             "-from this.",
-            "\ No newline at end of file",  # noqa: W605
+            "\\ No newline at end of file",
             "+from this.",
             "+",
             "+For the most part,",
@@ -421,7 +421,7 @@ class PresubmitUnittest(PresubmitTestsBase):
             "+or anything messed up like that,",
             "+because you parsed the header",
             "+correctly.",
-            "\ No newline at end of file",  # noqa: W605
+            "\\ No newline at end of file",
             "",
         ]
         files = [
@@ -871,9 +871,9 @@ class PresubmitUnittest(PresubmitTestsBase):
         )
 
         expected = (
-            "Running post upload checks \.\.\.\n"  # noqa: W605
+            "Running post upload checks \\.\\.\\.\n"
             "\n"
-            "\*\* Post Upload Hook Messages \*\*\n"  # noqa: W605
+            "\\*\\* Post Upload Hook Messages \\*\\*\n"
             "!!\n"
             "\n"
         )
@@ -2722,10 +2722,13 @@ class AffectedFileUnittest(PresubmitTestsBase):
                 "blat/flop.cc", "D", self.fake_root_dir, None
             ),
         ]
-        os.path.isfile.side_effect = lambda f: f in [
-            os.path.join(self.fake_root_dir, "foo", "Blat.java"),
-            os.path.join(self.fake_root_dir, "foo", "blat.cc"),
-        ]
+        os.path.isfile.side_effect = lambda f: (
+            f
+            in [
+                os.path.join(self.fake_root_dir, "foo", "Blat.java"),
+                os.path.join(self.fake_root_dir, "foo", "blat.cc"),
+            ]
+        )
 
         output = [f for f in files if f.IsTestableFile()]
         self.assertEqual(files[:2], output)

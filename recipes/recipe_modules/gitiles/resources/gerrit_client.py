@@ -2,8 +2,8 @@
 # /// script
 # requires-python = '>=3.11,<3.12'
 # dependencies = [
-#   'httplib2==0.13.1',
-#   'six==1.10.0'
+#   'httplib2==0.22.0',
+#   'pyparsing==3.2.0'
 # ]
 # ///
 

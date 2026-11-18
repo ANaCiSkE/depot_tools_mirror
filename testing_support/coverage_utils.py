@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import distutils.version
 import os
 import sys
 import textwrap
@@ -62,7 +61,9 @@ def covered_main(
                     % (got_ver, coverage),
                     require_native,
                 )
-            if got_ver < distutils.version.LooseVersion(require_native):
+            if coverage.version_info[:3] < tuple(
+                int(x) for x in require_native.split(".")
+            ):
                 native_error(
                     "Wrong version (%s) found: %s" % (got_ver, coverage),
                     require_native,

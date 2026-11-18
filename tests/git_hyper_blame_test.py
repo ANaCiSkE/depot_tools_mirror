@@ -147,7 +147,7 @@ class GitHyperBlameMainTest(GitHyperBlameTestBase):
         self.assertNotEqual(0, retval)
         self.assertEqual(b"", outbuf.getvalue())
         r = re.compile("^fatal: Not a git repository", re.I)
-        self.assertRegexpMatches(sys.stderr.getvalue(), r)
+        self.assertRegex(sys.stderr.getvalue(), r)
 
     def testBadFilename(self):
         """Tests the main function (bad filename)."""
@@ -179,7 +179,7 @@ class GitHyperBlameMainTest(GitHyperBlameTestBase):
         )
         self.assertNotEqual(0, retval)
         self.assertEqual(b"", outbuf.getvalue())
-        self.assertRegexpMatches(
+        self.assertRegex(
             sys.stderr.getvalue(),
             "^fatal: ambiguous argument 'xxxx': unknown "
             "revision or path not in the working tree.",

@@ -6787,30 +6787,28 @@ def FilesBelongToSameModule(filename_cc, filename_h):
     return files_belong_to_same_module, common_path
 
 
-def UpdateIncludeState(filename, include_dict, io=codecs):
+def UpdateIncludeState(filename, include_dict):
     """Fill up the include_dict with new includes found from the file.
 
     Args:
         filename: the name of the header to read.
         include_dict: a dictionary in which the headers are inserted.
-        io: The io factory to use to read the file. Provided for testability.
 
     Returns:
         True if a header was successfully added. False otherwise.
     """
-    headerfile = None
     try:
-        headerfile = io.open(filename, "r", "utf8", "replace")
+        with open(
+            filename, "r", encoding="utf8", errors="replace", newline=""
+        ) as headerfile:
+            for linenum, line in enumerate(headerfile, start=1):
+                clean_line = CleanseComments(line)
+                match = _RE_PATTERN_INCLUDE.search(clean_line)
+                if match:
+                    include = match.group(2)
+                    include_dict.setdefault(include, linenum)
     except IOError:
         return False
-    linenum = 0
-    for line in headerfile:
-        linenum += 1
-        clean_line = CleanseComments(line)
-        match = _RE_PATTERN_INCLUDE.search(clean_line)
-        if match:
-            include = match.group(2)
-            include_dict.setdefault(include, linenum)
     return True
 
 
@@ -6826,9 +6824,7 @@ def UpdateRequiredHeadersForLine(patterns, line, linenum, required):
     return required
 
 
-def CheckForIncludeWhatYouUse(
-    filename, clean_lines, include_state, error, io=codecs
-):
+def CheckForIncludeWhatYouUse(filename, clean_lines, include_state, error):
     """Reports for missing stl includes.
 
     This function will output warnings to make sure you are including the headers
@@ -6842,8 +6838,6 @@ def CheckForIncludeWhatYouUse(
         clean_lines: A CleansedLines instance containing the file.
         include_state: An _IncludeState instance.
         error: The function to call with any errors found.
-        io: The IO factory to use to read the header file. Provided for unittest
-            injection.
     """
     # A map of header name to linenumber and the template entity.
     # Example of required: { '<functional>': (1219, 'less<>') }
@@ -6904,7 +6898,7 @@ def CheckForIncludeWhatYouUse(
             abs_filename, header
         )
         fullpath = common_path + header
-        if same_module and UpdateIncludeState(fullpath, include_dict, io):
+        if same_module and UpdateIncludeState(fullpath, include_dict):
             header_found = True
 
     # If we can't find the header file for a .cc, assume it's because we don't
@@ -7496,7 +7490,9 @@ def ProcessFile(filename, vlevel, extra_check_functions=[]):
                 .split("\n")
             )
         else:
-            with codecs.open(filename, "r", "utf8", "replace") as stream:
+            with open(
+                filename, "r", encoding="utf8", errors="replace", newline=""
+            ) as stream:
                 lines = stream.read().split("\n")
 
         # Remove trailing '\r'.

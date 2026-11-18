@@ -371,7 +371,7 @@ class GitReadOnlyFunctionsTest(
         self.assertEqual(ret, [binascii.unhexlify(h) for h in hashes])
 
         expected_re = r"one of \(u?'main', u?'bananas'\)"
-        with self.assertRaisesRegexp(Exception, expected_re):
+        with self.assertRaisesRegex(Exception, expected_re):
             self.repo.run(self.gc.parse_commitrefs, "main", "bananas")
 
     def testRepoRoot(self):

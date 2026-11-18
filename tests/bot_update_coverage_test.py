@@ -3,7 +3,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import codecs
 import contextlib
 import copy
 import datetime
@@ -138,7 +137,7 @@ class FakeFilesystem:
     def __init__(self):
         self.files = {}
 
-    def open(self, target, mode="r", encoding=None):
+    def open(self, target, mode="r", encoding=None, newline=None):
         if "w" in mode:
             self.files[target] = FakeFile()
             return self.files[target]
@@ -190,8 +189,6 @@ class BotUpdateUnittests(unittest.TestCase):
         setattr(os, "getcwd", lambda: "/b/build/foo/build")
 
         setattr(bot_update, "open", self.filesystem.open)
-        self.old_codecs_open = codecs.open
-        setattr(codecs, "open", self.filesystem.open)
 
     def tearDown(self):
         sys.platform = self.old_platform
@@ -199,7 +196,6 @@ class BotUpdateUnittests(unittest.TestCase):
         setattr(bot_update, "git", self.old_git)
         setattr(os, "getcwd", self.old_os_cwd)
         delattr(bot_update, "open")
-        setattr(codecs, "open", self.old_codecs_open)
 
     def overrideSetupForWindows(self):
         sys.platform = "win"
@@ -624,11 +620,14 @@ class BotUpdateUnittests(unittest.TestCase):
         fake_open = self.filesystem.open
 
         def dispatch_open(
-            target: str, mode: str = "r", encoding: str | None = None
+            target: str,
+            mode: str = "r",
+            encoding: str | None = None,
+            newline: str | None = None,
         ) -> Any:
             if use_real_cache_fs and target.startswith(git_cache_dir + os.sep):
-                return open(target, mode, encoding=encoding)
-            return fake_open(target, mode, encoding=encoding)
+                return open(target, mode, encoding=encoding, newline=newline)
+            return fake_open(target, mode, encoding=encoding, newline=newline)
 
         with (
             contextlib.nullcontext()

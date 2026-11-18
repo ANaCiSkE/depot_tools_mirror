@@ -470,6 +470,16 @@ def _RunKtfmt(opts, paths, top_dir, diffs):
     return 0
 
 
+def _IsRootedPath(path: str) -> bool:
+    """Returns True for absolute or drive-relative rooted paths.
+
+    On Windows Python 3.13+, os.path.isabs returns False for drive-relative
+    paths like '/foo' or '\\foo', even though os.path.join still resets the
+    root when given one.
+    """
+    return os.path.isabs(path) or path.startswith(("/", "\\"))
+
+
 def _RunRustFmtInMirror(
     file_path: str,
     rel_path: str,
@@ -485,7 +495,11 @@ def _RunRustFmtInMirror(
     rustfmt from trying to resolve `mod foo;` files, which don't exist there.
     """
     rel_path = os.path.normpath(rel_path)
-    if os.path.isabs(rel_path) or rel_path.split(os.sep)[0] == os.pardir:
+    if (
+        _IsRootedPath(rel_path)
+        or os.path.splitdrive(rel_path)[0]
+        or rel_path.split(os.sep)[0] == os.pardir
+    ):
         # Outside of the config's directory, so no `ignore` entry can match.
         rel_path = os.path.basename(rel_path)
 
@@ -526,7 +540,7 @@ def _RunRustFmt(opts, paths, top_dir, diffs):
 
     if stdin_filename:
         rel_path = stdin_filename
-        if chromium_src_path and os.path.isabs(rel_path):
+        if chromium_src_path and _IsRootedPath(rel_path):
             rel_path = os.path.relpath(rel_path, chromium_src_path)
         _RunRustFmtInMirror(paths[0], rel_path, rustfmt_toml_path, rustfmt_tool)
         return 0

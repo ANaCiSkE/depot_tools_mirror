@@ -54,9 +54,10 @@ class OwnersClient(object):
             return dict()
         nproc = min(gerrit_util.MAX_CONCURRENT_CONNECTION, len(paths))
         with git_common.ScopedPool(nproc, kind="threads") as pool:
-            return dict(
+            results = dict(
                 pool.imap_unordered(lambda p: (p, self.ListOwners(p)), paths)
             )
+        return {p: results[p] for p in paths}
 
     def GetFilesApprovalStatus(self, paths, approvers, reviewers):
         """Check the approval status for the given paths.
@@ -90,7 +91,8 @@ class OwnersClient(object):
             return []
         exclude = exclude or []
         owners = []
-        queues = self.BatchListOwners(paths).values()
+        owners_by_path = self.BatchListOwners(paths)
+        queues = [owners_by_path[p] for p in paths]
         for i in range(max(len(q) for q in queues)):
             for q in queues:
                 if i < len(q) and q[i] not in owners and q[i] not in exclude:
@@ -235,11 +237,12 @@ class GerritClient(OwnersClient):
         Returns a dictionary {path: [owners]}.
         """
         with git_common.ScopedPool(kind="threads") as pool:
-            return dict(
+            results = dict(
                 pool.imap_unordered(
                     lambda p: (p, self.ListBestOwners(p)), paths
                 )
             )
+        return {p: results[p] for p in paths}
 
 
 def GetCodeOwnersClient(host, project, branch, cache=None):

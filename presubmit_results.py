@@ -51,8 +51,9 @@ class _PresubmitResultLocation:
     def validate(self):
         if not self.file_path:
             raise ValueError("file path is required")
-        if self.file_path != self.COMMIT_MSG_PATH and os.path.isabs(
-            self.file_path
+        if self.file_path != self.COMMIT_MSG_PATH and (
+            os.path.isabs(self.file_path)
+            or self.file_path.startswith(("/", "\\"))
         ):
             raise ValueError(
                 f"file path must be relative path, got {self.file_path}"

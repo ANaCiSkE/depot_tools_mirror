@@ -5,7 +5,6 @@
 # found in the LICENSE file.
 """Unit tests for git_cl.py."""
 
-import codecs
 import datetime
 import io
 import json
@@ -10836,11 +10835,13 @@ class CMDLintTestCase(CMDTestCaseBase):
     def setUp(self):
         super(CMDLintTestCase, self).setUp()
         mock.patch("git_cl.sys.stderr", io.StringIO()).start()
-        mock.patch("codecs.open", mock.mock_open()).start()
+        self.mock_cpplint_open = mock.patch(
+            "cpplint.open", mock.mock_open(), create=True
+        ).start()
         mock.patch("os.path.isfile", return_value=True).start()
 
     def testLintSingleFile(self, *_mock):
-        codecs.open().read.return_value = self.bad_indent
+        self.mock_cpplint_open().read.return_value = self.bad_indent
         self.assertEqual(1, git_cl.main(["lint", "pdf.h"]))
         self.assertIn(
             "pdf.h:3:  (cpplint) Do not indent within a namespace",
@@ -10848,7 +10849,7 @@ class CMDLintTestCase(CMDTestCaseBase):
         )
 
     def testLintMultiFiles(self, *_mock):
-        codecs.open().read.return_value = self.bad_indent
+        self.mock_cpplint_open().read.return_value = self.bad_indent
         self.assertEqual(1, git_cl.main(["lint", "pdf.h", "pdf.cc"]))
         self.assertIn(
             "pdf.h:3:  (cpplint) Do not indent within a namespace",
@@ -10873,7 +10874,7 @@ class CMDLintTestCase(CMDTestCaseBase):
     @mock.patch("git_cl.Settings.GetRoot", return_value=".")
     @mock.patch("git_cl_core.FindCodereviewSettingsFile", return_value=None)
     def testLintChangelist(self, *_mock):
-        codecs.open().read.return_value = self.bad_indent
+        self.mock_cpplint_open().read.return_value = self.bad_indent
         self.assertEqual(1, git_cl.main(["lint"]))
         self.assertIn(
             "chg-1.h:3:  (cpplint) Do not indent within a namespace",
@@ -10927,7 +10928,7 @@ class CMDLintTestCase(CMDTestCaseBase):
     )
     @mock.patch("git_cl.subprocess2.call", return_value=0)
     def testLintMixedCppAndPython(self, mock_call, _mock_linter):
-        codecs.open().read.return_value = self.bad_indent
+        self.mock_cpplint_open().read.return_value = self.bad_indent
         self.assertEqual(1, git_cl.main(["lint", "test.h", "test.py"]))
         self.assertIn(
             "test.h:3:  (cpplint) Do not indent within a namespace",

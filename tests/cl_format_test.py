@@ -7,6 +7,7 @@
 import io
 import json
 import logging
+import ntpath
 import optparse
 import os
 import shutil
@@ -1882,7 +1883,7 @@ class TestGoogleJavaFormat(unittest.TestCase):
         ret = cl_format._RunGoogleJavaFormat(mock_opts, files, top_dir, diffs)
 
         self.assertEqual(0, ret)
-        self.assertEqual(
+        self.assertCountEqual(
             [
                 mock.call(
                     ["gjf", "--aosp", "--dry-run", "--lines=8:12", "Foo.java"],
@@ -2372,6 +2373,98 @@ class TestStdinFilenameFormatting(unittest.TestCase):
             self.assertIn(
                 "cannot be used with --stdin-filename", stderr.getvalue()
             )
+
+    @mock.patch("gclient_paths.GetChromiumSrcPath")
+    @mock.patch(
+        "rustfmt.FindRustfmtToolInChromiumTree", return_value="/fake/rustfmt"
+    )
+    @mock.patch("cl_format.RunCommand")
+    def test_rust_stdin_drive_relative_paths(
+        self, mock_run, _mock_find_tool, mock_solution_path
+    ):
+        """Drive-relative Windows 3.13+ paths stay rooted and inside mirror."""
+        mock_solution_path.return_value = self.test_dir
+        toml_path = self._write(".rustfmt.toml", self.RUSTFMT_TOML)
+        temp_file = self._write("temp.rs", b"fn  main() {   }\n")
+        real_isabs = os.path.isabs
+        drive_rel_prefixes = (
+            "/src",
+            "\\src",
+            "/elsewhere",
+            "\\elsewhere",
+            "D:",
+        )
+
+        def win313_isabs(path):
+            # Simulate Windows Python 3.13+ where os.path.isabs returns False
+            # for drive-relative paths like '/foo' or '\\foo'.
+            if str(path).startswith(drive_rel_prefixes):
+                return False
+            return real_isabs(path)
+
+        # _RunRustFmt still calls relpath for rooted drive-relative paths so
+        # .rustfmt.toml's relative `ignore` patterns keep matching.
+        for stdin_filename in (
+            "/src/third_party/foo/lib.rs",
+            "\\src\\third_party\\foo\\lib.rs",
+        ):
+            with self.subTest(caller_stdin_filename=stdin_filename):
+                mock_run.reset_mock()
+                with (
+                    mock.patch("os.path.isabs", side_effect=win313_isabs),
+                    mock.patch(
+                        "os.path.relpath",
+                        return_value=os.path.join(
+                            "third_party", "foo", "lib.rs"
+                        ),
+                    ) as mock_relpath,
+                ):
+                    opts = mock.Mock(
+                        stdin_filename=stdin_filename,
+                        dry_run=False,
+                        diff=False,
+                    )
+                    self.assertEqual(
+                        0,
+                        cl_format._RunRustFmt(
+                            opts, [temp_file], self.test_dir, None
+                        ),
+                    )
+                mock_relpath.assert_called_once_with(
+                    stdin_filename, self.test_dir
+                )
+                cmd = mock_run.call_args[0][0]
+                mirror_dir = os.path.dirname(
+                    cmd[1].removeprefix("--config-path=")
+                )
+                self.assertEqual(
+                    os.path.join(mirror_dir, "third_party", "foo", "lib.rs"),
+                    cmd[-1],
+                )
+
+        # _RunRustFmtInMirror basenames drive-relative and drive-prefixed paths
+        # so os.path.join(tmp_dir, rel_path) cannot escape the mirror dir.
+        for rel_path in (
+            "/elsewhere/foo.rs",
+            "\\elsewhere/foo.rs",
+            "D:sub/foo.rs",
+        ):
+            with self.subTest(mirror_rel_path=rel_path):
+                mock_run.reset_mock()
+                with (
+                    mock.patch("os.path.isabs", side_effect=win313_isabs),
+                    mock.patch(
+                        "os.path.splitdrive", side_effect=ntpath.splitdrive
+                    ),
+                ):
+                    cl_format._RunRustFmtInMirror(
+                        temp_file, rel_path, toml_path, "/fake/rustfmt"
+                    )
+                cmd = mock_run.call_args[0][0]
+                mirror_dir = os.path.dirname(
+                    cmd[1].removeprefix("--config-path=")
+                )
+                self.assertEqual(os.path.join(mirror_dir, "foo.rs"), cmd[-1])
 
 
 class TestCogAndNonGitFormatting(unittest.TestCase):
