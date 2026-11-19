@@ -427,6 +427,59 @@ class WatchlistsTest(unittest.TestCase):
         self.assertEqual(escape_warnings[0].filename, wl._GetRulesFilePath())
         self.assertEqual(escape_warnings[0].lineno, 4)
 
+    def testEscapedRegexPatternsMatchWithoutWarnings(self):
+        """Test that escaped and raw regex strings match literal dots cleanly."""
+        contents = r"""{
+        'WATCHLIST_DEFINITIONS': {
+          'escaped_dot': {
+            'filepath': 'chrome/browser/about_flags\\.cc',
+          },
+          'raw_dot': {
+            'filepath': r'chrome/browser/other_flags\.cc',
+          },
+        },
+        'WATCHLISTS': {
+          'escaped_dot': ['escaped@example.com'],
+          'raw_dot': ['raw@example.com'],
+        },
+      }"""
+        watchlists.Watchlists._HasWatchlistsFile.return_value = True
+        watchlists.Watchlists._ContentsOfWatchlistsFile.return_value = contents
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            wl = watchlists.Watchlists("/a/path")
+
+        self.assertEqual(caught, [])
+        self.assertEqual(
+            wl._defns["escaped_dot"]["filepath"],
+            r"chrome/browser/about_flags\.cc",
+        )
+        self.assertEqual(
+            wl._defns["raw_dot"]["filepath"],
+            r"chrome/browser/other_flags\.cc",
+        )
+        self.assertEqual(
+            wl.GetWatchersForPaths(["chrome/browser/about_flags.cc"]),
+            ["escaped@example.com"],
+        )
+        self.assertEqual(
+            wl.GetWatchersForPaths(["chrome/browser/about_flagsXcc"]),
+            [],
+        )
+        self.assertEqual(
+            wl.GetWatchersForPaths([r"chrome/browser/about_flags\.cc"]),
+            [],
+        )
+        self.assertEqual(
+            wl.GetWatchersForPaths(["chrome/browser/other_flags.cc"]),
+            ["raw@example.com"],
+        )
+        self.assertEqual(
+            wl.GetWatchersForPaths(["chrome/browser/other_flagsXcc"]),
+            [],
+        )
+
 
 if __name__ == "__main__":
     import unittest
