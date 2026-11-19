@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = '>=3.14,<3.15'
+# requires-python = '>=3.11,<3.12'
 # dependencies = [
 #   'packaging==25.0'
 # ]

@@ -1,4 +1,4 @@
-brotli==1.2.1 ; platform_machine == 'aarch64' or platform_machine == 'x86_64' or sys_platform != 'linux' \
+brotli==1.2.1 ; python_full_version >= '3.12' or platform_machine != 'riscv64' or sys_platform != 'linux' \
     --hash=sha256:0593fb29b25c3a73b7eb874585957b639f86397991f4b8c035ed003353d6771b \
     --hash=sha256:47278d4a6afeaddba8ecd29d5fa3764e252778033bfacb8532e811e2774b9c6d \
     --hash=sha256:4d09be3b11bbb8162860a12bf17948990a207f3e3be84ca7aef7f3092f9c2a52 \
@@ -130,6 +130,10 @@ six==1.17.0 \
 sqlparse==0.4.4 \
     --hash=sha256:5430a4fe2ac7d0f93e66f1efc6e1338a41884b7ddf2a350cedd20ccc4d9d28f3 \
     --hash=sha256:6b7138ced63f1574a1cbc6ada6c5a448327b89e451ca2dbb3cbded83d5bb7329
+tomli==2.1.0 ; python_full_version <= '3.11' \
+    --hash=sha256:a5c57c3d1c56f5ccdf89f6523458f60ef716e210fc47c4cfb188c5ba473e0391 \
+    --hash=sha256:b0ebe91199c7a9543037fd8ea3e730efd67a2942d7afba8aef5167327c2fcdc3
+    # via coverage
 tzdata==2023.4 \
     --hash=sha256:3bfb77cffc5b0b14bdb11a65b1074fe50cccbae0f3107024e344b48912c89184 \
     --hash=sha256:aa3ace4329eeacda5b7beb7ea08ece826c28d761cda36e747cfbf97996d39bf3
