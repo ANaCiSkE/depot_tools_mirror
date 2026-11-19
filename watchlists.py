@@ -55,7 +55,12 @@ def _ParseAndCompileWatchlistRules(
         return WatchlistRules({}, {}, {})
 
     try:
-        watchlists_data = ast.literal_eval(contents)
+        tree = ast.parse(
+            contents.lstrip(" \t"),
+            filename=rules_filepath or "<unknown>",
+            mode="eval",
+        )
+        watchlists_data = ast.literal_eval(tree)
     except Exception as e:
         logging.error("Cannot parse %s: %s", rules_filepath, e)
         return WatchlistRules({}, {}, {})

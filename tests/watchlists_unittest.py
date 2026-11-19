@@ -8,6 +8,7 @@ import os
 import sys
 import unittest
 from unittest import mock
+import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -396,6 +397,35 @@ class WatchlistsTest(unittest.TestCase):
         )
         self.assertEqual(wl2._defns["a_module"]["filepath"], "a_module")
         self.assertNotIn("new_module", wl2._watchlists)
+
+    def testInvalidEscapeWarningIncludesRulesFilepath(self):
+        """Test that parse warnings reference the WATCHLISTS path, not <unknown>."""
+        contents = r"""{
+        'WATCHLIST_DEFINITIONS': {
+          'a_module': {
+            'filepath': 'a_module\.cc',
+          },
+        },
+        'WATCHLISTS': {
+          'a_module': ['user@example.com'],
+        },
+      }"""
+        watchlists.Watchlists._HasWatchlistsFile.return_value = True
+        watchlists.Watchlists._ContentsOfWatchlistsFile.return_value = contents
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            wl = watchlists.Watchlists("/a/path")
+
+        escape_warnings = [
+            w
+            for w in caught
+            if issubclass(w.category, (SyntaxWarning, DeprecationWarning))
+            and "invalid escape sequence" in str(w.message)
+        ]
+        self.assertEqual(len(escape_warnings), 1)
+        self.assertEqual(escape_warnings[0].filename, wl._GetRulesFilePath())
+        self.assertEqual(escape_warnings[0].lineno, 4)
 
 
 if __name__ == "__main__":
