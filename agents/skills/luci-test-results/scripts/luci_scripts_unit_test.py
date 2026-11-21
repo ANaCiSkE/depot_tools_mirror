@@ -382,7 +382,9 @@ class TestLuciScripts(unittest.TestCase):
         self.assertEqual(
             fetch_log.fetch_log(SAMPLE_RESULT_NAME, raw=True), "snippet-text"
         )
-        mock_snippet.assert_called_once_with(SAMPLE_RESULT_NAME, raw=True)
+        mock_snippet.assert_called_once_with(
+            SAMPLE_RESULT_NAME, raw=True, artifact_id=None
+        )
 
     @mock.patch("test_history.run_prpc")
     def test_test_history(self, mock_prpc):
@@ -945,6 +947,171 @@ class TestLuciScripts(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 test_history.main()
             self.assertEqual(cm.exception.code, 2)
+
+    def test_filter_log_keeps_gtest_assertion(self):
+        # A symbolized gtest stack trace mentions
+        # HandleExceptionsInMethodIfSupported far below the assertion; the
+        # snippet must still be centred on the assertion itself.
+        sample_log = "\n".join(
+            [
+                "[ RUN      ] FooTest.Bar",
+                "../../foo/foo_unittest.cc:163: Failure",
+                "Value of: foo->IsReady()",
+                "  Actual: true",
+                "Expected: false",
+                "Stack trace:",
+            ]
+            + [f"INFO:root:noise {i}" for i in range(30)]
+            + [
+                "  0d24129e  FooTest_Bar_Test::TestBody()  foo_unittest.cc:0:0",
+                "  1001acde  void testing::internal::"
+                "HandleExceptionsInMethodIfSupported<testing::Test, void>()",
+                "[  FAILED  ] FooTest.Bar (65 ms)",
+            ]
+        )
+        output = fetch_log.filter_log(sample_log)
+        self.assertIn("foo_unittest.cc:163: Failure", output)
+        self.assertIn("  Actual: true", output)
+        self.assertIn("Expected: false", output)
+
+    def test_filter_log_keeps_windows_gtest_assertion(self):
+        sample_log = "\n".join(
+            [
+                "[ RUN      ] FooTest.Bar",
+                r"..\..\foo\foo_unittest.cc(163): error: Value of: foo->IsReady()",
+                "  Actual: true",
+                "Expected: false",
+                "Stack trace:",
+            ]
+            + [f"INFO:root:noise {i}" for i in range(30)]
+            + [
+                "  1001acde  testing::internal::HandleExceptionsInMethodIfSupported",
+                "[  FAILED  ] FooTest.Bar (65 ms)",
+            ]
+        )
+        output = fetch_log.filter_log(sample_log)
+        self.assertIn(r"foo_unittest.cc(163): error:", output)
+        self.assertIn("  Actual: true", output)
+        self.assertIn("Expected: false", output)
+
+    def test_filter_log_java_exception(self):
+        sample_log = "\n".join(
+            [f"noise {i}" for i in range(40)]
+            + [
+                "java.lang.RuntimeException: java.util.concurrent."
+                "TimeoutException: No Activity reached target state",
+                "\tat org.chromium.Foo.bar(Foo.java:10)",
+            ]
+        )
+        output = fetch_log.filter_log(sample_log)
+        self.assertIn("java.lang.RuntimeException", output)
+        self.assertNotIn("noise 0\n", output)
+
+    def test_select_artifact(self):
+        test_log = {"artifactId": "Test Log", "contentType": "text/plain"}
+        image = {"artifactId": "screenshot", "contentType": "image/png"}
+        dump = {"artifactId": "upstart", "contentType": "text/plain"}
+
+        # "Test Log" counts as the test log.
+        self.assertEqual(
+            fetch_log.select_artifact([image, test_log]), (test_log, None)
+        )
+        # Without a test log, prefer text and explain the choice.
+        target, note = fetch_log.select_artifact([image, dump])
+        self.assertEqual(target, dump)
+        self.assertIn("No test log artifact found", note)
+        self.assertIn("screenshot, upstart", note)
+        # Explicit IDs are honoured, and unknown ones are reported.
+        self.assertEqual(
+            fetch_log.select_artifact([image, dump], "screenshot"),
+            (image, None),
+        )
+        target, note = fetch_log.select_artifact([image, dump], "missing")
+        self.assertIsNone(target)
+        self.assertIn("Artifact 'missing' not found", note)
+
+    @mock.patch("test_history.run_prpc")
+    def test_test_history_try_bucket(self, mock_prpc):
+        def side_effect(service, method, payload):
+            if method == "luci.analysis.v1.TestHistory.QueryVariants":
+                # Try variants have no bucket key.
+                return {
+                    "variants": [
+                        {
+                            "variantHash": "ci_hash",
+                            "variant": {
+                                "def": {"bucket": "ci", "builder": "b1"}
+                            },
+                        },
+                        {
+                            "variantHash": "try_hash",
+                            "variant": {"def": {"builder": "b1"}},
+                        },
+                    ]
+                }
+            self.assertEqual(
+                payload["predicate"],
+                {"variantPredicate": {"hashEquals": "try_hash"}},
+            )
+            return {
+                "verdicts": [
+                    {
+                        "testId": SAMPLE_TEST_ID,
+                        "status": "FLAKY",
+                        "variantHash": "try_hash",
+                    }
+                ]
+            }
+
+        mock_prpc.side_effect = side_effect
+        verdicts = test_history.test_history(
+            "chromium", SAMPLE_TEST_ID, limit=5, builder="b1", bucket="try"
+        )
+        self.assertEqual(len(verdicts), 1)
+        self.assertEqual(verdicts[0]["bucket"], "try")
+        # The variant lookup must not filter on bucket=try server-side.
+        variants_call = mock_prpc.call_args_list[0]
+        self.assertEqual(
+            variants_call.args[2]["variantPredicate"],
+            {"contains": {"def": {"builder": "b1"}}},
+        )
+
+    @mock.patch("test_history.run_prpc")
+    def test_fetch_multi_builder_history_try_bucket(self, mock_prpc):
+        def side_effect(service, method, payload):
+            if method == "luci.analysis.v1.TestHistory.QueryVariants":
+                # Try variants have no bucket key, so never filter on it.
+                self.assertNotIn("bucket", str(payload))
+                return {
+                    "variants": [
+                        {
+                            "variantHash": "ci_hash",
+                            "variant": {
+                                "def": {"bucket": "ci", "builder": "b1"}
+                            },
+                        },
+                        {
+                            "variantHash": "try_hash",
+                            "variant": {"def": {"builder": "b2"}},
+                        },
+                    ]
+                }
+            return {
+                "verdicts": [
+                    {
+                        "testId": SAMPLE_TEST_ID,
+                        "status": "EXPECTED",
+                        "variantHash": "try_hash",
+                    }
+                ]
+            }
+
+        mock_prpc.side_effect = side_effect
+        verdicts, mapping = test_history.fetch_multi_builder_history(
+            "chromium", SAMPLE_TEST_ID, per_builder_limit=5, bucket="try"
+        )
+        self.assertEqual(mapping, {"try_hash": "try/b2"})
+        self.assertEqual(len(verdicts), 1)
 
 
 if __name__ == "__main__":

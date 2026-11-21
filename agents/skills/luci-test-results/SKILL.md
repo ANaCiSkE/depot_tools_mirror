@@ -110,8 +110,16 @@ Retrieve a filtered failure log snippet using the result name (`res`) from step
 ```bash
 vpython3 scripts/fetch_log.py \
   --res "<RES_NAME>" \
+  [--artifact-id <ARTIFACT_ID>] \
   [--raw]
+
+# List a result's artifacts (ID, content type, size):
+vpython3 scripts/fetch_log.py --res "<RES_NAME>" --list-artifacts
 ```
+
+By default it reads the `test_log`/`stdout` text artifact (falling back to the
+first text artifact and printing the available artifact IDs to stderr if none
+exists); pass `--artifact-id` to read a different one.
 
 ## 5. Check Specific Test in a Single Build (`check_test.py`)
 
@@ -190,6 +198,8 @@ vpython3 scripts/test_history.py \
 - **Timeline Glyphs**: Displays recent verdicts ordered newest →
   oldest (`P` = Pass, `F` = Fail, `R` = Flaky/Pass on Retry, `S` = Skip), along
   with daily breakdowns.
+- **Try Builders**: `--bucket try` works with or without `--builder`. LUCI
+  Analysis try variants carry no `bucket` key, so they are found by its absence.
 - **Raw Output**: Use `--raw` to print raw JSON verdicts instead of the summary.
 - **Substring Resolution & Fuzzy Search Fallback**: Pass `--test-substring` (or a
   short `Class#method` to `--test-id`) to auto-resolve via `QueryTests`
@@ -210,5 +220,6 @@ vpython3 scripts/test_history.py \
    `CascadingFailureException`. Triage the root failure in that shard first by
    checking the first failure in a task group.
 2. **Log Filtering:** The `fetch_log.py` command automatically filters for
-   `AssertionError`, `FATAL`, `Exception`, `FAIL`, and leak reports to keep the
-   context window clean.
+   exception and error lines, gtest `file:line: Failure` assertions (with their
+   `Actual`/`Expected` lines), `Check failed`, `FATAL`, `FAIL`, and leak reports
+   to keep the context window clean. Use `--raw` for the full log.

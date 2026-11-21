@@ -23,6 +23,16 @@ DEFAULT_MULTI_BUILDER_LIMIT = 15
 MAX_PARALLEL_BUILDERS = 40
 MAX_WORKERS = 16
 REVIVER_BUCKET = "reviver"
+# LUCI Analysis variants of Chromium try (CQ) builders have no "bucket" key;
+# only CI-side builders (ci, reviver, findit, ...) record one. So a variant
+# without a bucket is a try variant, and "bucket=try" can't be matched by a
+# server-side variant predicate.
+TRY_BUCKET = "try"
+
+
+def _variant_bucket(def_map):
+    """Returns the bucket of a variant def; variants without one are try."""
+    return def_map.get("bucket", TRY_BUCKET)
 
 
 def query_tests(project, test_query):
@@ -42,7 +52,7 @@ def _builder_label(def_map):
     reviver/runner) and records the builder it stands in for in
     reviver_builder, so the plain bucket/builder is the same for all of them.
     """
-    label = f"{def_map.get('bucket', 'ci')}/{def_map['builder']}"
+    label = f"{_variant_bucket(def_map)}/{def_map['builder']}"
     target = def_map.get("reviver_builder")
     if not target:
         return label
@@ -109,7 +119,7 @@ def _build_predicate(
         variant_def["builder"] = builder
     if reviver_builder:
         variant_def["reviver_builder"] = reviver_builder
-    if bucket:
+    if bucket and bucket != TRY_BUCKET:
         variant_def["bucket"] = bucket
     if device_os:
         variant_def["device_os"] = device_os
@@ -146,10 +156,42 @@ def test_history(
         test_suite,
         reviver_builder=reviver_builder,
     )
-    verdicts = []
-    page_token = None
     target_limit = int(limit) if limit else DEFAULT_SINGLE_BUILDER_LIMIT
 
+    if bucket == TRY_BUCKET:
+        # Try variants can only be told apart by their missing bucket, so
+        # find them via QueryVariants and query each one by hash.
+        variant_defs = query_variant_defs(project, test_id, predicate=predicate)
+        verdicts = []
+        for v_hash, def_map in variant_defs.items():
+            if _variant_bucket(def_map) != TRY_BUCKET:
+                continue
+            verdicts.extend(
+                _query_history(
+                    project,
+                    test_id,
+                    {"variantPredicate": {"hashEquals": v_hash}},
+                    target_limit,
+                )
+            )
+        verdicts.sort(key=lambda v: v.get("partitionTime", ""), reverse=True)
+    else:
+        verdicts = _query_history(project, test_id, predicate, target_limit)
+
+    verdicts = verdicts[:target_limit]
+    if builder or bucket:
+        for v in verdicts:
+            if bucket:
+                v.setdefault("bucket", bucket)
+            if builder:
+                v.setdefault("builder", builder)
+    return verdicts
+
+
+def _query_history(project, test_id, predicate, target_limit):
+    """Pages through TestHistory.Query until target_limit verdicts."""
+    verdicts = []
+    page_token = None
     while len(verdicts) < target_limit:
         batch_size = min(1000, target_limit - len(verdicts))
         payload = {
@@ -172,15 +214,7 @@ def test_history(
         page_token = result.get("nextPageToken")
         if not page_token:
             break
-
-    verdicts = verdicts[:target_limit]
-    if builder or bucket:
-        for v in verdicts:
-            if bucket:
-                v.setdefault("bucket", bucket)
-            if builder:
-                v.setdefault("builder", builder)
-    return verdicts
+    return verdicts[:target_limit]
 
 
 def fetch_multi_builder_history(
@@ -200,6 +234,11 @@ def fetch_multi_builder_history(
         None, target_bucket, device_os, device_type, os_val, test_suite
     )
     variant_defs = query_variant_defs(project, test_id, predicate=predicate)
+    variant_defs = {
+        v_hash: def_map
+        for v_hash, def_map in variant_defs.items()
+        if _variant_bucket(def_map) == target_bucket
+    }
     variant_builders = {
         v_hash: _builder_label(def_map)
         for v_hash, def_map in variant_defs.items()
@@ -209,7 +248,7 @@ def fetch_multi_builder_history(
     distinct = sorted(
         {
             (
-                def_map.get("bucket", "ci"),
+                _variant_bucket(def_map),
                 def_map["builder"],
                 def_map.get("reviver_builder", ""),
             )
